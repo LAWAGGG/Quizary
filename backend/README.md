@@ -36,7 +36,6 @@ backend/
 ├── alembic/                 # Database migrations
 ├── requirements.txt
 ├── .env.example
-└── quizary-postman-collection.json   # Postman collection (import ke Postman)
 ```
 
 ## Cara Menjalankan
