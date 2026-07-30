@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -10,7 +12,7 @@ class RegisterRequest(BaseModel):
     @model_validator(mode="after")
     def passwords_match(self):
         if self.password != self.password_confirmation:
-            raise ValueError("password_confirmation does not match")
+            raise ValueError("password_confirmation does not match password")
         return self
 
 
@@ -24,7 +26,8 @@ class UserResponse(BaseModel):
     name: str
     email: str
     role: str
-    avatar: str | None
+    # avatar is always a full URL (resolved by the router before returning)
+    avatar: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

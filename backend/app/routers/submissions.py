@@ -1,37 +1,136 @@
 import random
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user, get_optional_user, verify_form_owner
+from app.dependencies import get_current_user, get_optional_user
 from app.models.answer import Answer
 from app.models.answer_option import AnswerOption
-from app.models.form import Form
-from app.models.question import Question
+from app.models.form import Form, FormStatus, SubmissionLimit
+from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
 from app.models.submission import Submission, SubmissionStatus
 from app.models.submission_question_order import SubmissionQuestionOrder
 from app.models.submission_option_order import SubmissionOptionOrder
 from app.models.user import User
+from app.utils import to_naive_utc, fmt_dt
 from app.schemas.submissions import (
     SubmissionCreateRequest,
     SubmissionCreateResponse,
     QuestionWithOptions,
     OptionPublic,
-    AutosaveRequestChoice,
-    AutosaveRequestText,
+    AutosaveRequest,
     SubmitResponse,
     SubmissionDetailResponse,
-    AnswerDetail,
+    SavedAnswer,
     SubmissionListItem,
     SubmissionListResponse,
-    MessageResponse,
 )
 
 router = APIRouter(tags=["submissions"])
 
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+def _now() -> datetime:
+    """Naive UTC — consistent with MySQL DATETIME storage."""
+    return datetime.utcnow()
+
+
+def _get_sub_or_404(sub_id: int, db: Session) -> Submission:
+    sub = db.get(Submission, sub_id)
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
+    return sub
+
+
+def _expired_at(sub: Submission, form: Form) -> datetime | None:
+    """Return naive-UTC expiry, or None if no time limit."""
+    started = to_naive_utc(sub.started_at)
+    if not started:
+        return None
+    exp = started + timedelta(seconds=form.timer_seconds) if form.timer_seconds else None
+    ends = to_naive_utc(form.ends_at)
+    if exp and ends:
+        return min(exp, ends)
+    return exp or ends
+
+
+def _is_expired(sub: Submission, form: Form) -> bool:
+    exp = _expired_at(sub, form)
+    return exp is not None and _now() > exp
+
+
+def _get_question_for_submission(question_id: int, sub: Submission, db: Session) -> Question:
+    row = db.query(SubmissionQuestionOrder).filter(
+        SubmissionQuestionOrder.submission_id == sub.id,
+        SubmissionQuestionOrder.question_id == question_id,
+    ).first()
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Question not found in this submission",
+        )
+    q = db.get(Question, question_id)
+    if not q:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+    return q
+
+
+def _validate_option_ids(option_ids: list[int], question: Question) -> None:
+    valid = {o.id for o in question.options}
+    for oid in option_ids:
+        if oid not in valid:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Option {oid} not found in this question",
+            )
+
+
+def _build_questions_response(sub_id: int, db: Session) -> list[QuestionWithOptions]:
+    """
+    Ordered questions for a submission — respects per-submission shuffle.
+    Does NOT expose is_correct (security boundary for respondents).
+    """
+    ordered_qs = (
+        db.query(Question)
+        .join(SubmissionQuestionOrder, SubmissionQuestionOrder.question_id == Question.id)
+        .filter(SubmissionQuestionOrder.submission_id == sub_id)
+        .order_by(SubmissionQuestionOrder.order_index)
+        .all()
+    )
+
+    result = []
+    for idx, q in enumerate(ordered_qs):
+        if q.type in (QuestionType.multiple_choice, QuestionType.checkbox):
+            opt_order = {
+                soo.option_id: soo.order_index
+                for soo in db.query(SubmissionOptionOrder).filter(
+                    SubmissionOptionOrder.submission_id == sub_id,
+                    SubmissionOptionOrder.option_id.in_([o.id for o in q.options]),
+                ).all()
+            }
+            opts = sorted(q.options, key=lambda o: opt_order.get(o.id, o.order_index or 0))
+        else:
+            opts = []
+
+        result.append(QuestionWithOptions(
+            id=q.id,
+            type=q.type.value,
+            question_text=q.question_text,
+            order_index=idx,
+            options=[
+                OptionPublic(id=o.id, option_text=o.option_text, order_index=i)
+                for i, o in enumerate(opts)
+            ],
+        ))
+    return result
+
+
+# ── POST /submissions ─────────────────────────────────────────────────────────
 
 @router.post("/submissions", status_code=201)
 def create_submission(
@@ -40,272 +139,304 @@ def create_submission(
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
+    """
+    Start a new submission session and receive all questions ordered for this session.
+
+    If the user/IP already has an in-progress session for this form, the existing
+    session is RESUMED instead of creating a duplicate — so refreshing the page or
+    navigating away and coming back will always restore the same session with the
+    same question order and already-saved answers.
+    """
     form = db.get(Form, body.form_id)
-    if not form or form.status.value != "published":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form tidak ditemukan")
+    if not form or form.status != FormStatus.published:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
 
-    now = datetime.now(timezone.utc)
-    if form.ends_at and now > form.ends_at:
-        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Waktu pengisian telah berakhir")
+    now = _now()
+    ends = to_naive_utc(form.ends_at)
+    if ends and now > ends:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Form submission period has ended")
 
-    existing = db.query(Submission).filter(
+    starts = to_naive_utc(form.starts_at)
+    if starts and now < starts:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Form is not open yet. Opens at {fmt_dt(starts)}",
+        )
+
+    ip = request.client.host if request.client else None
+
+    # ── Resume existing in-progress session ──────────────────────────────────
+    # Instead of returning 409, we hand back the existing session so the
+    # respondent can continue after a refresh/navigation without losing progress.
+    in_progress_q = db.query(Submission).filter(
         Submission.form_id == form.id,
         Submission.status == SubmissionStatus.in_progress,
     )
     if user:
-        existing = existing.filter(Submission.user_id == user.id)
-    else:
-        existing = existing.filter(Submission.ip_address == request.client.host if request.client else "unknown")
-    existing_sub = existing.first()
-    if existing_sub:
-        return MessageResponse(message="Anda memiliki sesi pengerjaan yang belum selesai", submission_id=existing_sub.id)
+        in_progress_q = in_progress_q.filter(Submission.user_id == user.id)
+    elif ip:
+        in_progress_q = in_progress_q.filter(Submission.ip_address == ip)
 
+    existing = in_progress_q.first()
+    if existing:
+        # Edge-case: the existing session may have already expired server-side.
+        if _is_expired(existing, form):
+            existing.status = SubmissionStatus.auto_submitted
+            existing.submitted_at = now
+            db.commit()
+            raise HTTPException(status_code=status.HTTP_410_GONE, detail="Your previous session has expired")
+
+        # Return the existing session with the same question order — idempotent resume.
+        return SubmissionCreateResponse(
+            submission_id=existing.id,
+            started_at=fmt_dt(to_naive_utc(existing.started_at)),
+            expired_at=fmt_dt(_expired_at(existing, form)),
+            questions=_build_questions_response(existing.id, db),
+            resumed=True,
+        )
+
+    # ── Check submission_limit=once ───────────────────────────────────────────
+    if form.submission_limit == SubmissionLimit.once:
+        done_q = db.query(Submission).filter(
+            Submission.form_id == form.id,
+            Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted]),
+        )
+        if user:
+            done_q = done_q.filter(Submission.user_id == user.id)
+        elif ip:
+            done_q = done_q.filter(Submission.ip_address == ip)
+        if done_q.first():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="You have already submitted this form")
+
+    # ── Create new session ────────────────────────────────────────────────────
     sub = Submission(
         form_id=form.id,
         user_id=user.id if user else None,
         respondent_name=body.respondent_name,
         respondent_email=body.respondent_email,
-        ip_address=request.client.host if request.client else None,
+        ip_address=ip,
         status=SubmissionStatus.in_progress,
         started_at=now,
+        created_at=now,
     )
     db.add(sub)
     db.flush()
 
-    questions = db.query(Question).filter(Question.form_id == form.id).order_by(Question.order_index).all()
-
+    questions = (
+        db.query(Question)
+        .filter(Question.form_id == form.id)
+        .order_by(Question.order_index)
+        .all()
+    )
     if form.shuffle_questions:
         random.shuffle(questions)
 
     for idx, q in enumerate(questions):
-        sqo = SubmissionQuestionOrder(submission_id=sub.id, question_id=q.id, order_index=idx)
-        db.add(sqo)
-
-        if form.shuffle_options and q.type.value in ("multiple_choice", "checkbox"):
+        db.add(SubmissionQuestionOrder(submission_id=sub.id, question_id=q.id, order_index=idx))
+        if form.shuffle_options and q.type in (QuestionType.multiple_choice, QuestionType.checkbox):
             opts = list(q.options)
             random.shuffle(opts)
             for oi, opt in enumerate(opts):
-                soo = SubmissionOptionOrder(submission_id=sub.id, option_id=opt.id, order_index=oi)
-                db.add(soo)
-
-    expired_at = None
-    if form.timer_seconds:
-        expired_at = now + timedelta(seconds=form.timer_seconds)
-        if form.ends_at:
-            expired_at = min(expired_at, form.ends_at)
+                db.add(SubmissionOptionOrder(submission_id=sub.id, option_id=opt.id, order_index=oi))
 
     db.commit()
-
-    ordered_qs = db.query(Question).join(
-        SubmissionQuestionOrder,
-        SubmissionQuestionOrder.question_id == Question.id,
-    ).filter(
-        SubmissionQuestionOrder.submission_id == sub.id,
-    ).order_by(SubmissionQuestionOrder.order_index).all()
-
-    q_response = []
-    for q in ordered_qs:
-        if q.type.value in ("multiple_choice", "checkbox"):
-            option_orders = {
-                soo.option_id: soo.order_index
-                for soo in db.query(SubmissionOptionOrder).filter(
-                    SubmissionOptionOrder.submission_id == sub.id,
-                    SubmissionOptionOrder.option_id.in_([o.id for o in q.options]),
-                ).all()
-            }
-            opts = sorted(q.options, key=lambda o: option_orders.get(o.id, o.order_index or 0))
-        else:
-            opts = sorted(q.options, key=lambda o: o.order_index or 0)
-
-        q_response.append(QuestionWithOptions(
-            id=q.id,
-            type=q.type.value,
-            question_text=q.question_text,
-            order_index=ordered_qs.index(q),
-            options=[OptionPublic(id=o.id, option_text=o.option_text, order_index=i) for i, o in enumerate(opts)],
-        ))
+    db.refresh(sub)
 
     return SubmissionCreateResponse(
         submission_id=sub.id,
-        started_at=sub.started_at,
-        expired_at=expired_at,
-        questions=q_response,
+        started_at=fmt_dt(sub.started_at),
+        expired_at=fmt_dt(_expired_at(sub, form)),
+        questions=_build_questions_response(sub.id, db),
+        resumed=False,
     )
 
 
-def _get_submission_or_404(sub_id: int, db: Session) -> Submission:
-    sub = db.get(Submission, sub_id)
-    if not sub:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission tidak ditemukan")
-    return sub
+# ── PATCH /submissions/{id}/autosave ─────────────────────────────────────────
 
-
-def _check_expired(sub: Submission, form: Form) -> bool:
-    if not sub.started_at:
-        return False
-    now = datetime.now(timezone.utc)
-    expired = sub.started_at + timedelta(seconds=form.timer_seconds) if form.timer_seconds else None
-    if form.ends_at:
-        expired = min(expired, form.ends_at) if expired else form.ends_at
-    return expired is not None and now > expired
-
-
-@router.patch("/submissions/{submission_id}/autosave", response_model=dict)
+@router.patch("/submissions/{submission_id}/autosave")
 def autosave(
     submission_id: int,
-    body: AutosaveRequestChoice | AutosaveRequestText,
-    request: Request,
+    body: AutosaveRequest,
     db: Session = Depends(get_db),
 ):
-    sub = _get_submission_or_404(submission_id, db)
+    sub = _get_sub_or_404(submission_id, db)
     form = db.get(Form, sub.form_id)
 
     if sub.status != SubmissionStatus.in_progress:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission sudah pernah diselesaikan")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission has already been completed")
 
-    if _check_expired(sub, form):
+    if _is_expired(sub, form):
         sub.status = SubmissionStatus.auto_submitted
+        sub.submitted_at = _now()
         db.commit()
-        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Waktu pengerjaan telah berakhir")
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Submission time has expired")
+
+    question = _get_question_for_submission(body.question_id, sub, db)
+    if body.option_ids:
+        _validate_option_ids(body.option_ids, question)
 
     answer = db.query(Answer).filter(
         Answer.submission_id == sub.id,
         Answer.question_id == body.question_id,
     ).first()
-
     if not answer:
-        answer = Answer(submission_id=sub.id, question_id=body.question_id)
+        answer = Answer(submission_id=sub.id, question_id=body.question_id, created_at=_now())
         db.add(answer)
         db.flush()
 
-    if hasattr(body, "option_ids"):
+    if body.option_ids is not None:
         db.query(AnswerOption).filter(AnswerOption.answer_id == answer.id).delete()
         for oid in body.option_ids:
             db.add(AnswerOption(answer_id=answer.id, option_id=oid))
         answer.answer_text = None
-    elif hasattr(body, "answer_text"):
+    elif body.answer_text is not None:
         answer.answer_text = body.answer_text
         db.query(AnswerOption).filter(AnswerOption.answer_id == answer.id).delete()
 
     db.commit()
-    return {"message": "Jawaban tersimpan", "question_id": body.question_id}
+    return {"message": "Answer saved", "question_id": body.question_id}
 
 
-@router.post("/submissions/{submission_id}/submit", response_model=SubmitResponse)
-def submit_answers(
-    submission_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    sub = _get_submission_or_404(submission_id, db)
+# ── POST /submissions/{id}/submit ─────────────────────────────────────────────
+
+@router.post("/submissions/{submission_id}/submit")
+def submit_answers(submission_id: int, db: Session = Depends(get_db)):
+    sub = _get_sub_or_404(submission_id, db)
     form = db.get(Form, sub.form_id)
 
     if sub.status != SubmissionStatus.in_progress:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission sudah pernah diselesaikan")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission has already been completed")
 
-    if _check_expired(sub, form):
-        sub.status = SubmissionStatus.auto_submitted
-    else:
-        sub.status = SubmissionStatus.submitted
-
-    total_score = 0.0
-    max_score = 0.0
+    sub.status = SubmissionStatus.auto_submitted if _is_expired(sub, form) else SubmissionStatus.submitted
 
     questions = db.query(Question).filter(Question.form_id == form.id).all()
     q_map = {q.id: q for q in questions}
-    max_score = sum(q.points or 0 for q in questions)
+    max_score = float(sum(q.points or 0 for q in questions))
+    total_score = 0.0
 
-    answers = db.query(Answer).filter(Answer.submission_id == sub.id).all()
-    for answer in answers:
+    for answer in db.query(Answer).filter(Answer.submission_id == sub.id).all():
         q = q_map.get(answer.question_id)
         if not q:
             continue
-        if q.type.value in ("multiple_choice", "checkbox"):
+        if q.type in (QuestionType.multiple_choice, QuestionType.checkbox):
             correct_ids = {o.id for o in q.options if o.is_correct}
             selected_ids = {ao.option_id for ao in answer.selected_options}
             if correct_ids and selected_ids == correct_ids:
                 answer.is_correct = True
-                answer.points_earned = float(q.points or 0)
+                answer.points_earned = Decimal(str(q.points or 0))
                 total_score += float(q.points or 0)
             else:
                 answer.is_correct = False
-                answer.points_earned = 0.0
-        elif q.type.value == "short_answer":
+                answer.points_earned = Decimal("0")
+        elif q.type == QuestionType.short_answer:
             if answer.answer_text and answer.answer_text.strip():
                 answer.is_correct = True
-                answer.points_earned = float(q.points or 0)
+                answer.points_earned = Decimal(str(q.points or 0))
                 total_score += float(q.points or 0)
             else:
                 answer.is_correct = False
-                answer.points_earned = 0.0
+                answer.points_earned = Decimal("0")
         else:
             answer.is_correct = None
-            answer.points_earned = 0.0
+            answer.points_earned = Decimal("0")
 
-    sub.score = total_score
-    sub.max_score = max_score
-    sub.submitted_at = datetime.now(timezone.utc)
+    sub.score = Decimal(str(total_score))
+    sub.max_score = Decimal(str(max_score))
+    sub.submitted_at = _now()
     db.commit()
 
-    return SubmitResponse(message="Jawaban berhasil dikirim", status=sub.status.value, score=total_score, max_score=max_score)
+    return SubmitResponse(
+        message="Submission completed successfully",
+        status=sub.status.value,
+        score=total_score,
+        max_score=max_score,
+    )
 
+
+# ── GET /submissions/{id} ─────────────────────────────────────────────────────
 
 @router.get("/submissions/{submission_id}")
 def get_submission(
     submission_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
-    sub = _get_submission_or_404(submission_id, db)
+    sub = _get_sub_or_404(submission_id, db)
     form = db.get(Form, sub.form_id)
+    if not form:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
 
-    is_owner = user and form and form.user_id == user.id
+    is_owner = user and form.user_id == user.id
+    is_respondent = sub.user_id and user and sub.user_id == user.id
+    is_same_ip = sub.ip_address and user is None and request.client.host == sub.ip_address
 
-    answers_data = []
-    questions = db.query(Question).filter(Question.form_id == form.id).all()
-    q_map = {q.id: q for q in questions}
+    if not is_owner and not is_respondent and not is_same_ip:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-    answers = db.query(Answer).filter(Answer.submission_id == sub.id).all()
-    for answer in answers:
+    # Ordered questions (respects per-submission shuffle stored in DB)
+    questions = _build_questions_response(sub.id, db)
+
+    # Build a map of option_id → option_text for the whole form (used in answers)
+    all_options = db.query(QuestionOption).join(
+        Question, Question.id == QuestionOption.question_id
+    ).filter(Question.form_id == form.id).all()
+    opt_text_map = {o.id: o.option_text for o in all_options}
+
+    q_map = {q.id: q for q in db.query(Question).filter(Question.form_id == form.id).all()}
+
+    answers_data: list[SavedAnswer] = []
+    for answer in db.query(Answer).filter(Answer.submission_id == sub.id).all():
         q = q_map.get(answer.question_id)
         if not q:
             continue
-        selected_opts = []
-        for ao in answer.selected_options:
-            opt = db.get(QuestionOption, ao.option_id)
-            if opt:
-                selected_opts.append(opt.option_text)
 
-        answers_data.append(AnswerDetail(
+        selected_ids = [ao.option_id for ao in answer.selected_options]
+        selected_texts = [opt_text_map[oid] for oid in selected_ids if oid in opt_text_map]
+
+        answers_data.append(SavedAnswer(
             question_id=q.id,
             question_text=q.question_text,
+            question_type=q.type.value,
+            selected_option_ids=selected_ids,
             answer_text=answer.answer_text,
-            selected_options=selected_opts,
+            selected_options=selected_texts,
             is_correct=answer.is_correct,
-            points_earned=answer.points_earned,
+            points_earned=float(answer.points_earned) if answer.points_earned is not None else None,
         ))
 
     return SubmissionDetailResponse(
         id=sub.id,
         status=sub.status.value,
-        score=sub.score,
-        max_score=sub.max_score,
-        submitted_at=sub.submitted_at,
+        started_at=fmt_dt(to_naive_utc(sub.started_at)),
+        expired_at=fmt_dt(_expired_at(sub, form)),
+        score=float(sub.score) if sub.score is not None else None,
+        max_score=float(sub.max_score) if sub.max_score is not None else None,
+        submitted_at=fmt_dt(to_naive_utc(sub.submitted_at)),
+        questions=questions,
         answers=answers_data,
     )
 
 
+# ── GET /me/submissions ───────────────────────────────────────────────────────
+
 @router.get("/me/submissions", response_model=SubmissionListResponse)
 def my_submissions(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    subs = db.query(Submission).filter(Submission.user_id == user.id).order_by(Submission.created_at.desc()).all()
-    data = []
-    for s in subs:
-        f = db.get(Form, s.form_id)
-        data.append(SubmissionListItem(
+    subs = (
+        db.query(Submission)
+        .join(Form, Submission.form_id == Form.id)
+        .filter(Submission.user_id == user.id)
+        .order_by(Submission.created_at.desc())
+        .all()
+    )
+    data = [
+        SubmissionListItem(
             id=s.id,
-            form_title=f.title if f else "(deleted)",
+            form_title=s.form.title if s.form else "(deleted)",
             status=s.status.value,
-            score=s.score,
-            submitted_at=s.submitted_at,
-        ))
+            score=float(s.score) if s.score is not None else None,
+            submitted_at=fmt_dt(to_naive_utc(s.submitted_at)),
+        )
+        for s in subs
+    ]
     return SubmissionListResponse(data=data)

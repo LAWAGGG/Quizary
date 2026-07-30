@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel
@@ -10,7 +9,7 @@ class ResultItem(BaseModel):
     score: Optional[float] = None
     max_score: Optional[float] = None
     status: str
-    submitted_at: Optional[datetime] = None
+    submitted_at: Optional[str] = None   # "d-m-Y H:i:s"
 
 
 class ResultListResponse(BaseModel):
@@ -61,6 +60,8 @@ class DashboardResponse(BaseModel):
     submission_trend: list[SubmissionTrend]
 
 
+# ── Import schemas ────────────────────────────────────────────────────────────
+
 class ImportTextRequest(BaseModel):
     raw_text: str
 
@@ -81,8 +82,13 @@ class ImportPreviewResponse(BaseModel):
     invalid_count: int
 
 
+class ImportConfirmQuestion(BaseModel):
+    question_text: str
+    options: list[ImportedOption]
+
+
 class ImportConfirmRequest(BaseModel):
-    questions: list[ImportPreviewResponse]
+    questions: list[ImportConfirmQuestion]
 
 
 class ImportConfirmResponse(BaseModel):

@@ -1,6 +1,6 @@
 import os
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,6 +12,7 @@ app = FastAPI(title="Quizary API")
 UPLOAD_DIR = "uploads"
 os.makedirs(os.path.join(UPLOAD_DIR, "banners"), exist_ok=True)
 os.makedirs(os.path.join(UPLOAD_DIR, "question-images"), exist_ok=True)
+os.makedirs(os.path.join(UPLOAD_DIR, "avatars"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
@@ -27,7 +28,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         errors.append({field: msg})
     return JSONResponse(
         status_code=422,
-        content={"message": "Validasi gagal", "errors": errors},
+        content={"message": "Invalid fields", "errors": errors},
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"message": exc.detail},
     )
 
 

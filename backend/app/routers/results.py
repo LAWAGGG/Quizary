@@ -1,7 +1,8 @@
+from collections import Counter
 from io import BytesIO
-from datetime import datetime, timezone
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 from openpyxl import Workbook
 
@@ -12,6 +13,7 @@ from app.models.submission import Submission, SubmissionStatus
 from app.models.answer import Answer
 from app.models.question import Question
 from app.models.user import User
+from app.utils import to_naive_utc, fmt_dt
 from app.schemas.results import (
     ResultItem,
     ResultListResponse,
@@ -53,10 +55,10 @@ def list_results(
         data=[ResultItem(
             submission_id=s.id,
             respondent_name=s.respondent_name,
-            score=s.score,
-            max_score=s.max_score,
+            score=float(s.score) if s.score is not None else None,
+            max_score=float(s.max_score) if s.max_score is not None else None,
             status=s.status.value,
-            submitted_at=s.submitted_at,
+            submitted_at=fmt_dt(to_naive_utc(s.submitted_at)),
         ) for s in subs],
         meta={"total": total, "page": page, "per_page": per_page},
     )
@@ -76,21 +78,24 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
             correct_rate=0, wrong_rate=0, score_distribution=[], per_question_stats=[],
         )
 
-    scores = [s.score or 0 for s in subs]
+    scores = [float(s.score or 0) for s in subs]
     avg = sum(scores) / total
-    highest = max(scores)
-    lowest = min(scores)
 
+    sub_ids = [s.id for s in subs]
     questions = db.query(Question).filter(Question.form_id == form.id).all()
-    per_q = []
-    total_correct = 0
-    total_answers = 0
+    all_answers = db.query(Answer).filter(
+        Answer.question_id.in_([q.id for q in questions]),
+        Answer.submission_id.in_(sub_ids),
+    ).all()
 
+    answer_by_q: dict[int, list[Answer]] = {}
+    for a in all_answers:
+        answer_by_q.setdefault(a.question_id, []).append(a)
+
+    per_q = []
+    total_correct = total_answers = 0
     for q in questions:
-        answers = db.query(Answer).filter(
-            Answer.question_id == q.id,
-            Answer.submission_id.in_([s.id for s in subs]),
-        ).all()
+        answers = answer_by_q.get(q.id, [])
         correct = sum(1 for a in answers if a.is_correct is True)
         wrong = sum(1 for a in answers if a.is_correct is False)
         per_q.append(PerQuestionStat(question_id=q.id, correct_count=correct, wrong_count=wrong))
@@ -99,14 +104,13 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
 
     rate = total_correct / total_answers if total_answers else 0
 
-    dist = {}
+    dist: dict[str, int] = {}
     for s in scores:
-        key = f"{int(s)}-{int(s)}"
-        if int(s) <= 1:
+        if s <= 1:
             key = "0-1"
-        elif int(s) <= 3:
+        elif s <= 3:
             key = "2-3"
-        elif int(s) <= 5:
+        elif s <= 5:
             key = "4-5"
         else:
             key = "6+"
@@ -115,8 +119,8 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
     return AnalyticsResponse(
         total_participants=total,
         average_score=round(avg, 2),
-        highest_score=highest,
-        lowest_score=lowest,
+        highest_score=max(scores),
+        lowest_score=min(scores),
         correct_rate=round(rate, 2),
         wrong_rate=round(1 - rate, 2),
         score_distribution=[ScoreDistribution(range=k, count=v) for k, v in sorted(dist.items())],
@@ -134,10 +138,17 @@ def export_excel(form: Form = Depends(verify_form_owner), db: Session = Depends(
     wb = Workbook()
     ws = wb.active
     ws.title = "Hasil"
-    ws.append(["Responden", "Skor", "Max Skor", "Status", "Dikirim"])
+    ws.append(["Responden", "Email", "Skor", "Max Skor", "Status", "Dikirim"])
 
     for s in subs:
-        ws.append([s.respondent_name or "Anonim", s.score, s.max_score, s.status.value, s.submitted_at])
+        ws.append([
+            s.respondent_name or "Anonim",
+            s.respondent_email or "-",
+            float(s.score) if s.score is not None else 0,
+            float(s.max_score) if s.max_score is not None else 0,
+            s.status.value,
+            fmt_dt(to_naive_utc(s.submitted_at)) or "-",
+        ])
 
     buf = BytesIO()
     wb.save(buf)
@@ -149,27 +160,88 @@ def export_excel(form: Form = Depends(verify_form_owner), db: Session = Depends(
     )
 
 
+@router.get("/forms/{form_id}/export/pdf")
+def export_pdf(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+        from reportlab.lib.styles import getSampleStyleSheet
+    except ImportError:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="PDF export requires reportlab. Install it with: pip install reportlab",
+        )
+
+    subs = db.query(Submission).filter(
+        Submission.form_id == form.id,
+        Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted]),
+    ).order_by(Submission.score.desc()).all()
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4)
+    styles = getSampleStyleSheet()
+    elements = [Paragraph(f"Hasil: {form.title}", styles["Title"])]
+
+    data = [["Responden", "Email", "Skor", "Max", "Status", "Dikirim"]]
+    for s in subs:
+        data.append([
+            s.respondent_name or "Anonim",
+            s.respondent_email or "-",
+            str(float(s.score or 0)),
+            str(float(s.max_score or 0)),
+            s.status.value,
+            fmt_dt(to_naive_utc(s.submitted_at)) or "-",
+        ])
+
+    table = Table(data)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#6C5CE7")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F0EFFF")]),
+    ]))
+    elements.append(table)
+    doc.build(elements)
+    buf.seek(0)
+
+    return Response(
+        content=buf.read(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=hasil-{form.short_code}.pdf"},
+    )
+
+
 @router.get("/dashboard/summary", response_model=DashboardResponse)
 def dashboard_summary(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     forms = db.query(Form).filter(Form.user_id == user.id).all()
-    total_forms = len(forms)
-    total_quiz = sum(1 for f in forms if f.type.value == "quiz")
-    total_submissions = sum(db.query(Submission).filter(Submission.form_id == f.id).count() for f in forms)
-    respondent_ids = set()
-    for f in forms:
-        for s in db.query(Submission).filter(Submission.form_id == f.id).all():
-            if s.user_id:
-                respondent_ids.add(s.user_id)
-    total_respondents = len(respondent_ids)
+    form_ids = [f.id for f in forms]
 
-    recent = sorted(forms, key=lambda f: f.created_at or datetime(2000, 1, 1, tzinfo=timezone.utc), reverse=True)[:5]
-    recent_data = []
-    for f in recent:
-        cnt = db.query(Submission).filter(Submission.form_id == f.id).count()
-        recent_data.append(RecentForm(id=f.id, title=f.title, status=f.status.value, submission_count=cnt))
+    subs = db.query(Submission).filter(Submission.form_id.in_(form_ids)).all() if form_ids else []
+
+    # Count unique respondents by user_id or ip_address
+    respondent_keys: set = set()
+    for s in subs:
+        respondent_keys.add(f"u:{s.user_id}" if s.user_id else f"ip:{s.ip_address}")
+
+    recent = sorted(forms, key=lambda f: f.created_at or datetime(2000, 1, 1), reverse=True)[:5]
+    sub_count_by_form = Counter(s.form_id for s in subs)
+    recent_data = [
+        RecentForm(id=f.id, title=f.title, status=f.status.value, submission_count=sub_count_by_form.get(f.id, 0))
+        for f in recent
+    ]
+
+    date_counts = Counter(s.created_at.date() for s in subs if s.created_at)
+    trend = [SubmissionTrend(date=str(d), count=c) for d, c in sorted(date_counts.items())[-7:]]
 
     return DashboardResponse(
-        total_forms=total_forms, total_quiz=total_quiz,
-        total_submissions=total_submissions, total_respondents=total_respondents,
-        recent_forms=recent_data, submission_trend=[],
+        total_forms=len(forms),
+        total_quiz=sum(1 for f in forms if f.type.value == "quiz"),
+        total_submissions=len(subs),
+        total_respondents=len(respondent_keys),
+        recent_forms=recent_data,
+        submission_trend=trend,
     )

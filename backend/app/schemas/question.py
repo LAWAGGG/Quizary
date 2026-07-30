@@ -19,6 +19,15 @@ class OptionResponse(BaseModel):
     option_text: str
     is_correct: bool
     order_index: int
+    images: list[dict] = []
+
+    model_config = {"from_attributes": True}
+
+
+class ImageResponse(BaseModel):
+    id: int
+    path: str
+    order_index: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -33,9 +42,14 @@ class QuestionCreate(BaseModel):
     @model_validator(mode="after")
     def validate_options(self):
         if self.type in ("multiple_choice", "checkbox") and not self.options:
-            raise ValueError("Tipe soal multiple_choice dan checkbox wajib memiliki minimal 1 opsi")
+            raise ValueError("multiple_choice and checkbox questions require at least 1 option")
         if self.type in ("short_answer", "essay") and self.options:
-            raise ValueError("Tipe soal short_answer dan essay tidak boleh memiliki opsi")
+            raise ValueError("short_answer and essay questions must not have options")
+        # Fix #3 — multiple_choice must have exactly 1 correct answer
+        if self.type == "multiple_choice":
+            correct_count = sum(1 for o in self.options if o.is_correct)
+            if correct_count != 1:
+                raise ValueError("multiple_choice questions must have exactly 1 correct option")
         return self
 
 
@@ -48,11 +62,17 @@ class QuestionUpdate(BaseModel):
 
     @model_validator(mode="after")
     def validate_options(self):
-        if "type" in self.model_fields_set and self.options is not None:
-            if self.type in ("multiple_choice", "checkbox") and len(self.options) == 0:
-                raise ValueError("Tipe soal multiple_choice dan checkbox wajib memiliki minimal 1 opsi")
-            if self.type in ("short_answer", "essay") and len(self.options) > 0:
-                raise ValueError("Tipe soal short_answer dan essay tidak boleh memiliki opsi")
+        q_type = self.type
+        opts = self.options
+        if q_type is not None and opts is not None:
+            if q_type in ("multiple_choice", "checkbox") and len(opts) == 0:
+                raise ValueError("multiple_choice and checkbox questions require at least 1 option")
+            if q_type in ("short_answer", "essay") and len(opts) > 0:
+                raise ValueError("short_answer and essay questions must not have options")
+            if q_type == "multiple_choice":
+                correct_count = sum(1 for o in opts if o.is_correct is True)
+                if correct_count != 1:
+                    raise ValueError("multiple_choice questions must have exactly 1 correct option")
         return self
 
 
@@ -64,6 +84,7 @@ class QuestionResponse(BaseModel):
     order_index: int
     is_required: bool
     options: list[OptionResponse] = []
+    images: list[dict] = []
 
     model_config = {"from_attributes": True}
 
@@ -72,19 +93,15 @@ class QuestionListResponse(BaseModel):
     data: list[QuestionResponse]
 
 
-class ReorderItem(BaseModel):
-    id: int
-    order_index: int = Field(ge=0)
-
-
+# Fix #5 — simplified reorder: just a list of IDs in desired order
 class ReorderRequest(BaseModel):
     form_id: int
-    orders: list[ReorderItem]
+    orders: list[int] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_orders(self):
         if not self.orders:
-            raise ValueError("orders tidak boleh kosong")
+            raise ValueError("orders must not be empty")
         return self
 
 
