@@ -1,5 +1,5 @@
 import random
-from datetime import datetime, timedelta
+from datetime import timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -16,7 +16,7 @@ from app.models.submission import Submission, SubmissionStatus
 from app.models.submission_question_order import SubmissionQuestionOrder
 from app.models.submission_option_order import SubmissionOptionOrder
 from app.models.user import User
-from app.utils import to_naive_utc, fmt_dt
+from app.utils import now_wib, fmt_dt
 from app.schemas.submissions import (
     SubmissionCreateRequest,
     SubmissionCreateResponse,
@@ -35,9 +35,8 @@ router = APIRouter(tags=["submissions"])
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def _now() -> datetime:
-    """Naive UTC — consistent with MySQL DATETIME storage."""
-    return datetime.utcnow()
+def _now():
+    return now_wib()
 
 
 def _get_sub_or_404(sub_id: int, db: Session) -> Submission:
@@ -47,13 +46,12 @@ def _get_sub_or_404(sub_id: int, db: Session) -> Submission:
     return sub
 
 
-def _expired_at(sub: Submission, form: Form) -> datetime | None:
-    """Return naive-UTC expiry, or None if no time limit."""
-    started = to_naive_utc(sub.started_at)
+def _expired_at(sub: Submission, form: Form):
+    started = sub.started_at
     if not started:
         return None
     exp = started + timedelta(seconds=form.timer_seconds) if form.timer_seconds else None
-    ends = to_naive_utc(form.ends_at)
+    ends = form.ends_at
     if exp and ends:
         return min(exp, ends)
     return exp or ends
@@ -152,11 +150,11 @@ def create_submission(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
 
     now = _now()
-    ends = to_naive_utc(form.ends_at)
+    ends = form.ends_at
     if ends and now > ends:
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Form submission period has ended")
 
-    starts = to_naive_utc(form.starts_at)
+    starts = form.starts_at
     if starts and now < starts:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -189,7 +187,7 @@ def create_submission(
         # Return the existing session with the same question order — idempotent resume.
         return SubmissionCreateResponse(
             submission_id=existing.id,
-            started_at=fmt_dt(to_naive_utc(existing.started_at)),
+            started_at=fmt_dt(existing.started_at),
             expired_at=fmt_dt(_expired_at(existing, form)),
             questions=_build_questions_response(existing.id, db),
             resumed=True,
@@ -253,17 +251,35 @@ def create_submission(
 
 # ── PATCH /submissions/{id}/autosave ─────────────────────────────────────────
 
+def _verify_submission_access(sub: Submission, request: Request, user: User | None, db: Session) -> None:
+    form = db.get(Form, sub.form_id)
+    if form and user and form.user_id == user.id:
+        return
+    if sub.user_id and user and sub.user_id == user.id:
+        return
+    client_ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+                 or (request.client.host if request.client else None))
+    if sub.ip_address and client_ip and sub.ip_address == client_ip:
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+
 @router.patch("/submissions/{submission_id}/autosave")
 def autosave(
     submission_id: int,
     body: AutosaveRequest,
+    request: Request,
     db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
 ):
     sub = _get_sub_or_404(submission_id, db)
+    _verify_submission_access(sub, request, user, db)
     form = db.get(Form, sub.form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
 
     if sub.status != SubmissionStatus.in_progress:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission has already been completed")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
 
     if _is_expired(sub, form):
         sub.status = SubmissionStatus.auto_submitted
@@ -300,12 +316,20 @@ def autosave(
 # ── POST /submissions/{id}/submit ─────────────────────────────────────────────
 
 @router.post("/submissions/{submission_id}/submit")
-def submit_answers(submission_id: int, db: Session = Depends(get_db)):
+def submit_answers(
+    submission_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
     sub = _get_sub_or_404(submission_id, db)
+    _verify_submission_access(sub, request, user, db)
     form = db.get(Form, sub.form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
 
     if sub.status != SubmissionStatus.in_progress:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission has already been completed")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
 
     sub.status = SubmissionStatus.auto_submitted if _is_expired(sub, form) else SubmissionStatus.submitted
 
@@ -408,11 +432,11 @@ def get_submission(
     return SubmissionDetailResponse(
         id=sub.id,
         status=sub.status.value,
-        started_at=fmt_dt(to_naive_utc(sub.started_at)),
+        started_at=fmt_dt(sub.started_at),
         expired_at=fmt_dt(_expired_at(sub, form)),
         score=float(sub.score) if sub.score is not None else None,
         max_score=float(sub.max_score) if sub.max_score is not None else None,
-        submitted_at=fmt_dt(to_naive_utc(sub.submitted_at)),
+        submitted_at=fmt_dt(sub.submitted_at),
         questions=questions,
         answers=answers_data,
     )
@@ -435,7 +459,7 @@ def my_submissions(user: User = Depends(get_current_user), db: Session = Depends
             form_title=s.form.title if s.form else "(deleted)",
             status=s.status.value,
             score=float(s.score) if s.score is not None else None,
-            submitted_at=fmt_dt(to_naive_utc(s.submitted_at)),
+            submitted_at=fmt_dt(s.submitted_at),
         )
         for s in subs
     ]

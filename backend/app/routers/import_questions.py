@@ -1,4 +1,5 @@
 import re
+import io
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
@@ -9,94 +10,67 @@ from app.dependencies import verify_form_owner
 from app.models.form import Form
 from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
-from app.schemas.results import (
-    ImportConfirmRequest,
-    ImportConfirmResponse,
-    ImportedQuestion,
-    ImportedOption,
-    ImportPreviewResponse,
-    ImportTextRequest,
-)
+from app.routers.questions import _distribute_quiz_points
 
 router = APIRouter(tags=["import"])
 
 
-def _parse_text(raw: str) -> tuple[list[ImportedQuestion], int]:
-    """
-    Parse raw text into questions using this template:
-      1. Question text
-      A. Option A
-      B. Option B
-      Jawaban: A
-    Returns (questions, invalid_count).
-    """
-    questions: list[ImportedQuestion] = []
-    invalid = 0
+def _parse_text(raw: str) -> list[dict]:
+    questions: list[dict] = []
 
-    blocks = re.split(r'\n\s*(?=\d+\.)', raw.strip())
+    blocks = re.split(r'\n\s*(?=\d+[\.\)])', raw.strip())
     for block in blocks:
         block = block.strip()
         if not block:
             continue
 
-        q_text: str | None = None
-        options: list[tuple[str, str]] = []
-        answer_letter: str | None = None
+        q_text = None
+        options: list[dict] = []
+        answer_letter = None
 
         for line in block.split("\n"):
             line = line.strip()
             if not line:
                 continue
-            if m := re.match(r'\d+\.\s*(.+)', line):
+            m = re.match(r'\d+[\.\)]\s*(.+)', line)
+            if m:
                 q_text = m.group(1).strip()
-            elif m := re.match(r'([A-D])[\.\)]\s*(.+)', line):
-                options.append((m.group(1), m.group(2).strip()))
-            elif m := re.match(r'Jawaban\s*[:\-]?\s*([A-D])', line, re.IGNORECASE):
+                continue
+            m = re.match(r'([A-Da-d])[\.\)]\s*(.+)', line)
+            if m:
+                letter = m.group(1).upper()
+                text = m.group(2).strip()
+                options.append({"letter": letter, "text": text})
+                continue
+            m = re.match(r'(?:Kunci\s*)?(?:Jawaban|Jawab|Answer)\s*[:\-]?\s*([A-Da-d])', line, re.IGNORECASE)
+            if m:
                 answer_letter = m.group(1).upper()
 
         if q_text and options:
-            questions.append(ImportedQuestion(
-                question_text=q_text,
-                options=[
-                    ImportedOption(text=opt_text, is_correct=(letter == answer_letter))
-                    for letter, opt_text in options
+            questions.append({
+                "question_text": q_text,
+                "options": [
+                    {"text": opt["text"], "is_correct": opt["letter"] == answer_letter}
+                    for opt in options
                 ],
-            ))
-        else:
-            invalid += 1
+            })
 
-    return questions, invalid
+    return questions
 
 
-@router.post("/forms/{form_id}/import/text", response_model=ImportPreviewResponse)
-def import_text(
-    body: ImportTextRequest,
-    form: Form = Depends(verify_form_owner),
-    db: Session = Depends(get_db),
-):
-    """Preview parsed questions from raw text. Nothing is saved yet."""
-    if not body.raw_text.strip():
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="raw_text must not be empty",
-        )
-    questions, invalid = _parse_text(body.raw_text)
-    return ImportPreviewResponse(preview=questions, valid_count=len(questions), invalid_count=invalid)
-
-
-@router.post("/forms/{form_id}/import/docx", response_model=ImportPreviewResponse)
+@router.post("/forms/{form_id}/import/docx", status_code=201)
 async def import_docx(
     form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
     file: UploadFile = File(...),
 ):
-    """Preview parsed questions from a .docx file. Nothing is saved yet."""
     if not file.filename or not file.filename.lower().endswith(".docx"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Only .docx files are supported",
         )
+
     try:
-        import io
         from docx import Document  # type: ignore
     except ImportError:
         raise HTTPException(
@@ -107,24 +81,14 @@ async def import_docx(
     content = await file.read()
     doc = Document(io.BytesIO(content))
     raw = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
-    questions, invalid = _parse_text(raw)
-    return ImportPreviewResponse(preview=questions, valid_count=len(questions), invalid_count=invalid)
+    parsed = _parse_text(raw)
 
-
-@router.post("/forms/{form_id}/import/confirm", status_code=201, response_model=ImportConfirmResponse)
-def import_confirm(
-    body: ImportConfirmRequest,
-    form: Form = Depends(verify_form_owner),
-    db: Session = Depends(get_db),
-):
-    """Permanently save the confirmed questions to the form."""
-    if not body.questions:
+    if not parsed:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="questions list must not be empty",
+            detail="No questions could be imported, check document format",
         )
 
-    # Determine next order_index so imported questions append after existing ones
     max_order = (
         db.query(Question.order_index)
         .filter(Question.form_id == form.id)
@@ -132,13 +96,12 @@ def import_confirm(
         .first()
     )
     next_order = (max_order[0] + 1) if max_order else 0
-
-    count = 0
     now = datetime.utcnow()
+    count = 0
 
-    for q_data in body.questions:
-        has_options = bool(q_data.options)
-        correct_count = sum(1 for o in q_data.options if o.is_correct)
+    for q_data in parsed:
+        has_options = bool(q_data["options"])
+        correct_count = sum(1 for o in q_data["options"] if o["is_correct"])
 
         if has_options and correct_count > 1:
             q_type = QuestionType.checkbox
@@ -150,27 +113,25 @@ def import_confirm(
         q = Question(
             form_id=form.id,
             type=q_type,
-            question_text=q_data.question_text,
-            points=1,
+            question_text=q_data["question_text"],
+            points=0 if form.type.value == "quiz" else 1,
             order_index=next_order,
             created_at=now,
         )
         db.add(q)
         db.flush()
 
-        for i, opt in enumerate(q_data.options):
+        for i, opt in enumerate(q_data["options"]):
             db.add(QuestionOption(
                 question_id=q.id,
-                option_text=opt.text,
-                is_correct=opt.is_correct,
+                option_text=opt["text"],
+                is_correct=opt["is_correct"],
                 order_index=i,
             ))
 
         next_order += 1
         count += 1
 
+    _distribute_quiz_points(form.id, db)
     db.commit()
-    return ImportConfirmResponse(
-        message=f"{count} question(s) imported successfully",
-        imported_count=count,
-    )
+    return {"message": f"{count} question(s) imported successfully", "imported_count": count}

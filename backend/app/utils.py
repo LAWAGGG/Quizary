@@ -1,5 +1,19 @@
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timezone, timedelta
 from fastapi import Request
+
+WIB = timezone(timedelta(hours=7))
+
+UPLOAD_DIR = "uploads"
+
+
+def _delete_file(path: str | None) -> None:
+    """Remove a stored file from disk if it exists."""
+    if not path:
+        return
+    full = os.path.join(UPLOAD_DIR, path.lstrip("/"))
+    if os.path.isfile(full):
+        os.remove(full)
 
 
 def file_url(request: Request, path: str | None) -> str | None:
@@ -15,6 +29,11 @@ def file_url(request: Request, path: str | None) -> str | None:
         return path
     base = str(request.base_url).rstrip("/")
     return f"{base}/uploads/{path.lstrip('/')}"
+
+
+def now_wib() -> datetime:
+    """Current time in WIB (UTC+7) as a naive datetime."""
+    return datetime.now(WIB).replace(tzinfo=None)
 
 
 def to_naive_utc(dt: datetime | None) -> datetime | None:
@@ -34,5 +53,5 @@ def to_naive_utc(dt: datetime | None) -> datetime | None:
 
 
 def fmt_dt(dt: datetime | None) -> str | None:
-    """Format a datetime to 'd-m-Y H:i:s' string, or None."""
+    """Format a naive datetime to 'd-m-Y H:i:s', or None."""
     return dt.strftime("%d-%m-%Y %H:%M:%S") if dt else None

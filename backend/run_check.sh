@@ -18,7 +18,7 @@ from app.schemas.form import FormCreate, FormUpdate, FormPublishRequest
 from app.schemas.question import QuestionCreate, QuestionUpdate, ReorderRequest
 from app.schemas.submissions import SubmissionCreateRequest, AutosaveRequest, SubmissionCreateResponse, SubmissionDetailResponse
 from app.schemas.auth import RegisterRequest, LoginRequest, UserResponse, TokenResponse
-from app.schemas.results import ResultItem, AnalyticsResponse, DashboardResponse, ImportConfirmRequest
+from app.schemas.results import ResultItem, AnalyticsResponse, DashboardResponse
 from app.schemas.profile import ProfileUpdateRequest
 print('  All schemas OK')
 "

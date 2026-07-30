@@ -1,4 +1,5 @@
 import os
+import traceback
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -37,6 +38,14 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,
         content={"message": exc.detail},
+    )
+
+
+@app.exception_handler(Exception)
+async def catch_all_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"message": f"Internal error: {type(exc).__name__}: {exc}"},
     )
 
 

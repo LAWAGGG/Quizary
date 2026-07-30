@@ -1,30 +1,37 @@
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Annotated
 
 from pydantic import BaseModel, Field, model_validator, BeforeValidator
 
+WIB = timezone(timedelta(hours=7))
+
 
 def _parse_datetime(v: object) -> datetime:
     """
-    Accept "d-m-Y H:i:s" (e.g. "30-07-2026 11:00:00") or ISO 8601 fallback.
-    Always returns a timezone-naive datetime (stored as UTC in MySQL DATETIME).
+    Accept "d-m-Y H:i:s" (e.g. "30-07-2026 18:00:00") or ISO 8601.
+    Returns a timezone-naive datetime in WIB (Asia/Jakarta, UTC+7).
+    Naive input → kept as-is (assumed WIB).
+    Aware input → converted to WIB, then stripped.
     """
     if isinstance(v, datetime):
         return v.replace(tzinfo=None) if v.tzinfo else v
     if not isinstance(v, str):
         raise ValueError("datetime must be a string")
     v = v.strip()
+
     for fmt in ("%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M", "%d-%m-%Y"):
         try:
             return datetime.strptime(v, fmt)
         except ValueError:
             pass
-    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(v.rstrip("Z").split("+")[0], fmt)
-        except ValueError:
-            pass
-    raise ValueError("Use format 'd-m-Y H:i:s', e.g. '30-07-2026 11:00:00'")
+
+    try:
+        dt = datetime.fromisoformat(v)
+        return dt.astimezone(WIB).replace(tzinfo=None) if dt.tzinfo else dt
+    except ValueError:
+        pass
+
+    raise ValueError("Gunakan format 'd-m-Y H:i:s', contoh '30-07-2026 18:00:00'")
 
 
 def _fmt_dt(dt: datetime | None) -> str | None:

@@ -31,7 +31,8 @@ def register(request: Request, body: RegisterRequest, db: Session = Depends(get_
     db.add(user)
     db.commit()
     db.refresh(user)
-    return _user_response(user, request)
+    token = create_access_token(user.id, user.role.value)
+    return {"token": token, "user": _user_response(user, request).model_dump()}
 
 
 @router.post("/login")

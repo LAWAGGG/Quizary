@@ -8,7 +8,7 @@ from app.models.form import Form
 from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
 from app.models.user import User
-from app.utils import file_url
+from app.utils import file_url, _delete_file
 from app.schemas.question import (
     MessageResponse,
     QuestionCreate,
@@ -20,6 +20,26 @@ router = APIRouter(tags=["questions"])
 
 _OPTION_TYPES = ("multiple_choice", "checkbox")
 _TEXT_TYPES = ("short_answer", "essay")
+
+
+def _distribute_quiz_points(form_id: int, db: Session) -> None:
+    form = db.get(Form, form_id)
+    if not form or form.type.value != "quiz":
+        return
+    questions = db.query(Question).filter(Question.form_id == form_id).all()
+    if not questions:
+        return
+    manual = [q for q in questions if q.points != 0]
+    auto = [q for q in questions if q.points == 0]
+    if not auto:
+        return
+    remaining = 100 - sum(q.points for q in manual)
+    if remaining <= 0:
+        return
+    base = remaining // len(auto)
+    rem = remaining % len(auto)
+    for i, q in enumerate(auto):
+        q.points = base + (1 if i < rem else 0)
 
 
 def _get_question_or_404(q_id: int, db: Session) -> Question:
@@ -109,7 +129,7 @@ def create_question(
         form_id=form.id,
         type=QuestionType(body.type),
         question_text=body.question_text,
-        points=body.points,
+        points=0 if form.type.value == "quiz" else body.points,
         is_required=body.is_required,
         order_index=next_order,
         created_at=datetime.utcnow(),
@@ -125,6 +145,7 @@ def create_question(
             order_index=i,
         ))
 
+    _distribute_quiz_points(form.id, db)
     db.commit()
     db.refresh(question)
     return _build_question(question, request)
@@ -186,15 +207,20 @@ def update_question(
 
         for opt_dict in options_data:
             opt_id = opt_dict.get("id")
-            if opt_id and opt_id in existing_ids:
-                seen_ids.add(opt_id)
-                opt = db.get(QuestionOption, opt_id)
-                if opt:
+            if opt_id:
+                if opt_id in existing_ids:
+                    seen_ids.add(opt_id)
+                    opt = db.get(QuestionOption, opt_id)
                     if opt_dict.get("option_text") is not None:
                         opt.option_text = opt_dict["option_text"]
                     if opt_dict.get("is_correct") is not None:
                         opt.is_correct = opt_dict["is_correct"]
-            elif not opt_id:
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Option {opt_id} not found in this question",
+                    )
+            else:
                 new_opts.append(opt_dict)
 
         for opt in list(question.options):
@@ -225,6 +251,7 @@ def update_question(
                     detail="multiple_choice questions must have exactly 1 correct option",
                 )
 
+    _distribute_quiz_points(question.form_id, db)
     db.commit()
     db.refresh(question)
     return _build_question(question, request)
@@ -240,7 +267,14 @@ def delete_question(
 ):
     question = _get_question_or_404(question_id, db)
     _ensure_owner(question, user, db)
+    for img in question.images:
+        _delete_file(img.path)
+    for opt in question.options:
+        for img in opt.images:
+            _delete_file(img.path)
+    form_id = question.form_id
     db.delete(question)
+    _distribute_quiz_points(form_id, db)
     db.commit()
     return {"message": "Question deleted"}
 

@@ -1,7 +1,6 @@
 import os
 import uuid
 from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
 
@@ -12,29 +11,34 @@ from app.models.image import Image
 from app.models.question import Question
 from app.models.question_option import QuestionOption
 from app.models.user import User
-from app.schemas.auth import MessageResponse
-from app.utils import file_url
+from app.schemas.auth import MessageResponse, UserResponse
+from app.utils import UPLOAD_DIR, file_url, _delete_file
 
 router = APIRouter(tags=["profile & media"])
 
-UPLOAD_DIR = "uploads"
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_MIMES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 
 
+def _user_response(user: User, request: Request) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        role=user.role.value,
+        avatar=file_url(request, user.avatar),
+    )
+
+
 def _save_upload(file: UploadFile, subdir: str) -> str:
-    ext = os.path.splitext(file.filename or ".png")[1].lower()
+    if not file.filename or not file.file:
+        raise HTTPException(status_code=422, detail="Invalid file")
+    ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Unsupported file format, use JPG/PNG/GIF/WEBP",
-        )
+        raise HTTPException(status_code=422, detail="Unsupported file format, use JPG/PNG/GIF/WEBP")
     mime = file.content_type
     if mime and mime not in ALLOWED_MIMES:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Unsupported file format, use JPG/PNG/GIF/WEBP",
-        )
+        raise HTTPException(status_code=422, detail="Unsupported file format, use JPG/PNG/GIF/WEBP")
     filename = f"{uuid.uuid4().hex}{ext}"
     dest = os.path.join(UPLOAD_DIR, subdir, filename)
     with open(dest, "wb") as f:
@@ -42,18 +46,8 @@ def _save_upload(file: UploadFile, subdir: str) -> str:
     return f"{subdir}/{filename}"
 
 
-def _delete_file(path: str | None) -> None:
-    """Remove a stored file from disk if it exists."""
-    if not path:
-        return
-    # path stored in DB is relative, e.g. "banners/abc.png" or "question-images/xyz.jpg"
-    full = os.path.join(UPLOAD_DIR, path.lstrip("/"))
-    if os.path.isfile(full):
-        os.remove(full)
-
-
 # ── PUT /me ──────────────────────────────────────────────────────────────────
-@router.put("/me", response_model=MessageResponse)
+@router.put("/me")
 def update_profile(
     request: Request,
     name: str | None = Form(None),
@@ -62,19 +56,22 @@ def update_profile(
     db: Session = Depends(get_db),
 ):
     if name is not None:
+        if not name.strip():
+            raise HTTPException(status_code=422, detail="Name cannot be empty")
         user.name = name
+    old_avatar = user.avatar
     if avatar is not None:
-        old_path = user.avatar
         new_path = _save_upload(avatar, "avatars")
         user.avatar = new_path
-        db.commit()
-        _delete_file(old_path)
     db.commit()
-    return MessageResponse(message="Profile updated")
+    db.refresh(user)
+    if avatar is not None:
+        _delete_file(old_avatar)
+    return _user_response(user, request)
 
 
 # ── POST /me/avatar ──────────────────────────────────────────────────────────
-@router.post("/me/avatar", response_model=MessageResponse)
+@router.post("/me/avatar")
 def upload_avatar(
     request: Request,
     avatar: UploadFile = File(...),
@@ -86,9 +83,9 @@ def upload_avatar(
     new_path = _save_upload(avatar, "avatars")
     user.avatar = new_path
     db.commit()
-    # Remove old avatar file after committing
+    db.refresh(user)
     _delete_file(old_path)
-    return MessageResponse(message="Avatar updated")
+    return _user_response(user, request)
 
 
 # ── POST /forms/{form_id}/banner ─────────────────────────────────────────────
@@ -191,8 +188,36 @@ def delete_image(
     stored_path = img.path
     db.delete(img)
     db.commit()
+    _delete_file(stored_path)
 
-    # Fix #7 — delete physical file from disk
+    return MessageResponse(message="Image deleted")
+
+
+# ── DELETE /options/{option_id}/images/{image_id} ──────────────────────────────
+@router.delete("/options/{option_id}/images/{image_id}", response_model=MessageResponse)
+def delete_option_image(
+    option_id: int,
+    image_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    opt = db.get(QuestionOption, option_id)
+    if not opt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Option not found")
+    q = db.get(Question, opt.question_id)
+    if not q:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+    f = db.get(FormModel, q.form_id)
+    if not f or f.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not the owner of this form")
+
+    img = db.query(Image).filter(Image.id == image_id, Image.option_id == option_id).first()
+    if not img:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Image not found")
+
+    stored_path = img.path
+    db.delete(img)
+    db.commit()
     _delete_file(stored_path)
 
     return MessageResponse(message="Image deleted")

@@ -3,11 +3,10 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_optional_user
-from app.utils import file_url, to_naive_utc, fmt_dt
+from app.utils import file_url, now_wib, fmt_dt
 from app.models.form import Form, FormStatus, SubmissionLimit
 from app.models.submission import Submission, SubmissionStatus
 from app.models.user import User
-from datetime import datetime
 
 router = APIRouter(tags=["public"])
 
@@ -53,11 +52,9 @@ def start_form_check(
             detail="Login required to access this form",
         )
 
-    # Fix #6 — use to_naive_utc() so comparison is always naive↔naive regardless
-    # of how MySQL/SQLAlchemy returns the stored DATETIME value.
-    now = datetime.utcnow()
-    starts = to_naive_utc(form.starts_at)
-    ends = to_naive_utc(form.ends_at)
+    now = now_wib()
+    starts = form.starts_at
+    ends = form.ends_at
 
     if starts and now < starts:
         return {

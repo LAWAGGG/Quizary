@@ -60,37 +60,4 @@ class DashboardResponse(BaseModel):
     submission_trend: list[SubmissionTrend]
 
 
-# ── Import schemas ────────────────────────────────────────────────────────────
 
-class ImportTextRequest(BaseModel):
-    raw_text: str
-
-
-class ImportedOption(BaseModel):
-    text: str
-    is_correct: bool
-
-
-class ImportedQuestion(BaseModel):
-    question_text: str
-    options: list[ImportedOption]
-
-
-class ImportPreviewResponse(BaseModel):
-    preview: list[ImportedQuestion]
-    valid_count: int
-    invalid_count: int
-
-
-class ImportConfirmQuestion(BaseModel):
-    question_text: str
-    options: list[ImportedOption]
-
-
-class ImportConfirmRequest(BaseModel):
-    questions: list[ImportConfirmQuestion]
-
-
-class ImportConfirmResponse(BaseModel):
-    message: str
-    imported_count: int

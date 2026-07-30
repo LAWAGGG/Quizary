@@ -8,8 +8,10 @@ from app.database import get_db
 from app.dependencies import get_current_user, verify_form_owner
 from app.models.form import Form, FormStatus, FormType, SubmissionLimit
 from app.models.question import Question
+from app.models.question_option import QuestionOption
+from app.models.image import Image
 from app.models.user import User
-from app.utils import file_url, fmt_dt, to_naive_utc
+from app.utils import file_url, fmt_dt, to_naive_utc, _delete_file
 from app.schemas.form import (
     FormCreate,
     FormListItem,
@@ -149,13 +151,21 @@ def update_form(
     form.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(form)
-    return {"message": "Form updated", "id": form.id}
+    return _form_dict(form, request)
 
 
 # ── DELETE /forms/{form_id} ───────────────────────────────────────────────────
 
 @router.delete("/forms/{form_id}")
 def delete_form(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
+    _delete_file(form.banner_path)
+    questions = db.query(Question).filter(Question.form_id == form.id).all()
+    for q in questions:
+        for img in db.query(Image).filter(Image.question_id == q.id).all():
+            _delete_file(img.path)
+        for opt in db.query(QuestionOption).filter(QuestionOption.question_id == q.id).all():
+            for img in db.query(Image).filter(Image.option_id == opt.id).all():
+                _delete_file(img.path)
     db.delete(form)
     db.commit()
     return {"message": "Form and all related data have been deleted"}
