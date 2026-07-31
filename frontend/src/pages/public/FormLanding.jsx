@@ -1,0 +1,303 @@
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { Lock, Clock, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { Button, Input, Card, AppMark } from '../../components/ui'
+import api from '../../api/client'
+
+function parseDate(str) {
+  if (!str) return new Date()
+  const [d, m, Y, H, M, S] = str.split(/[\s:-]+/).map(Number)
+  return new Date(Y, m - 1, d, H, M, S)
+}
+
+function CountdownTo({ target }) {
+  const [remaining, setRemaining] = useState('')
+
+  useEffect(() => {
+    function tick() {
+      const diff = target.getTime() - Date.now()
+      if (diff <= 0) return setRemaining('Start...')
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      setRemaining(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [target])
+
+  return <div className="font-mono text-4xl font-bold tabular-nums mt-4">{remaining}</div>
+}
+
+const BUBBLES = Array.from({ length: 12 }, (_, i) => i)
+
+function BlockedState({ color, icon, title, children }) {
+  return (
+    <div className="min-h-dvh flex items-center justify-center p-6" style={{ backgroundColor: color }}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-center text-white max-w-md"
+      >
+        <span className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white/10 mb-6">
+          {icon}
+        </span>
+        <p className="font-display text-xl font-semibold">{title}</p>
+        {children}
+      </motion.div>
+    </div>
+  )
+}
+
+export default function FormLanding() {
+  const { shortCode } = useParams()
+  const navigate = useNavigate()
+
+  const [form, setForm] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [startState, setStartState] = useState(null)
+  const [error, setError] = useState(null)
+
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    api.get(`/q/${shortCode}`)
+      .then((res) => setForm(res.data))
+      .catch((err) => setError(err.response?.data?.message || 'Form not found'))
+      .finally(() => setLoading(false))
+  }, [shortCode])
+
+  const handleStart = async () => {
+    try {
+      const res = await api.get(`/q/${shortCode}/start`)
+      const data = res.data
+      if (data.can_start && !data.require_identity) {
+        const sub = await api.post('/submissions', { form_id: data.form_id })
+        navigate(`/s/${sub.data.submission_id}?type=${form.type}&title=${encodeURIComponent(form.title)}&code=${shortCode}`)
+      } else {
+        setStartState(data)
+      }
+    } catch (err) {
+      if (err.response?.status === 401) {
+        setStartState({ requires_login: true })
+      } else {
+        setError(err.response?.data?.message || 'Something went wrong')
+      }
+    }
+  }
+
+  const handleSubmitIdentity = async (e) => {
+    e.preventDefault()
+    if (!name.trim()) return
+    setSubmitting(true)
+    try {
+      const res = await api.post('/submissions', {
+        form_id: startState.form_id,
+        respondent_name: name,
+        respondent_email: email || undefined,
+      })
+      navigate(`/s/${res.data.submission_id}?type=${form.type}&title=${encodeURIComponent(form.title)}&code=${shortCode}`)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to start')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-paper">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+          className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full"
+        />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-ink p-6">
+        <div className="text-center text-white max-w-sm">
+          <p className="font-display text-6xl font-bold text-primary">404</p>
+          <p className="text-white/60 mt-4">{error}</p>
+          <Button variant="secondary" className="mt-8" onClick={() => navigate('/')}>Go home</Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!form) return null
+
+  const isQuiz = form.type === 'quiz'
+  const bgColor = form.theme_color || '#6C5CE7'
+
+  if (startState) {
+    if (startState.requires_login) {
+      return (
+        <BlockedState
+          color={bgColor}
+          icon={<Lock className="w-6 h-6 text-white" />}
+          title="Sign in required"
+        >
+          <p className="text-white/70 text-sm mt-2 mb-6">You need to sign in to access {form.title}.</p>
+          <Button variant="secondary" size="xl" onClick={() => navigate('/login')}>
+            Login
+          </Button>
+        </BlockedState>
+      )
+    }
+
+    if (!startState.can_start) {
+      const msgs = {
+        not_started: 'This form opens in:',
+        closed: 'This form is now closed.',
+        already_submitted: 'You have already submitted this form.',
+      }
+      return (
+        <BlockedState
+          color={bgColor}
+          icon={startState.reason === 'already_submitted' ? <CheckCircle2 className="w-6 h-6 text-white" /> : <Clock className="w-6 h-6 text-white" />}
+          title={msgs[startState.reason] || 'Access denied'}
+        >
+          {startState.reason === 'not_started' && <CountdownTo target={parseDate(startState.starts_at)} />}
+        </BlockedState>
+      )
+    }
+
+    return (
+      <div className="min-h-dvh flex items-center justify-center p-6 bg-paper">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md"
+        >
+          <div className="flex items-center gap-2.5 mb-6 justify-center">
+            <AppMark size="sm" />
+            <span className="font-display font-bold text-ink">Quizary</span>
+          </div>
+          <Card className="p-6 md:p-7">
+            <h2 className="font-display text-xl font-bold text-ink">{form.title}</h2>
+            <p className="text-sm text-gray-500 mt-1 mb-6">Enter your details to begin</p>
+            <form onSubmit={handleSubmitIdentity} className="space-y-4">
+              <Input
+                label="Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name"
+                required
+              />
+              <Input
+                label="Email (optional)"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="email@example.com"
+              />
+              <Button type="submit" disabled={submitting || !name.trim()} loading={submitting} className="w-full" size="lg">
+                Start
+              </Button>
+            </form>
+          </Card>
+        </motion.div>
+      </div>
+    )
+  }
+
+  if (isQuiz) {
+    return (
+      <div className="min-h-dvh flex flex-col" style={{ backgroundColor: bgColor, '--color-primary': bgColor }}>
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
+          <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-white/10 blur-3xl pointer-events-none" aria-hidden="true" />
+          <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-black/10 blur-3xl pointer-events-none" aria-hidden="true" />
+
+          <div className="flex items-center gap-2.5 mb-10">
+            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white text-sm font-bold text-[var(--color-primary)]">Q</span>
+            <span className="font-display font-bold text-white">Quizary</span>
+          </div>
+
+          {form.banner_path && (
+            <motion.img
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              src={form.banner_path}
+              alt=""
+              className="w-40 h-40 object-cover rounded-3xl mb-8 shadow-lift border-4 border-white/20"
+            />
+          )}
+
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="font-display text-4xl md:text-5xl font-bold leading-tight text-white max-w-2xl"
+          >
+            {form.title}
+          </motion.h1>
+          {form.description && (
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-base md:text-lg opacity-80 max-w-md text-white mt-4"
+            >
+              {form.description}
+            </motion.p>
+          )}
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="mt-10"
+          >
+            <button
+              onClick={handleStart}
+              className="inline-flex items-center gap-2 h-14 px-10 rounded-full bg-white text-base font-bold text-[var(--color-primary)] hover:scale-[1.03] active:scale-95 transition-transform shadow-lift"
+            >
+              Start
+              <ArrowRight className="w-5 h-5" />
+            </button>
+          </motion.div>
+        </div>
+
+        <div className="pb-6 flex items-center gap-3 justify-center">
+          {BUBBLES.map((i) => (
+            <span
+              key={i}
+              className={`w-5 h-5 rounded-full border-2 transition-colors ${
+                i === 2 || i === 5 || i === 8 ? 'border-white bg-white' : 'border-white/25'
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-dvh bg-paper flex flex-col">
+      <div className="flex-1 max-w-lg mx-auto w-full p-6">
+        {form.banner_path && (
+          <img src={form.banner_path} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
+        )}
+        <Card className="p-6 md:p-7">
+          <div className="flex items-center gap-2 mb-4">
+            <AppMark size="sm" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Quizary form</span>
+          </div>
+          <h1 className="font-display text-2xl font-bold text-ink mb-2">{form.title}</h1>
+          {form.description && <p className="text-gray-600 mb-6">{form.description}</p>}
+          <Button onClick={handleStart} className="w-full" size="lg" icon={<ArrowRight className="w-4 h-4" />}>
+            Start
+          </Button>
+        </Card>
+      </div>
+    </div>
+  )
+}

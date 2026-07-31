@@ -33,6 +33,7 @@ def get_public_form(request: Request, short_code: str, db: Session = Depends(get
         "starts_at": fmt_dt(form.starts_at),
         "ends_at": fmt_dt(form.ends_at),
         "timer_seconds": form.timer_seconds,
+        "submission_limit": form.submission_limit.value,
         "thank_you_message": form.thank_you_message,
     }
 
