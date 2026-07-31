@@ -21,13 +21,13 @@ Auth: -
 ```json
 // Response 201
 {
-  "message": "Registrasi berhasil",
-  "user": { "id": 1, "name": "Ahmad Faqih", "email": "faqih@sekolah.sch.id", "role": "user" }
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": { "id": 1, "name": "Ahmad Faqih", "email": "faqih@sekolah.sch.id", "role": "user", "avatar": null }
 }
 ```
 ```json
-// Response 422 (validasi gagal)
-{ "message": "Email sudah terdaftar", "errors": { "email": ["Email sudah digunakan"] } }
+// Response 409 (email sudah terdaftar)
+{ "message": "Email already registered" }
 ```
 
 ### `POST /login`
@@ -40,22 +40,19 @@ Auth: -
 // Response 200
 {
   "token": "eyJhbGciOiJIUzI1NiIs...",
-  "user": { "id": 1, "name": "Ahmad Faqih", "role": "user" }
+  "user": { "id": 1, "name": "Ahmad Faqih", "role": "user", "avatar": null }
 }
 ```
 ```json
 // Response 401
-{ "message": "Email atau password salah" }
+{ "message": "Invalid email or password" }
 ```
 
 ### `POST /logout`
 Auth: Bearer Token
 ```json
-// Request: (kosong)
-```
-```json
 // Response 200
-{ "message": "Logout berhasil" }
+{ "message": "Logged out successfully" }
 ```
 
 ### `GET /me`
@@ -66,14 +63,26 @@ Auth: Bearer Token
 ```
 
 ### `PUT /me`
-Auth: Bearer Token
-```json
-// Request
-{ "name": "Ahmad Faqih Ar Rifa'i", "avatar": "avatars/faqih.png" }
+Auth: Bearer Token — `multipart/form-data`
+```
+// Request (form-data)
+name: "Ahmad Faqih Ar Rifa'i"
+avatar: <file.png>   (opsional)
 ```
 ```json
 // Response 200
-{ "message": "Profil diperbarui", "user": { "id": 1, "name": "Ahmad Faqih Ar Rifa'i" } }
+{ "id": 1, "name": "Ahmad Faqih Ar Rifa'i", "email": "faqih@sekolah.sch.id", "role": "user", "avatar": "http://localhost:8000/uploads/avatars/abc123.png" }
+```
+
+### `POST /me/avatar`
+Auth: Bearer Token — `multipart/form-data`
+```
+// Request (form-data)
+avatar: <file.png>
+```
+```json
+// Response 200
+{ "id": 1, "name": "Ahmad Faqih", "email": "faqih@sekolah.sch.id", "role": "user", "avatar": "http://localhost:8000/uploads/avatars/abc123.png" }
 ```
 
 ---
@@ -82,7 +91,7 @@ Auth: Bearer Token
 
 ### `GET /forms`
 Auth: Bearer Token — mengembalikan form milik user login
-Query params: `?status=published&type=quiz&page=1`
+Query params: `?status=published&type=quiz&page=1&per_page=10`
 ```json
 // Response 200
 {
@@ -108,57 +117,101 @@ Auth: Bearer Token
 ```
 ```json
 // Response 201
-{ "id": 2, "title": "Quiz Matematika Dasar", "status": "draft", "short_code": "QZM002B" }
+{
+  "id": 2,
+  "title": "Quiz Matematika Dasar",
+  "description": "Quiz materi aljabar",
+  "type": "quiz",
+  "status": "draft",
+  "short_code": "QZM002B",
+  "is_public": true,
+  "require_login": false,
+  "theme_color": null,
+  "banner_path": null,
+  "thank_you_message": null,
+  "timer_seconds": null,
+  "starts_at": null,
+  "ends_at": null,
+  "shuffle_questions": false,
+  "shuffle_options": false,
+  "submission_limit": "once",
+  "created_at": "30-07-2026 18:00:00",
+  "updated_at": "30-07-2026 18:00:00"
+}
 ```
 
 ### `GET /forms/{id}`
-Auth: Bearer Token (pemilik) — publik hanya kalau dipanggil dari halaman admin
+Auth: Bearer Token (pemilik)
 ```json
 // Response 200
 {
   "id": 2,
   "title": "Quiz Matematika Dasar",
+  "description": "Quiz materi aljabar",
   "type": "quiz",
   "status": "published",
-  "starts_at": "2026-07-23T08:00:00Z",
-  "ends_at": "2026-07-30T08:00:00Z",
+  "short_code": "QZM002B",
+  "is_public": true,
+  "require_login": false,
+  "theme_color": "#EF4444",
+  "banner_path": "http://localhost:8000/uploads/banners/math-quiz.png",
+  "thank_you_message": "Terima kasih telah mengerjakan quiz ini",
   "timer_seconds": 600,
+  "starts_at": "30-07-2026 18:00:00",
+  "ends_at": "31-07-2026 18:00:00",
   "shuffle_questions": true,
   "shuffle_options": true,
-  "theme_color": "#EF4444",
-  "banner_path": "banners/math-quiz.png"
+  "submission_limit": "once",
+  "created_at": "30-07-2026 18:00:00",
+  "updated_at": "30-07-2026 18:00:00"
 }
 ```
 ```json
 // Response 404
-{ "message": "Form tidak ditemukan" }
+{ "message": "Form not found" }
 ```
 
 ### `PUT /forms/{id}`
-Auth: Bearer Token (pemilik)
+Auth: Bearer Token (pemilik) — kirim field yang berubah saja
 ```json
-// Request (kirim field yang berubah saja)
+// Request
 {
-  "starts_at": "2026-07-25T08:00:00Z",
-  "ends_at": "2026-07-31T08:00:00Z",
+  "starts_at": "30-07-2026 18:00:00",
+  "ends_at": "31-07-2026 18:00:00",
   "timer_seconds": 900,
   "shuffle_questions": true
 }
 ```
 ```json
-// Response 200
-{ "message": "Form diperbarui", "id": 2 }
+// Response 200 — mengembalikan full form object (sama seperti GET)
+{
+  "id": 2,
+  "title": "Quiz Matematika Dasar",
+  "type": "quiz",
+  "status": "draft",
+  "short_code": "QZM002B",
+  "starts_at": "30-07-2026 18:00:00",
+  "ends_at": "31-07-2026 18:00:00",
+  "timer_seconds": 900,
+  "shuffle_questions": true,
+  "shuffle_options": false,
+  ...
+}
 ```
 ```json
 // Response 403
-{ "message": "Anda bukan pemilik form ini" }
+{ "message": "You are not the owner of this form" }
+```
+```json
+// Response 404
+{ "message": "Form not found" }
 ```
 
 ### `DELETE /forms/{id}`
 Auth: Bearer Token (pemilik)
 ```json
 // Response 200
-{ "message": "Form dan seluruh data terkait telah dihapus" }
+{ "message": "Form and all related data have been deleted" }
 ```
 
 ### `PATCH /forms/{id}/publish`
@@ -169,11 +222,11 @@ Auth: Bearer Token (pemilik)
 ```
 ```json
 // Response 200
-{ "message": "Form dipublikasikan", "short_code": "QZM002B" }
+{ "message": "Form published", "short_code": "QZM002B" }
 ```
 ```json
 // Response 422 (validasi gagal, misal belum ada soal)
-{ "message": "Form minimal harus memiliki 1 soal sebelum dipublikasikan" }
+{ "message": "Form must have at least 1 question before publishing" }
 ```
 
 ### `POST /forms/{id}/banner`
@@ -184,11 +237,11 @@ banner: <file.png>
 ```
 ```json
 // Response 200
-{ "message": "Banner diunggah", "banner_path": "banners/math-quiz.png" }
+{ "message": "Banner uploaded", "banner_path": "http://localhost:8000/uploads/banners/math-quiz.png" }
 ```
 ```json
 // Response 422
-{ "message": "Format file tidak didukung, gunakan JPG/PNG" }
+{ "message": "Unsupported file format, use JPG/PNG/GIF/WEBP" }
 ```
 
 ---
@@ -209,10 +262,10 @@ Auth: Bearer Token (pemilik)
       "order_index": 0,
       "is_required": true,
       "options": [
-        { "id": 1, "option_text": "80", "is_correct": false },
-        { "id": 2, "option_text": "96", "is_correct": true }
+        { "id": 1, "option_text": "80", "is_correct": false, "order_index": 0, "image": null },
+        { "id": 2, "option_text": "96", "is_correct": true, "order_index": 1, "image": null }
       ],
-      "images": [{ "id": 1, "path": "question-images/q1.png", "type": "file" }]
+      "image": { "id": 1, "path": "http://localhost:8000/uploads/question-images/q1.png" }
     }
   ]
 }
@@ -234,14 +287,30 @@ Auth: Bearer Token (pemilik)
 }
 ```
 ```json
-// Response 201
-{ "id": 1, "question_text": "Berapa hasil dari 12 x 8?" }
+// Response 201 — full question object (sama seperti GET data item)
+{
+  "id": 1,
+  "type": "multiple_choice",
+  "question_text": "Berapa hasil dari 12 x 8?",
+  "points": 1,
+  "order_index": 0,
+  "is_required": true,
+  "options": [
+    { "id": 1, "option_text": "80", "is_correct": false, "order_index": 0, "image": null },
+    { "id": 2, "option_text": "96", "is_correct": true, "order_index": 1, "image": null }
+  ],
+  "image": null
+}
+```
+```json
+// Response 422 — misal multiple_choice tidak punya tepat 1 jawaban benar
+{ "message": "multiple_choice questions must have exactly 1 correct option" }
 ```
 
 ### `PUT /questions/{id}`
 Auth: Bearer Token (pemilik form terkait)
 ```json
-// Request
+// Request — kirim field yang berubah
 {
   "question_text": "Berapa hasil dari 12 x 9?",
   "points": 2,
@@ -252,33 +321,38 @@ Auth: Bearer Token (pemilik form terkait)
 }
 ```
 ```json
-// Response 200
-{ "message": "Soal diperbarui", "id": 1 }
+// Response 200 — full question object (sama seperti POST)
+{
+  "id": 1,
+  "type": "multiple_choice",
+  "question_text": "Berapa hasil dari 12 x 9?",
+  "points": 2,
+  "order_index": 0,
+  "is_required": true,
+  "options": [ ... ],
+  "image": null
+}
 ```
 
 ### `DELETE /questions/{id}`
 Auth: Bearer Token (pemilik)
 ```json
 // Response 200
-{ "message": "Soal dihapus" }
+{ "message": "Question deleted" }
 ```
 
 ### `PATCH /questions/reorder`
 Auth: Bearer Token (pemilik)
 ```json
-// Request
+// Request — orders adalah array ID dalam urutan yang diinginkan
 {
   "form_id": 2,
-  "orders": [
-    { "id": 5, "order_index": 0 },
-    { "id": 3, "order_index": 1 },
-    { "id": 8, "order_index": 2 }
-  ]
+  "orders": [5, 3, 8]
 }
 ```
 ```json
 // Response 200
-{ "message": "Urutan soal diperbarui" }
+{ "message": "Question order updated" }
 ```
 
 ---
@@ -286,91 +360,69 @@ Auth: Bearer Token (pemilik)
 ## 4. Images
 
 ### `POST /questions/{id}/images`
-Auth: Bearer Token (pemilik) — `multipart/form-data` atau JSON untuk link
-```json
-// Request (link)
-{ "type": "link", "path": "https://example.com/image.jpg" }
+Auth: Bearer Token (pemilik) — `multipart/form-data`
 ```
-```
-// Request (file, multipart)
+// Request (form-data)
 image: <file.png>
 ```
 ```json
 // Response 201
-{ "id": 4, "path": "question-images/q1-uploaded.png", "type": "file" }
+{ "id": 4, "path": "http://localhost:8000/uploads/question-images/q1-uploaded.png" }
+```
+```json
+// Response 404
+{ "message": "Question not found" }
 ```
 
-### `POST /options/{id}/images`
-Auth: Bearer Token (pemilik) — sama seperti di atas, target `option_id`
+### `POST /options/{option_id}/images`
+Auth: Bearer Token (pemilik) — `multipart/form-data`
+```
+// Request (form-data)
+image: <file.png>
+```
 ```json
 // Response 201
-{ "id": 5, "path": "question-images/opt-1.png", "type": "file" }
+{ "id": 5, "path": "http://localhost:8000/uploads/question-images/opt-1.png" }
 ```
 
 ### `DELETE /images/{id}`
 Auth: Bearer Token (pemilik)
 ```json
 // Response 200
-{ "message": "Gambar dihapus" }
+{ "message": "Image deleted" }
+```
+
+### `DELETE /options/{option_id}/images/{image_id}`
+Auth: Bearer Token (pemilik)
+```json
+// Response 200
+{ "message": "Image deleted" }
 ```
 
 ---
 
 ## 5. Import Soal
 
-### `POST /forms/{id}/import/text`
-Auth: Bearer Token (pemilik)
-```json
-// Request
-{
-  "raw_text": "1. Apa ibu kota Indonesia?\nA. Bandung\nB. Jakarta\nC. Surabaya\nJawaban: B"
-}
-```
-```json
-// Response 200 (preview, belum tersimpan)
-{
-  "preview": [
-    {
-      "question_text": "Apa ibu kota Indonesia?",
-      "options": [
-        { "text": "Bandung", "is_correct": false },
-        { "text": "Jakarta", "is_correct": true },
-        { "text": "Surabaya", "is_correct": false }
-      ]
-    }
-  ],
-  "valid_count": 1,
-  "invalid_count": 0
-}
-```
-```json
-// Response 422
-{ "message": "Format tidak sesuai template pada soal nomor 2" }
-```
-
-### `POST /forms/{id}/import/docx`
+### `POST /forms/{form_id}/import/docx`
 Auth: Bearer Token (pemilik) — `multipart/form-data`
 ```
-// Request
+// Request (form-data)
 file: <soal.docx>
 ```
 ```json
-// Response 200
-{ "preview": [ /* struktur sama seperti import/text */ ], "valid_count": 10, "invalid_count": 1 }
-```
-
-**Catatan:** endpoint import hanya mengembalikan preview. Simpan permanen lewat endpoint terpisah:
-
-### `POST /forms/{id}/import/confirm`
-Auth: Bearer Token (pemilik)
-```json
-// Request
-{ "questions": [ /* array hasil preview yang sudah dikoreksi user */ ] }
+// Response 201 — langsung menyimpan soal dari file
+{ "message": "10 question(s) imported successfully", "imported_count": 10 }
 ```
 ```json
-// Response 201
-{ "message": "10 soal berhasil diimpor", "imported_count": 10 }
+// Response 422
+{ "message": "Only .docx files are supported" }
 ```
+```json
+// Response 422 (tidak ada soal terdeteksi)
+{ "message": "No questions could be imported, check document format" }
+```
+
+> **Catatan:** Tidak ada endpoint `/import/text` atau `/import/confirm`. Import langsung menyimpan soal. Untuk menambah/mengedit soal, gunakan endpoint Questions biasa.
 
 ---
 
@@ -381,18 +433,23 @@ Auth: -
 ```json
 // Response 200
 {
+  "id": 2,
   "title": "Quiz Matematika Dasar",
   "description": "Quiz materi aljabar",
   "type": "quiz",
-  "banner_path": "banners/math-quiz.png",
+  "banner_path": "http://localhost:8000/uploads/banners/math-quiz.png",
   "theme_color": "#EF4444",
   "require_login": false,
-  "status": "published"
+  "status": "published",
+  "starts_at": "30-07-2026 18:00:00",
+  "ends_at": "31-07-2026 18:00:00",
+  "timer_seconds": 600,
+  "thank_you_message": "Terima kasih telah mengerjakan quiz ini"
 }
 ```
 ```json
 // Response 404
-{ "message": "Form tidak ditemukan" }
+{ "message": "Form not found" }
 ```
 
 ### `GET /q/{short_code}/start`
@@ -402,16 +459,20 @@ Auth: - (atau Bearer Token kalau `require_login=true`)
 { "can_start": true, "form_id": 2, "require_identity": true }
 ```
 ```json
-// Response 403 (belum waktunya)
-{ "can_start": false, "reason": "not_started", "starts_at": "2026-07-25T08:00:00Z" }
+// Response 200 (belum waktunya)
+{ "can_start": false, "reason": "not_started", "starts_at": "30-07-2026 18:00:00" }
 ```
 ```json
-// Response 410 (sudah tutup/limit tercapai)
+// Response 200 (sudah tutup)
 { "can_start": false, "reason": "closed" }
 ```
 ```json
-// Response 410 (sudah pernah submit, submission_limit=once)
+// Response 200 (sudah pernah submit, submission_limit=once)
 { "can_start": false, "reason": "already_submitted" }
+```
+```json
+// Response 401 (require_login=true tapi tidak ada token)
+{ "message": "Login required to access this form" }
 ```
 
 ---
@@ -429,11 +490,11 @@ Auth: - (atau Bearer Token jika login)
 }
 ```
 ```json
-// Response 201
+// Response 201 — session baru
 {
   "submission_id": 11,
-  "started_at": "2026-07-24T10:00:00Z",
-  "expired_at": "2026-07-24T10:10:00Z",
+  "started_at": "24-07-2026 17:00:00",
+  "expired_at": "24-07-2026 17:10:00",
   "questions": [
     {
       "id": 3,
@@ -445,16 +506,40 @@ Auth: - (atau Bearer Token jika login)
         { "id": 11, "option_text": "7", "order_index": 1 }
       ]
     }
-  ]
+  ],
+  "resumed": false
 }
 ```
 ```json
-// Response 409 (sudah ada submission in_progress aktif)
-{ "message": "Anda memiliki sesi pengerjaan yang belum selesai", "submission_id": 11 }
+// Response 201 — melanjutkan session yang sudah ada (tidak ada 409)
+// Terjadi saat user refresh halaman atau kembali nanti
+{
+  "submission_id": 11,
+  "started_at": "24-07-2026 17:00:00",
+  "expired_at": "24-07-2026 17:10:00",
+  "questions": [ ... ],
+  "resumed": true
+}
+```
+```json
+// Response 403 (belum waktunya)
+{ "message": "Form is not open yet. Opens at 30-07-2026 18:00:00" }
+```
+```json
+// Response 410 (periode sudah berakhir)
+{ "message": "Form submission period has ended" }
+```
+```json
+// Response 410 (session sebelumnya expired)
+{ "message": "Your previous session has expired" }
+```
+```json
+// Response 409 (submission_limit=once, sudah pernah submit)
+{ "message": "You have already submitted this form" }
 ```
 
 ### `PATCH /submissions/{id}/autosave`
-Auth: - (sesuai submission)
+Auth: - (sesuai submission) atau Bearer Token (pemilik form)
 ```json
 // Request (pilihan ganda/checkbox)
 { "question_id": 1, "option_ids": [2] }
@@ -465,46 +550,64 @@ Auth: - (sesuai submission)
 ```
 ```json
 // Response 200
-{ "message": "Jawaban tersimpan", "question_id": 1 }
+{ "message": "Answer saved", "question_id": 1 }
 ```
 ```json
-// Response 410 (waktu habis)
-{ "message": "Waktu pengerjaan telah berakhir" }
+// Response 410 (waktu habis — submission auto-submitted)
+{ "message": "Submission time has expired" }
+```
+```json
+// Response 409 (submission sudah selesai)
+{ "message": "Submission already completed" }
 ```
 
 ### `POST /submissions/{id}/submit`
-Auth: - (sesuai submission)
+Auth: - (sesuai submission) atau Bearer Token (pemilik form)
 ```json
 // Request: (kosong, submission_id dari path)
 ```
 ```json
 // Response 200
 {
-  "message": "Jawaban berhasil dikirim",
+  "message": "Submission completed successfully",
   "status": "submitted",
   "score": 3,
   "max_score": 3
 }
 ```
 ```json
+// Response 200 — waktu habis (auto-submitted)
+{
+  "message": "Submission completed successfully",
+  "status": "auto_submitted",
+  "score": 3,
+  "max_score": 3
+}
+```
+```json
 // Response 409
-{ "message": "Submission sudah pernah diselesaikan" }
+{ "message": "Submission already completed" }
 ```
 
 ### `GET /submissions/{id}`
-Auth: - (sesuai submission) atau Bearer Token (pemilik form)
+Auth: - (respondent via IP) atau Bearer Token (respondent/owner)
 ```json
 // Response 200
 {
   "id": 11,
   "status": "submitted",
+  "started_at": "24-07-2026 17:00:00",
+  "expired_at": "24-07-2026 17:10:00",
   "score": 3,
   "max_score": 3,
-  "submitted_at": "2026-07-24T10:08:00Z",
+  "submitted_at": "24-07-2026 17:08:00",
+  "questions": [ ... ],
   "answers": [
     {
       "question_id": 1,
       "question_text": "Berapa hasil dari 12 x 8?",
+      "question_type": "multiple_choice",
+      "selected_option_ids": [2],
       "answer_text": null,
       "selected_options": ["96"],
       "is_correct": true,
@@ -520,7 +623,7 @@ Auth: Bearer Token
 // Response 200
 {
   "data": [
-    { "id": 9, "form_title": "Survey Kepuasan Siswa", "status": "submitted", "score": null, "submitted_at": "2026-07-23T09:00:00Z" }
+    { "id": 9, "form_title": "Survey Kepuasan Siswa", "status": "submitted", "score": null, "submitted_at": "23-07-2026 16:00:00" }
   ]
 }
 ```
@@ -531,14 +634,14 @@ Auth: Bearer Token
 
 ### `GET /forms/{id}/results`
 Auth: Bearer Token (pemilik)
-Query params: `?status=submitted&sort=score_desc&page=1`
+Query params: `?status=submitted&sort=score_desc&page=1&per_page=10`
 ```json
 // Response 200
 {
   "data": [
-    { "submission_id": 1, "respondent_name": "Dewi Anjani", "score": 3, "max_score": 3, "status": "submitted", "submitted_at": "2026-07-24T08:10:00Z" }
+    { "submission_id": 1, "respondent_name": "Dewi Anjani", "score": 3, "max_score": 3, "status": "submitted", "submitted_at": "24-07-2026 17:08:00" }
   ],
-  "meta": { "total": 25, "page": 1 }
+  "meta": { "total": 25, "page": 1, "per_page": 10 }
 }
 ```
 
@@ -563,16 +666,12 @@ Auth: Bearer Token (pemilik)
 }
 ```
 
----
-
-## 9. Export
-
 ### `GET /forms/{id}/export/excel`
 Auth: Bearer Token (pemilik)
 ```
 // Response 200
 Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-Content-Disposition: attachment; filename="hasil-quiz-matematika.xlsx"
+Content-Disposition: attachment; filename="hasil-QZM002B.xlsx"
 [binary file]
 ```
 
@@ -581,13 +680,13 @@ Auth: Bearer Token (pemilik)
 ```
 // Response 200
 Content-Type: application/pdf
-Content-Disposition: attachment; filename="hasil-quiz-matematika.pdf"
+Content-Disposition: attachment; filename="hasil-QZM002B.pdf"
 [binary file]
 ```
 
 ---
 
-## 10. Dashboard
+## 9. Dashboard
 
 ### `GET /dashboard/summary`
 Auth: Bearer Token
@@ -610,12 +709,58 @@ Auth: Bearer Token
 
 ---
 
+## Daftar Semua Endpoint
+
+| Method | Path | Auth | Keterangan |
+|--------|------|------|------------|
+| POST | `/api/register` | - | Daftar akun baru |
+| POST | `/api/login` | - | Login |
+| POST | `/api/logout` | Bearer | Logout (revoke token) |
+| GET | `/api/me` | Bearer | Profil user |
+| PUT | `/api/me` | Bearer | Update profil (multipart/form-data) |
+| POST | `/api/me/avatar` | Bearer | Upload avatar (multipart/form-data) |
+| GET | `/api/forms` | Bearer | Daftar form milik user |
+| POST | `/api/forms` | Bearer | Buat form baru |
+| GET | `/api/forms/{id}` | Bearer | Detail form |
+| PUT | `/api/forms/{id}` | Bearer | Update form (partial) |
+| DELETE | `/api/forms/{id}` | Bearer | Hapus form + seluruh data terkait |
+| PATCH | `/api/forms/{id}/publish` | Bearer | Ubah status publikasi |
+| POST | `/api/forms/{id}/banner` | Bearer | Upload banner (multipart/form-data) |
+| GET | `/api/forms/{id}/questions` | Bearer | Daftar soal form |
+| POST | `/api/forms/{id}/questions` | Bearer | Tambah soal |
+| GET | `/api/forms/{id}/results` | Bearer | Hasil submission (pemilik) |
+| GET | `/api/forms/{id}/analytics` | Bearer | Statistik (pemilik) |
+| GET | `/api/forms/{id}/export/excel` | Bearer | Export Excel (pemilik) |
+| GET | `/api/forms/{id}/export/pdf` | Bearer | Export PDF (pemilik) |
+| POST | `/api/forms/{id}/import/docx` | Bearer | Import soal dari .docx |
+| PUT | `/api/questions/{id}` | Bearer | Update soal |
+| DELETE | `/api/questions/{id}` | Bearer | Hapus soal |
+| PATCH | `/api/questions/reorder` | Bearer | Urutkan ulang soal |
+| POST | `/api/questions/{id}/images` | Bearer | Upload gambar soal (multipart/form-data) |
+| POST | `/api/options/{id}/images` | Bearer | Upload gambar opsi (multipart/form-data) |
+| DELETE | `/api/images/{id}` | Bearer | Hapus gambar |
+| DELETE | `/api/options/{id}/images/{image_id}` | Bearer | Hapus gambar opsi |
+| POST | `/api/submissions` | - | Mulai sesi/submit baru |
+| PATCH | `/api/submissions/{id}/autosave` | - | Autosave jawaban |
+| POST | `/api/submissions/{id}/submit` | - | Kumpulkan jawaban |
+| GET | `/api/submissions/{id}` | - | Detail submission + jawaban |
+| GET | `/api/me/submissions` | Bearer | Riwayat submission user |
+| GET | `/api/q/{short_code}` | - | Info form publik |
+| GET | `/api/q/{short_code}/start` | - | Cek bisa mulai/tidak |
+| GET | `/api/dashboard/summary` | Bearer | Ringkasan dashboard |
+
+---
+
 ## Konvensi Umum
 
 | Aspek | Aturan |
 |---|---|
-| Format tanggal | ISO 8601 UTC, contoh `2026-07-24T10:00:00Z` |
+| Format tanggal | `d-m-Y H:i:s` WIB (UTC+7), contoh `24-07-2026 17:00:00` |
 | Auth header | `Authorization: Bearer {token}` |
-| Error format | `{ "message": "...", "errors": { "field": ["pesan"] } }` (errors hanya muncul saat status 422) |
-| Pagination | Query `?page=1&per_page=10`, response selalu punya `meta: { total, page, per_page }` |
+| Error format 422 | `{ "message": "Invalid fields", "errors": [{ "field": "pesan" }] }` |
+| Error format lainnya | `{ "message": "pesan error" }` |
+| Pagination | Query `?page=1&per_page=10`, response punya `meta: { total, page, per_page }` |
 | ID | Integer auto-increment, kecuali `short_code` yang string |
+| Upload limit | Hanya JPG/PNG/GIF/WEBP, file size tidak dibatasi di backend |
+| Avatar/banner | Selalu mengembalikan full URL (`http://host/uploads/...`) |
+| Image di question | `image` adalah object tunggal (gambar pertama), bukan array |
