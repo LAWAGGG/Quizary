@@ -10,7 +10,7 @@ from app.dependencies import verify_form_owner
 from app.models.form import Form
 from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
-from app.routers.questions import _distribute_quiz_points
+from app.services.points import distribute_quiz_points
 
 router = APIRouter(tags=["import"])
 
@@ -132,6 +132,6 @@ async def import_docx(
         next_order += 1
         count += 1
 
-    _distribute_quiz_points(form.id, db)
+    distribute_quiz_points(form.id, db)
     db.commit()
     return {"message": f"{count} question(s) imported successfully", "imported_count": count}

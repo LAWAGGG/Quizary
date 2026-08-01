@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle } from 'lucide-react'
+import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2 } from 'lucide-react'
 import api from '../../api/client'
-import { Button, Input, Textarea, Select, Toggle, Card, TypeBadge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton } from '../../components/ui'
+import { useToast } from '../../context/ToastContext'
+import { Button, Input, Textarea, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton } from '../../components/ui'
 
 const TYPE_LABELS = {
   multiple_choice: 'Multiple Choice',
@@ -16,15 +17,20 @@ const TYPE_OPTIONS = ['multiple_choice', 'checkbox', 'short_answer', 'essay']
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
-function QuestionForm({ initial, onSave, onCancel, loading }) {
+function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors }) {
   const [form, setForm] = useState({
     question_text: '',
     type: 'multiple_choice',
     points: 1,
+    is_scored: true,
     is_required: true,
     options: [{ option_text: '', is_correct: false }],
     ...(initial || {}),
   })
+  const isEditing = !!initial
+  const ferr = (name) => errors?.[name]
+  const optionsErr = Object.keys(errors || {}).some((k) => k.startsWith('options'))
+  const optionsMsg = Object.values(errors || {}).find((v, i) => Object.keys(errors)[i]?.startsWith('options'))
 
   const handleTypeChange = (type) => {
     setForm((prev) => ({
@@ -60,7 +66,7 @@ function QuestionForm({ initial, onSave, onCancel, loading }) {
 
   return (
     <div className="space-y-5">
-      <Select label="Question Type" value={form.type} onChange={(e) => handleTypeChange(e.target.value)}>
+      <Select label="Question Type" value={form.type} onChange={(e) => handleTypeChange(e.target.value)} error={ferr('type')}>
         {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
       </Select>
 
@@ -70,27 +76,52 @@ function QuestionForm({ initial, onSave, onCancel, loading }) {
         onChange={(e) => setForm((p) => ({ ...p, question_text: e.target.value }))}
         rows={2}
         placeholder="Enter question text..."
+        error={ferr('question_text')}
       />
 
       <div className="flex items-end gap-4">
-        <div className="flex-1">
-          <Input
-            label="Points"
-            type="number"
-            value={form.points}
-            onChange={(e) => setForm((p) => ({ ...p, points: parseInt(e.target.value) || 0 }))}
-            min={0}
-            max={999}
-          />
-        </div>
-        <div className="flex items-center gap-2.5 h-11">
+        {isQuiz && (
+          <div className="flex-1">
+            {isEditing ? (
+              <Input
+                label="Points"
+                type="number"
+                value={form.points}
+                onChange={(e) => setForm((p) => ({ ...p, points: parseInt(e.target.value) || 0 }))}
+                min={0}
+                max={999}
+                disabled={!form.is_scored}
+                helper={form.is_scored ? 'Other scored questions rebalance automatically.' : 'Turn on "Count points" to include this question.'}
+                error={ferr('points')}
+              />
+            ) : (
+              <div>
+                <label className="field-label">Points</label>
+                <p className="text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded-xl px-4 h-11 flex items-center">
+                  Auto-assigned by system
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="flex items-center gap-2.5 h-11 pb-[1px]">
+          {isQuiz && isEditing && (
+            <>
+              <span className="text-sm text-gray-600">Count points</span>
+              <Toggle
+                label="Count points"
+                checked={form.is_scored}
+                onChange={(v) => setForm((p) => ({ ...p, is_scored: v, points: v ? p.points : 0 }))}
+              />
+            </>
+          )}
           <span className="text-sm text-gray-600">Required</span>
           <Toggle label="Required" checked={form.is_required} onChange={(v) => setForm((p) => ({ ...p, is_required: v }))} />
         </div>
       </div>
 
       {needsOptions && (
-        <div>
+        <div className={`${optionsErr ? 'border border-incorrect rounded-xl p-3' : ''}`}>
           <div className="flex items-center justify-between mb-2.5">
             <label className="field-label !mb-0">
               Answer options
@@ -111,9 +142,17 @@ function QuestionForm({ initial, onSave, onCancel, loading }) {
                 exit={{ opacity: 0, height: 0 }}
                 className="flex items-center gap-2.5"
               >
-                <span className={`bubble ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
-                  {opt.is_correct ? <Check className="w-3.5 h-3.5" /> : LETTERS[i % LETTERS.length]}
-                </span>
+                {form.type === 'checkbox' ? (
+                  <span className={`flex items-center justify-center w-7 h-7 rounded-lg border-2 shrink-0 transition-colors ${
+                    opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 bg-white text-transparent'
+                  }`}>
+                    {opt.is_correct && <Check className="w-4 h-4" strokeWidth={3.5} />}
+                  </span>
+                ) : (
+                  <span className={`bubble ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
+                    {opt.is_correct ? <Check className="w-3.5 h-3.5" /> : LETTERS[i % LETTERS.length]}
+                  </span>
+                )}
                 <input
                   type="text"
                   value={opt.option_text}
@@ -148,6 +187,9 @@ function QuestionForm({ initial, onSave, onCancel, loading }) {
           {needsOptions && form.options.length > 0 && !hasCorrect && (
             <p className="text-xs text-warn mt-2">Mark at least one option as correct.</p>
           )}
+          {optionsErr && optionsMsg && (
+            <p className="text-xs font-medium text-incorrect mt-2">{optionsMsg}</p>
+          )}
         </div>
       )}
 
@@ -161,7 +203,7 @@ function QuestionForm({ initial, onSave, onCancel, loading }) {
   )
 }
 
-function QuestionCard({ question, index, onEdit, onDelete, onDragStart, onDragOver, onDragEnd, isDragging }) {
+function QuestionCard({ question, index, onEdit, onDelete, onDragStart, onDragOver, onDragEnd, isDragging, isQuiz, selected, onToggleSelect }) {
   return (
     <motion.div
       layout
@@ -173,19 +215,29 @@ function QuestionCard({ question, index, onEdit, onDelete, onDragStart, onDragOv
       onDragOver={(e) => onDragOver(e, index)}
       onDragEnd={onDragEnd}
     >
-      <Card className={`cursor-grab active:cursor-grabbing transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : 'hover:border-gray-300'}`}>
+      <Card className={`cursor-grab active:cursor-grabbing transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? 'border-primary/50 shadow-card' : 'hover:border-gray-300'}`}>
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-3 min-w-0">
             <span className="text-gray-300 cursor-grab"><GripVertical className="w-5 h-5" /></span>
             <span className="w-6 h-6 rounded-full bg-ink text-white text-xs font-bold flex items-center justify-center shrink-0">
               {index + 1}
             </span>
-            <TypeBadge type={question.type} />
-            {question.points > 0 && (
+            <Badge scheme="gray">{TYPE_LABELS[question.type]}</Badge>
+            {isQuiz && question.is_scored && question.points > 0 && (
               <span className="text-xs text-gray-400">{question.points} pts</span>
             )}
+            {isQuiz && !question.is_scored && (
+              <span className="text-xs text-gray-400">Not scored</span>
+            )}
           </div>
-          <div className="flex gap-1 shrink-0">
+          <div className="flex gap-1 shrink-0 items-center">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelect(question.id)}
+              className="w-4 h-4 rounded accent-primary cursor-pointer"
+              aria-label={`Select question ${index + 1}`}
+            />
             <button onClick={() => onEdit(question)} className="text-xs font-medium text-gray-400 hover:text-primary px-2 py-1 transition-colors">Edit</button>
             <button onClick={() => onDelete(question)} className="text-xs font-medium text-gray-400 hover:text-incorrect px-2 py-1 transition-colors">Delete</button>
           </div>
@@ -197,9 +249,15 @@ function QuestionCard({ question, index, onEdit, onDelete, onDragStart, onDragOv
           <div className="space-y-1.5">
             {question.options.map((opt, i) => (
               <div key={opt.id} className="flex items-center gap-2.5">
-                <span className={`bubble w-6 h-6 text-xs ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
-                  {opt.is_correct ? <Check className="w-3 h-3" /> : LETTERS[i % LETTERS.length]}
-                </span>
+                {question.type === 'checkbox' ? (
+                  <span className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 ${opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 text-transparent'}`}>
+                    {opt.is_correct && <Check className="w-3 h-3" strokeWidth={3.5} />}
+                  </span>
+                ) : (
+                  <span className={`bubble w-6 h-6 text-xs ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
+                    {opt.is_correct ? <Check className="w-3 h-3" /> : LETTERS[i % LETTERS.length]}
+                  </span>
+                )}
                 <span className={`text-sm ${opt.is_correct ? 'text-correct font-medium' : 'text-gray-600'}`}>
                   {opt.option_text}
                 </span>
@@ -219,6 +277,7 @@ function QuestionCard({ question, index, onEdit, onDelete, onDragStart, onDragOv
 export default function QuestionBuilder() {
   const { formId } = useParams()
   const navigate = useNavigate()
+  const toast = useToast()
   const docxRef = useRef(null)
 
   const [form, setForm] = useState(null)
@@ -226,11 +285,14 @@ export default function QuestionBuilder() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
   const [showForm, setShowForm] = useState(false)
-  const [error, setError] = useState('')
   const [dragIdx, setDragIdx] = useState(null)
   const [reorderSaving, setReorderSaving] = useState(false)
   const [saveLoading, setSaveLoading] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [selectedIds, setSelectedIds] = useState([])
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [showBulkDelete, setShowBulkDelete] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -241,6 +303,7 @@ export default function QuestionBuilder() {
       .then(([fRes, qRes]) => {
         setForm(fRes.data)
         setQuestions(qRes.data.data)
+        setSelectedIds([])
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -252,11 +315,13 @@ export default function QuestionBuilder() {
   }, [formId])
 
   const handleSaveQuestion = async (data) => {
-    setSaveLoading(true); setError('')
+    setSaveLoading(true)
+    setFieldErrors({})
     const payload = {
       question_text: data.question_text,
       type: data.type,
       points: data.points,
+      is_scored: data.is_scored !== false,
       is_required: data.is_required,
       options: (data.type === 'multiple_choice' || data.type === 'checkbox')
         ? data.options.filter((o) => o.option_text.trim()).map((o) => ({
@@ -269,14 +334,27 @@ export default function QuestionBuilder() {
     try {
       if (editing) {
         await api.put(`/questions/${editing.id}`, payload)
+        toast.success('Question updated')
       } else {
         await api.post(`/forms/${formId}/questions`, payload)
+        toast.success('Question added')
       }
       load()
       setShowForm(false)
       setEditing(null)
     } catch (err) {
-      setError(err.response?.data?.detail || err.response?.data?.message || 'Failed to save question')
+      const data = err.response?.data
+      if (data?.errors) {
+        const mapped = {}
+        data.errors.forEach((entry) => {
+          Object.entries(entry).forEach(([k, v]) => { mapped[k] = v })
+        })
+        setFieldErrors(mapped)
+        if (mapped._schema) toast.error(mapped._schema)
+        else if (data.message) toast.error(data.message)
+      } else {
+        toast.error(data?.message || data?.detail || 'Failed to save question')
+      }
     } finally {
       setSaveLoading(false)
     }
@@ -287,10 +365,40 @@ export default function QuestionBuilder() {
     try {
       await api.delete(`/questions/${deleteTarget.id}`)
       setDeleteTarget(null)
+      toast.success('Question deleted')
       load()
     } catch {
-      setError('Failed to delete question')
+      toast.error('Failed to delete question')
       setDeleteTarget(null)
+    }
+  }
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  const allSelected = questions.length > 0 && selectedIds.length === questions.length
+
+  const toggleSelectAll = () => {
+    setSelectedIds(allSelected ? [] : questions.map((q) => q.id))
+  }
+
+  const handleBulkDelete = async () => {
+    setShowBulkDelete(false)
+    if (!selectedIds.length) return
+    setBulkDeleting(true)
+    try {
+      for (const id of selectedIds) {
+        await api.delete(`/questions/${id}`)
+      }
+      toast.success(`${selectedIds.length} question(s) deleted`)
+      setSelectedIds([])
+      load()
+    } catch {
+      toast.error('Failed to delete some questions')
+      setSelectedIds([])
+    } finally {
+      setBulkDeleting(false)
     }
   }
 
@@ -331,15 +439,17 @@ export default function QuestionBuilder() {
       await api.post(`/forms/${formId}/import/docx`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
+      toast.success('Questions imported')
       load()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to import DOCX')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to import DOCX')
     }
   }
 
   const editQuestion = (q) => {
     setEditing(q)
     setShowForm(true)
+    setFieldErrors({})
   }
 
   if (loading) {
@@ -372,7 +482,7 @@ export default function QuestionBuilder() {
             <Button variant="secondary" onClick={() => docxRef.current?.click()} icon={<Upload className="w-4 h-4" />}>
               Import DOCX
             </Button>
-            <Button onClick={() => { setEditing(null); setShowForm(true) }} icon={<Plus className="w-4 h-4" />}>
+              <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />}>
               Add Question
             </Button>
           </>
@@ -381,9 +491,6 @@ export default function QuestionBuilder() {
 
       <FormSubNav formId={formId} className="mt-5" />
 
-      {error && (
-        <div className="bg-incorrect-soft border border-incorrect/20 text-incorrect px-4 py-3 rounded-xl mt-6 text-sm">{error}</div>
-      )}
       {reorderSaving && (
         <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl mt-4 text-sm flex items-center gap-2">
           <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -410,6 +517,8 @@ export default function QuestionBuilder() {
                 onSave={(data) => handleSaveQuestion(data)}
                 onCancel={() => { setShowForm(false); setEditing(null) }}
                 loading={saveLoading}
+                isQuiz={form.type === 'quiz'}
+                errors={fieldErrors}
               />
             </Card>
           </motion.div>
@@ -423,26 +532,54 @@ export default function QuestionBuilder() {
             title="No questions yet"
             description="Add your first question, or import one from a DOCX file."
             action={
-              <Button onClick={() => { setEditing(null); setShowForm(true) }} icon={<Plus className="w-4 h-4" />}>
+            <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />}>
                 Add Question
               </Button>
             }
           />
         </Card>
       ) : (
-        <div className="space-y-3 mt-6">
-          {questions.map((q, i) => (
-            <div key={q.id}>
-              <QuestionCard
-                question={q}
-                index={i}
-                onEdit={editQuestion}
-                onDelete={setDeleteTarget}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDragEnd={handleDragEnd}
-                isDragging={dragIdx === i}
-              />
+        <>
+          {selectedIds.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              className="sticky top-0 z-20 mt-6 bg-white border border-gray-200 shadow-lift rounded-2xl px-4 py-3 flex items-center gap-3"
+            >
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded accent-primary"
+                />
+                Select all ({selectedIds.length}/{questions.length})
+              </label>
+              <div className="ml-auto flex gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds([])}>Cancel</Button>
+                <Button variant="danger" size="sm" onClick={() => setShowBulkDelete(true)} icon={<Trash2 className="w-4 h-4" />}>
+                  Delete ({selectedIds.length})
+                </Button>
+              </div>
+            </motion.div>
+          )}
+          <div className="space-y-3 mt-6">
+            {questions.map((q, i) => (
+              <div key={q.id}>
+                <QuestionCard
+                  question={q}
+                  index={i}
+                  onEdit={editQuestion}
+                  onDelete={setDeleteTarget}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDragEnd={handleDragEnd}
+                  isDragging={dragIdx === i}
+                  isQuiz={form.type === 'quiz'}
+                  selected={selectedIds.includes(q.id)}
+                  onToggleSelect={toggleSelect}
+                />
               <AnimatePresence>
                 {showForm && editing?.id === q.id && (
                   <motion.div
@@ -458,6 +595,7 @@ export default function QuestionBuilder() {
                           question_text: q.question_text,
                           type: q.type,
                           points: q.points,
+                          is_scored: q.is_scored !== false,
                           is_required: q.is_required,
                           options: q.options?.length
                             ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct }))
@@ -466,6 +604,8 @@ export default function QuestionBuilder() {
                         onSave={(data) => handleSaveQuestion(data)}
                         onCancel={() => { setShowForm(false); setEditing(null) }}
                         loading={saveLoading}
+                        isQuiz={form.type === 'quiz'}
+                        errors={fieldErrors}
                       />
                     </Card>
                   </motion.div>
@@ -473,8 +613,32 @@ export default function QuestionBuilder() {
               </AnimatePresence>
             </div>
           ))}
-        </div>
+          </div>
+        </>
       )}
+
+      <ConfirmModal
+        show={showBulkDelete}
+        title={`Delete ${selectedIds.length} question(s)?`}
+        message={
+          <div>
+            <p>This will permanently delete the selected questions. Review the list below:</p>
+            <ul className="mt-2 space-y-1 max-h-44 overflow-y-auto pr-1">
+              {questions.filter((q) => selectedIds.includes(q.id)).map((q) => (
+                <li key={q.id} className="flex items-start gap-2 text-xs text-gray-600 leading-snug">
+                  <span className="w-1.5 h-1.5 rounded-full bg-incorrect shrink-0 mt-1" />
+                  <span className="line-clamp-2">{q.question_text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        }
+        onConfirm={handleBulkDelete}
+        onCancel={() => setShowBulkDelete(false)}
+        loading={bulkDeleting}
+        confirmText="Delete"
+        variant="danger"
+      />
 
       <ConfirmModal
         show={!!deleteTarget}

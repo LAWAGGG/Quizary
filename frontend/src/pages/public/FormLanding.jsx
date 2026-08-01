@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Lock, Clock, ArrowRight, CheckCircle2 } from 'lucide-react'
-import { Button, Input, Card, AppMark } from '../../components/ui'
+import { Button, Input, Card, AppMark, FallbackPage, DotCorner } from '../../components/ui'
+import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 
 function parseDate(str) {
@@ -33,9 +34,9 @@ function CountdownTo({ target }) {
 
 const BUBBLES = Array.from({ length: 12 }, (_, i) => i)
 
-function BlockedState({ color, icon, title, children }) {
+function BlockedState({ background, icon, title, children }) {
   return (
-    <div className="min-h-dvh flex items-center justify-center p-6" style={{ backgroundColor: color }}>
+    <div className="min-h-dvh flex items-center justify-center p-6" style={{ background }}>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -122,26 +123,24 @@ export default function FormLanding() {
 
   if (error) {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-ink p-6">
-        <div className="text-center text-white max-w-sm">
-          <p className="font-display text-6xl font-bold text-primary">404</p>
-          <p className="text-white/60 mt-4">{error}</p>
-          <Button variant="secondary" className="mt-8" onClick={() => navigate('/')}>Go home</Button>
-        </div>
-      </div>
+      <FallbackPage
+        title="404"
+        message={error}
+        action={<Button onClick={() => navigate('/')} className="w-full">Go home</Button>}
+      />
     )
   }
 
   if (!form) return null
 
   const isQuiz = form.type === 'quiz'
-  const bgColor = form.theme_color || '#6C5CE7'
+  const palette = themePalette(form.theme_color)
 
   if (startState) {
     if (startState.requires_login) {
       return (
         <BlockedState
-          color={bgColor}
+          background={palette.gradient}
           icon={<Lock className="w-6 h-6 text-white" />}
           title="Sign in required"
         >
@@ -161,7 +160,7 @@ export default function FormLanding() {
       }
       return (
         <BlockedState
-          color={bgColor}
+          background={palette.gradient}
           icon={startState.reason === 'already_submitted' ? <CheckCircle2 className="w-6 h-6 text-white" /> : <Clock className="w-6 h-6 text-white" />}
           title={msgs[startState.reason] || 'Access denied'}
         >
@@ -171,7 +170,9 @@ export default function FormLanding() {
     }
 
     return (
-      <div className="min-h-dvh flex items-center justify-center p-6 bg-paper">
+      <div className="theme-surface min-h-dvh relative overflow-hidden flex items-center justify-center p-6 bg-paper" style={{ '--t': palette.base }}>
+        <DotCorner position="top-left" color={palette.base} />
+        <DotCorner position="bottom-right" color={palette.base} />
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -181,7 +182,7 @@ export default function FormLanding() {
             <AppMark size="sm" />
             <span className="font-display font-bold text-ink">Quizary</span>
           </div>
-          <Card className="p-6 md:p-7">
+          <Card className="p-6 md:p-7" style={{ borderColor: palette.border }}>
             <h2 className="font-display text-xl font-bold text-ink">{form.title}</h2>
             <p className="text-sm text-gray-500 mt-1 mb-6">Enter your details to begin</p>
             <form onSubmit={handleSubmitIdentity} className="space-y-4">
@@ -199,7 +200,7 @@ export default function FormLanding() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="email@example.com"
               />
-              <Button type="submit" disabled={submitting || !name.trim()} loading={submitting} className="w-full" size="lg">
+              <Button type="submit" disabled={submitting || !name.trim()} loading={submitting} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }}>
                 Start
               </Button>
             </form>
@@ -211,10 +212,10 @@ export default function FormLanding() {
 
   if (isQuiz) {
     return (
-      <div className="min-h-dvh flex flex-col" style={{ backgroundColor: bgColor, '--color-primary': bgColor }}>
+      <div className="min-h-dvh flex flex-col" style={{ background: palette.gradient, '--color-primary': palette.base }}>
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
-          <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-white/10 blur-3xl pointer-events-none" aria-hidden="true" />
-          <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-black/10 blur-3xl pointer-events-none" aria-hidden="true" />
+          <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full blur-3xl pointer-events-none" style={{ backgroundColor: palette.blobLight }} aria-hidden="true" />
+          <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full blur-3xl pointer-events-none" style={{ backgroundColor: palette.blobDark }} aria-hidden="true" />
 
           <div className="flex items-center gap-2.5 mb-10">
             <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white text-sm font-bold text-[var(--color-primary)]">Q</span>
@@ -281,19 +282,21 @@ export default function FormLanding() {
   }
 
   return (
-    <div className="min-h-dvh bg-paper flex flex-col">
+    <div className="theme-surface min-h-dvh relative overflow-hidden flex flex-col" style={{ background: palette.pageBg, '--t': palette.base }}>
+      <DotCorner position="top-left" color={palette.base} />
+      <DotCorner position="bottom-right" color={palette.base} />
       <div className="flex-1 max-w-lg mx-auto w-full p-6">
         {form.banner_path && (
           <img src={form.banner_path} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
-        <Card className="p-6 md:p-7">
+        <Card className="p-6 md:p-7" style={{ borderColor: palette.border }}>
           <div className="flex items-center gap-2 mb-4">
             <AppMark size="sm" />
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Quizary form</span>
           </div>
           <h1 className="font-display text-2xl font-bold text-ink mb-2">{form.title}</h1>
           {form.description && <p className="text-gray-600 mb-6">{form.description}</p>}
-          <Button onClick={handleStart} className="w-full" size="lg" icon={<ArrowRight className="w-4 h-4" />}>
+          <Button onClick={handleStart} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }} icon={<ArrowRight className="w-4 h-4" />}>
             Start
           </Button>
         </Card>

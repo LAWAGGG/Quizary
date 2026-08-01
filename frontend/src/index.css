@@ -97,6 +97,18 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   @apply cursor-pointer;
 }
 
+/* Public theme surface: recolor focus ring/border from --t instead of fixed primary */
+.theme-surface {
+  --t: #6C5CE7;
+}
+
+.theme-surface input:focus,
+.theme-surface textarea:focus,
+.theme-surface select:focus {
+  border-color: var(--t);
+  --tw-ring-color: color-mix(in srgb, var(--t) 14%, transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,

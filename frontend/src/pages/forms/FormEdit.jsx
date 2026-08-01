@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Copy, Check, ArrowLeft, Save, Send, Trash2, ImageUp, Link2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Copy, Check, ArrowLeft, Save, Trash2, ImageUp, Link2, Eye, ChevronDown, Info, Lock, Settings2 } from 'lucide-react'
 import api from '../../api/client'
+import { useToast } from '../../context/ToastContext'
 import { Button, Input, Textarea, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, PageSkeleton } from '../../components/ui'
 
 function CopyField({ label, value }) {
@@ -31,6 +33,25 @@ function CopyField({ label, value }) {
   )
 }
 
+function CollapsibleCard({ title, icon, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <Card padding={false} className="overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-2.5 px-5 py-4 text-left hover:bg-gray-50/70 transition-colors"
+      >
+        <span className="text-primary shrink-0">{icon}</span>
+        <h2 className="font-display font-semibold text-ink">{title}</h2>
+        <ChevronDown className={`w-4 h-4 text-gray-400 ml-auto shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <div className="px-5 pb-5">{children}</div>}
+    </Card>
+  )
+}
+
 function SettingRow({ title, desc, control }) {
   return (
     <div className="flex items-center justify-between gap-4 py-3">
@@ -46,19 +67,27 @@ function SettingRow({ title, desc, control }) {
 export default function FormEdit() {
   const { formId: id } = useParams()
   const navigate = useNavigate()
+  const toast = useToast()
   const fileRef = useRef(null)
   const [form, setForm] = useState(null)
+  const [base, setBase] = useState(null)
+  const [timerMinutes, setTimerMinutes] = useState('')
+  const [initialTimerMinutes, setInitialTimerMinutes] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [publishing, setPublishing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  const [errors, setErrors] = useState({})
 
   useEffect(() => {
     api.get(`/forms/${id}`)
-      .then((res) => setForm(res.data))
+      .then((res) => {
+        setForm(res.data)
+        setBase(res.data)
+        const minutes = res.data.timer_seconds ? String(Math.round(res.data.timer_seconds / 60)) : ''
+        setTimerMinutes(minutes)
+        setInitialTimerMinutes(minutes)
+      })
       .catch(() => navigate('/forms'))
       .finally(() => setLoading(false))
   }, [id, navigate])
@@ -66,57 +95,126 @@ export default function FormEdit() {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
     setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
+    setErrors((prev) => ({ ...prev, [name]: undefined }))
   }
 
   function toBackendDate(str) {
     if (!str) return null
-    const d = new Date(str)
+    let d
+    if (/^\d{2}-\d{2}-\d{4}/.test(str)) {
+      const [date, time] = str.split(' ')
+      const [day, month, year] = date.split('-').map(Number)
+      const [h, m] = (time || '0:0').split(':').map(Number)
+      d = new Date(year, month - 1, day, h || 0, m || 0)
+    } else {
+      d = new Date(str)
+    }
     if (isNaN(d.getTime())) return null
     const pad = (n) => String(n).padStart(2, '0')
     return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`
   }
 
-  const handleSave = async () => {
-    if (!form.title.trim()) { setError('Title is required'); return }
-    setSaving(true); setError(''); setSuccess('')
-    const payload = {
+  function normalize() {
+    return {
       title: form.title,
       description: form.description || null,
       type: form.type,
+      status: form.status,
       is_public: form.is_public,
       require_login: form.require_login,
       submission_limit: form.submission_limit,
       theme_color: form.theme_color || null,
       thank_you_message: form.thank_you_message || null,
-      timer_seconds: form.timer_seconds ? Number(form.timer_seconds) : null,
       shuffle_questions: form.shuffle_questions,
       shuffle_options: form.shuffle_options,
-      status: form.status,
       starts_at: toBackendDate(form.starts_at),
       ends_at: toBackendDate(form.ends_at),
     }
+  }
+
+  function baseSnapshot() {
+    return {
+      title: base.title,
+      description: base.description || null,
+      type: base.type,
+      status: base.status,
+      is_public: base.is_public,
+      require_login: base.require_login,
+      submission_limit: base.submission_limit,
+      theme_color: base.theme_color || null,
+      thank_you_message: base.thank_you_message || null,
+      shuffle_questions: base.shuffle_questions,
+      shuffle_options: base.shuffle_options,
+      starts_at: base.starts_at,
+      ends_at: base.ends_at,
+    }
+  }
+
+  function toInputDate(str) {
+    if (!str) return ''
+    if (/^\d{2}-\d{2}-\d{4}/.test(str)) {
+      const [date, time] = str.split(' ')
+      const [day, month, year] = date.split('-')
+      return `${year}-${month}-${day}T${(time || '').slice(0, 5)}`
+    }
+    return str
+  }
+
+  const timerChanged = timerMinutes !== initialTimerMinutes
+  const dirty = form && base
+    ? (JSON.stringify(normalize()) !== JSON.stringify(baseSnapshot()) || timerChanged)
+    : false
+
+  const buildPayload = () => ({
+    ...normalize(),
+    timer_seconds: timerMinutes ? Number(timerMinutes) * 60 : null,
+  })
+
+  const applyFieldErrors = (err) => {
+    const data = err.response?.data
+    if (data?.errors) {
+      const mapped = {}
+      data.errors.forEach((entry) => {
+        Object.entries(entry).forEach(([k, v]) => { mapped[k] = v })
+      })
+      setErrors(mapped)
+      const unresolved = data.errors.filter((entry) => Object.keys(entry)[0] === '_schema')
+      if (unresolved.length || data.message) {
+        toast.error(data.message || 'Invalid fields')
+      }
+    } else {
+      toast.error(data?.message || data?.detail || 'Failed to save changes')
+    }
+  }
+
+  const handleSave = async () => {
+    if (!form.title.trim()) {
+      setErrors({ title: 'Title is required' })
+      return
+    }
+    setSaving(true)
     try {
-      const res = await api.put(`/forms/${id}`, payload)
+      const res = await api.put(`/forms/${id}`, buildPayload())
       setForm(res.data)
-      setSuccess('Changes saved successfully')
+      setBase(res.data)
+      const minutes = res.data.timer_seconds ? String(Math.round(res.data.timer_seconds / 60)) : ''
+      setTimerMinutes(minutes)
+      setInitialTimerMinutes(minutes)
+      setErrors({})
+      toast.success('Changes saved successfully')
     } catch (err) {
-      setError(err.response?.data?.message || err.response?.data?.detail || 'Failed to save')
+      applyFieldErrors(err)
     } finally {
       setSaving(false)
     }
   }
 
-  const handlePublish = async (status) => {
-    setPublishing(true); setError('')
-    try {
-      await api.patch(`/forms/${id}/publish`, { status })
-      setForm((prev) => ({ ...prev, status }))
-      setSuccess(status === 'published' ? 'Form published successfully' : 'Form returned to draft')
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to update status')
-    } finally {
-      setPublishing(false)
-    }
+  const handleDiscard = () => {
+    setForm(base)
+    const minutes = base.timer_seconds ? String(Math.round(base.timer_seconds / 60)) : ''
+    setTimerMinutes(minutes)
+    setInitialTimerMinutes(minutes)
+    setErrors({})
   }
 
   const handleDelete = async () => {
@@ -126,7 +224,7 @@ export default function FormEdit() {
       navigate('/forms')
     } catch {
       setDeleting(false); setShowDelete(false)
-      setError('Failed to delete form')
+      toast.error('Failed to delete form')
     }
   }
 
@@ -139,10 +237,12 @@ export default function FormEdit() {
       const res = await api.post(`/forms/${id}/banner`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      setForm((prev) => ({ ...prev, banner_path: res.data.banner_path }))
-      setSuccess('Banner uploaded successfully')
+      const bannerPath = res.data.banner_path
+      setForm((prev) => ({ ...prev, banner_path: bannerPath }))
+      setBase((prev) => ({ ...prev, banner_path: bannerPath }))
+      toast.success('Banner uploaded successfully')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to upload banner')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to upload banner')
     }
   }
 
@@ -167,76 +267,68 @@ export default function FormEdit() {
             <span className="text-gray-400">· {form.type === 'quiz' ? 'Quiz' : 'Form'}</span>
           </span>
         }
-        actions={
-          <div className="flex gap-2">
-            <Button variant="soft" onClick={() => navigate(`/forms/${id}/questions`)}>Questions</Button>
-            <Button onClick={handleSave} loading={saving} icon={<Save className="w-4 h-4" />}>
-              {saving ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
-        }
       />
 
       <FormSubNav formId={id} className="mt-5" />
 
-      {error && (
-        <div className="bg-incorrect-soft border border-incorrect/20 text-incorrect px-4 py-3 rounded-xl mt-6 text-sm">{error}</div>
-      )}
-      {success && (
-        <div className="bg-correct-soft border border-correct/20 text-correct px-4 py-3 rounded-xl mt-6 text-sm">{success}</div>
-      )}
-
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-6">
-          <Card>
-            <div className="flex items-center gap-2 mb-5">
-              <Link2 className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold text-ink">Share</h2>
-            </div>
+          <CollapsibleCard title="Share" icon={<Link2 className="w-4 h-4" />} defaultOpen>
             <CopyField label="Public Link" value={`${window.location.origin}/q/${form.short_code}`} />
             <div className="flex gap-2 mt-4">
-              {form.status !== 'published' ? (
-                <Button onClick={() => handlePublish('published')} loading={publishing} variant="soft" icon={<Send className="w-4 h-4" />} className="flex-1">
-                  {publishing ? 'Publishing...' : 'Publish'}
-                </Button>
-              ) : (
-                <Button onClick={() => handlePublish('draft')} loading={publishing} variant="secondary" className="flex-1">
-                  {publishing ? '...' : 'Unpublish'}
-                </Button>
-              )}
+              <Button
+                variant="secondary"
+                className="flex-1"
+                icon={<Eye className="w-4 h-4" />}
+                onClick={() => window.open(`/q/${form.short_code}`, '_blank')}
+              >
+                Open public page
+              </Button>
               <Button onClick={() => setShowDelete(true)} variant="ghost-danger" icon={<Trash2 className="w-4 h-4" />}>
                 Delete
               </Button>
             </div>
-          </Card>
+          </CollapsibleCard>
 
-          <Card>
-            <h2 className="font-display font-semibold text-ink mb-5">Basic Information</h2>
+          <CollapsibleCard title="Basic Information" icon={<Info className="w-4 h-4" />}>
             <div className="space-y-5">
-              <Input label="Title" name="title" value={form.title} onChange={handleChange} maxLength={150} />
-              <Textarea label="Description" name="description" value={form.description || ''} onChange={handleChange} rows={3} />
+              <Input
+                label="Title"
+                name="title"
+                value={form.title}
+                onChange={handleChange}
+                maxLength={150}
+                error={errors.title}
+              />
+              <Textarea
+                label="Description"
+                name="description"
+                value={form.description || ''}
+                onChange={handleChange}
+                rows={3}
+                error={errors.description}
+              />
 
               <div className="grid grid-cols-2 gap-4">
-                <Select label="Type" name="type" value={form.type} onChange={handleChange}>
+                <Select label="Type" name="type" value={form.type} onChange={handleChange} error={errors.type}>
                   <option value="form">Form</option>
                   <option value="quiz">Quiz</option>
                 </Select>
-                <Select label="Status" name="status" value={form.status} onChange={handleChange}>
+                <Select label="Status" name="status" value={form.status} onChange={handleChange} error={errors.status}>
                   <option value="draft">Draft</option>
                   <option value="published">Published</option>
                   <option value="closed">Closed</option>
                 </Select>
               </div>
 
-              <Select label="Submission limit" name="submission_limit" value={form.submission_limit} onChange={handleChange}>
+              <Select label="Submission limit" name="submission_limit" value={form.submission_limit} onChange={handleChange} error={errors.submission_limit}>
                 <option value="unlimited">Unlimited</option>
                 <option value="once">Once per person</option>
               </Select>
             </div>
-          </Card>
+          </CollapsibleCard>
 
-          <Card>
-            <h2 className="font-display font-semibold text-ink mb-3">Access</h2>
+          <CollapsibleCard title="Access" icon={<Lock className="w-4 h-4" />}>
             <div className="divide-y divide-gray-100">
               <SettingRow
                 title="Public form"
@@ -249,10 +341,9 @@ export default function FormEdit() {
                 control={<Toggle label="Require login" checked={form.require_login} onChange={(v) => setForm((prev) => ({ ...prev, require_login: v }))} />}
               />
             </div>
-          </Card>
+          </CollapsibleCard>
 
-          <Card>
-            <h2 className="font-display font-semibold text-ink mb-3">Behavior</h2>
+          <CollapsibleCard title="Behavior" icon={<Settings2 className="w-4 h-4" />}>
             <div className="divide-y divide-gray-100">
               <SettingRow
                 title="Shuffle questions"
@@ -266,15 +357,15 @@ export default function FormEdit() {
               />
               <div className="py-4">
                 <Input
-                  label="Timer (seconds)"
+                  label="Time limit (minutes)"
                   type="number"
-                  name="timer_seconds"
-                  value={form.timer_seconds || ''}
-                  onChange={handleChange}
-                  placeholder="30–86400"
-                  min={30}
-                  max={86400}
+                  value={timerMinutes}
+                  onChange={(e) => { setTimerMinutes(e.target.value); setErrors((p) => ({ ...p, timer_seconds: undefined })) }}
+                  placeholder="e.g. 10"
+                  min={1}
+                  max={1440}
                   helper="Leave empty for no time limit."
+                  error={errors.timer_seconds}
                 />
               </div>
               <div className="py-4">
@@ -286,17 +377,18 @@ export default function FormEdit() {
                       name="theme_color"
                       value={form.theme_color || '#6C5CE7'}
                       onChange={handleChange}
-                      className="w-11 h-11 rounded-xl cursor-pointer border border-gray-200 shrink-0"
+                      className={`w-11 h-11 rounded-xl cursor-pointer border border-gray-200 shrink-0 ${errors.theme_color ? 'border-incorrect' : ''}`}
                       aria-label="Theme color"
                     />
                     <input
                       name="theme_color"
                       value={form.theme_color || ''}
                       onChange={handleChange}
-                      className="input-field font-mono"
+                      className={`input-field font-mono ${errors.theme_color ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
                       placeholder="#6C5CE7"
                     />
                   </div>
+                  {errors.theme_color && <p className="field-error">{errors.theme_color}</p>}
                 </div>
               </div>
               <div className="py-4">
@@ -306,20 +398,22 @@ export default function FormEdit() {
                     <input
                       type="datetime-local"
                       name="starts_at"
-                      value={form.starts_at ? form.starts_at.replace(' ', 'T') : ''}
+                      value={toInputDate(form.starts_at)}
                       onChange={(e) => setForm((p) => ({ ...p, starts_at: e.target.value }))}
-                      className="input-field"
+                      className={`input-field ${errors.starts_at ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
                     />
+                    {errors.starts_at && <p className="field-error">{errors.starts_at}</p>}
                   </div>
                   <div>
                     <label className="field-label">Closes at</label>
                     <input
                       type="datetime-local"
                       name="ends_at"
-                      value={form.ends_at ? form.ends_at.replace(' ', 'T') : ''}
+                      value={toInputDate(form.ends_at)}
                       onChange={(e) => setForm((p) => ({ ...p, ends_at: e.target.value }))}
-                      className="input-field"
+                      className={`input-field ${errors.ends_at ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
                     />
+                    {errors.ends_at && <p className="field-error">{errors.ends_at}</p>}
                   </div>
                 </div>
               </div>
@@ -331,15 +425,15 @@ export default function FormEdit() {
                   onChange={handleChange}
                   rows={2}
                   placeholder="Thank you for filling out this form"
+                  error={errors.thank_you_message}
                 />
               </div>
             </div>
-          </Card>
+          </CollapsibleCard>
         </div>
 
         <div className="space-y-6">
-          <Card>
-            <h2 className="font-display font-semibold text-ink mb-4">Banner</h2>
+          <CollapsibleCard title="Banner" icon={<ImageUp className="w-4 h-4" />}>
             {form.banner_path ? (
               <img src={form.banner_path} alt="Banner" className="w-full h-36 object-cover rounded-xl mb-4" />
             ) : (
@@ -358,24 +452,29 @@ export default function FormEdit() {
                 Change Banner
               </Button>
             )}
-          </Card>
-
-          <Card>
-            <h2 className="font-display font-semibold text-ink mb-3">Quick actions</h2>
-            <div className="space-y-2">
-              <Button variant="secondary" className="w-full justify-start" onClick={() => navigate(`/forms/${id}/questions`)}>
-                Manage questions
-              </Button>
-              <Button variant="secondary" className="w-full justify-start" onClick={() => navigate(`/forms/${id}/results`)}>
-                View results
-              </Button>
-              <Button variant="secondary" className="w-full justify-start" onClick={() => window.open(`/q/${form.short_code}`, '_blank')}>
-                Open public page
-              </Button>
-            </div>
-          </Card>
+          </CollapsibleCard>
         </div>
       </div>
+
+      <AnimatePresence>
+        {dirty && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.15 }}
+            className="fixed bottom-4 inset-x-4 z-50 flex justify-center pointer-events-none"
+          >
+            <div className="pointer-events-auto flex items-center gap-3 bg-white border border-gray-200 shadow-lift rounded-2xl px-4 py-3 w-full max-w-md">
+              <p className="text-sm text-gray-500 flex-1 truncate">Unsaved changes</p>
+              <Button variant="ghost" size="sm" onClick={handleDiscard}>Discard</Button>
+              <Button size="sm" onClick={handleSave} loading={saving} icon={<Save className="w-4 h-4" />}>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <ConfirmModal
         show={showDelete}

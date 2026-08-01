@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, X, Minus, Eye, EyeOff, ArrowRight, ClipboardList } from 'lucide-react'
-import { Button, Card, Badge } from '../../components/ui'
+import { Button, Card, Badge, FallbackPage, DotCorner } from '../../components/ui'
+import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -70,12 +71,11 @@ export default function QuizResult() {
 
   if (error) {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-ink p-6">
-        <div className="text-center">
-          <p className="text-white/30 text-5xl font-display font-bold mb-2">!</p>
-          <p className="text-white/60">{error}</p>
-        </div>
-      </div>
+      <FallbackPage
+        title="Oops"
+        message={error}
+        action={<Button variant="secondary" onClick={() => navigate('/')} className="w-full">Go home</Button>}
+      />
     )
   }
 
@@ -83,39 +83,58 @@ export default function QuizResult() {
 
   const isQuiz = formType === 'quiz'
   const canRefill = publicForm?.submission_limit === 'unlimited' && formCode
-  const themeColor = publicForm?.theme_color || '#6C5CE7'
+  const palette = themePalette(publicForm?.theme_color)
   const totalQ = data.answers?.length || 0
 
   if (!isQuiz) {
     const thankYou = publicForm?.thank_you_message || 'Thank you for your response!'
 
     return (
-      <div className="min-h-dvh bg-paper flex items-center justify-center px-4 py-10">
+      <div
+        className="theme-surface min-h-dvh bg-paper relative overflow-hidden flex items-center justify-center px-4 py-10"
+        style={{ background: palette.pageBg, '--t': palette.base }}
+      >
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            backgroundImage: `radial-gradient(${palette.soft} 1.5px, transparent 1.5px)`,
+            backgroundSize: '28px 28px',
+            opacity: 0.7,
+          }}
+          aria-hidden="true"
+        />
+
+        <DotCorner position="top-left" color={palette.base} />
+        <DotCorner position="bottom-right" color={palette.base} />
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: 'easeOut' }}
-          className="w-full max-w-md"
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+          className="relative w-full max-w-md"
         >
-          <Card className="p-6 md:p-8 overflow-hidden relative">
-            <div
-              className="absolute -top-20 -right-20 w-56 h-56 rounded-full opacity-10 pointer-events-none"
-              style={{ backgroundColor: themeColor }}
-              aria-hidden="true"
-            />
-
-            <div className="text-center mb-6">
+          <Card className="p-7 md:p-9 overflow-hidden" style={{ borderColor: palette.border }}>
+            <div className="relative w-fit mx-auto mb-7">
               <motion.span
+                className="absolute inset-0 rounded-full"
+                style={{ backgroundColor: palette.soft }}
+                animate={{ scale: [1, 1.55], opacity: [0.7, 0] }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'easeOut' }}
+              />
+              <motion.span
+                className="relative flex items-center justify-center w-20 h-20 rounded-full shadow-lift"
+                style={{ background: palette.cta, color: palette.onBase }}
                 initial={{ scale: 0.6, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 18, delay: 0.1 }}
-                className="inline-flex items-center justify-center w-16 h-16 rounded-full text-white shadow-lift"
-                style={{ backgroundColor: themeColor }}
+                transition={{ type: 'spring', stiffness: 260, damping: 16, delay: 0.1 }}
               >
-                <Check className="w-8 h-8" strokeWidth={3} />
+                <Check className="w-9 h-9" strokeWidth={3} />
               </motion.span>
-              <p className="eyebrow mt-5">Submitted</p>
-              <h1 className="font-display text-2xl md:text-[26px] font-bold text-ink mt-2 leading-snug">
+            </div>
+
+            <div className="text-center">
+              <p className="eyebrow justify-center" style={{ color: palette.base }}>Submitted</p>
+              <h1 className="font-display text-2xl md:text-[26px] font-bold text-ink mt-3 leading-snug">
                 {thankYou}
               </h1>
               <p className="text-sm text-gray-500 mt-2 leading-relaxed">
@@ -127,26 +146,25 @@ export default function QuizResult() {
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 mb-6">
+            <div className="grid grid-cols-3 gap-2.5 mt-8">
               <MetaChip label="Questions" value={String(totalQ)} />
               <MetaChip label="Submitted" value={formatSubmitted(data.submitted_at)} />
               <MetaChip label="Reference" value={`#${submissionId}`} />
             </div>
 
-            <div className="border-t border-gray-100 pt-5">
+            <div className="border-t border-gray-100 mt-7 pt-6">
               {canRefill ? (
                 <Button
                   onClick={() => navigate(`/q/${formCode}`)}
                   size="lg"
                   className="w-full"
+                  style={{ background: palette.cta, color: palette.onBase }}
                   icon={<ArrowRight className="w-4 h-4" />}
                 >
                   Fill Again
                 </Button>
               ) : (
-                <p className="text-center text-sm text-gray-400">
-                  You can close this page.
-                </p>
+                <p className="text-center text-sm text-gray-400">You can close this page.</p>
               )}
             </div>
           </Card>
@@ -177,15 +195,31 @@ export default function QuizResult() {
   }
 
   return (
-    <div className="min-h-dvh bg-paper">
-      <div className="max-w-lg mx-auto p-6 pb-12">
+    <div
+      className="theme-surface min-h-dvh bg-paper relative overflow-hidden"
+      style={{ background: palette.pageBg, '--t': palette.base }}
+    >
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: `radial-gradient(${palette.soft} 1.5px, transparent 1.5px)`,
+          backgroundSize: '28px 28px',
+          opacity: 0.7,
+        }}
+        aria-hidden="true"
+      />
+
+      <DotCorner position="top-left" color={palette.base} />
+      <DotCorner position="bottom-right" color={palette.base} />
+
+      <div className="relative max-w-lg mx-auto p-6 pb-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-8"
         >
           {formTitle && (
-            <p className="eyebrow justify-center">{formTitle}</p>
+            <p className="eyebrow justify-center" style={{ color: palette.base }}>{formTitle}</p>
           )}
 
           <div className="relative w-36 h-36 mx-auto mt-5 mb-5">
@@ -225,20 +259,19 @@ export default function QuizResult() {
           {data.max_score > 0 && (
             <p className="font-display text-xl font-semibold text-ink tabular-nums">{percentage}%</p>
           )}
+          <p className="text-sm text-gray-500 mt-1">
+            {percentage >= 70
+              ? 'Great job! Solid result.'
+              : percentage >= 40
+                ? 'Good effort — keep practicing.'
+                : 'Keep practicing — you’ll get there.'}
+          </p>
 
           {totalQ > 0 && (
-            <div className="flex justify-center gap-3 mt-5">
-              <span className="inline-flex items-center gap-2 px-3 h-9 rounded-xl bg-correct-soft text-correct text-sm font-semibold">
-                <Check className="w-3.5 h-3.5" strokeWidth={3} /> {correctCount}
-              </span>
-              <span className="inline-flex items-center gap-2 px-3 h-9 rounded-xl bg-incorrect-soft text-incorrect text-sm font-semibold">
-                <X className="w-3.5 h-3.5" strokeWidth={3} /> {wrongCount}
-              </span>
-              {unansweredCount > 0 && (
-                <span className="inline-flex items-center gap-2 px-3 h-9 rounded-xl bg-gray-100 text-gray-500 text-sm font-semibold">
-                  <Minus className="w-3.5 h-3.5" strokeWidth={3} /> {unansweredCount}
-                </span>
-              )}
+            <div className="grid grid-cols-3 gap-2.5 mt-6 max-w-sm mx-auto">
+              <MetaChip label="Correct" value={String(correctCount)} />
+              <MetaChip label="Wrong" value={String(wrongCount)} />
+              <MetaChip label="Skipped" value={String(unansweredCount)} />
             </div>
           )}
         </motion.div>
@@ -311,6 +344,7 @@ export default function QuizResult() {
               onClick={() => navigate(`/q/${formCode}`)}
               size="lg"
               className="w-full"
+              style={{ background: palette.cta, color: palette.onBase }}
               icon={<ArrowRight className="w-4 h-4" />}
             >
               Fill Again
@@ -331,7 +365,7 @@ export default function QuizResult() {
 
 function MetaChip({ label, value }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl bg-gray-50 px-2 py-3 text-center min-w-0">
+    <div className="flex flex-col items-center justify-center rounded-xl bg-gray-50 border border-gray-100 px-2 py-3.5 text-center min-w-0">
       <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
       <span className="text-sm font-semibold text-ink mt-1 truncate max-w-full">{value}</span>
     </div>

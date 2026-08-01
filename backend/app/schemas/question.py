@@ -57,6 +57,7 @@ class QuestionUpdate(BaseModel):
     type: Optional[str] = Field(None, pattern=r"^(multiple_choice|checkbox|short_answer|essay)$")
     question_text: Optional[str] = Field(None, min_length=1)
     points: Optional[int] = Field(None, ge=0, le=999)
+    is_scored: Optional[bool] = None
     is_required: Optional[bool] = None
     options: Optional[list[OptionUpdate]] = None
 
@@ -81,6 +82,7 @@ class QuestionResponse(BaseModel):
     type: str
     question_text: str
     points: int
+    is_scored: bool = True
     order_index: int
     is_required: bool
     options: list[OptionResponse] = []

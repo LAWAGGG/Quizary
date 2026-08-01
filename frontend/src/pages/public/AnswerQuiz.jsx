@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Check, Timer, ChevronLeft, ChevronRight } from 'lucide-react'
-import { Button, Input, Textarea, Card } from '../../components/ui'
+import { Button, Input, Textarea, Card, FallbackPage } from '../../components/ui'
+import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 
 const OPT_COLORS = ['#3B82F6', '#EF4444', '#F59E0B', '#10B981']
@@ -14,7 +15,7 @@ function parseDate(str) {
   return new Date(Y, m - 1, d, H, M, S)
 }
 
-function OptionTile({ letter, color, selected, children, onClick, disabled }) {
+function OptionTile({ letter, color, selected, checkbox, children, onClick, disabled }) {
   return (
     <motion.button
       whileTap={{ scale: 0.96 }}
@@ -25,11 +26,19 @@ function OptionTile({ letter, color, selected, children, onClick, disabled }) {
       }`}
       style={{ backgroundColor: color }}
     >
-      <span className="flex items-center justify-center w-9 h-9 rounded-full bg-white/25 font-mono font-bold text-sm shrink-0">
-        {letter}
-      </span>
+      {checkbox ? (
+        <span className={`flex items-center justify-center w-7 h-7 rounded-lg shrink-0 transition-colors ${
+          selected ? 'bg-white' : 'bg-white/25'
+        }`}>
+          {selected && <Check className="w-4 h-4 text-[var(--t,#6C5CE7)]" strokeWidth={3.5} />}
+        </span>
+      ) : (
+        <span className="flex items-center justify-center w-9 h-9 rounded-full bg-white/25 font-mono font-bold text-sm shrink-0">
+          {letter}
+        </span>
+      )}
       <span className="flex-1 leading-snug">{children}</span>
-      {selected && (
+      {selected && !checkbox && (
         <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white/25 flex items-center justify-center">
           <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
         </span>
@@ -47,6 +56,7 @@ export default function AnswerQuiz() {
   const formCode = searchParams.get('code') || ''
 
   const [data, setData] = useState(null)
+  const [publicForm, setPublicForm] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [currentIdx, setCurrentIdx] = useState(0)
@@ -96,6 +106,13 @@ export default function AnswerQuiz() {
   useEffect(() => {
     fetchSubmission()
   }, [fetchSubmission])
+
+  useEffect(() => {
+    if (!formCode) return
+    api.get(`/q/${formCode}`)
+      .then((res) => setPublicForm(res.data))
+      .catch(() => {})
+  }, [formCode])
 
   const handleAutoSubmit = useCallback(async () => {
     try {
@@ -224,18 +241,19 @@ export default function AnswerQuiz() {
 
   if (error) {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-ink p-6">
-        <div className="text-center">
-          <p className="text-white/30 text-5xl font-display font-bold mb-2">!</p>
-          <p className="text-white/60">{error}</p>
-        </div>
-      </div>
+      <FallbackPage
+        title="Oops"
+        message={error}
+        action={<Button variant="secondary" onClick={() => navigate('/')} className="w-full">Go home</Button>}
+      />
     )
   }
 
   if (!data) return null
 
   const isQuiz = formType === 'quiz'
+  const palette = themePalette(publicForm?.theme_color)
+  const bannerPath = publicForm?.banner_path || null
   const questions = data.questions || []
   const current = questions[currentIdx]
   const totalQ = questions.length
@@ -254,27 +272,27 @@ export default function AnswerQuiz() {
     }
 
     return (
-      <div className="h-dvh flex flex-col bg-paper">
-        <header className="bg-white border-b border-gray-200 px-4 py-3">
+      <div className="theme-surface h-dvh flex flex-col bg-paper" style={{ '--t': palette.base }}>
+        <header className="px-4 py-3" style={{ background: palette.gradient }}>
           <div className="flex items-center justify-between mb-2.5">
             <button
               onClick={() => navigate('/')}
-              className="p-1.5 -ml-1.5 text-gray-400 hover:text-ink transition-colors"
+              className="p-1.5 -ml-1.5 text-white/70 hover:text-white transition-colors"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
-            <span className="text-sm font-semibold text-ink truncate mx-2">{formTitle}</span>
+            <span className="text-sm font-semibold text-white truncate mx-2">{formTitle}</span>
             <div className="flex items-center gap-2.5">
               {saving[current?.id] && (
-                <svg className="w-4 h-4 text-gray-300 animate-spin" fill="none" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-white/60 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
               )}
               {timeLeft !== null && (
                 <span className={`inline-flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums px-2.5 h-8 rounded-lg ${
-                  timeLeft < 60000 ? 'bg-incorrect-soft text-incorrect' : 'bg-gray-100 text-ink'
+                  timeLeft < 60000 ? 'bg-white text-incorrect' : 'bg-white/15 text-white'
                 }`}>
                   <Timer className="w-3.5 h-3.5" />
                   {formatTime(timeLeft)}
@@ -283,30 +301,29 @@ export default function AnswerQuiz() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-white/25 rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-primary rounded-full"
+                className="h-full bg-white rounded-full"
                 initial={{ width: 0 }}
                 animate={{ width: `${progress}%` }}
                 transition={{ duration: 0.3 }}
               />
             </div>
-            <span className="text-xs font-mono font-bold text-gray-400 shrink-0 tabular-nums">
+            <span className="text-xs font-mono font-bold text-white/70 shrink-0 tabular-nums">
               {currentIdx + 1}/{totalQ}
             </span>
           </div>
         </header>
 
-        <AnimatePresence mode="wait" custom={direction}>
-          <motion.div
-            key={current?.id}
-            custom={direction}
-            initial={{ x: direction * 60, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: direction * -60, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="flex-1 overflow-y-auto px-4 py-6"
-          >
+        <div className="flex-1 overflow-y-auto px-4 py-6">
+          <AnimatePresence mode="wait" custom={direction}>            <motion.div
+              key={current?.id}
+              custom={direction}
+              initial={{ x: direction * 60, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: direction * -60, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
             {current && (
               <div className="max-w-lg mx-auto">
                 {current.type === 'multiple_choice' && (
@@ -345,6 +362,7 @@ export default function AnswerQuiz() {
                             letter={LETTERS[i % LETTERS.length]}
                             color={OPT_COLORS[i % OPT_COLORS.length]}
                             selected={selected}
+                            checkbox
                             onClick={() => handleSelect(current.id, opt.id)}
                           >
                             {opt.option_text}
@@ -383,6 +401,7 @@ export default function AnswerQuiz() {
             )}
           </motion.div>
         </AnimatePresence>
+        </div>
 
         <footer className="px-4 py-4 bg-white border-t border-gray-200">
           <div className="max-w-lg mx-auto flex gap-3">
@@ -392,11 +411,11 @@ export default function AnswerQuiz() {
               </Button>
             )}
             {isLast ? (
-              <Button onClick={handleSubmitAll} disabled={submitting} loading={submitting} className="flex-1" icon={!submitting && <Check className="w-4 h-4" />}>
+              <Button onClick={handleSubmitAll} disabled={submitting} loading={submitting} className="flex-1" style={{ background: palette.cta, color: palette.onBase }} icon={!submitting && <Check className="w-4 h-4" />}>
                 Submit
               </Button>
             ) : (
-              <Button onClick={handleNext} disabled={!hasAnswer} className="flex-1">
+              <Button onClick={handleNext} disabled={!hasAnswer} className="flex-1" style={{ background: palette.cta, color: palette.onBase }}>
                 Next
                 <ChevronRight className="w-4 h-4" />
               </Button>
@@ -408,58 +427,84 @@ export default function AnswerQuiz() {
   }
 
   return (
-    <div className="min-h-dvh bg-paper">
+    <div className="theme-surface min-h-dvh bg-paper" style={{ background: palette.pageBg, '--t': palette.base }}>
       <div className="max-w-lg mx-auto p-4 pb-28">
+        {bannerPath && (
+          <img src={bannerPath} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
+        )}
         <div className="flex items-center justify-between mb-6">
           <h1 className="font-display text-xl font-bold text-ink">{formTitle}</h1>
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">{totalQ} questions</span>
         </div>
         <div className="space-y-5">
-          {questions.map((q, qi) => (
-            <Card key={q.id} className="p-5">
+          {questions.map((q) => (
+            <Card key={q.id} className="p-5" style={{ borderColor: palette.border }}>
               <div className="flex items-start gap-3 mb-4">
-                <span className="w-6 h-6 rounded-full bg-ink text-white text-xs font-bold flex items-center justify-center shrink-0">
-                  {qi + 1}
-                </span>
                 <p className="font-semibold text-ink leading-snug">{q.question_text}</p>
               </div>
 
               {q.type === 'multiple_choice' && (
                 <div className="space-y-2">
-                  {q.options.map((opt, i) => (
-                    <label key={opt.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
-                      <span className={`bubble w-6 h-6 text-xs ${(answers[q.id] || [])[0] === opt.id ? 'bubble-selected' : 'bubble-empty'}`}>
-                        {LETTERS[i % LETTERS.length]}
-                      </span>
-                      <input
-                        type="radio"
-                        name={`q-${q.id}`}
-                        checked={(answers[q.id] || [])[0] === opt.id}
-                        onChange={() => handleSelect(q.id, opt.id)}
-                        className="sr-only"
-                      />
-                      <span className="text-sm text-ink">{opt.option_text}</span>
-                    </label>
-                  ))}
+                  {q.options.map((opt, i) => {
+                    const selected = (answers[q.id] || [])[0] === opt.id
+                    return (
+                      <label
+                        key={opt.id}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                          selected ? 'border-primary bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
+                        }`}
+                        style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
+                      >
+                        <span
+                          className={`bubble w-6 h-6 text-xs ${selected ? 'bubble-selected' : 'bubble-empty'}`}
+                          style={selected ? { borderColor: palette.base, backgroundColor: palette.base, color: palette.onBase } : undefined}
+                        >
+                          {LETTERS[i % LETTERS.length]}
+                        </span>
+                        <input
+                          type="radio"
+                          name={`q-${q.id}`}
+                          checked={selected}
+                          onChange={() => handleSelect(q.id, opt.id)}
+                          className="sr-only"
+                        />
+                        <span className="text-sm text-ink">{opt.option_text}</span>
+                      </label>
+                    )
+                  })}
                 </div>
               )}
 
               {q.type === 'checkbox' && (
                 <div className="space-y-2">
-                  {q.options.map((opt, i) => (
-                    <label key={opt.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
-                      <span className={`bubble w-6 h-6 text-xs ${(answers[q.id] || []).includes(opt.id) ? 'bubble-selected' : 'bubble-empty'}`}>
-                        {LETTERS[i % LETTERS.length]}
-                      </span>
-                      <input
-                        type="checkbox"
-                        checked={(answers[q.id] || []).includes(opt.id)}
-                        onChange={() => handleSelect(q.id, opt.id)}
-                        className="sr-only"
-                      />
-                      <span className="text-sm text-ink">{opt.option_text}</span>
-                    </label>
-                  ))}
+                  {q.options.map((opt) => {
+                    const selected = (answers[q.id] || []).includes(opt.id)
+                    return (
+                      <label
+                        key={opt.id}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                          selected ? 'border-primary bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
+                        }`}
+                        style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
+                      >
+                        <span
+                          className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 transition-colors ${
+                            selected ? '' : 'border-gray-300 bg-white'
+                          }`}
+                          style={selected ? { borderColor: palette.base, backgroundColor: palette.base, color: palette.onBase } : undefined}
+                        >
+                          {selected && <Check className="w-3.5 h-3.5" strokeWidth={3.5} />}
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => handleSelect(q.id, opt.id)}
+                          className="sr-only"
+                        />
+                        <span className="text-sm text-ink">{opt.option_text}</span>
+                      </label>
+                    )
+                  })}
                 </div>
               )}
 
@@ -487,7 +532,7 @@ export default function AnswerQuiz() {
 
       <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
         <div className="max-w-lg mx-auto">
-          <Button onClick={handleSubmitAll} disabled={submitting} loading={submitting} className="w-full" size="lg">
+          <Button onClick={handleSubmitAll} disabled={submitting} loading={submitting} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }}>
             Submit
           </Button>
         </div>

@@ -10,6 +10,7 @@ class ResultItem(BaseModel):
     max_score: Optional[float] = None
     status: str
     submitted_at: Optional[str] = None   # "d-m-Y H:i:s"
+    answer_summary: str = ""             # preview jawaban (dipakai untuk form type)
 
 
 class ResultListResponse(BaseModel):
@@ -28,15 +29,42 @@ class ScoreDistribution(BaseModel):
     count: int
 
 
+class OptionChoice(BaseModel):
+    option_id: int
+    option_text: str
+    count: int
+    pct: float
+
+
+class QuestionStat(BaseModel):
+    question_id: int
+    question_text: str
+    type: str
+    answered: int
+    skipped: int
+    most_selected: Optional[str] = None
+    most_selected_count: int = 0
+    most_selected_pct: float = 0
+    option_breakdown: list[OptionChoice] = []
+    sample_answers: list[str] = []
+
+
 class AnalyticsResponse(BaseModel):
+    type: str = "quiz"  # "quiz" | "form"
     total_participants: int
-    average_score: float
-    highest_score: float
-    lowest_score: float
-    correct_rate: float
-    wrong_rate: float
-    score_distribution: list[ScoreDistribution]
-    per_question_stats: list[PerQuestionStat]
+    # quiz-specific
+    average_score: float = 0
+    highest_score: float = 0
+    lowest_score: float = 0
+    correct_rate: float = 0
+    wrong_rate: float = 0
+    score_distribution: list[ScoreDistribution] = []
+    per_question_stats: list[PerQuestionStat] = []
+    # form-specific
+    total_answers: int = 0
+    completion_rate: float = 0
+    avg_answers: float = 0
+    question_stats: list[QuestionStat] = []
 
 
 class RecentForm(BaseModel):

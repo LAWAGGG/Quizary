@@ -8,6 +8,7 @@ from app.models.form import Form
 from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
 from app.models.user import User
+from app.services.points import distribute_quiz_points
 from app.utils import file_url, _delete_file
 from app.schemas.question import (
     MessageResponse,
@@ -20,26 +21,6 @@ router = APIRouter(tags=["questions"])
 
 _OPTION_TYPES = ("multiple_choice", "checkbox")
 _TEXT_TYPES = ("short_answer", "essay")
-
-
-def _distribute_quiz_points(form_id: int, db: Session) -> None:
-    form = db.get(Form, form_id)
-    if not form or form.type.value != "quiz":
-        return
-    questions = db.query(Question).filter(Question.form_id == form_id).all()
-    if not questions:
-        return
-    manual = [q for q in questions if q.points != 0]
-    auto = [q for q in questions if q.points == 0]
-    if not auto:
-        return
-    remaining = 100 - sum(q.points for q in manual)
-    if remaining <= 0:
-        return
-    base = remaining // len(auto)
-    rem = remaining % len(auto)
-    for i, q in enumerate(auto):
-        q.points = base + (1 if i < rem else 0)
 
 
 def _get_question_or_404(q_id: int, db: Session) -> Question:
@@ -84,6 +65,7 @@ def _build_question(q: Question, request: Request) -> dict:
         "type": q.type.value,
         "question_text": q.question_text,
         "points": q.points,
+        "is_scored": q.is_scored,
         "order_index": q.order_index,
         "is_required": q.is_required,
         "options": opts,
@@ -145,7 +127,7 @@ def create_question(
             order_index=i,
         ))
 
-    _distribute_quiz_points(form.id, db)
+    distribute_quiz_points(form.id, db)
     db.commit()
     db.refresh(question)
     return _build_question(question, request)
@@ -170,8 +152,9 @@ def update_question(
     # Determine the effective type after this update
     new_type_str = update_data.get("type") or question.type.value
 
-    # Fix #4 — if options are sent, the effective type must support options
-    if options_data is not None:
+    # Fix #4 — non-empty options with a text type is invalid; an empty list is
+    # allowed and simply means "clear options" (e.g. switching MC → short_answer).
+    if options_data:
         if new_type_str in _TEXT_TYPES:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -193,6 +176,14 @@ def update_question(
                 detail=f"Switching to '{new_type.value}' requires at least 1 option in this request",
             )
         question.type = new_type
+
+    # Toggle is_scored: off → force 0 points; on (no explicit points) → rejoin pool
+    was_scored = question.is_scored
+    if "is_scored" in update_data:
+        if update_data["is_scored"] is False:
+            update_data["points"] = 0
+        elif "points" not in update_data:
+            update_data["points"] = 0
 
     for field, value in update_data.items():
         setattr(question, field, value)
@@ -251,7 +242,12 @@ def update_question(
                     detail="multiple_choice questions must have exactly 1 correct option",
                 )
 
-    _distribute_quiz_points(question.form_id, db)
+    if question.is_scored and not was_scored:
+        distribute_quiz_points(question.form_id, db)
+    elif question.is_scored:
+        distribute_quiz_points(question.form_id, db, fixed_ids={question.id})
+    else:
+        distribute_quiz_points(question.form_id, db)
     db.commit()
     db.refresh(question)
     return _build_question(question, request)
@@ -274,7 +270,7 @@ def delete_question(
             _delete_file(img.path)
     form_id = question.form_id
     db.delete(question)
-    _distribute_quiz_points(form_id, db)
+    distribute_quiz_points(form_id, db)
     db.commit()
     return {"message": "Question deleted"}
 

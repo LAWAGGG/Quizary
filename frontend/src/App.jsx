@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { MotionConfig } from 'framer-motion'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ToastProvider } from './context/ToastContext'
 import DashboardLayout from './components/layout/DashboardLayout'
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
@@ -58,7 +59,9 @@ export default function App() {
     <BrowserRouter>
       <MotionConfig reducedMotion="user">
         <AuthProvider>
-          <AppRoutes />
+          <ToastProvider>
+            <AppRoutes />
+          </ToastProvider>
         </AuthProvider>
       </MotionConfig>
     </BrowserRouter>

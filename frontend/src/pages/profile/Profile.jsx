@@ -3,16 +3,17 @@ import { motion } from 'framer-motion'
 import { Camera } from 'lucide-react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
+import { useToast } from '../../context/ToastContext'
 import { Card, Button, Input, Badge, PageHeader } from '../../components/ui'
 
 export default function Profile() {
   const { user, updateUser } = useAuth()
+  const toast = useToast()
   const [name, setName] = useState('')
   const [avatar, setAvatar] = useState(null)
   const [avatarPreview, setAvatarPreview] = useState(null)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [message, setMessage] = useState(null)
   const fileRef = useRef(null)
 
   useEffect(() => {
@@ -24,7 +25,6 @@ export default function Profile() {
 
   const handleSave = async () => {
     setSaving(true)
-    setMessage(null)
     try {
       const formData = new FormData()
       formData.append('name', name)
@@ -32,9 +32,9 @@ export default function Profile() {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       updateUser(res.data)
-      setMessage({ type: 'success', text: 'Profile updated successfully' })
+      toast.success('Profile updated successfully')
     } catch (err) {
-      setMessage({ type: 'error', text: 'Failed to update profile' })
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to update profile')
     } finally {
       setSaving(false)
     }
@@ -50,7 +50,6 @@ export default function Profile() {
   const handleUploadAvatar = async () => {
     if (!avatar) return
     setUploading(true)
-    setMessage(null)
     try {
       const formData = new FormData()
       formData.append('avatar', avatar)
@@ -60,9 +59,9 @@ export default function Profile() {
       updateUser(res.data)
       setAvatarPreview(res.data.avatar)
       setAvatar(null)
-      setMessage({ type: 'success', text: 'Avatar uploaded successfully' })
+      toast.success('Avatar uploaded successfully')
     } catch (err) {
-      setMessage({ type: 'error', text: 'Failed to upload avatar' })
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to upload avatar')
     } finally {
       setUploading(false)
     }
@@ -133,14 +132,6 @@ export default function Profile() {
                 {(user?.role || 'user').toUpperCase()}
               </Badge>
             </div>
-
-            {message && (
-              <div className={`px-4 py-3 rounded-xl text-sm ${
-                message.type === 'success' ? 'bg-correct-soft text-correct' : 'bg-incorrect-soft text-incorrect'
-              }`}>
-                {message.text}
-              </div>
-            )}
 
             <Button onClick={handleSave} loading={saving} className="w-full" size="lg">
               Save Changes

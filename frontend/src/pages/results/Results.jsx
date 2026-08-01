@@ -22,6 +22,7 @@ export default function Results() {
   const [data, setData] = useState([])
   const [meta, setMeta] = useState({ total: 0, page: 1, per_page: 20 })
   const [formTitle, setFormTitle] = useState('')
+  const [isQuiz, setIsQuiz] = useState(true)
   const [status, setStatus] = useState('')
   const [sort, setSort] = useState('')
   const [page, setPage] = useState(1)
@@ -46,6 +47,7 @@ export default function Results() {
   useEffect(() => {
     api.get(`/forms/${formId}`).then((res) => {
       setFormTitle(res.data.title)
+      setIsQuiz(res.data.type === 'quiz')
     }).catch(() => {})
   }, [formId])
 
@@ -103,11 +105,13 @@ export default function Results() {
             {statusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </Select>
         </div>
-        <div className="w-full sm:w-48">
-          <Select value={sort} onChange={(e) => { setSort(e.target.value); setPage(1) }} aria-label="Sort results">
-            {sortOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </Select>
-        </div>
+        {isQuiz && (
+          <div className="w-full sm:w-48">
+            <Select value={sort} onChange={(e) => { setSort(e.target.value); setPage(1) }} aria-label="Sort results">
+              {sortOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </Select>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -131,7 +135,7 @@ export default function Results() {
                   <tr className="border-b border-gray-100 bg-gray-50/70">
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">ID</th>
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Respondent</th>
-                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Score / Max</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">{isQuiz ? 'Score / Max' : 'Answers'}</th>
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Submitted</th>
                   </tr>
@@ -142,8 +146,14 @@ export default function Results() {
                       <td className="px-5 py-3.5 text-sm font-mono text-gray-400">#{row.submission_id}</td>
                       <td className="px-5 py-3.5 text-sm font-medium text-ink">{row.respondent_name || 'Anonymous'}</td>
                       <td className="px-5 py-3.5 text-sm tabular-nums">
-                        <span className="font-semibold text-ink">{row.score ?? '-'}</span>
-                        <span className="text-gray-400"> / {row.max_score ?? '-'}</span>
+                        {isQuiz ? (
+                          <>
+                            <span className="font-semibold text-ink">{row.score ?? '-'}</span>
+                            <span className="text-gray-400"> / {row.max_score ?? '-'}</span>
+                          </>
+                        ) : (
+                          <span className="text-gray-600 block max-w-[320px] truncate">{row.answer_summary || '-'}</span>
+                        )}
                       </td>
                       <td className="px-5 py-3.5"><StatusBadge status={row.status} /></td>
                       <td className="px-5 py-3.5 text-sm text-gray-500">{row.submitted_at || '-'}</td>
@@ -166,10 +176,14 @@ export default function Results() {
                     <StatusBadge status={row.status} />
                   </div>
                   <div className="flex justify-between items-center text-sm text-gray-500">
-                    <span>
-                      Score: <span className="font-semibold text-ink">{row.score ?? '-'} / {row.max_score ?? '-'}</span>
-                    </span>
-                    <span className="text-xs">{row.submitted_at || '-'}</span>
+                    {isQuiz ? (
+                      <span>
+                        Score: <span className="font-semibold text-ink">{row.score ?? '-'} / {row.max_score ?? '-'}</span>
+                      </span>
+                    ) : (
+                      <span className="truncate pr-2">{row.answer_summary || '-'}</span>
+                    )}
+                    <span className="text-xs shrink-0">{row.submitted_at || '-'}</span>
                   </div>
                 </Card>
               </motion.div>

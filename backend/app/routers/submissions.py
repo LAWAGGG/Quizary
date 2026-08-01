@@ -342,6 +342,10 @@ def submit_answers(
         q = q_map.get(answer.question_id)
         if not q:
             continue
+        if not q.is_scored:
+            answer.is_correct = None
+            answer.points_earned = Decimal("0")
+            continue
         if q.type in (QuestionType.multiple_choice, QuestionType.checkbox):
             correct_ids = {o.id for o in q.options if o.is_correct}
             selected_ids = {ao.option_id for ao in answer.selected_options}

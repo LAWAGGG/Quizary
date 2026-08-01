@@ -11,15 +11,19 @@ from app.dependencies import get_current_user, verify_form_owner
 from app.models.form import Form
 from app.models.submission import Submission, SubmissionStatus
 from app.models.answer import Answer
-from app.models.question import Question
+from app.models.answer_option import AnswerOption
+from app.models.question import Question, QuestionType
+from app.models.question_option import QuestionOption
 from app.models.user import User
-from app.utils import to_naive_utc, fmt_dt
+from app.utils import to_naive_utc, fmt_dt, now_wib
 from app.schemas.results import (
     ResultItem,
     ResultListResponse,
     AnalyticsResponse,
     PerQuestionStat,
     ScoreDistribution,
+    OptionChoice,
+    QuestionStat,
     DashboardResponse,
     RecentForm,
     SubmissionTrend,
@@ -51,6 +55,33 @@ def list_results(
     total = q.count()
     subs = q.offset((page - 1) * per_page).limit(per_page).all()
 
+    answer_summary: dict[int, str] = {}
+    if form.type.value != "quiz" and subs:
+        q_ids = [row[0] for row in db.query(Question.id).filter(Question.form_id == form.id).all()]
+        opt_text = {o.id: o.option_text for o in db.query(QuestionOption).filter(QuestionOption.question_id.in_(q_ids)).all()}
+        answers = db.query(Answer).filter(
+            Answer.submission_id.in_([s.id for s in subs]),
+            Answer.question_id.in_(q_ids),
+        ).all()
+        ans_opt = db.query(AnswerOption).filter(AnswerOption.answer_id.in_([a.id for a in answers])).all()
+        ao_by_a: dict[int, list[str]] = {}
+        for ao in ans_opt:
+            text = opt_text.get(ao.option_id)
+            if text:
+                ao_by_a.setdefault(ao.answer_id, []).append(text)
+        q_type = {row.id: row.type for row in db.query(Question.id, Question.type).filter(Question.id.in_(q_ids)).all()}
+        by_sub: dict[int, list[str]] = {}
+        for a in answers:
+            if q_type.get(a.question_id) in (QuestionType.multiple_choice, QuestionType.checkbox):
+                text = ", ".join(ao_by_a.get(a.id, []))
+            else:
+                text = a.answer_text or ""
+            if text:
+                by_sub.setdefault(a.submission_id, []).append(text)
+        for s in subs:
+            joined = " · ".join(by_sub.get(s.id, [])[:3])
+            answer_summary[s.id] = joined[:100]
+
     return ResultListResponse(
         data=[ResultItem(
             submission_id=s.id,
@@ -59,6 +90,7 @@ def list_results(
             max_score=float(s.max_score) if s.max_score is not None else None,
             status=s.status.value,
             submitted_at=fmt_dt(to_naive_utc(s.submitted_at)),
+            answer_summary=answer_summary.get(s.id, ""),
         ) for s in subs],
         meta={"total": total, "page": page, "per_page": per_page},
     )
@@ -72,17 +104,12 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
     ).all()
 
     total = len(subs)
-    if total == 0:
-        return AnalyticsResponse(
-            total_participants=0, average_score=0, highest_score=0, lowest_score=0,
-            correct_rate=0, wrong_rate=0, score_distribution=[], per_question_stats=[],
-        )
-
-    scores = [float(s.score or 0) for s in subs]
-    avg = sum(scores) / total
-
+    questions = db.query(Question).filter(Question.form_id == form.id).order_by(Question.order_index).all()
     sub_ids = [s.id for s in subs]
-    questions = db.query(Question).filter(Question.form_id == form.id).all()
+
+    if total == 0:
+        return AnalyticsResponse(type=form.type.value, total_participants=0)
+
     all_answers = db.query(Answer).filter(
         Answer.question_id.in_([q.id for q in questions]),
         Answer.submission_id.in_(sub_ids),
@@ -91,6 +118,68 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
     answer_by_q: dict[int, list[Answer]] = {}
     for a in all_answers:
         answer_by_q.setdefault(a.question_id, []).append(a)
+
+    # ── Form type: answer-frequency analysis ────────────────────────────────
+    if form.type.value != "quiz":
+        question_stats: list[QuestionStat] = []
+        total_answers = 0
+        for q in questions:
+            answers = answer_by_q.get(q.id, [])
+            non_empty = [
+                a for a in answers
+                if (a.answer_text and a.answer_text.strip()) or a.selected_options
+            ]
+            answered = len(non_empty)
+            total_answers += answered
+
+            opts = sorted(q.options, key=lambda o: o.order_index or 0)
+            opt_counts: Counter = Counter()
+            for a in non_empty:
+                for ao in a.selected_options:
+                    opt_counts[ao.option_id] += 1
+
+            breakdown = [
+                OptionChoice(
+                    option_id=o.id,
+                    option_text=o.option_text,
+                    count=opt_counts.get(o.id, 0),
+                    pct=round(opt_counts.get(o.id, 0) / answered * 100, 1) if answered else 0,
+                )
+                for o in opts
+            ]
+            most = max(breakdown, key=lambda b: b.count) if breakdown and any(b.count for b in breakdown) else None
+
+            sample_answers = [
+                a.answer_text.strip() for a in non_empty
+                if a.answer_text and a.answer_text.strip()
+            ][:5]
+
+            question_stats.append(QuestionStat(
+                question_id=q.id,
+                question_text=q.question_text,
+                type=q.type.value,
+                answered=answered,
+                skipped=total - answered,
+                most_selected=most.option_text if most else None,
+                most_selected_count=most.count if most else 0,
+                most_selected_pct=most.pct if most else 0,
+                option_breakdown=breakdown,
+                sample_answers=sample_answers,
+            ))
+
+        completion = total_answers / (total * len(questions)) if total and questions else 0
+        return AnalyticsResponse(
+            type="form",
+            total_participants=total,
+            total_answers=total_answers,
+            completion_rate=round(completion, 2),
+            avg_answers=round(total_answers / total, 1) if total else 0,
+            question_stats=question_stats,
+        )
+
+    # ── Quiz type: score & correctness analysis ─────────────────────────────
+    scores = [float(s.score or 0) for s in subs]
+    avg = sum(scores) / total
 
     per_q = []
     total_correct = total_answers = 0
@@ -117,6 +206,7 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
         dist[key] = dist.get(key, 0) + 1
 
     return AnalyticsResponse(
+        type="quiz",
         total_participants=total,
         average_score=round(avg, 2),
         highest_score=max(scores),
@@ -128,27 +218,64 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
     )
 
 
+def _export_columns(form: Form, subs: list[Submission], db: Session):
+    """Build dynamic export: one column per question + Dikirim/Skor/Status."""
+    questions = db.query(Question).filter(Question.form_id == form.id).order_by(Question.order_index).all()
+    q_ids = [q.id for q in questions]
+    headers = [q.question_text for q in questions] + ["Dikirim", "Skor", "Status"]
+
+    if not questions:
+        return questions, headers, []
+
+    opt_text = {o.id: o.option_text for o in db.query(QuestionOption).filter(QuestionOption.question_id.in_(q_ids)).all()}
+    answers = db.query(Answer).filter(
+        Answer.question_id.in_(q_ids),
+        Answer.submission_id.in_([s.id for s in subs]),
+    ).all()
+
+    ans_opt = db.query(AnswerOption).filter(AnswerOption.answer_id.in_([a.id for a in answers])).all()
+    ao_by_answer: dict[int, list[str]] = {}
+    for ao in ans_opt:
+        text = opt_text.get(ao.option_id)
+        if text:
+            ao_by_answer.setdefault(ao.answer_id, []).append(text)
+
+    q_by_id = {q.id: q for q in questions}
+    answer_map: dict[tuple[int, int], str] = {}
+    for a in answers:
+        q = q_by_id.get(a.question_id)
+        if not q:
+            continue
+        if q.type in (QuestionType.multiple_choice, QuestionType.checkbox):
+            answer_map[(a.submission_id, a.question_id)] = ", ".join(ao_by_answer.get(a.id, []))
+        else:
+            answer_map[(a.submission_id, a.question_id)] = a.answer_text or ""
+
+    rows = []
+    for s in subs:
+        row = [answer_map.get((s.id, q.id), "") or "-" for q in questions]
+        row.append(fmt_dt(to_naive_utc(s.submitted_at)) or "-")
+        row.append(float(s.score) if s.score is not None else "-")
+        row.append(s.status.value)
+        rows.append(row)
+    return questions, headers, rows
+
+
 @router.get("/forms/{form_id}/export/excel")
 def export_excel(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
     subs = db.query(Submission).filter(
         Submission.form_id == form.id,
         Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted]),
-    ).order_by(Submission.score.desc()).all()
+    ).order_by(Submission.created_at.desc()).all()
+
+    _, headers, rows = _export_columns(form, subs, db)
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Hasil"
-    ws.append(["Responden", "Email", "Skor", "Max Skor", "Status", "Dikirim"])
-
-    for s in subs:
-        ws.append([
-            s.respondent_name or "Anonim",
-            s.respondent_email or "-",
-            float(s.score) if s.score is not None else 0,
-            float(s.max_score) if s.max_score is not None else 0,
-            s.status.value,
-            fmt_dt(to_naive_utc(s.submitted_at)) or "-",
-        ])
+    ws.append(headers)
+    for row in rows:
+        ws.append(row)
 
     buf = BytesIO()
     wb.save(buf)
@@ -163,10 +290,10 @@ def export_excel(form: Form = Depends(verify_form_owner), db: Session = Depends(
 @router.get("/forms/{form_id}/export/pdf")
 def export_pdf(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
     try:
-        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.pagesizes import A4, landscape
         from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     except ImportError:
         from fastapi import HTTPException
         raise HTTPException(
@@ -177,34 +304,44 @@ def export_pdf(form: Form = Depends(verify_form_owner), db: Session = Depends(ge
     subs = db.query(Submission).filter(
         Submission.form_id == form.id,
         Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted]),
-    ).order_by(Submission.score.desc()).all()
+    ).order_by(Submission.created_at.desc()).all()
+
+    _, headers, rows = _export_columns(form, subs, db)
 
     buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4)
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4))
     styles = getSampleStyleSheet()
-    elements = [Paragraph(f"Hasil: {form.title}", styles["Title"])]
+    title_style = ParagraphStyle("QuizTitle", parent=styles["Title"], fontSize=16, spaceAfter=2)
+    sub_style = ParagraphStyle("QuizSub", parent=styles["Normal"], fontSize=9, textColor=colors.grey, spaceAfter=10)
+    cell_style = ParagraphStyle("Cell", parent=styles["BodyText"], fontSize=7.5, leading=10)
+    head_style = ParagraphStyle("Head", parent=styles["BodyText"], fontSize=8, leading=10, fontName="Helvetica-Bold", textColor=colors.white)
 
-    data = [["Responden", "Email", "Skor", "Max", "Status", "Dikirim"]]
-    for s in subs:
-        data.append([
-            s.respondent_name or "Anonim",
-            s.respondent_email or "-",
-            str(float(s.score or 0)),
-            str(float(s.max_score or 0)),
-            s.status.value,
-            fmt_dt(to_naive_utc(s.submitted_at)) or "-",
-        ])
+    elements = [
+        Paragraph(form.title, title_style),
+        Paragraph(f"Diekspor pada {now_wib().strftime('%d-%m-%Y %H:%M')}", sub_style),
+        Spacer(1, 4),
+    ]
 
-    table = Table(data)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#6C5CE7")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F0EFFF")]),
-    ]))
-    elements.append(table)
+    if not headers:
+        elements.append(Paragraph("Belum ada data.", styles["Normal"]))
+    else:
+        col_w = doc.width / len(headers)
+        table_data = [[Paragraph(str(c), head_style) for c in headers]] + [
+            [Paragraph(str(c), cell_style) for c in row] for row in rows
+        ]
+        table = Table(table_data, colWidths=[col_w] * len(headers), repeatRows=1)
+        table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#6C5CE7")),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F4F5F7")]),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(table)
+
     doc.build(elements)
     buf.seek(0)
 

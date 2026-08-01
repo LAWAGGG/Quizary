@@ -82,6 +82,12 @@ Aturan kunci yang **tidak boleh dilanggar** oleh implementasi apapun:
 - 1 gambar hanya boleh milik `question_id` **atau** `option_id`, tidak dua-duanya
 - Waktu berakhir efektif = `MIN(started_at + timer_seconds, ends_at)`
 
+**Sistem poin quiz (hanya berlaku untuk tipe `quiz`):**
+- Total pool = **100**, dibagi merata ke semua soal `is_scored=true` setiap ada **penambahan soal, import soal, penghapusan soal, atau soal diaktifkan kembali** (sisa 100 yang tak habis dibagi jatuh ke soal terurut awal).
+- Saat user **mengedit poin** salah satu soal, poin soal tersebut dipertahankan dan sisa pool (100 − poinnya) dibagi merata ke soal scored lainnya.
+- `is_scored=false` → soal "detail-only": tidak ikut pool, poin direset 0, tidak dinilai (`is_correct=null`, `points_earned=0`), tampil sebagai "Not graded" di hasil.
+- Konversi tipe form→quiz: opsi pertama tiap soal pilihan ganda otomatis benar + semua poin direset & dibagi. Konversi quiz→form: semua `is_correct` direset `false`.
+
 ---
 
 ## 7. Functional Requirements (Ringkasan per Modul)
@@ -296,6 +302,7 @@ CREATE TABLE questions (
     type ENUM('multiple_choice','checkbox','short_answer','essay') NOT NULL,
     question_text TEXT NOT NULL,
     points INT DEFAULT 0,
+    is_scored BOOLEAN DEFAULT TRUE,
     order_index INT DEFAULT 0,
     is_required BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP NULL,
@@ -423,3 +430,4 @@ CREATE TABLE images (
 | Versi | Perubahan |
 |---|---|
 | 1.0 | Draft awal — menggabungkan requirement analysis, struktur database, API contract, dan design system dari referensi visual menjadi satu dokumen acuan tunggal |
+| 1.1 | Sistem poin quiz: kolom `questions.is_scored`, pool 100, redistribusi otomatis, konversi tipe form↔quiz, aturan publish (min 1 soal) berlaku juga di `PUT /forms/{id}` |

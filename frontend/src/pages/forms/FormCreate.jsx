@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Eye } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import api from '../../api/client'
+import { useToast } from '../../context/ToastContext'
 import { Button, Input, Textarea, Toggle, Select, Card, PageHeader } from '../../components/ui'
 
 export default function FormCreate() {
   const navigate = useNavigate()
+  const toast = useToast()
   const [form, setForm] = useState({
     title: '',
     description: '',
@@ -31,9 +33,10 @@ export default function FormCreate() {
     setError('')
     try {
       const res = await api.post('/forms', form)
+      toast.success('Form created')
       navigate(`/forms/${res.data.id}`)
     } catch (err) {
-      setError(err.response?.data?.message || err.response?.data?.detail || 'Failed to create form')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to create form')
     } finally {
       setLoading(false)
     }
@@ -48,19 +51,12 @@ export default function FormCreate() {
         <ArrowLeft className="w-4 h-4" /> Back to forms
       </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8">
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl">
           <PageHeader
             eyebrow="New form"
             title="Create a new form"
             description="Start with the basics — you can add questions next."
           />
-
-          {error && (
-            <div className="bg-incorrect-soft border border-incorrect/20 text-incorrect px-4 py-3 rounded-xl mt-6 text-sm">
-              {error}
-            </div>
-          )}
 
           <form onSubmit={handleSubmit} className="space-y-5 mt-6">
             <Card className="space-y-5">
@@ -68,9 +64,10 @@ export default function FormCreate() {
                 label="Title"
                 name="title"
                 value={form.title}
-                onChange={handleChange}
+                onChange={(e) => { handleChange(e); setError('') }}
                 placeholder="e.g. Weekly Pop Quiz"
                 maxLength={150}
+                error={error}
               />
 
               <Textarea
@@ -137,33 +134,7 @@ export default function FormCreate() {
               </Button>
             </div>
           </form>
-        </motion.div>
-
-        <div className="hidden lg:block">
-          <div className="sticky top-0">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-gray-400 mb-3">
-              <Eye className="w-3.5 h-3.5" /> Live preview
-            </div>
-            <motion.div layout className="rounded-3xl bg-ink text-white p-8 shadow-lift overflow-hidden relative">
-              <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-primary/20 blur-2xl pointer-events-none" aria-hidden="true" />
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 text-[11px] font-semibold uppercase tracking-wider">
-                {form.type === 'quiz' ? 'Quiz' : 'Form'}
-              </span>
-              <h3 className="font-display text-2xl font-bold leading-snug mt-4">
-                {form.title.trim() || 'Your form title'}
-              </h3>
-              <p className="text-white/55 text-sm mt-2 leading-relaxed">
-                {form.description.trim() || 'A short description of what this form is about.'}
-              </p>
-              <div className="mt-8">
-                <div className="w-full h-12 rounded-xl bg-white text-primary font-semibold flex items-center justify-center text-sm">
-                  Start
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </div>
+      </motion.div>
     </div>
   )
 }

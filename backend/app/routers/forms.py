@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user, verify_form_owner
 from app.models.form import Form, FormStatus, FormType, SubmissionLimit
-from app.models.question import Question
+from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
 from app.models.image import Image
 from app.models.user import User
+from app.services.points import distribute_quiz_points
 from app.utils import file_url, fmt_dt, to_naive_utc, _delete_file
 from app.schemas.form import (
     FormCreate,
@@ -40,6 +41,15 @@ def _parse_enum(val: str, enum_cls, field_name: str):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"{field_name} must be one of: {', '.join(valid)}",
+        )
+
+
+def _ensure_publishable(form: Form, db: Session) -> None:
+    """A form can only be published if it has at least 1 question."""
+    if db.query(Question).filter(Question.form_id == form.id).count() == 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Form must have at least 1 question before publishing",
         )
 
 
@@ -139,6 +149,20 @@ def update_form(
     db: Session = Depends(get_db),
 ):
     update_data = body.model_dump(exclude_unset=True)
+    will_publish = (
+        update_data.get("status") == "published"
+        and form.status.value != "published"
+    )
+
+    if "type" in update_data:
+        new_type = _parse_enum(update_data["type"], FormType, "type")
+        if new_type != form.type:
+            form.type = new_type  # set first so helpers/distribute see the new type
+            if new_type == FormType.quiz:
+                _prepare_quiz_after_form_conversion(form.id, db)
+            else:
+                _clear_correct_after_quiz_conversion(form.id, db)
+
     for field, value in update_data.items():
         if field == "type":
             value = _parse_enum(value, FormType, "type")
@@ -148,10 +172,40 @@ def update_form(
             value = _parse_enum(value, SubmissionLimit, "submission_limit")
         setattr(form, field, value)
 
+    if will_publish:
+        _ensure_publishable(form, db)
+
     form.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(form)
     return _form_dict(form, request)
+
+
+def _prepare_quiz_after_form_conversion(form_id: int, db: Session) -> None:
+    """form → quiz: mark the first option of each choice question as correct,
+    reset all points, then auto-distribute quiz points across questions."""
+    questions = (
+        db.query(Question)
+        .filter(Question.form_id == form_id)
+        .order_by(Question.order_index)
+        .all()
+    )
+    for q in questions:
+        if q.type in (QuestionType.multiple_choice, QuestionType.checkbox):
+            opts = sorted(q.options, key=lambda o: o.order_index or 0)
+            if opts and not any(o.is_correct for o in opts):
+                opts[0].is_correct = True
+        q.points = 0
+    distribute_quiz_points(form_id, db)
+
+
+def _clear_correct_after_quiz_conversion(form_id: int, db: Session) -> None:
+    """quiz → form: no correct answers are needed anymore."""
+    db.query(QuestionOption).filter(
+        QuestionOption.question_id.in_(
+            db.query(Question.id).filter(Question.form_id == form_id)
+        )
+    ).update({"is_correct": False}, synchronize_session=False)
 
 
 # ── DELETE /forms/{form_id} ───────────────────────────────────────────────────
@@ -180,11 +234,7 @@ def publish_form(
     db: Session = Depends(get_db),
 ):
     if body.status == "published":
-        if db.query(Question).filter(Question.form_id == form.id).count() == 0:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Form must have at least 1 question before publishing",
-            )
+        _ensure_publishable(form, db)
 
     form.status = _parse_enum(body.status, FormStatus, "status")
     form.updated_at = datetime.utcnow()

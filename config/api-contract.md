@@ -206,6 +206,14 @@ Auth: Bearer Token (pemilik) — kirim field yang berubah saja
 // Response 404
 { "message": "Form not found" }
 ```
+```json
+// Response 422 — status diubah ke "published" tapi form belum punya soal
+{ "message": "Form must have at least 1 question before publishing" }
+```
+
+**Konversi tipe (`type`):**
+- `form` → `quiz`: opsi pertama tiap soal pilihan ganda otomatis menjadi benar + poin seluruh soal direset & dibagi otomatis (pool 100).
+- `quiz` → `form`: seluruh `is_correct` pada opsi direset ke `false`.
 
 ### `DELETE /forms/{id}`
 Auth: Bearer Token (pemilik)
@@ -228,6 +236,7 @@ Auth: Bearer Token (pemilik)
 // Response 422 (validasi gagal, misal belum ada soal)
 { "message": "Form must have at least 1 question before publishing" }
 ```
+> Business rule yang sama juga berlaku saat `status` diubah ke `published` lewat `PUT /forms/{id}`.
 
 ### `POST /forms/{id}/banner`
 Auth: Bearer Token (pemilik) — `multipart/form-data`
@@ -259,6 +268,7 @@ Auth: Bearer Token (pemilik)
       "type": "multiple_choice",
       "question_text": "Berapa hasil dari 12 x 8?",
       "points": 1,
+      "is_scored": true,
       "order_index": 0,
       "is_required": true,
       "options": [
@@ -293,6 +303,7 @@ Auth: Bearer Token (pemilik)
   "type": "multiple_choice",
   "question_text": "Berapa hasil dari 12 x 8?",
   "points": 1,
+  "is_scored": true,
   "order_index": 0,
   "is_required": true,
   "options": [
@@ -314,6 +325,7 @@ Auth: Bearer Token (pemilik form terkait)
 {
   "question_text": "Berapa hasil dari 12 x 9?",
   "points": 2,
+  "is_scored": true,
   "options": [
     { "id": 1, "option_text": "80", "is_correct": false },
     { "id": 2, "option_text": "108", "is_correct": true }
@@ -327,12 +339,21 @@ Auth: Bearer Token (pemilik form terkait)
   "type": "multiple_choice",
   "question_text": "Berapa hasil dari 12 x 9?",
   "points": 2,
+  "is_scored": true,
   "order_index": 0,
   "is_required": true,
   "options": [ ... ],
   "image": null
 }
 ```
+**Aturan `is_scored`:**
+- `false` → soal tidak dihitung poin (detail-only): poin dipaksa 0, dikeluarkan dari distribusi pool & dari penilaian (muncul "Not graded").
+- `true` → soal ikut pool poin quiz; jika `points` tidak dikirim, kembali ke pool auto-distribusi.
+- Ganti type dari `multiple_choice`/`checkbox` ke `short_answer`/`essay` dengan `options: []` **diperbolehkan** (opsi lama dihapus) — hanya `options` yang berisi item yang ditolak.
+
+**Distribusi poin quiz (pool 100):**
+- Tambah/import/hapus soal, atau toggle `is_scored` on → seluruh soal scored dibagi merata (sisa tidak habis dibagi jatuh ke soal terurut awal).
+- Edit poin satu soal → poinnya dipertahankan, sisa 100 dibagi merata ke soal scored lain.
 
 ### `DELETE /questions/{id}`
 Auth: Bearer Token (pemilik)
@@ -639,17 +660,22 @@ Query params: `?status=submitted&sort=score_desc&page=1&per_page=10`
 // Response 200
 {
   "data": [
-    { "submission_id": 1, "respondent_name": "Dewi Anjani", "score": 3, "max_score": 3, "status": "submitted", "submitted_at": "24-07-2026 17:08:00" }
+    { "submission_id": 1, "respondent_name": "Dewi Anjani", "score": 3, "max_score": 3, "status": "submitted", "submitted_at": "24-07-2026 17:08:00", "answer_summary": "Merah · Tambahkan dark mode" }
   ],
   "meta": { "total": 25, "page": 1, "per_page": 10 }
 }
 ```
+`answer_summary` diisi untuk **form type** (pratinjau jawaban responden, dipakai kolom "Answers" di UI); untuk quiz tetap kosong. `sort=score_desc/asc` hanya relevan untuk quiz.
 
 ### `GET /forms/{id}/analytics`
 Auth: Bearer Token (pemilik)
+
+Response bergantung pada tipe form (`type` field).
+
+**Quiz (`type: "quiz"`)** — skor & akurasi:
 ```json
-// Response 200
 {
+  "type": "quiz",
   "total_participants": 25,
   "average_score": 2.4,
   "highest_score": 3,
@@ -662,7 +688,58 @@ Auth: Bearer Token (pemilik)
   ],
   "per_question_stats": [
     { "question_id": 1, "correct_count": 20, "wrong_count": 5 }
-  ]
+  ],
+  "total_answers": 0,
+  "completion_rate": 0,
+  "avg_answers": 0,
+  "question_stats": []
+}
+```
+
+**Form (`type: "form"`)** — frekuensi jawaban:
+```json
+{
+  "type": "form",
+  "total_participants": 25,
+  "total_answers": 60,
+  "completion_rate": 0.92,
+  "avg_answers": 2.4,
+  "question_stats": [
+    {
+      "question_id": 1,
+      "question_text": "Warna favorit?",
+      "type": "multiple_choice",
+      "answered": 25,
+      "skipped": 0,
+      "most_selected": "Biru",
+      "most_selected_count": 14,
+      "most_selected_pct": 56,
+      "option_breakdown": [
+        { "option_id": 1, "option_text": "Merah", "count": 8, "pct": 32 },
+        { "option_id": 2, "option_text": "Biru", "count": 14, "pct": 56 }
+      ],
+      "sample_answers": []
+    },
+    {
+      "question_id": 2,
+      "question_text": "Saran Anda",
+      "type": "essay",
+      "answered": 10,
+      "skipped": 15,
+      "most_selected": null,
+      "most_selected_count": 0,
+      "most_selected_pct": 0,
+      "option_breakdown": [],
+      "sample_answers": ["Tambah fitur X", "Lebih simpel"]
+    }
+  ],
+  "average_score": 0,
+  "highest_score": 0,
+  "lowest_score": 0,
+  "correct_rate": 0,
+  "wrong_rate": 0,
+  "score_distribution": [],
+  "per_question_stats": []
 }
 ```
 
@@ -674,6 +751,7 @@ Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 Content-Disposition: attachment; filename="hasil-QZM002B.xlsx"
 [binary file]
 ```
+**Struktur kolom (dinamis):** satu kolom per soal (header = teks soal, urut `order_index`), lalu kolom `Dikirim`, `Skor`, `Status`. Jawaban pilihan ganda/checkbox digabung dengan `", "`; teks bebas diambil dari `answer_text`. Baris kosong diisi `-`. Kolom responden/email tidak disertakan.
 
 ### `GET /forms/{id}/export/pdf`
 Auth: Bearer Token (pemilik)
@@ -683,6 +761,7 @@ Content-Type: application/pdf
 Content-Disposition: attachment; filename="hasil-QZM002B.pdf"
 [binary file]
 ```
+**Layout:** judul = nama form + baris `Diekspor pada {tanggal}`, tabel landscape dengan kolom sama seperti export Excel (soal + Dikirim + Skor + Status).
 
 ---
 
