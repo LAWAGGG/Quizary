@@ -1,12 +1,12 @@
 import { forwardRef } from 'react'
 
 const variants = {
-  primary: 'bg-primary text-white hover:bg-primary-600 active:bg-primary-700 shadow-chip',
+  primary: 'bg-gradient-to-br from-primary-500 to-primary-700 text-white hover:from-primary-600 hover:to-primary-800 active:from-primary-700 active:to-primary-900 shadow-chip',
   secondary: 'bg-white text-ink border border-gray-200 hover:border-gray-300 hover:bg-gray-50 active:bg-gray-100',
   soft: 'bg-primary-50 text-primary-700 hover:bg-primary-100 active:bg-primary-200',
   dark: 'bg-ink text-white hover:bg-ink-800 active:bg-ink-700 shadow-chip',
   ghost: 'text-gray-600 hover:text-ink hover:bg-gray-100 active:bg-gray-200',
-  danger: 'bg-incorrect text-white hover:bg-red-600 active:bg-red-700 shadow-chip',
+  danger: 'bg-gradient-to-br from-red-500 to-red-700 text-white hover:from-red-600 hover:to-red-800 active:from-red-700 active:to-red-900 shadow-chip',
   'ghost-danger': 'text-incorrect hover:bg-incorrect-soft active:bg-red-100',
 }
 

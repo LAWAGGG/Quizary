@@ -109,6 +109,52 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   --tw-ring-color: color-mix(in srgb, var(--t) 14%, transparent);
 }
 
+/* ── 21st-style motif utilities ────────────────────────────────────────────── */
+
+/* Dot grid: halus, cocok untuk background section tanpa bikin sibuk */
+.dot-grid {
+  background-image: radial-gradient(circle, rgb(108 92 231 / 0.14) 1.5px, transparent 1.5px);
+  background-size: 22px 22px;
+}
+
+.dot-grid-light {
+  background-image: radial-gradient(circle, rgb(255 255 255 / 0.16) 1.5px, transparent 1.5px);
+  background-size: 22px 22px;
+}
+
+.dot-grid-dark {
+  background-image: radial-gradient(circle, rgb(17 24 39 / 0.12) 1.5px, transparent 1.5px);
+  background-size: 22px 22px;
+}
+
+/* Spotlight card: overlay radial-gradient yang mengikuti hover mouse */
+.spotlight-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.spotlight-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  background: var(--spot-glow, radial-gradient(320px circle at 50% 50%, rgb(108 92 231 / 0.08), transparent 60%));
+  pointer-events: none;
+}
+
+.spotlight-card:hover::before {
+  opacity: 1;
+}
+
+/* Aurora blobs: blur besar berwarna tema untuk section hero/public */
+.aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(60px);
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,

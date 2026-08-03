@@ -105,6 +105,20 @@ async def upload_banner(
     return {"message": "Banner uploaded", "banner_path": file_url(request, path)}
 
 
+# ── DELETE /forms/{form_id}/banner ────────────────────────────────────────────
+@router.delete("/forms/{form_id}/banner", response_model=MessageResponse)
+def delete_banner(
+    form: FormModel = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    stored_path = form.banner_path
+    form.banner_path = None
+    form.updated_at = datetime.utcnow()
+    db.commit()
+    _delete_file(stored_path)
+    return MessageResponse(message="Banner dihapus")
+
+
 # ── POST /questions/{question_id}/images ─────────────────────────────────────
 @router.post("/questions/{question_id}/images", status_code=201)
 def add_question_image(

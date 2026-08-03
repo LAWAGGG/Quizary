@@ -15,6 +15,7 @@ from app.models.answer_option import AnswerOption
 from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
 from app.models.user import User
+from app.services.grading import grade_answer
 from app.utils import to_naive_utc, fmt_dt, now_wib
 from app.schemas.results import (
     ResultItem,
@@ -185,9 +186,21 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
     total_correct = total_answers = 0
     for q in questions:
         answers = answer_by_q.get(q.id, [])
-        correct = sum(1 for a in answers if a.is_correct is True)
-        wrong = sum(1 for a in answers if a.is_correct is False)
-        per_q.append(PerQuestionStat(question_id=q.id, correct_count=correct, wrong_count=wrong))
+        correct = wrong = 0
+        for a in answers:
+            # Live-grade at read time (grade_answer) so stored is_correct is
+            # only a hint: historical/ungraded rows still count instead of 0.
+            verdict, _ = grade_answer(a, q)
+            if verdict is True:
+                correct += 1
+            elif verdict is False:
+                wrong += 1
+        per_q.append(PerQuestionStat(
+            question_id=q.id,
+            question_text=q.question_text,
+            correct_count=correct,
+            wrong_count=wrong,
+        ))
         total_correct += correct
         total_answers += correct + wrong
 

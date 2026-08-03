@@ -271,7 +271,9 @@ function QuizAnalytics({ data }) {
                     const accuracy = total ? Math.round((q.correct_count / total) * 100) : 0
                     return (
                       <tr key={q.question_id} className="border-t border-gray-50 hover:bg-gray-50/70 transition-colors">
-                        <td className="px-6 py-3.5 text-sm text-ink font-medium">Question {i + 1}</td>
+                        <td className="px-6 py-3.5 text-sm text-ink font-medium">
+                          <span className="block max-w-[280px] truncate">{q.question_text || `Question ${i + 1}`}</span>
+                        </td>
                         <td className="text-center px-4 py-3.5 text-sm text-correct font-semibold tabular-nums">{q.correct_count}</td>
                         <td className="text-center px-4 py-3.5 text-sm text-incorrect font-semibold tabular-nums">{q.wrong_count}</td>
                         <td className="text-center px-4 py-3.5">

@@ -66,7 +66,7 @@ function Sidebar({ open, onClose, onLogout, user }) {
                   {isActive && (
                     <motion.span
                       layoutId="nav-dot"
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-full bg-primary"
+                      className="absolute left-0 top-1/3 -translate-y-1/2 w-1 h-5 rounded-full bg-primary"
                     />
                   )}
                   <link.icon className="w-[18px] h-[18px] shrink-0" />

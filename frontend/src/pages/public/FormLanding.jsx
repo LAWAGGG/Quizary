@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Lock, Clock, ArrowRight, CheckCircle2 } from 'lucide-react'
-import { Button, Input, Card, AppMark, FallbackPage, DotCorner } from '../../components/ui'
+import { Button, Input, Card, AppMark, FallbackPage, DotCorner, SpotlightCard, AuroraBg } from '../../components/ui'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 
@@ -283,23 +283,27 @@ export default function FormLanding() {
 
   return (
     <div className="theme-surface min-h-dvh relative overflow-hidden flex flex-col" style={{ background: palette.pageBg, '--t': palette.base }}>
+      <AuroraBg base={palette.base} className="opacity-25" />
+      <div className="absolute inset-0 dot-grid opacity-60 pointer-events-none" aria-hidden="true" />
       <DotCorner position="top-left" color={palette.base} />
       <DotCorner position="bottom-right" color={palette.base} />
-      <div className="flex-1 max-w-lg mx-auto w-full p-6">
+      <div className="flex-1 max-w-lg mx-auto w-full p-6 relative">
         {form.banner_path && (
           <img src={form.banner_path} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
-        <Card className="p-6 md:p-7" style={{ borderColor: palette.border }}>
-          <div className="flex items-center gap-2 mb-4">
-            <AppMark size="sm" />
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Quizary form</span>
-          </div>
-          <h1 className="font-display text-2xl font-bold text-ink mb-2">{form.title}</h1>
-          {form.description && <p className="text-gray-600 mb-6">{form.description}</p>}
-          <Button onClick={handleStart} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }} icon={<ArrowRight className="w-4 h-4" />}>
-            Start
-          </Button>
-        </Card>
+        <SpotlightCard>
+          <Card className="p-6 md:p-7 h-full" style={{ borderColor: palette.border }}>
+            <div className="flex items-center gap-2 mb-4">
+              <AppMark size="sm" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Quizary form</span>
+            </div>
+            <h1 className="font-display text-2xl font-bold text-ink mb-2">{form.title}</h1>
+            {form.description && <p className="text-gray-600 mb-6">{form.description}</p>}
+            <Button onClick={handleStart} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }} icon={<ArrowRight className="w-4 h-4" />}>
+              Start
+            </Button>
+          </Card>
+        </SpotlightCard>
       </div>
     </div>
   )

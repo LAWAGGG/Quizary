@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, verify_form_owner
+from app.models.answer import Answer
+from app.models.answer_option import AnswerOption
 from app.models.form import Form
 from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
@@ -216,6 +218,11 @@ def update_question(
 
         for opt in list(question.options):
             if opt.id not in seen_ids:
+                if db.query(AnswerOption).filter(AnswerOption.option_id == opt.id).count() > 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Opsi \"{opt.option_text}\" tidak dapat dihapus karena sudah dipilih peserta",
+                    )
                 db.delete(opt)
 
         db.flush()
@@ -263,6 +270,11 @@ def delete_question(
 ):
     question = _get_question_or_404(question_id, db)
     _ensure_owner(question, user, db)
+    if db.query(Answer).filter(Answer.question_id == question.id).count() > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Soal tidak dapat dihapus karena sudah memiliki jawaban",
+        )
     for img in question.images:
         _delete_file(img.path)
     for opt in question.options:

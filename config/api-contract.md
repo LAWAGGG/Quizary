@@ -253,6 +253,17 @@ banner: <file.png>
 { "message": "Unsupported file format, use JPG/PNG/GIF/WEBP" }
 ```
 
+### `DELETE /forms/{id}/banner`
+Auth: Bearer Token (pemilik)
+```json
+// Response 200
+{ "message": "Banner dihapus" }
+```
+```json
+// Response 403
+{ "message": "Anda bukan pemilik form ini" }
+```
+
 ---
 
 ## 3. Questions

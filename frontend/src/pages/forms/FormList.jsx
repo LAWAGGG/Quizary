@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Plus, ClipboardList, Search } from 'lucide-react'
 import api from '../../api/client'
-import { Button, Input, StatusBadge, TypeBadge, Card, PageHeader, EmptyState, CardSkeleton } from '../../components/ui'
+import { Button, Input, StatusBadge, TypeBadge, Card, PageHeader, EmptyState, CardSkeleton, SpotlightCard } from '../../components/ui'
 
 const TABS = ['All', 'Draft', 'Published', 'Closed']
 
@@ -101,24 +101,29 @@ export default function FormList() {
                 onClick={() => navigate(`/forms/${form.id}`)}
                 className="h-full"
               >
-                <Card className="cursor-pointer hover:border-primary/40 hover:shadow-lift transition-all h-full flex flex-col">
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <span className="w-11 h-11 rounded-xl bg-primary-50 text-primary flex items-center justify-center shrink-0">
-                      <ClipboardList className="w-5 h-5" />
-                    </span>
-                    <span className="font-mono text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-lg">
-                      {form.short_code}
-                    </span>
-                  </div>
-                  <h3 className="font-display font-semibold text-ink truncate mb-2">{form.title}</h3>
-                  {form.description && (
-                    <p className="text-sm text-gray-400 line-clamp-2 mb-3 flex-1">{form.description}</p>
-                  )}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <TypeBadge type={form.type} />
-                    <StatusBadge status={form.status} />
-                  </div>
-                </Card>
+                <SpotlightCard className="h-full" intensity={0.1}>
+                  <Card className="cursor-pointer hover:border-primary/40 hover:shadow-lift transition-all h-full flex flex-col relative overflow-hidden group">
+                    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-primary-400 to-primary-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      <span className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-chip ${
+                        form.type === 'quiz' ? 'bg-primary-50 text-primary' : 'bg-blue-50 text-blue-700'
+                      }`}>
+                        <ClipboardList className="w-5 h-5" />
+                      </span>
+                      <span className="font-mono text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-lg">
+                        {form.short_code}
+                      </span>
+                    </div>
+                    <h3 className="font-display font-semibold text-ink truncate mb-2">{form.title}</h3>
+                    {form.description && (
+                      <p className="text-sm text-gray-400 line-clamp-2 mb-3 flex-1">{form.description}</p>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <TypeBadge type={form.type} />
+                      <StatusBadge status={form.status} />
+                    </div>
+                  </Card>
+                </SpotlightCard>
               </motion.div>
             ))}
           </div>

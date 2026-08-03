@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Plus, Eye, ClipboardList, HelpCircle, Send, Users, TrendingUp } from 'lucide-react'
+import { Plus, Eye, ClipboardList, HelpCircle, Send, Users, TrendingUp, Sparkles } from 'lucide-react'
 import api from '../../api/client'
 import { useAuth } from '../../context/AuthContext'
-import { Card, Button, StatusBadge, PageHeader, CardSkeleton } from '../../components/ui'
+import { Card, Button, StatusBadge, CardSkeleton, SpotlightCard, AuroraBg } from '../../components/ui'
 
 const STATS = [
   { key: 'total_forms', label: 'Total Forms', icon: ClipboardList, tint: 'bg-primary-50 text-primary' },
@@ -53,23 +53,36 @@ export default function Dashboard() {
 
   return (
     <div>
-      <PageHeader
-        eyebrow="Dashboard"
-        title={`Welcome back, ${firstName}`}
-        description="Here's how your forms are performing."
-        actions={
-          <>
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary-500 via-primary to-primary-800 p-6 md:p-8 text-white shadow-lift"
+      >
+        <AuroraBg base="#ffffff" className="opacity-30" />
+        <div className="absolute inset-0 dot-grid-light opacity-60 pointer-events-none" aria-hidden="true" />
+        <div className="relative flex flex-col sm:flex-row sm:items-center gap-6">
+          <div className="flex-1 min-w-0">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
+              <Sparkles className="w-3.5 h-3.5" />
+              Dashboard
+            </span>
+            <h1 className="font-display text-2xl md:text-3xl font-bold mt-2">
+              Welcome back, {firstName}
+            </h1>
+            <p className="text-white/75 text-sm mt-1.5">Here's how your forms are performing today.</p>
+          </div>
+          <div className="flex gap-2 shrink-0">
             <Button variant="secondary" onClick={() => navigate('/forms')} icon={<Eye className="w-4 h-4" />}>
               All Forms
             </Button>
-            <Button onClick={() => navigate('/forms/new')} icon={<Plus className="w-4 h-4" />}>
+            <Button onClick={() => navigate('/forms/new')} style={{ backgroundImage: 'none', backgroundColor: '#fff', color: '#6C5CE7' }} className="hover:bg-white/90" icon={<Plus className="w-4 h-4" />}>
               New Form
             </Button>
-          </>
-        }
-      />
+          </div>
+        </div>
+      </motion.div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
         {STATS.map((item, i) => (
           <motion.div
             key={item.key}
@@ -77,19 +90,21 @@ export default function Dashboard() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.06 }}
           >
-            <Card className="p-5 h-full">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm text-gray-500 truncate">{item.label}</p>
-                  <p className="font-display text-3xl font-bold text-ink mt-2 tabular-nums">
-                    {data?.[item.key] ?? 0}
-                  </p>
+            <SpotlightCard className="h-full">
+              <Card className="p-5 h-full hover:border-primary/30 hover:shadow-lift transition-all">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-500 truncate">{item.label}</p>
+                    <p className="font-display text-3xl font-bold text-ink mt-2 tabular-nums">
+                      {data?.[item.key] ?? 0}
+                    </p>
+                  </div>
+                  <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-chip ${item.tint}`}>
+                    <item.icon className="w-5 h-5" />
+                  </span>
                 </div>
-                <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${item.tint}`}>
-                  <item.icon className="w-5 h-5" />
-                </span>
-              </div>
-            </Card>
+              </Card>
+            </SpotlightCard>
           </motion.div>
         ))}
       </div>

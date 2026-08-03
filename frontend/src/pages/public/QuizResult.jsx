@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, X, Minus, Eye, EyeOff, ArrowRight, ClipboardList } from 'lucide-react'
-import { Button, Card, Badge, FallbackPage, DotCorner } from '../../components/ui'
+import { Button, Card, Badge, FallbackPage, DotCorner, AuroraBg } from '../../components/ui'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 
@@ -103,6 +103,7 @@ export default function QuizResult() {
           }}
           aria-hidden="true"
         />
+        <AuroraBg base={palette.base} className="opacity-20" />
 
         <DotCorner position="top-left" color={palette.base} />
         <DotCorner position="bottom-right" color={palette.base} />
@@ -208,6 +209,7 @@ export default function QuizResult() {
         }}
         aria-hidden="true"
       />
+      <AuroraBg base={palette.base} className="opacity-20" />
 
       <DotCorner position="top-left" color={palette.base} />
       <DotCorner position="bottom-right" color={palette.base} />

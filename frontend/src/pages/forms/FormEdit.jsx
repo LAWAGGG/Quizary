@@ -246,6 +246,17 @@ export default function FormEdit() {
     }
   }
 
+  const handleRemoveBanner = async () => {
+    try {
+      await api.delete(`/forms/${id}/banner`)
+      setForm((prev) => ({ ...prev, banner_path: null }))
+      setBase((prev) => ({ ...prev, banner_path: null }))
+      toast.success('Banner removed')
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to remove banner')
+    }
+  }
+
   if (loading) return <PageSkeleton />
   if (!form) return null
 
@@ -276,14 +287,16 @@ export default function FormEdit() {
           <CollapsibleCard title="Share" icon={<Link2 className="w-4 h-4" />} defaultOpen>
             <CopyField label="Public Link" value={`${window.location.origin}/q/${form.short_code}`} />
             <div className="flex gap-2 mt-4">
-              <Button
-                variant="secondary"
-                className="flex-1"
-                icon={<Eye className="w-4 h-4" />}
-                onClick={() => window.open(`/q/${form.short_code}`, '_blank')}
-              >
-                Open public page
-              </Button>
+              {form.status === 'published' && (
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  icon={<Eye className="w-4 h-4" />}
+                  onClick={() => window.open(`/q/${form.short_code}`, '_blank')}
+                >
+                  Open public page
+                </Button>
+              )}
               <Button onClick={() => setShowDelete(true)} variant="ghost-danger" icon={<Trash2 className="w-4 h-4" />}>
                 Delete
               </Button>
@@ -448,9 +461,14 @@ export default function FormEdit() {
             )}
             <input ref={fileRef} type="file" accept="image/*" onChange={handleBanner} className="hidden" />
             {form.banner_path && (
-              <Button type="button" variant="secondary" size="sm" className="w-full" onClick={() => fileRef.current?.click()} icon={<ImageUp className="w-4 h-4" />}>
-                Change Banner
-              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="secondary" size="sm" className="flex-1" onClick={() => fileRef.current?.click()} icon={<ImageUp className="w-4 h-4" />}>
+                  Change Banner
+                </Button>
+                <Button type="button" variant="ghost-danger" size="sm" className="flex-1" onClick={handleRemoveBanner} icon={<Trash2 className="w-4 h-4" />}>
+                  Remove
+                </Button>
+              </div>
             )}
           </CollapsibleCard>
         </div>

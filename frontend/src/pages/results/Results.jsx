@@ -147,10 +147,18 @@ export default function Results() {
                       <td className="px-5 py-3.5 text-sm font-medium text-ink">{row.respondent_name || 'Anonymous'}</td>
                       <td className="px-5 py-3.5 text-sm tabular-nums">
                         {isQuiz ? (
-                          <>
-                            <span className="font-semibold text-ink">{row.score ?? '-'}</span>
-                            <span className="text-gray-400"> / {row.max_score ?? '-'}</span>
-                          </>
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className={`inline-flex items-center justify-center min-w-[44px] h-7 px-2 rounded-lg font-semibold ${
+                              row.score != null && row.max_score > 0 && row.score / row.max_score >= 0.7
+                                ? 'bg-correct-soft text-correct'
+                                : row.score != null && row.max_score > 0 && row.score / row.max_score >= 0.4
+                                  ? 'bg-warn-soft text-warn'
+                                  : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {row.score ?? '-'}
+                            </span>
+                            <span className="text-gray-400">/ {row.max_score ?? '-'}</span>
+                          </span>
                         ) : (
                           <span className="text-gray-600 block max-w-[320px] truncate">{row.answer_summary || '-'}</span>
                         )}
@@ -177,8 +185,17 @@ export default function Results() {
                   </div>
                   <div className="flex justify-between items-center text-sm text-gray-500">
                     {isQuiz ? (
-                      <span>
-                        Score: <span className="font-semibold text-ink">{row.score ?? '-'} / {row.max_score ?? '-'}</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className={`inline-flex items-center justify-center h-6 px-2 rounded-lg text-xs font-semibold ${
+                          row.score != null && row.max_score > 0 && row.score / row.max_score >= 0.7
+                            ? 'bg-correct-soft text-correct'
+                            : row.score != null && row.max_score > 0 && row.score / row.max_score >= 0.4
+                              ? 'bg-warn-soft text-warn'
+                              : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {row.score ?? '-'}
+                        </span>
+                        <span className="text-gray-400 text-xs">/ {row.max_score ?? '-'}</span>
                       </span>
                     ) : (
                       <span className="truncate pr-2">{row.answer_summary || '-'}</span>

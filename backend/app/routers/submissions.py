@@ -1,6 +1,5 @@
 import random
 from datetime import timedelta
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -16,6 +15,7 @@ from app.models.submission import Submission, SubmissionStatus
 from app.models.submission_question_order import SubmissionQuestionOrder
 from app.models.submission_option_order import SubmissionOptionOrder
 from app.models.user import User
+from app.services.grading import grade_submission
 from app.utils import now_wib, fmt_dt
 from app.schemas.submissions import (
     SubmissionCreateRequest,
@@ -181,6 +181,7 @@ def create_submission(
         if _is_expired(existing, form):
             existing.status = SubmissionStatus.auto_submitted
             existing.submitted_at = now
+            grade_submission(db, existing, form)
             db.commit()
             raise HTTPException(status_code=status.HTTP_410_GONE, detail="Your previous session has expired")
 
@@ -284,6 +285,7 @@ def autosave(
     if _is_expired(sub, form):
         sub.status = SubmissionStatus.auto_submitted
         sub.submitted_at = _now()
+        grade_submission(db, sub, form)
         db.commit()
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Submission time has expired")
 
@@ -332,45 +334,8 @@ def submit_answers(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
 
     sub.status = SubmissionStatus.auto_submitted if _is_expired(sub, form) else SubmissionStatus.submitted
-
-    questions = db.query(Question).filter(Question.form_id == form.id).all()
-    q_map = {q.id: q for q in questions}
-    max_score = float(sum(q.points or 0 for q in questions))
-    total_score = 0.0
-
-    for answer in db.query(Answer).filter(Answer.submission_id == sub.id).all():
-        q = q_map.get(answer.question_id)
-        if not q:
-            continue
-        if not q.is_scored:
-            answer.is_correct = None
-            answer.points_earned = Decimal("0")
-            continue
-        if q.type in (QuestionType.multiple_choice, QuestionType.checkbox):
-            correct_ids = {o.id for o in q.options if o.is_correct}
-            selected_ids = {ao.option_id for ao in answer.selected_options}
-            if correct_ids and selected_ids == correct_ids:
-                answer.is_correct = True
-                answer.points_earned = Decimal(str(q.points or 0))
-                total_score += float(q.points or 0)
-            else:
-                answer.is_correct = False
-                answer.points_earned = Decimal("0")
-        elif q.type == QuestionType.short_answer:
-            if answer.answer_text and answer.answer_text.strip():
-                answer.is_correct = True
-                answer.points_earned = Decimal(str(q.points or 0))
-                total_score += float(q.points or 0)
-            else:
-                answer.is_correct = False
-                answer.points_earned = Decimal("0")
-        else:
-            answer.is_correct = None
-            answer.points_earned = Decimal("0")
-
-    sub.score = Decimal(str(total_score))
-    sub.max_score = Decimal(str(max_score))
     sub.submitted_at = _now()
+    total_score, max_score = grade_submission(db, sub, form)
     db.commit()
 
     return SubmitResponse(

@@ -1,4 +1,4 @@
-import { AppMark } from '../ui'
+import { AppMark, AuroraBg } from '../ui'
 
 const BUBBLES = Array.from({ length: 16 }, (_, i) => i)
 
@@ -6,7 +6,9 @@ export function AuthShell({ eyebrow, title, subtitle, children, footer }) {
   return (
     <div className="min-h-dvh grid lg:grid-cols-2">
       <aside className="hidden lg:flex flex-col justify-between bg-ink text-white p-12 overflow-hidden relative">
-        <div className="flex items-center gap-3">
+        <AuroraBg base="#6C5CE7" className="opacity-40" />
+        <div className="absolute inset-0 dot-grid-light opacity-50 pointer-events-none" aria-hidden="true" />
+        <div className="flex items-center gap-3 relative">
           <AppMark size="sm" />
           <span className="font-display font-bold text-lg">Quizary</span>
         </div>
@@ -26,7 +28,7 @@ export function AuthShell({ eyebrow, title, subtitle, children, footer }) {
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 relative">
           <div className="grid grid-cols-4 gap-2.5">
             {BUBBLES.map((i) => (
               <span

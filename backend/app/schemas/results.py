@@ -20,6 +20,7 @@ class ResultListResponse(BaseModel):
 
 class PerQuestionStat(BaseModel):
     question_id: int
+    question_text: str = ""
     correct_count: int
     wrong_count: int
 
