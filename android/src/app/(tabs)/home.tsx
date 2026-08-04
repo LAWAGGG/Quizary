@@ -8,9 +8,9 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getDashboardSummary, getMe } from '../services/api_service';
+import { getDashboardSummary, getMe } from '../../services/api_service';
 
 export default function HomeScreen() {
   const [data, setData] = useState<any>(null);
@@ -34,9 +34,11 @@ export default function HomeScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [loadDashboard])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -138,7 +140,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={f.id}
                   style={styles.recentItemRow}
-                  onPress={() => router.push('/(tabs)/library')}
+                  onPress={() => router.push({ pathname: '/form-detail', params: { id: f.id } })}
                   activeOpacity={0.7}
                 >
                   <View style={{ flex: 1, marginRight: 8 }}>

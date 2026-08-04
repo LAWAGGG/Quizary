@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { createForm } from '../services/api_service';
+import { createForm } from '../../services/api_service';
 
 export default function CreateScreen() {
   const [title, setTitle] = useState('');

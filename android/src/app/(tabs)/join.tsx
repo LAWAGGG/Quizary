@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ActivityInd
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { getPublicForm } from '../services/api_service';
+import { getPublicForm } from '../../services/api_service';
 
 export default function JoinScreen() {
   const [token, setToken] = useState('');

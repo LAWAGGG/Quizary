@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { router } from 'expo-router';
-import { apiRegister } from './services/api_service';
+import { apiRegister } from '../services/api_service';
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');

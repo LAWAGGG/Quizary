@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getMe, updateProfile, apiLogout, removeToken } from '../services/api_service';
+import { getMe, updateProfile, apiLogout, removeToken } from '../../services/api_service';
 
 export default function ProfileScreen() {
   const [user, setUser] = useState<any>(null);

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { getPublicForm, createSubmission, autosaveAnswer, finalizeSubmission } from '../services/api_service';
+import { getPublicForm, createSubmission, autosaveAnswer, finalizeSubmission } from '../../services/api_service';
 
 export default function QuizScreen() {
   const { shortCode, formId } = useLocalSearchParams<{ shortCode: string, formId: string }>();

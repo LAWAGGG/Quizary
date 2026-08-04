@@ -10,25 +10,32 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchMyForms, publishForm, deleteForm, getMe } from '../services/api_service';
+import { fetchMyForms, publishForm, deleteForm, getMe } from '../../services/api_service';
+
+const PER_PAGE = 12;
 
 export default function LibraryScreen() {
   const [forms, setForms] = useState<any[]>([]);
+  const [meta, setMeta] = useState<{ total: number; page: number; per_page: number }>({ total: 0, page: 1, per_page: PER_PAGE });
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'draft' | 'published' | 'closed'>('all');
+  const [page, setPage] = useState(1);
 
-  const loadForms = useCallback(async () => {
+  const loadForms = useCallback(async (pageNum = 1) => {
     try {
+      const status = filter === 'all' ? undefined : filter;
       const [res, userRes] = await Promise.all([
-        fetchMyForms().catch(() => null),
-        getMe().catch(() => null),
+        fetchMyForms({ status, page: pageNum, per_page: PER_PAGE }).catch((e) => { console.log('fetchMyForms error:', e); return null; }),
+        getMe().catch((e) => { console.log('getMe error:', e); return null; }),
       ]);
-      setForms(res?.data || res || []);
+      const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+      setForms(list);
+      if (res?.meta) setMeta(res.meta);
       if (userRes) setUser(userRes);
     } catch (error: any) {
       console.log('Failed to fetch forms', error);
@@ -36,22 +43,38 @@ export default function LibraryScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [filter]);
 
+  useFocusEffect(
+    useCallback(() => {
+      setPage(1);
+      loadForms(1);
+    }, [loadForms])
+  );
+
+  // Reload saat filter berubah
   useEffect(() => {
-    loadForms();
-  }, [loadForms]);
+    setLoading(true);
+    loadForms(1);
+  }, [filter]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadForms();
+    setPage(1);
+    loadForms(1);
+  };
+
+  const goToPage = (p: number) => {
+    setPage(p);
+    setLoading(true);
+    loadForms(p);
   };
 
   const handlePublish = async (id: number | string) => {
     try {
       await publishForm(id);
       Alert.alert('Sukses 🎉', 'Form berhasil dipublikasikan!');
-      loadForms();
+      loadForms(page);
     } catch (err: any) {
       Alert.alert('Gagal Publikasi', err.message || 'Form minimal harus memiliki 1 soal.');
     }
@@ -70,7 +93,7 @@ export default function LibraryScreen() {
             try {
               await deleteForm(id);
               Alert.alert('Terhapus', 'Form berhasil dihapus.');
-              loadForms();
+              loadForms(page);
             } catch (err: any) {
               Alert.alert('Gagal Hapus', err.message || 'Terjadi kesalahan.');
             }
@@ -80,14 +103,13 @@ export default function LibraryScreen() {
     );
   };
 
+  // client-side search filter (server handles status filter already)
   const filteredForms = forms.filter((f) => {
-    const matchesSearch = searchQuery.trim() === '' || f.title?.toLowerCase().includes(searchQuery.toLowerCase());
-    if (!matchesSearch) return false;
-    if (filter === 'published') return f.status === 'published';
-    if (filter === 'draft') return f.status === 'draft';
-    if (filter === 'closed') return f.status === 'closed';
-    return true;
+    if (searchQuery.trim() === '') return true;
+    return f.title?.toLowerCase().includes(searchQuery.toLowerCase());
   });
+
+  const totalPages = Math.ceil((meta.total || 0) / PER_PAGE);
 
   const initial = (user?.name || 'C').charAt(0).toUpperCase();
 
@@ -132,7 +154,11 @@ export default function LibraryScreen() {
             <TouchableOpacity
               key={f}
               style={[styles.chip, filter === f && styles.chipActive]}
-              onPress={() => setFilter(f)}
+              onPress={() => {
+                setFilter(f);
+                setPage(1);
+                setLoading(true);
+              }}
             >
               <Text style={[styles.chipText, filter === f && styles.chipTextActive]}>
                 {f === 'all' ? 'All' : f === 'draft' ? 'Draft' : f === 'published' ? 'Published' : 'Closed'}
@@ -156,7 +182,11 @@ export default function LibraryScreen() {
             contentContainerStyle={styles.listContent}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6366F1" />}
             renderItem={({ item }) => (
-              <View style={styles.formItemCard}>
+              <TouchableOpacity
+                style={styles.formItemCard}
+                onPress={() => router.push({ pathname: '/form-detail', params: { id: item.id } })}
+                activeOpacity={0.8}
+              >
                 <View style={styles.formItemHeader}>
                   <View style={{ flex: 1, marginRight: 8 }}>
                     <Text style={styles.formItemTitle}>{item.title}</Text>
@@ -164,9 +194,21 @@ export default function LibraryScreen() {
                       <Text style={styles.formItemDesc} numberOfLines={2}>{item.description}</Text>
                     ) : null}
                   </View>
-                  <View style={[styles.statusBadge, item.status === 'published' ? styles.badgePublished : styles.badgeDraft]}>
-                    <Text style={[styles.statusBadgeText, item.status === 'published' ? styles.textPublished : styles.textDraft]}>
-                      {item.status === 'published' ? 'Published' : 'Draft'}
+                  <View style={[
+                    styles.statusBadge,
+                    item.status === 'published' ? styles.badgePublished
+                    : item.status === 'closed' ? styles.badgeClosed
+                    : styles.badgeDraft,
+                  ]}>
+                    <Text style={[
+                      styles.statusBadgeText,
+                      item.status === 'published' ? styles.textPublished
+                      : item.status === 'closed' ? styles.textClosed
+                      : styles.textDraft,
+                    ]}>
+                      {item.status === 'published' ? 'Published'
+                        : item.status === 'closed' ? 'Closed'
+                        : 'Draft'}
                     </Text>
                   </View>
                 </View>
@@ -194,7 +236,7 @@ export default function LibraryScreen() {
                     <Ionicons name="trash-outline" size={16} color="#EF4444" />
                   </TouchableOpacity>
                 </View>
-              </View>
+              </TouchableOpacity>
             )}
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
@@ -208,6 +250,29 @@ export default function LibraryScreen() {
                   <Text style={styles.btnPrimaryText}>Create New Form</Text>
                 </TouchableOpacity>
               </View>
+            }
+            ListFooterComponent={
+              totalPages > 1 ? (
+                <View style={styles.pagination}>
+                  <TouchableOpacity
+                    style={[styles.pageBtn, page <= 1 && styles.pageBtnDisabled]}
+                    onPress={() => page > 1 && goToPage(page - 1)}
+                    disabled={page <= 1}
+                  >
+                    <Ionicons name="chevron-back-outline" size={16} color={page <= 1 ? '#CBD5E1' : '#6366F1'} />
+                    <Text style={[styles.pageBtnTxt, page <= 1 && { color: '#CBD5E1' }]}>Prev</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.pageInfo}>Page {page} of {totalPages}</Text>
+                  <TouchableOpacity
+                    style={[styles.pageBtn, page >= totalPages && styles.pageBtnDisabled]}
+                    onPress={() => page < totalPages && goToPage(page + 1)}
+                    disabled={page >= totalPages}
+                  >
+                    <Text style={[styles.pageBtnTxt, page >= totalPages && { color: '#CBD5E1' }]}>Next</Text>
+                    <Ionicons name="chevron-forward-outline" size={16} color={page >= totalPages ? '#CBD5E1' : '#6366F1'} />
+                  </TouchableOpacity>
+                </View>
+              ) : null
             }
           />
         )}
@@ -279,9 +344,11 @@ const styles = StyleSheet.create({
   statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   badgePublished: { backgroundColor: '#ECFDF5' },
   badgeDraft: { backgroundColor: '#FEF3C7' },
+  badgeClosed: { backgroundColor: '#F1F5F9' },
   statusBadgeText: { fontSize: 11, fontWeight: '700' },
   textPublished: { color: '#10B981' },
   textDraft: { color: '#D97706' },
+  textClosed: { color: '#64748B' },
   formItemMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   metaBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaBadgeText: { color: '#64748B', fontSize: 12 },
@@ -299,4 +366,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2', padding: 6, borderRadius: 8,
     alignItems: 'center', justifyContent: 'center',
   },
+  pagination: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingTop: 16, paddingBottom: 4,
+  },
+  pageBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#EEF2FF', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8,
+  },
+  pageBtnDisabled: { backgroundColor: '#F8FAFC' },
+  pageBtnTxt: { color: '#6366F1', fontWeight: '600', fontSize: 13 },
+  pageInfo: { color: '#64748B', fontSize: 13, fontWeight: '500' },
 });
