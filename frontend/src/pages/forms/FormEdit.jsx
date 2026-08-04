@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Copy, Check, ArrowLeft, Save, Trash2, ImageUp, Link2, Eye, ChevronDown, Info, Lock, Settings2 } from 'lucide-react'
+import { Copy, Check, ArrowLeft, Save, Trash2, ImageUp, Link2, Eye, ChevronDown, Info, Lock, Settings2, Download, QrCode, X } from 'lucide-react'
+import { QRCodeCanvas } from 'qrcode.react'
 import api from '../../api/client'
 import { useToast } from '../../context/ToastContext'
 import { Button, Input, Textarea, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, PageSkeleton } from '../../components/ui'
@@ -69,6 +70,7 @@ export default function FormEdit() {
   const navigate = useNavigate()
   const toast = useToast()
   const fileRef = useRef(null)
+  const qrRef = useRef(null)
   const [form, setForm] = useState(null)
   const [base, setBase] = useState(null)
   const [timerMinutes, setTimerMinutes] = useState('')
@@ -77,6 +79,7 @@ export default function FormEdit() {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
+  const [showQr, setShowQr] = useState(false)
   const [errors, setErrors] = useState({})
 
   useEffect(() => {
@@ -96,6 +99,22 @@ export default function FormEdit() {
     const { name, value, type, checked } = e.target
     setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
     setErrors((prev) => ({ ...prev, [name]: undefined }))
+  }
+
+  // Enforce the same setting chain as the backend in the UI, so the editor
+  // never sends contradictory values: is_restricted ⇒ once ⇒ require_login.
+  const toggleSetting = (key, value) => {
+    setForm((prev) => {
+      const next = { ...prev, [key]: value }
+      if (key === 'is_restricted' && value) {
+        next.submission_limit = 'once'
+        next.require_login = true
+      }
+      if (key === 'submission_limit' && value === 'once') {
+        next.require_login = true
+      }
+      return next
+    })
   }
 
   function toBackendDate(str) {
@@ -127,6 +146,8 @@ export default function FormEdit() {
       thank_you_message: form.thank_you_message || null,
       shuffle_questions: form.shuffle_questions,
       shuffle_options: form.shuffle_options,
+      show_leaderboard: form.show_leaderboard,
+      is_restricted: form.is_restricted,
       starts_at: toBackendDate(form.starts_at),
       ends_at: toBackendDate(form.ends_at),
     }
@@ -145,6 +166,8 @@ export default function FormEdit() {
       thank_you_message: base.thank_you_message || null,
       shuffle_questions: base.shuffle_questions,
       shuffle_options: base.shuffle_options,
+      show_leaderboard: base.show_leaderboard,
+      is_restricted: base.is_restricted,
       starts_at: base.starts_at,
       ends_at: base.ends_at,
     }
@@ -228,6 +251,16 @@ export default function FormEdit() {
     }
   }
 
+  const downloadQr = () => {
+    const canvas = qrRef.current
+    if (!canvas) return
+    const url = canvas.toDataURL('image/png')
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `qr-${form.short_code}.png`
+    a.click()
+  }
+
   const handleBanner = async (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -260,6 +293,10 @@ export default function FormEdit() {
   if (loading) return <PageSkeleton />
   if (!form) return null
 
+  const isRestricted = !!form.is_restricted
+  const onceLocked = form.submission_limit === 'once'
+  const isQuiz = form.type === 'quiz'
+
   return (
     <div>
       <button
@@ -286,6 +323,16 @@ export default function FormEdit() {
         <div className="space-y-6">
           <CollapsibleCard title="Share" icon={<Link2 className="w-4 h-4" />} defaultOpen>
             <CopyField label="Public Link" value={`${window.location.origin}/q/${form.short_code}`} />
+            <div className="mt-4">
+              <Button
+                variant="secondary"
+                className="w-full"
+                icon={<QrCode className="w-4 h-4" />}
+                onClick={() => setShowQr(true)}
+              >
+                Show QR Code
+              </Button>
+            </div>
             <div className="flex gap-2 mt-4">
               {form.status === 'published' && (
                 <Button
@@ -334,7 +381,15 @@ export default function FormEdit() {
                 </Select>
               </div>
 
-              <Select label="Submission limit" name="submission_limit" value={form.submission_limit} onChange={handleChange} error={errors.submission_limit}>
+              <Select
+                label="Submission limit"
+                name="submission_limit"
+                value={isRestricted ? 'once' : form.submission_limit}
+                onChange={(e) => { handleChange(e); toggleSetting('submission_limit', e.target.value) }}
+                disabled={isRestricted}
+                error={errors.submission_limit}
+                helper={isRestricted ? 'Locked to Once while fullscreen mode is on.' : undefined}
+              >
                 <option value="unlimited">Unlimited</option>
                 <option value="once">Once per person</option>
               </Select>
@@ -350,8 +405,15 @@ export default function FormEdit() {
               />
               <SettingRow
                 title="Require login"
-                desc="Respondents must sign in first."
-                control={<Toggle label="Require login" checked={form.require_login} onChange={(v) => setForm((prev) => ({ ...prev, require_login: v }))} />}
+                desc={onceLocked ? 'Automatically required because submission is limited to once.' : 'Respondents must sign in first.'}
+                control={
+                  <Toggle
+                    label="Require login"
+                    checked={form.require_login}
+                    disabled={onceLocked}
+                    onChange={(v) => toggleSetting('require_login', v)}
+                  />
+                }
               />
             </div>
           </CollapsibleCard>
@@ -368,6 +430,20 @@ export default function FormEdit() {
                 desc="Randomize answer order for each respondent."
                 control={<Toggle label="Shuffle options" checked={form.shuffle_options} onChange={(v) => setForm((prev) => ({ ...prev, shuffle_options: v }))} />}
               />
+              {isQuiz && (
+                <>
+                  <SettingRow
+                    title="Show leaderboard"
+                    desc="Show a read-only ranking to respondents after they submit."
+                    control={<Toggle label="Show leaderboard" checked={!!form.show_leaderboard} onChange={(v) => toggleSetting('show_leaderboard', v)} />}
+                  />
+                  <SettingRow
+                    title="Fullscreen mode"
+                    desc="Respondents must stay on the quiz tab. 3 exits auto-submit the quiz with score 0 (marked as cheating)."
+                    control={<Toggle label="Fullscreen mode" checked={isRestricted} onChange={(v) => toggleSetting('is_restricted', v)} />}
+                  />
+                </>
+              )}
               <div className="py-4">
                 <Input
                   label="Time limit (minutes)"
@@ -504,6 +580,55 @@ export default function FormEdit() {
         confirmText="Delete"
         variant="danger"
       />
+
+      <AnimatePresence>
+        {showQr && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4 backdrop-blur-sm"
+            onClick={() => setShowQr(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0, y: 8 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.96, opacity: 0, y: 8 }}
+              className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-lift relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setShowQr(false)}
+                className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Close QR code"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <h3 className="font-display text-lg font-bold text-ink mb-1">Scan to open</h3>
+              <p className="text-sm text-gray-500 mb-5">Pindai kode QR untuk membuka {form.title}.</p>
+              <div className="flex justify-center p-4 border border-gray-100 rounded-2xl">
+                <QRCodeCanvas
+                  ref={qrRef}
+                  value={`${window.location.origin}/q/${form.short_code}`}
+                  size={220}
+                  marginSize={2}
+                  level="M"
+                  className="rounded-lg"
+                />
+              </div>
+              <Button
+                variant="secondary"
+                size="lg"
+                className="w-full mt-5"
+                onClick={downloadQr}
+                icon={<Download className="w-4 h-4" />}
+              >
+                Download QR
+              </Button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

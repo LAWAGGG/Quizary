@@ -1,7 +1,8 @@
 import random
-from datetime import timedelta
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -16,7 +17,8 @@ from app.models.submission_question_order import SubmissionQuestionOrder
 from app.models.submission_option_order import SubmissionOptionOrder
 from app.models.user import User
 from app.services.grading import grade_submission
-from app.utils import now_wib, fmt_dt
+from app.services.session_expiry import expired_at, is_expired, auto_submit_expired_for_form
+from app.utils import now_wib, fmt_dt, file_url
 from app.schemas.submissions import (
     SubmissionCreateRequest,
     SubmissionCreateResponse,
@@ -24,6 +26,7 @@ from app.schemas.submissions import (
     OptionPublic,
     AutosaveRequest,
     SubmitResponse,
+    TabExitRequest,
     SubmissionDetailResponse,
     SavedAnswer,
     SubmissionListItem,
@@ -44,22 +47,6 @@ def _get_sub_or_404(sub_id: int, db: Session) -> Submission:
     if not sub:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
     return sub
-
-
-def _expired_at(sub: Submission, form: Form):
-    started = sub.started_at
-    if not started:
-        return None
-    exp = started + timedelta(seconds=form.timer_seconds) if form.timer_seconds else None
-    ends = form.ends_at
-    if exp and ends:
-        return min(exp, ends)
-    return exp or ends
-
-
-def _is_expired(sub: Submission, form: Form) -> bool:
-    exp = _expired_at(sub, form)
-    return exp is not None and _now() > exp
 
 
 def _get_question_for_submission(question_id: int, sub: Submission, db: Session) -> Question:
@@ -88,7 +75,47 @@ def _validate_option_ids(option_ids: list[int], question: Question) -> None:
             )
 
 
-def _build_questions_response(sub_id: int, db: Session) -> list[QuestionWithOptions]:
+def _missing_required(sub: Submission, form: Form, db: Session) -> list[str]:
+    """Return question texts of required questions left unanswered (FR-10)."""
+    questions = db.query(Question).filter(
+        Question.form_id == form.id,
+        Question.is_required == True,  # noqa: E712
+    ).all()
+    if not questions:
+        return []
+
+    q_map = {q.id: q for q in questions}
+    answers = db.query(Answer).filter(
+        Answer.submission_id == sub.id,
+        Answer.question_id.in_([q.id for q in questions]),
+    ).all()
+
+    missing: list[str] = []
+    for a in answers:
+        q = q_map.get(a.question_id)
+        if not q:
+            continue
+        if q.type in (QuestionType.multiple_choice, QuestionType.checkbox):
+            if not a.selected_options:
+                missing.append(q.question_text)
+        elif a.answer_text is None or not a.answer_text.strip():
+            missing.append(q.question_text)
+
+    answered_ids = {a.question_id for a in answers}
+    for q in questions:
+        if q.id not in answered_ids:
+            missing.append(q.question_text)
+    return missing
+
+
+def _image_obj(img, request: Request) -> dict | None:
+    """Single image object (first image only) — same shape as questions router."""
+    if img is None:
+        return None
+    return {"id": img.id, "path": file_url(request, img.path)}
+
+
+def _build_questions_response(sub_id: int, request: Request, db: Session) -> list[QuestionWithOptions]:
     """
     Ordered questions for a submission — respects per-submission shuffle.
     Does NOT expose is_correct (security boundary for respondents).
@@ -115,13 +142,21 @@ def _build_questions_response(sub_id: int, db: Session) -> list[QuestionWithOpti
         else:
             opts = []
 
+        q_img = sorted(q.images, key=lambda i: i.order_index or 0)
         result.append(QuestionWithOptions(
             id=q.id,
             type=q.type.value,
             question_text=q.question_text,
             order_index=idx,
+            is_required=q.is_required,
+            image=_image_obj(q_img[0], request) if q_img else None,
             options=[
-                OptionPublic(id=o.id, option_text=o.option_text, order_index=i)
+                OptionPublic(
+                    id=o.id,
+                    option_text=o.option_text,
+                    order_index=i,
+                    image=_image_obj(sorted(o.images, key=lambda im: im.order_index or 0)[0], request) if o.images else None,
+                )
                 for i, o in enumerate(opts)
             ],
         ))
@@ -149,6 +184,9 @@ def create_submission(
     if not form or form.status != FormStatus.published:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
 
+    if form.require_login and not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required to access this form")
+
     now = _now()
     ends = form.ends_at
     if ends and now > ends:
@@ -166,19 +204,34 @@ def create_submission(
     # ── Resume existing in-progress session ──────────────────────────────────
     # Instead of returning 409, we hand back the existing session so the
     # respondent can continue after a refresh/navigation without losing progress.
+    # Saat user login, session anonim (user_id NULL) dari IP yang sama juga
+    # di-resume & di-claim agar tidak ter-orphan setelah login.
     in_progress_q = db.query(Submission).filter(
         Submission.form_id == form.id,
         Submission.status == SubmissionStatus.in_progress,
     )
     if user:
-        in_progress_q = in_progress_q.filter(Submission.user_id == user.id)
+        in_progress_q = in_progress_q.filter(
+            or_(
+                Submission.user_id == user.id,
+                and_(Submission.user_id.is_(None), Submission.ip_address == ip),
+            )
+        )
     elif ip:
         in_progress_q = in_progress_q.filter(Submission.ip_address == ip)
 
-    existing = in_progress_q.first()
+    existing = in_progress_q.order_by(Submission.created_at.asc()).first()
     if existing:
+        # Claim session anonim ke user login supaya tidak ter-orphan.
+        if user and existing.user_id is None:
+            existing.user_id = user.id
+            if not existing.respondent_name:
+                existing.respondent_name = user.name
+            if not existing.respondent_email:
+                existing.respondent_email = user.email
+            db.commit()
         # Edge-case: the existing session may have already expired server-side.
-        if _is_expired(existing, form):
+        if is_expired(existing, form):
             existing.status = SubmissionStatus.auto_submitted
             existing.submitted_at = now
             grade_submission(db, existing, form)
@@ -189,16 +242,20 @@ def create_submission(
         return SubmissionCreateResponse(
             submission_id=existing.id,
             started_at=fmt_dt(existing.started_at),
-            expired_at=fmt_dt(_expired_at(existing, form)),
-            questions=_build_questions_response(existing.id, db),
+            expired_at=fmt_dt(expired_at(existing, form)),
+            questions=_build_questions_response(existing.id, request, db),
             resumed=True,
         )
 
     # ── Check submission_limit=once ───────────────────────────────────────────
+    # Identitas respondent = akun, bukan IP (rantai setting: once → require_login).
+    # Submission anonim dari IP yang sama TIDAK dihitung untuk user yang login,
+    # karena sebuah submission anonim tidak dapat diatribusikan ke akun tertentu
+    # dan IP yang dibagi (NAT/dev 127.0.0.1) akan memblokir akun baru secara salah.
     if form.submission_limit == SubmissionLimit.once:
         done_q = db.query(Submission).filter(
             Submission.form_id == form.id,
-            Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted]),
+            Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted, SubmissionStatus.cheating]),
         )
         if user:
             done_q = done_q.filter(Submission.user_id == user.id)
@@ -211,8 +268,8 @@ def create_submission(
     sub = Submission(
         form_id=form.id,
         user_id=user.id if user else None,
-        respondent_name=body.respondent_name,
-        respondent_email=body.respondent_email,
+        respondent_name=body.respondent_name or (user.name if user else None),
+        respondent_email=body.respondent_email or (user.email if user else None),
         ip_address=ip,
         status=SubmissionStatus.in_progress,
         started_at=now,
@@ -244,8 +301,8 @@ def create_submission(
     return SubmissionCreateResponse(
         submission_id=sub.id,
         started_at=fmt_dt(sub.started_at),
-        expired_at=fmt_dt(_expired_at(sub, form)),
-        questions=_build_questions_response(sub.id, db),
+        expired_at=fmt_dt(expired_at(sub, form)),
+        questions=_build_questions_response(sub.id, request, db),
         resumed=False,
     )
 
@@ -258,8 +315,9 @@ def _verify_submission_access(sub: Submission, request: Request, user: User | No
         return
     if sub.user_id and user and sub.user_id == user.id:
         return
-    client_ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-                 or (request.client.host if request.client else None))
+    # Only trust the direct peer IP. X-Forwarded-For is client-supplied and can
+    # be spoofed to impersonate another respondent's session.
+    client_ip = request.client.host if request.client else None
     if sub.ip_address and client_ip and sub.ip_address == client_ip:
         return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
@@ -279,10 +337,13 @@ def autosave(
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
 
+    if form.require_login and not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required to access this form")
+
     if sub.status != SubmissionStatus.in_progress:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
 
-    if _is_expired(sub, form):
+    if is_expired(sub, form):
         sub.status = SubmissionStatus.auto_submitted
         sub.submitted_at = _now()
         grade_submission(db, sub, form)
@@ -311,8 +372,63 @@ def autosave(
         answer.answer_text = body.answer_text
         db.query(AnswerOption).filter(AnswerOption.answer_id == answer.id).delete()
 
+    answer.updated_at = _now()
     db.commit()
     return {"message": "Answer saved", "question_id": body.question_id}
+
+
+# ── POST /submissions/{id}/tab-exit ──────────────────────────────────────────
+# Fullscreen anti-cheat (is_restricted quiz). Respondent leaving the tab reports
+# each exit; on the 3rd the submission is auto-submitted with score 0 + status
+# "cheating" server-side (the client is never trusted to self-impose the penalty).
+
+CHEAT_THRESHOLD = 3
+
+
+@router.post("/submissions/{submission_id}/tab-exit")
+def report_tab_exit(
+    submission_id: int,
+    request: Request,
+    body: TabExitRequest | None = None,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    sub = _get_sub_or_404(submission_id, db)
+    _verify_submission_access(sub, request, user, db)
+    form = db.get(Form, sub.form_id)
+    if not form:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    if form.type.value != "quiz" or not form.is_restricted:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Fullscreen mode is not enabled for this form")
+    if sub.status != SubmissionStatus.in_progress:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
+
+    sub.tab_exit_count = (sub.tab_exit_count or 0) + 1
+    sub.updated_at = _now()
+
+    if body and body.reason:
+        reasons = [r.strip() for r in (sub.cheat_reason or "").split(";") if r.strip()]
+        reasons.append(body.reason.strip())
+        sub.cheat_reason = "; ".join(reasons[-5:])[:255]
+
+    if sub.tab_exit_count >= CHEAT_THRESHOLD:
+        grade_submission(db, sub, form)   # fills per-answer grading + max_score
+        sub.status = SubmissionStatus.cheating
+        sub.submitted_at = _now()
+        sub.score = Decimal("0")          # nilai 0 untuk penyontek
+        db.commit()
+        return {
+            "message": "Anda keluar dari halaman terlalu sering. Jawaban dikumpulkan otomatis.",
+            "status": "cheating",
+            "warnings_left": 0,
+        }
+
+    db.commit()
+    return {
+        "message": "Tab exit recorded",
+        "tab_exit_count": sub.tab_exit_count,
+        "warnings_left": CHEAT_THRESHOLD - sub.tab_exit_count,
+    }
 
 
 # ── POST /submissions/{id}/submit ─────────────────────────────────────────────
@@ -330,10 +446,26 @@ def submit_answers(
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
 
+    if form.require_login and not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required to access this form")
+
     if sub.status != SubmissionStatus.in_progress:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
 
-    sub.status = SubmissionStatus.auto_submitted if _is_expired(sub, form) else SubmissionStatus.submitted
+    expired = is_expired(sub, form)
+    if not expired:
+        # FR-10 — soal wajib harus dijawab sebelum submit final (auto-submit
+        # karena waktu habis tetap diproses agar tidak kehilangan data).
+        missing = _missing_required(sub, form, db)
+        if missing:
+            names = " • ".join(missing[:5])
+            more = f" (+{len(missing) - 5} lainnya)" if len(missing) > 5 else ""
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Soal wajib belum dijawab: {names}{more}",
+            )
+
+    sub.status = SubmissionStatus.auto_submitted if expired else SubmissionStatus.submitted
     sub.submitted_at = _now()
     total_score, max_score = grade_submission(db, sub, form)
     db.commit()
@@ -362,13 +494,15 @@ def get_submission(
 
     is_owner = user and form.user_id == user.id
     is_respondent = sub.user_id and user and sub.user_id == user.id
-    is_same_ip = sub.ip_address and user is None and request.client.host == sub.ip_address
+    # Konsisten dengan _verify_submission_access: IP match berlaku juga saat login,
+    # agar session anonim yang dibuat sebelum login tetap bisa diakses setelah login.
+    is_same_ip = sub.ip_address and request.client.host == sub.ip_address
 
     if not is_owner and not is_respondent and not is_same_ip:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     # Ordered questions (respects per-submission shuffle stored in DB)
-    questions = _build_questions_response(sub.id, db)
+    questions = _build_questions_response(sub.id, request, db)
 
     # Build a map of option_id → option_text for the whole form (used in answers)
     all_options = db.query(QuestionOption).join(
@@ -377,6 +511,9 @@ def get_submission(
     opt_text_map = {o.id: o.option_text for o in all_options}
 
     q_map = {q.id: q for q in db.query(Question).filter(Question.form_id == form.id).all()}
+
+    # Keamanan (FR-34/7.3): jangan bocorkan is_correct/score sebelum submission selesai.
+    completed = sub.status in (SubmissionStatus.submitted, SubmissionStatus.auto_submitted, SubmissionStatus.cheating)
 
     answers_data: list[SavedAnswer] = []
     for answer in db.query(Answer).filter(Answer.submission_id == sub.id).all():
@@ -394,17 +531,17 @@ def get_submission(
             selected_option_ids=selected_ids,
             answer_text=answer.answer_text,
             selected_options=selected_texts,
-            is_correct=answer.is_correct,
-            points_earned=float(answer.points_earned) if answer.points_earned is not None else None,
+            is_correct=answer.is_correct if completed else None,
+            points_earned=float(answer.points_earned) if completed and answer.points_earned is not None else None,
         ))
 
     return SubmissionDetailResponse(
         id=sub.id,
         status=sub.status.value,
         started_at=fmt_dt(sub.started_at),
-        expired_at=fmt_dt(_expired_at(sub, form)),
-        score=float(sub.score) if sub.score is not None else None,
-        max_score=float(sub.max_score) if sub.max_score is not None else None,
+        expired_at=fmt_dt(expired_at(sub, form)),
+        score=float(sub.score) if completed and sub.score is not None else None,
+        max_score=float(sub.max_score) if completed and sub.max_score is not None else None,
         submitted_at=fmt_dt(sub.submitted_at),
         questions=questions,
         answers=answers_data,

@@ -42,6 +42,8 @@ class Form(Base):
     shuffle_questions = Column(Boolean, default=False)
     shuffle_options = Column(Boolean, default=False)
     submission_limit = Column(SAEnum(SubmissionLimit), default=SubmissionLimit.unlimited)
+    show_leaderboard = Column(Boolean, default=False)
+    is_restricted = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=True)
 

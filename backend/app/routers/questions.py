@@ -1,4 +1,3 @@
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -11,7 +10,7 @@ from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
 from app.models.user import User
 from app.services.points import distribute_quiz_points
-from app.utils import file_url, _delete_file
+from app.utils import file_url, now_wib, _delete_file
 from app.schemas.question import (
     MessageResponse,
     QuestionCreate,
@@ -116,7 +115,7 @@ def create_question(
         points=0 if form.type.value == "quiz" else body.points,
         is_required=body.is_required,
         order_index=next_order,
-        created_at=datetime.utcnow(),
+        created_at=now_wib(),
     )
     db.add(question)
     db.flush()
@@ -187,10 +186,15 @@ def update_question(
         elif "points" not in update_data:
             update_data["points"] = 0
 
+    # Essay is never graded (grade_answer returns None/0) — it must not carry
+    # points or it inflates max_score beyond what anyone can reach.
+    if question.type.value == "essay":
+        update_data["points"] = 0
+
     for field, value in update_data.items():
         setattr(question, field, value)
 
-    question.updated_at = datetime.utcnow()
+    question.updated_at = now_wib()
 
     # Handle options update (only for option-type questions)
     if options_data is not None:
@@ -300,6 +304,13 @@ def reorder_questions(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
     if form.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not the owner of this form")
+
+    form_ids = {row[0] for row in db.query(Question.id).filter(Question.form_id == form.id).all()}
+    if set(body.orders) != form_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="orders must include exactly all questions in this form",
+        )
 
     for idx, q_id in enumerate(body.orders):
         q = db.get(Question, q_id)

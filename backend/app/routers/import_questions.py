@@ -1,6 +1,5 @@
 import re
 import io
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
@@ -11,6 +10,7 @@ from app.models.form import Form
 from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
 from app.services.points import distribute_quiz_points
+from app.utils import now_wib
 
 router = APIRouter(tags=["import"])
 
@@ -96,7 +96,7 @@ async def import_docx(
         .first()
     )
     next_order = (max_order[0] + 1) if max_order else 0
-    now = datetime.utcnow()
+    now = now_wib()
     count = 0
 
     for q_data in parsed:

@@ -112,6 +112,9 @@ Aturan kunci yang **tidak boleh dilanggar** oleh implementasi apapun:
 
 - Shuffle, limit submit, dan validasi waktu **harus** divalidasi ulang di backend pada setiap request, klien tidak dipercaya sepenuhnya
 - Halaman pengerjaan tidak boleh mengirim jawaban benar (`is_correct` dari opsi) ke klien sebelum submit — cek response `GET /submissions/{id}` sebelum status `submitted`/`auto_submitted`, field opsi hanya berisi `option_text`, bukan `is_correct`
+- **Mode fullscreen (`is_restricted`)** hanya berlaku untuk tipe `quiz`. Anticheat ini client-reported: tiap keluar dari tab/loss-of-focus dilaporkan ke `POST /submissions/{id}/tab-exit`, server yang menghitung. Masuk ambang ke-3 → submission `status='cheating'`, `score=0`, `submitted_at` diisi. Penalti ada di server, bukan klien.
+- **Rantai setting (auto-coerce):** `is_restricted=true` memaksa `submission_limit='once'`; `submission_limit='once'` memaksa `require_login=true`. Identitas berbasis akun membuat "sekali per orang" dan atribusi anti-cheat tidak bergantung IP yang bisa dipalsukan.
+- **Leaderboard (`show_leaderboard`)** bersifat read-only setelah submit (bukan real-time). Publik via `GET /q/{code}/leaderboard`; submission `cheating` dikecualikan supaya tidak terekspos ke responden.
 
 ### 7.4 Keputusan: Tipe Soal Tambahan dari Referensi UI
 
@@ -287,6 +290,8 @@ CREATE TABLE forms (
     shuffle_questions BOOLEAN DEFAULT FALSE,
     shuffle_options BOOLEAN DEFAULT FALSE,
     submission_limit ENUM('unlimited','once') DEFAULT 'unlimited',
+    show_leaderboard BOOLEAN DEFAULT FALSE,
+    is_restricted BOOLEAN DEFAULT FALSE,
 
     created_at TIMESTAMP NULL,
     updated_at TIMESTAMP NULL,
@@ -333,9 +338,10 @@ CREATE TABLE submissions (
     respondent_email VARCHAR(150) NULL,
     ip_address VARCHAR(45) NULL,
 
-    status ENUM('in_progress','submitted','auto_submitted') DEFAULT 'in_progress',
+    status ENUM('in_progress','submitted','auto_submitted','cheating') DEFAULT 'in_progress',
     score DECIMAL(8,2) NULL,
     max_score DECIMAL(8,2) NULL,
+    tab_exit_count INT DEFAULT 0,
 
     started_at DATETIME NULL,
     submitted_at DATETIME NULL,
@@ -431,3 +437,4 @@ CREATE TABLE images (
 |---|---|
 | 1.0 | Draft awal — menggabungkan requirement analysis, struktur database, API contract, dan design system dari referensi visual menjadi satu dokumen acuan tunggal |
 | 1.1 | Sistem poin quiz: kolom `questions.is_scored`, pool 100, redistribusi otomatis, konversi tipe form↔quiz, aturan publish (min 1 soal) berlaku juga di `PUT /forms/{id}` |
+| 1.2 | Leaderboard opsional (`forms.show_leaderboard`), mode fullscreen anti-cheat (`forms.is_restricted` + `submissions.tab_exit_count` + status `cheating`), rantai setting auto-coerce (restricted→once→login), QR share di frontend |

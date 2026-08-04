@@ -1,6 +1,5 @@
 import os
 import uuid
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
 
@@ -12,7 +11,7 @@ from app.models.question import Question
 from app.models.question_option import QuestionOption
 from app.models.user import User
 from app.schemas.auth import MessageResponse, UserResponse
-from app.utils import UPLOAD_DIR, file_url, _delete_file
+from app.utils import UPLOAD_DIR, file_url, now_wib, _delete_file
 
 router = APIRouter(tags=["profile & media"])
 
@@ -99,7 +98,7 @@ async def upload_banner(
     old_path = form.banner_path
     path = _save_upload(banner, "banners")
     form.banner_path = path
-    form.updated_at = datetime.utcnow()
+    form.updated_at = now_wib()
     db.commit()
     _delete_file(old_path)
     return {"message": "Banner uploaded", "banner_path": file_url(request, path)}
@@ -113,7 +112,7 @@ def delete_banner(
 ):
     stored_path = form.banner_path
     form.banner_path = None
-    form.updated_at = datetime.utcnow()
+    form.updated_at = now_wib()
     db.commit()
     _delete_file(stored_path)
     return MessageResponse(message="Banner dihapus")
@@ -136,7 +135,7 @@ def add_question_image(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not the owner of this form")
 
     file_path = _save_upload(image, "question-images")
-    img = Image(question_id=question_id, path=file_path, created_at=datetime.utcnow())
+    img = Image(question_id=question_id, path=file_path, created_at=now_wib())
     db.add(img)
     db.commit()
     db.refresh(img)
@@ -163,7 +162,7 @@ def add_option_image(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not the owner of this form")
 
     file_path = _save_upload(image, "question-images")
-    img = Image(option_id=option_id, path=file_path, created_at=datetime.utcnow())
+    img = Image(option_id=option_id, path=file_path, created_at=now_wib())
     db.add(img)
     db.commit()
     db.refresh(img)

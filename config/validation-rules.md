@@ -92,8 +92,11 @@ Semua opsional (partial update). Field tambahan:
 | `starts_at` / `ends_at` | ISO 8601 UTC, `starts_at < ends_at` |
 | `status` | `"draft"` / `"published"` / `"closed"` |
 | `shuffle_questions` / `shuffle_options` | `boolean` |
+| `show_leaderboard` / `is_restricted` | `boolean` — `is_restricted` hanya relevan untuk quiz |
 
-**Source:** `schemas/form.py:FormUpdate`
+**Rantai setting (auto-coerce):** `is_restricted=true` → `submission_limit="once"` → `require_login=true`. Nilai ter-coerce tersimpan di DB (bukan sekadar validasi). Berlaku di `POST /forms` & `PUT /forms/{id}`.
+
+**Source:** `schemas/form.py:FormCreate`, `schemas/form.py:FormUpdate`, `routers/forms.py:_apply_setting_chain`
 
 #### `PATCH /api/forms/{form_id}/publish`
 | Field | Rule |
@@ -214,6 +217,20 @@ Setiap business logic non-trivial WAJIB di-test:
 | Reorder | Order berubah sesuai payload |
 | Short_code unique | Auto-generate, tidak bentrok |
 | Partial update | Update 1 field → field lain tidak berubah |
+| Soal wajib (FR-10) | Submit dengan `is_required=true` belum dijawab → 422; jawab semua → 200 |
+| Soal wajib + auto-submit | Waktu habis & soal wajib kosong → tetap auto-submit 200 (bukan 422) |
+| require_login (server-side) | POST /submissions tanpa token untuk form `require_login=true` → 401 |
+| Identitas otomatis | POST /submissions dengan token (tanpa nama) → `respondent_name`/`email` dari akun |
+| Resume claim session | Session anonim (user_id NULL) di-resume saat login → `user_id` terisi |
+| Jawaban benar bocor (FR-34) | GET /submissions/{id} status `in_progress` → `is_correct`/`score` = null |
+| Rantai `is_restricted` (chain) | PUT `is_restricted=true` → respons `submission_limit="once"` & `require_login=true` |
+| Rantai `once` (chain) | PUT `submission_limit="once"` → respons `require_login=true` |
+| once + login (server-side) | POST /submissions tanpa token untuk form `submission_limit="once"` → 401 |
+| Anti-cheat tab-exit (threshold) | `POST /submissions/{id}/tab-exit` ×2 → `warnings_left` turun; ×3 → status `cheating`, score `0` |
+| Anti-cheat non-quiz/off | `tab-exit` pada form form/`is_restricted=false` → 403 |
+| Leaderboard gating | `GET /q/{code}/leaderboard` saat `show_leaderboard=false` → 404 |
+| Leaderboard exclude cheating | Submission `cheating` tidak muncul di daftar leaderboard |
+| Leaderboard own rank | `?submission_id=` → respons punya `own.{rank, score, total}` |
 
 ### 3.3 Edge Case Test
 

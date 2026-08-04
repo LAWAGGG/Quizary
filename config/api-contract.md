@@ -112,7 +112,9 @@ Auth: Bearer Token
   "type": "quiz",
   "is_public": true,
   "require_login": false,
-  "submission_limit": "once"
+  "submission_limit": "once",
+  "show_leaderboard": true,
+  "is_restricted": true
 }
 ```
 ```json
@@ -135,6 +137,8 @@ Auth: Bearer Token
   "shuffle_questions": false,
   "shuffle_options": false,
   "submission_limit": "once",
+  "show_leaderboard": false,
+  "is_restricted": false,
   "created_at": "30-07-2026 18:00:00",
   "updated_at": "30-07-2026 18:00:00"
 }
@@ -162,6 +166,8 @@ Auth: Bearer Token (pemilik)
   "shuffle_questions": true,
   "shuffle_options": true,
   "submission_limit": "once",
+  "show_leaderboard": true,
+  "is_restricted": true,
   "created_at": "30-07-2026 18:00:00",
   "updated_at": "30-07-2026 18:00:00"
 }
@@ -214,6 +220,11 @@ Auth: Bearer Token (pemilik) — kirim field yang berubah saja
 **Konversi tipe (`type`):**
 - `form` → `quiz`: opsi pertama tiap soal pilihan ganda otomatis menjadi benar + poin seluruh soal direset & dibagi otomatis (pool 100).
 - `quiz` → `form`: seluruh `is_correct` pada opsi direset ke `false`.
+
+**Rantai setting (auto-coerce, berlaku di `POST /forms` & `PUT /forms/{id}`):**
+- `is_restricted=true` ⇒ `submission_limit` dipaksa `"once"`.
+- `submission_limit="once"` ⇒ `require_login` dipaksa `true` (identitas akun, bukan IP).
+- Nilai yang ter-coerce langsung tersimpan di DB dan terlihat di respons. Creator tidak perlu mengaturnya manual.
 
 ### `DELETE /forms/{id}`
 Auth: Bearer Token (pemilik)
@@ -476,6 +487,10 @@ Auth: -
   "starts_at": "30-07-2026 18:00:00",
   "ends_at": "31-07-2026 18:00:00",
   "timer_seconds": 600,
+  "question_count": 10,
+  "submission_limit": "once",
+  "show_leaderboard": true,
+  "is_restricted": true,
   "thank_you_message": "Terima kasih telah mengerjakan quiz ini"
 }
 ```
@@ -507,6 +522,31 @@ Auth: - (atau Bearer Token kalau `require_login=true`)
 { "message": "Login required to access this form" }
 ```
 
+### `GET /q/{short_code}/leaderboard`
+Auth: -
+> Hanya tersedia untuk form published + public + `show_leaderboard=true`. Kalau off → **404** (tidak bocor). Submission berstatus `cheating` tidak ikut leaderboard.
+```json
+// Query params
+?limit=10&submission_id=11
+```
+```json
+// Response 200
+{
+  "total": 45,
+  "data": [
+    { "rank": 1, "respondent_name": "Dewi Anjani", "score": 100 },
+    { "rank": 2, "respondent_name": "Budi", "score": 80 }
+  ],
+  "own": { "rank": 3, "respondent_name": "Cici", "score": 70, "total": 45 }
+}
+```
+- `limit` default 10, `1–50`.
+- `submission_id` opsional — kalau dikirim, `own` berisi entri/rank pengirim (untuk menyorot posisi sendiri setelah submit).
+```json
+// Response 404
+{ "message": "Leaderboard not available" }
+```
+
 ---
 
 ## 7. Submission
@@ -521,6 +561,10 @@ Auth: - (atau Bearer Token jika login)
   "respondent_email": "dewi@gmail.com"
 }
 ```
+> Jika `require_login=true`, endpoint ini **wajib** punya token (dienforce server-side) → 401.
+> Jika tidak mengirim nama/email tapi punya token, nama/email otomatis diambil dari akun.
+> Session anonim yang dibuat sebelum login akan di-resume & di-claim saat user login.
+> Karena rantai setting: form `submission_limit="once"` selalu punya `require_login=true` (identitas = akun, bukan IP).
 ```json
 // Response 201 — session baru
 {
@@ -533,9 +577,11 @@ Auth: - (atau Bearer Token jika login)
       "type": "checkbox",
       "question_text": "Manakah yang termasuk bilangan prima?",
       "order_index": 0,
+      "is_required": true,
+      "image": null,
       "options": [
-        { "id": 9, "option_text": "2", "order_index": 0 },
-        { "id": 11, "option_text": "7", "order_index": 1 }
+        { "id": 9, "option_text": "2", "order_index": 0, "image": null },
+        { "id": 11, "option_text": "7", "order_index": 1, "image": null }
       ]
     }
   ],
@@ -593,6 +639,34 @@ Auth: - (sesuai submission) atau Bearer Token (pemilik form)
 { "message": "Submission already completed" }
 ```
 
+### `POST /submissions/{id}/tab-exit`
+Auth: - (sesuai submission) atau Bearer Token (pemilik form)
+> Fullscreen anti-cheat (`is_restricted` quiz). Responden melaporkan tiap keluar dari tab/hilang fokus; penalti ditentukan server, bukan klien.
+```json
+// Response 200 — belum ambang batas (peringatan 1 & 2)
+{
+  "message": "Tab exit recorded",
+  "tab_exit_count": 1,
+  "warnings_left": 2
+}
+```
+```json
+// Response 200 — exit ke-3 → auto-submit, nilai 0, status cheating
+{
+  "message": "Anda keluar dari halaman terlalu sering. Jawaban dikumpulkan otomatis.",
+  "status": "cheating",
+  "warnings_left": 0
+}
+```
+```json
+// Response 403 (bukan quiz / is_restricted off)
+{ "message": "Fullscreen mode is not enabled for this form" }
+```
+```json
+// Response 409 (submission sudah selesai)
+{ "message": "Submission already completed" }
+```
+
 ### `POST /submissions/{id}/submit`
 Auth: - (sesuai submission) atau Bearer Token (pemilik form)
 ```json
@@ -620,9 +694,17 @@ Auth: - (sesuai submission) atau Bearer Token (pemilik form)
 // Response 409
 { "message": "Submission already completed" }
 ```
+```json
+// Response 422 — soal wajib (is_required=true) belum dijawab (FR-10).
+// Tidak berlaku saat auto-submit karena waktu habis.
+{ "message": "Soal wajib belum dijawab: <text soal> (+N lainnya)" }
+```
 
 ### `GET /submissions/{id}`
 Auth: - (respondent via IP) atau Bearer Token (respondent/owner)
+> Saat status masih `in_progress`, field `score`, `max_score`, `is_correct`, dan
+> `points_earned` dikembalikan `null` (jawaban benar tidak boleh bocor ke responden
+> sebelum submission selesai — FR-34/7.3).
 ```json
 // Response 200
 {
@@ -671,12 +753,13 @@ Query params: `?status=submitted&sort=score_desc&page=1&per_page=10`
 // Response 200
 {
   "data": [
-    { "submission_id": 1, "respondent_name": "Dewi Anjani", "score": 3, "max_score": 3, "status": "submitted", "submitted_at": "24-07-2026 17:08:00", "answer_summary": "Merah · Tambahkan dark mode" }
+    { "submission_id": 1, "respondent_name": "Dewi Anjani", "score": 3, "max_score": 3, "status": "submitted", "submitted_at": "24-07-2026 17:08:00", "answer_summary": "Merah · Tambahkan dark mode", "rank": 2 }
   ],
   "meta": { "total": 25, "page": 1, "per_page": 10 }
 }
 ```
 `answer_summary` diisi untuk **form type** (pratinjau jawaban responden, dipakai kolom "Answers" di UI); untuk quiz tetap kosong. `sort=score_desc/asc` hanya relevan untuk quiz.
+`rank` (posisi, 1-based) hanya terisi saat `sort=score_desc`. Status bisa `submitted` / `auto_submitted` / `cheating` (nilai 0 hasil anti-cheat, disorot di dashboard creator).
 
 ### `GET /forms/{id}/analytics`
 Auth: Bearer Token (pemilik)
@@ -832,11 +915,13 @@ Auth: Bearer Token
 | DELETE | `/api/options/{id}/images/{image_id}` | Bearer | Hapus gambar opsi |
 | POST | `/api/submissions` | - | Mulai sesi/submit baru |
 | PATCH | `/api/submissions/{id}/autosave` | - | Autosave jawaban |
+| POST | `/api/submissions/{id}/tab-exit` | - | Laporkan keluar dari tab (anti-cheat) |
 | POST | `/api/submissions/{id}/submit` | - | Kumpulkan jawaban |
 | GET | `/api/submissions/{id}` | - | Detail submission + jawaban |
 | GET | `/api/me/submissions` | Bearer | Riwayat submission user |
 | GET | `/api/q/{short_code}` | - | Info form publik |
 | GET | `/api/q/{short_code}/start` | - | Cek bisa mulai/tidak |
+| GET | `/api/q/{short_code}/leaderboard` | - | Leaderboard publik (quiz, jika show_leaderboard) |
 | GET | `/api/dashboard/summary` | Bearer | Ringkasan dashboard |
 
 ---

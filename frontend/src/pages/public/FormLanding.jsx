@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Lock, Clock, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { Lock, Clock, ArrowRight, CheckCircle2, HelpCircle } from 'lucide-react'
 import { Button, Input, Card, AppMark, FallbackPage, DotCorner, SpotlightCard, AuroraBg } from '../../components/ui'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
@@ -9,7 +9,9 @@ import api from '../../api/client'
 function parseDate(str) {
   if (!str) return new Date()
   const [d, m, Y, H, M, S] = str.split(/[\s:-]+/).map(Number)
-  return new Date(Y, m - 1, d, H, M, S)
+  // API times are WIB (UTC+7). Build the absolute instant from WIB components
+  // so the countdown is correct regardless of the viewer's browser timezone.
+  return new Date(Date.UTC(Y, m - 1, d, (H || 0) - 7, M || 0, S || 0))
 }
 
 function CountdownTo({ target }) {
@@ -85,8 +87,11 @@ export default function FormLanding() {
     } catch (err) {
       if (err.response?.status === 401) {
         setStartState({ requires_login: true })
+      } else if (err.response?.status === 410) {
+        // Session sebelumnya habis & auto-submitted — tawarkan mulai baru.
+        setStartState({ session_expired: true })
       } else {
-        setError(err.response?.data?.message || 'Something went wrong')
+        setError(err.response?.data?.message || err.response?.data?.detail || 'Something went wrong')
       }
     }
   }
@@ -103,7 +108,7 @@ export default function FormLanding() {
       })
       navigate(`/s/${res.data.submission_id}?type=${form.type}&title=${encodeURIComponent(form.title)}&code=${shortCode}`)
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to start')
+      setError(err.response?.data?.message || err.response?.data?.detail || 'Failed to start')
     } finally {
       setSubmitting(false)
     }
@@ -137,6 +142,23 @@ export default function FormLanding() {
   const palette = themePalette(form.theme_color)
 
   if (startState) {
+    if (startState.session_expired) {
+      return (
+        <BlockedState
+          background={palette.gradient}
+          icon={<Clock className="w-6 h-6 text-white" />}
+          title="Your previous session ended"
+        >
+          <p className="text-white/70 text-sm mt-2 mb-6">
+            Waktu pengerjaan sebelumnya habis dan jawabanmu sudah otomatis terkirim. Kamu bisa mulai sesi baru jika masih tersedia.
+          </p>
+          <Button variant="secondary" size="xl" onClick={handleStart}>
+            Start New Session
+          </Button>
+        </BlockedState>
+      )
+    }
+
     if (startState.requires_login) {
       return (
         <BlockedState
@@ -241,15 +263,27 @@ export default function FormLanding() {
             {form.title}
           </motion.h1>
           {form.description && (
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="text-base md:text-lg opacity-80 max-w-md text-white mt-4"
-            >
-              {form.description}
-            </motion.p>
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="text-base md:text-lg opacity-80 max-w-md text-white mt-4"
+          >
+            {form.description}
+          </motion.p>
           )}
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="mt-6 flex items-center gap-3"
+          >
+            <InfoChip icon={<HelpCircle className="w-3.5 h-3.5" />} text={`${form.question_count ?? 0} question${(form.question_count ?? 0) !== 1 ? 's' : ''}`} />
+            {form.timer_seconds > 0 && (
+              <InfoChip icon={<Clock className="w-3.5 h-3.5" />} text={`~${Math.ceil(form.timer_seconds / 60)} min`} />
+            )}
+          </motion.div>
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -304,7 +338,22 @@ export default function FormLanding() {
             </Button>
           </Card>
         </SpotlightCard>
+        <div className="flex items-center justify-center gap-3 mt-6">
+          <InfoChip icon={<HelpCircle className="w-3.5 h-3.5" />} text={`${form.question_count ?? 0} question${(form.question_count ?? 0) !== 1 ? 's' : ''}`} />
+          {form.timer_seconds > 0 && (
+            <InfoChip icon={<Clock className="w-3.5 h-3.5" />} text={`~${Math.ceil(form.timer_seconds / 60)} min`} />
+          )}
+        </div>
       </div>
     </div>
+  )
+}
+
+function InfoChip({ icon, text }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-chip">
+      {icon}
+      {text}
+    </span>
   )
 }

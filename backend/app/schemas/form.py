@@ -48,6 +48,8 @@ class FormCreate(BaseModel):
     is_public: bool = True
     require_login: bool = False
     submission_limit: str = "unlimited"
+    show_leaderboard: bool = False
+    is_restricted: bool = False
 
     @model_validator(mode="after")
     def validate_enums(self):
@@ -72,6 +74,8 @@ class FormUpdate(BaseModel):
     ends_at: Optional[FlexDatetime] = None
     shuffle_questions: Optional[bool] = None
     shuffle_options: Optional[bool] = None
+    show_leaderboard: Optional[bool] = None
+    is_restricted: Optional[bool] = None
     status: Optional[str] = None
 
     @model_validator(mode="after")

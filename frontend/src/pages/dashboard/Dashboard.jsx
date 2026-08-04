@@ -62,10 +62,6 @@ export default function Dashboard() {
         <div className="absolute inset-0 dot-grid-light opacity-60 pointer-events-none" aria-hidden="true" />
         <div className="relative flex flex-col sm:flex-row sm:items-center gap-6">
           <div className="flex-1 min-w-0">
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
-              <Sparkles className="w-3.5 h-3.5" />
-              Dashboard
-            </span>
             <h1 className="font-display text-2xl md:text-3xl font-bold mt-2">
               Welcome back, {firstName}
             </h1>

@@ -1,5 +1,5 @@
 from app.models.form import Form
-from app.models.question import Question
+from app.models.question import Question, QuestionType
 
 
 def distribute_quiz_points(form_id: int, db, fixed_ids: set[int] | None = None) -> None:
@@ -10,6 +10,9 @@ def distribute_quiz_points(form_id: int, db, fixed_ids: set[int] | None = None) 
     - `fixed_ids={qid}` (points edited): that question keeps its current
       points and the remaining pool is split equally among the others.
     - `is_scored=false` questions are excluded entirely (detail-only).
+    - Essay questions are excluded too: they are never graded (see grading.py),
+      so allocating them points would inflate max_score beyond what a
+      respondent can reach.
     """
     form = db.get(Form, form_id)
     if not form or form.type.value != "quiz":
@@ -19,7 +22,11 @@ def distribute_quiz_points(form_id: int, db, fixed_ids: set[int] | None = None) 
     db.flush()
     questions = (
         db.query(Question)
-        .filter(Question.form_id == form_id, Question.is_scored.is_(True))
+        .filter(
+            Question.form_id == form_id,
+            Question.is_scored.is_(True),
+            Question.type != QuestionType.essay,
+        )
         .order_by(Question.order_index, Question.id)
         .all()
     )

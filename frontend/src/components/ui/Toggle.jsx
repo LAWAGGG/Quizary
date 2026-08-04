@@ -1,13 +1,15 @@
-export function Toggle({ checked, onChange, label }) {
+export function Toggle({ checked, onChange, label, disabled }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-white
+        ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
         ${checked ? 'bg-primary' : 'bg-gray-300'}`}
     >
       <span

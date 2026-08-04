@@ -13,6 +13,7 @@ class OptionPublic(BaseModel):
     id: int
     option_text: str
     order_index: int
+    image: Optional[dict] = None
 
 
 class QuestionWithOptions(BaseModel):
@@ -20,6 +21,8 @@ class QuestionWithOptions(BaseModel):
     type: str
     question_text: str
     order_index: int
+    is_required: bool = True
+    image: Optional[dict] = None
     options: list[OptionPublic]
 
 
@@ -44,6 +47,10 @@ class SubmitResponse(BaseModel):
     status: str
     score: Optional[float] = None
     max_score: Optional[float] = None
+
+
+class TabExitRequest(BaseModel):
+    reason: Optional[str] = None
 
 
 # Used in GET /submissions/{id} — includes saved answers for in-progress resume

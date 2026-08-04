@@ -11,6 +11,8 @@ class ResultItem(BaseModel):
     status: str
     submitted_at: Optional[str] = None   # "d-m-Y H:i:s"
     answer_summary: str = ""             # preview jawaban (dipakai untuk form type)
+    rank: Optional[int] = None           # posisi saat sort=score_desc (quiz)
+    cheat_reason: Optional[str] = None   # alasan flag "cheating" (fullscreen mode)
 
 
 class ResultListResponse(BaseModel):

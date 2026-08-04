@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Check, Timer, ChevronLeft, ChevronRight } from 'lucide-react'
-import { Button, Input, Textarea, Card, FallbackPage } from '../../components/ui'
+import { X, Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle } from 'lucide-react'
+import { Button, Input, Textarea, Card, FallbackPage, QuestionMap, ConfirmSubmitModal } from '../../components/ui'
+import { useAutosave } from '../../hooks/useAutosave'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 
@@ -12,7 +13,9 @@ const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 function parseDate(str) {
   if (!str) return null
   const [d, m, Y, H, M, S] = str.split(/[\s:-]+/).map(Number)
-  return new Date(Y, m - 1, d, H, M, S)
+  // API times are WIB (UTC+7). Build the absolute instant from WIB components
+  // so the countdown is correct regardless of the viewer's browser timezone.
+  return new Date(Date.UTC(Y, m - 1, d, (H || 0) - 7, M || 0, S || 0))
 }
 
 function OptionTile({ letter, color, selected, checkbox, children, onClick, disabled }) {
@@ -61,20 +64,52 @@ export default function AnswerQuiz() {
   const [error, setError] = useState(null)
   const [currentIdx, setCurrentIdx] = useState(0)
   const [answers, setAnswers] = useState({})
-  const [saving, setSaving] = useState({})
+  const [reviewed, setReviewed] = useState({})
+  const [showMap, setShowMap] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [timeLeft, setTimeLeft] = useState(null)
   const [direction, setDirection] = useState(1)
+  const [cheatWarn, setCheatWarn] = useState(null)
 
-  const saveTimer = useRef(null)
   const timerRef = useRef(null)
+
+  const goToResult = useCallback(() => {
+    // Keluar dari fullscreen saat selesai (semua jalur: submit, timeout, cheating).
+    const ex = document.exitFullscreen || document.webkitExitFullscreen
+    if (ex) Promise.resolve(ex.call(document)).catch(() => {})
+    navigate(`/s/${submissionId}/result?type=${formType}&title=${encodeURIComponent(formTitle)}&code=${formCode}`, { replace: true })
+  }, [submissionId, navigate, formType, formTitle, formCode])
+
+  const onExpired = useCallback(() => {
+    setTimeLeft(0)
+    goToResult()
+  }, [goToResult])
+
+  const reportTabExit = useCallback(async (reason = '') => {
+    // Fullscreen anti-cheat: every detected violation reports to the server,
+    // which owns the penalty. The 3rd violation auto-submits with 0 + 'cheating'.
+    try {
+      const res = await api.post(`/submissions/${submissionId}/tab-exit`, reason ? { reason } : undefined)
+      const d = res.data
+      if (d.status === 'cheating' || d.warnings_left === 0) {
+        goToResult()
+      } else {
+        setCheatWarn({ left: d.warnings_left, reason, at: Date.now() })
+      }
+    } catch (err) {
+      if (err.response?.status === 410) goToResult()
+    }
+  }, [submissionId, goToResult])
+
+  const { statuses, save, flushAll, clearTimers } = useAutosave({ submissionId, onExpired })
 
   const fetchSubmission = useCallback(async () => {
     try {
       const res = await api.get(`/submissions/${submissionId}`)
       const d = res.data
       if (d.status === 'submitted' || d.status === 'auto_submitted') {
-        navigate(`/s/${submissionId}/result?type=${formType}&title=${encodeURIComponent(formTitle)}&code=${formCode}`, { replace: true })
+        goToResult()
         return
       }
       setData(d)
@@ -101,7 +136,7 @@ export default function AnswerQuiz() {
     } finally {
       setLoading(false)
     }
-  }, [submissionId, navigate, formType, formTitle, formCode])
+  }, [submissionId, goToResult])
 
   useEffect(() => {
     fetchSubmission()
@@ -116,12 +151,18 @@ export default function AnswerQuiz() {
 
   const handleAutoSubmit = useCallback(async () => {
     try {
+      // Flush jawaban yang masih dalam debounce agar tidak hilang saat auto-submit.
+      await flushAll(answers)
       await api.post(`/submissions/${submissionId}/submit`)
-      navigate(`/s/${submissionId}/result?type=${formType}&title=${encodeURIComponent(formTitle)}&code=${formCode}`, { replace: true })
-    } catch {
-      // ignore
+      goToResult()
+    } catch (err) {
+      if (err.response?.status === 410) {
+        goToResult()
+      } else {
+        setError(err.response?.data?.message || err.response?.data?.detail || 'Gagal mengirim jawaban')
+      }
     }
-  }, [submissionId, navigate, formType, formTitle, formCode])
+  }, [submissionId, goToResult, flushAll, answers])
 
   useEffect(() => {
     if (!data || formType !== 'quiz' || !data.expired_at) return
@@ -143,48 +184,174 @@ export default function AnswerQuiz() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.id, formType, data?.expired_at, handleAutoSubmit])
 
-  const debouncedSave = useCallback((qId, value) => {
-    clearTimeout(saveTimer.current)
-    setSaving((s) => ({ ...s, [qId]: true }))
-    saveTimer.current = setTimeout(async () => {
-      try {
-        const payload = Array.isArray(value)
-          ? { question_id: qId, option_ids: value }
-          : { question_id: qId, answer_text: value }
-        await api.patch(`/submissions/${submissionId}/autosave`, payload)
-        setSaving((s) => ({ ...s, [qId]: false }))
-      } catch (err) {
-        setSaving((s) => ({ ...s, [qId]: false }))
-        if (err.response?.status === 410) {
-          navigate(`/s/${submissionId}/result?type=${formType}&title=${encodeURIComponent(formTitle)}&code=${formCode}`, { replace: true })
-        }
-      }
-    }, 500)
-  }, [submissionId, navigate, formType, formTitle, formCode])
+  useEffect(() => {
+    return () => clearTimers()
+  }, [clearTimers])
 
   useEffect(() => {
-    return () => clearTimeout(saveTimer.current)
-  }, [])
+    if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    // Fullscreen langsung, tanpa tombol. requestFullscreen() butuh user gesture,
+    // jadi dipicu ulang otomatis pada sentuhan/klik/tekan pertama di halaman kuis.
+    const requestFs = () => {
+      const el = document.documentElement
+      const req = el.requestFullscreen || el.webkitRequestFullscreen
+      if (req && !(document.fullscreenElement || document.webkitFullscreenElement)) {
+        Promise.resolve(req.call(el)).catch(() => {})
+      }
+    }
+    requestFs()
+    document.addEventListener('pointerdown', requestFs, { once: true })
+    document.addEventListener('keydown', requestFs, { once: true })
+    return () => {
+      document.removeEventListener('pointerdown', requestFs)
+      document.removeEventListener('keydown', requestFs)
+    }
+  }, [formType, publicForm?.is_restricted, data])
+
+  // Fullscreen anti-cheat (is_restricted quiz). Detects and reports every
+  // cheating vector — tab/app switched, fullscreen exited, split-screen,
+  // floating window/PiP, print, devtools/shortcuts, right-click, copy.
+  // Debounced so the simultaneous blur + visibilitychange + resize burst that
+  // fires on a single "leave" isn't double-counted as multiple violations.
+  useEffect(() => {
+    if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    let lastAt = 0
+    const MIN_GAP = 1200
+    const report = (reason) => {
+      const now = Date.now()
+      if (now - lastAt < MIN_GAP) return
+      lastAt = now
+      reportTabExit(reason)
+    }
+
+    const inFullscreen = () => document.fullscreenElement || document.webkitFullscreenElement
+
+    const onFsChange = () => {
+      if (!inFullscreen()) report('left-fullscreen')
+    }
+    const onVis = () => { if (document.visibilityState === 'hidden') report('tab-hidden') }
+    const onBlur = () => report('window-blur')
+
+    // Split-screen / floating window: only meaningful while fullscreen is ON —
+    // in fullscreen the content should cover the whole screen, so any large
+    // shrink means the app was split, resized, or another app floated over it.
+    // The soft keyboard is handled by visualViewport, not window resize.
+    let shrinkTimer = null
+    const onResize = () => {
+      if (!inFullscreen()) return
+      if (window.screen.height - window.innerHeight > 120) {
+        clearTimeout(shrinkTimer)
+        shrinkTimer = setTimeout(() => report('split-screen'), 300)
+      }
+    }
+
+    const beforePrint = () => report('print')
+    const onPiP = () => report('picture-in-picture')
+    const onContext = (e) => { e.preventDefault(); report('context-menu') }
+    const onCopy = () => report('copy')
+    const onKey = (e) => {
+      const k = (e.key || '').toLowerCase()
+      const blocked =
+        e.key === 'F12' ||
+        e.key === 'PrintScreen' || e.key === 'PrtScn' ||
+        (e.ctrlKey && ['p', 'u', 's', 'a'].includes(k)) ||
+        (e.ctrlKey && e.shiftKey && ['i', 'j', 'c', 'k'].includes(k))
+      if (blocked) {
+        e.preventDefault()
+        report('shortcut')
+      }
+    }
+
+    document.addEventListener('fullscreenchange', onFsChange)
+    document.addEventListener('webkitfullscreenchange', onFsChange)
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('blur', onBlur)
+    window.addEventListener('resize', onResize)
+    window.addEventListener('beforeprint', beforePrint)
+    document.addEventListener('enterpictureinpicture', onPiP)
+    document.addEventListener('contextmenu', onContext)
+    document.addEventListener('copy', onCopy)
+    document.addEventListener('keydown', onKey)
+
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange)
+      document.removeEventListener('webkitfullscreenchange', onFsChange)
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('blur', onBlur)
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('beforeprint', beforePrint)
+      document.removeEventListener('enterpictureinpicture', onPiP)
+      document.removeEventListener('contextmenu', onContext)
+      document.removeEventListener('copy', onCopy)
+      document.removeEventListener('keydown', onKey)
+      clearTimeout(shrinkTimer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formType, publicForm?.is_restricted, data, reportTabExit])
+
+  // Auto-dismiss the cheat warning banner after a few seconds.
+  useEffect(() => {
+    if (!cheatWarn) return
+    const t = setTimeout(() => setCheatWarn(null), 5000)
+    return () => clearTimeout(t)
+  }, [cheatWarn])
+
+  // Keyboard navigation (quiz mode): 1-4 pilih opsi, ←/→ ganti soal, Enter next/submit
+  useEffect(() => {
+    if (formType !== 'quiz' || !data) return
+    const qs = data.questions || []
+    const cur = qs[currentIdx]
+    if (!cur || showConfirm || showMap) return
+    const curAnswer = answers[cur.id]
+    const hasAns = Array.isArray(curAnswer) ? curAnswer.length > 0 : curAnswer?.length > 0
+    const isReq = cur.is_required !== false
+    const canGo = !isReq || hasAns
+    const isLast = currentIdx === qs.length - 1
+
+    const handler = (e) => {
+      if (e.key === 'ArrowRight') { e.preventDefault(); if (!isLast) handleNext() }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); handlePrev() }
+      else if (e.key === 'Enter') {
+        e.preventDefault()
+        if (isLast) { if (canGo) openConfirm() } else if (canGo) handleNext()
+      }
+      else if (/^[1-4]$/.test(e.key) && (cur.type === 'multiple_choice' || cur.type === 'checkbox')) {
+        const opt = cur.options[Number(e.key) - 1]
+        if (opt) handleSelect(cur.id, opt.id)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formType, data, currentIdx, answers, showConfirm, showMap, reviewed])
 
   const handleSelect = (qId, optId) => {
     const question = data.questions.find((q) => q.id === qId)
     if (!question) return
 
     if (question.type === 'multiple_choice') {
-      const next = answers[qId]?.[0] === optId ? [] : [optId]
-      setAnswers((a) => ({ ...a, [qId]: next }))
-      debouncedSave(qId, next)
+      setAnswers((a) => {
+        const next = a[qId]?.[0] === optId ? [] : [optId]
+        save(qId, next)
+        return { ...a, [qId]: next }
+      })
     } else if (question.type === 'checkbox') {
-      const prev = answers[qId] || []
-      const next = prev.includes(optId) ? prev.filter((id) => id !== optId) : [...prev, optId]
-      setAnswers((a) => ({ ...a, [qId]: next }))
-      debouncedSave(qId, next)
+      setAnswers((a) => {
+        const prev = a[qId] || []
+        const next = prev.includes(optId) ? prev.filter((id) => id !== optId) : [...prev, optId]
+        save(qId, next)
+        return { ...a, [qId]: next }
+      })
     }
   }
 
   const handleTextChange = (qId, value) => {
     setAnswers((a) => ({ ...a, [qId]: value }))
-    debouncedSave(qId, value)
+    save(qId, value)
+  }
+
+  const toggleReview = (qId) => {
+    setReviewed((r) => ({ ...r, [qId]: !r[qId] }))
   }
 
   const handleNext = () => {
@@ -202,29 +369,34 @@ export default function AnswerQuiz() {
     }
   }
 
+  const goToQuestion = (idx) => {
+    setDirection(idx > currentIdx ? 1 : -1)
+    setCurrentIdx(idx)
+  }
+
   const handleSubmitAll = async () => {
     if (submitting) return
     setSubmitting(true)
     try {
-      await Promise.all(
-        Object.entries(answers).map(([qId, value]) => {
-          const payload = Array.isArray(value)
-            ? { question_id: Number(qId), option_ids: value }
-            : { question_id: Number(qId), answer_text: value }
-          return api.patch(`/submissions/${submissionId}/autosave`, payload)
-        })
-      )
+      await flushAll(answers)
       await api.post(`/submissions/${submissionId}/submit`)
-      navigate(`/s/${submissionId}/result?type=${formType}&title=${encodeURIComponent(formTitle)}&code=${formCode}`, { replace: true })
+      goToResult()
     } catch (err) {
       if (err.response?.status === 410) {
-        navigate(`/s/${submissionId}/result?type=${formType}&title=${encodeURIComponent(formTitle)}&code=${formCode}`, { replace: true })
+        goToResult()
       } else {
-        setError('Failed to submit your answers')
+        const msg = err.response?.data?.message || err.response?.data?.detail || 'Failed to submit your answers'
+        setShowConfirm(false)
+        setError(msg)
       }
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const openConfirm = async () => {
+    await flushAll(answers)
+    setShowConfirm(true)
   }
 
   if (loading) {
@@ -259,10 +431,24 @@ export default function AnswerQuiz() {
   const totalQ = questions.length
 
   if (isQuiz) {
-    const answered = answers[current?.id]
-    const hasAnswer = Array.isArray(answered) ? answered.length > 0 : answered?.length > 0
+    const currentAnswer = answers[current?.id]
+    const hasAnswer = Array.isArray(currentAnswer) ? currentAnswer.length > 0 : currentAnswer?.length > 0
+    const isRequired = current?.is_required !== false
     const isLast = currentIdx === totalQ - 1
     const progress = totalQ > 0 ? ((currentIdx + 1) / totalQ) * 100 : 0
+    const canProceed = !isRequired || hasAnswer
+    const isAnswered = (val) => Array.isArray(val) ? val.length > 0 : !!val && val.length > 0
+    const answeredMap = {}
+    const reviewedMap = {}
+    questions.forEach((q, i) => {
+      answeredMap[i] = isAnswered(answers[q.id])
+      reviewedMap[i] = !!reviewed[q.id]
+    })
+    const reviewedCount = Object.values(reviewed).filter(Boolean).length
+    const missingRequired = questions
+      .filter((q) => q.is_required !== false && !isAnswered(answers[q.id]))
+      .map((q) => q.question_text)
+    const answeredCount = questions.filter((q) => isAnswered(answers[q.id])).length
 
     const formatTime = (ms) => {
       if (ms <= 0) return '00:00'
@@ -273,6 +459,23 @@ export default function AnswerQuiz() {
 
     return (
       <div className="theme-surface h-dvh flex flex-col bg-paper" style={{ '--t': palette.base }}>
+        {cheatWarn && (
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-24px)] max-w-lg"
+          >
+            <div className="flex items-start gap-3 bg-incorrect text-white px-4 py-3.5 rounded-2xl shadow-lift">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-semibold">Aktivitas mencurigakan terdeteksi ({cheatWarn.reason || 'keluar halaman'}).</p>
+                <p className="text-white/85 mt-0.5">
+                  Peringatan {3 - cheatWarn.left}/2. Melanjutkan akan mengumpulkan jawaban otomatis dengan nilai 0.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
         <header className="px-4 py-3" style={{ background: palette.gradient }}>
           <div className="flex items-center justify-between mb-2.5">
             <button
@@ -283,16 +486,17 @@ export default function AnswerQuiz() {
               <X className="w-5 h-5" />
             </button>
             <span className="text-sm font-semibold text-white truncate mx-2">{formTitle}</span>
-            <div className="flex items-center gap-2.5">
-              {saving[current?.id] && (
-                <svg className="w-4 h-4 text-white/60 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
+            <div className="flex items-center gap-2">
+              {current && (
+                <SaveIndicator status={statuses[current.id]} />
               )}
               {timeLeft !== null && (
-                <span className={`inline-flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums px-2.5 h-8 rounded-lg ${
-                  timeLeft < 60000 ? 'bg-white text-incorrect' : 'bg-white/15 text-white'
+                <span className={`inline-flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums px-2.5 h-8 rounded-lg transition-colors ${
+                  timeLeft < 30000
+                    ? 'bg-incorrect text-white animate-pulse'
+                    : timeLeft < 60000
+                      ? 'bg-white text-incorrect'
+                      : 'bg-white/15 text-white'
                 }`}>
                   <Timer className="w-3.5 h-3.5" />
                   {formatTime(timeLeft)}
@@ -309,11 +513,35 @@ export default function AnswerQuiz() {
                 transition={{ duration: 0.3 }}
               />
             </div>
-            <span className="text-xs font-mono font-bold text-white/70 shrink-0 tabular-nums">
+            <button
+              onClick={() => setShowMap((v) => !v)}
+              className={`inline-flex items-center gap-1.5 text-xs font-bold shrink-0 px-2 h-8 rounded-lg transition-colors ${
+                showMap ? 'bg-white text-primary' : 'text-white/80 hover:bg-white/15'
+              }`}
+              aria-label="Show question map"
+            >
+              <Grid3x3 className="w-3.5 h-3.5" />
               {currentIdx + 1}/{totalQ}
-            </span>
+            </button>
           </div>
         </header>
+
+        {showMap && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white border-b border-gray-200 px-4 py-4"
+          >
+            <div className="max-w-lg mx-auto">
+              <QuestionMap total={totalQ} current={currentIdx} answered={answeredMap} reviewed={reviewedMap} onSelect={goToQuestion} />
+              <div className="flex flex-wrap items-center gap-4 mt-3 text-[11px] text-gray-400">
+                <Legend dot="bg-correct" label="Answered" />
+                <Legend dot="bg-warn" label="Marked" />
+                <Legend dot="bg-white border border-gray-300" label="Unanswered" />
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-4 py-6">
           <AnimatePresence mode="wait" custom={direction}>            <motion.div
@@ -326,9 +554,31 @@ export default function AnswerQuiz() {
             >
             {current && (
               <div className="max-w-lg mx-auto">
+                <div className="flex items-start justify-between gap-3 mb-1">
+                  <div className="flex items-center gap-2">
+                    {current.is_required === false ? (
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Optional</span>
+                    ) : (
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-primary bg-primary-50 px-2 py-0.5 rounded-full">Required</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => toggleReview(current.id)}
+                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 h-8 rounded-lg transition-colors ${
+                      reviewed[current.id] ? 'bg-warn text-white shadow-chip' : 'bg-white text-gray-400 border border-gray-200 hover:text-warn hover:border-warn'
+                    }`}
+                    aria-pressed={!!reviewed[current.id]}
+                  >
+                    <Flag className="w-3.5 h-3.5" />
+                    {reviewed[current.id] ? 'Marked' : 'Mark for review'}
+                  </button>
+                </div>
+                <h2 className="font-display text-xl font-bold text-ink text-center mb-2">{current.question_text}</h2>
+                {current.image && (
+                  <img src={current.image.path} alt="" className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card" />
+                )}
                 {current.type === 'multiple_choice' && (
                   <div className="space-y-4">
-                    <h2 className="font-display text-xl font-bold text-ink text-center mb-2">{current.question_text}</h2>
                     <p className="text-xs text-gray-400 text-center mb-2">Pick one answer</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {current.options.map((opt, i) => {
@@ -351,7 +601,6 @@ export default function AnswerQuiz() {
 
                 {current.type === 'checkbox' && (
                   <div className="space-y-4">
-                    <h2 className="font-display text-xl font-bold text-ink text-center mb-2">{current.question_text}</h2>
                     <p className="text-xs text-gray-400 text-center mb-2">Pick all that apply</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {current.options.map((opt, i) => {
@@ -375,7 +624,6 @@ export default function AnswerQuiz() {
 
                 {current.type === 'short_answer' && (
                   <div className="mt-4">
-                    <h2 className="font-display text-xl font-bold text-ink text-center mb-6">{current.question_text}</h2>
                     <Input
                       value={answers[current.id] || ''}
                       onChange={(e) => handleTextChange(current.id, e.target.value)}
@@ -387,7 +635,6 @@ export default function AnswerQuiz() {
 
                 {current.type === 'essay' && (
                   <div className="mt-4">
-                    <h2 className="font-display text-xl font-bold text-ink text-center mb-6">{current.question_text}</h2>
                     <Textarea
                       value={answers[current.id] || ''}
                       onChange={(e) => handleTextChange(current.id, e.target.value)}
@@ -411,17 +658,33 @@ export default function AnswerQuiz() {
               </Button>
             )}
             {isLast ? (
-              <Button onClick={handleSubmitAll} disabled={submitting} loading={submitting} className="flex-1" style={{ background: palette.cta, color: palette.onBase }} icon={!submitting && <Check className="w-4 h-4" />}>
+              <Button onClick={openConfirm} disabled={submitting} loading={submitting} className="flex-1" style={{ background: palette.cta, color: palette.onBase }} icon={!submitting && <Check className="w-4 h-4" />}>
                 Submit
               </Button>
             ) : (
-              <Button onClick={handleNext} disabled={!hasAnswer} className="flex-1" style={{ background: palette.cta, color: palette.onBase }}>
+              <Button onClick={handleNext} disabled={!canProceed} className="flex-1" style={{ background: palette.cta, color: palette.onBase }}>
                 Next
                 <ChevronRight className="w-4 h-4" />
               </Button>
             )}
           </div>
+          {!isLast && !canProceed && (
+            <p className="text-center text-xs text-gray-400 mt-2">Jawab dulu untuk lanjut (soal wajib)</p>
+          )}
         </footer>
+
+        <ConfirmSubmitModal
+          show={showConfirm}
+          title="Submit your answers?"
+          answeredCount={answeredCount}
+          totalCount={totalQ}
+          missing={missingRequired}
+          reviewedCount={reviewedCount}
+          onConfirm={handleSubmitAll}
+          onCancel={() => setShowConfirm(false)}
+          loading={submitting}
+          confirmText="Submit Now"
+        />
       </div>
     )
   }
@@ -538,5 +801,41 @@ export default function AnswerQuiz() {
         </div>
       </footer>
     </div>
+  )
+}
+
+function SaveIndicator({ status }) {
+  if (!status) return null
+  if (status === 'saving') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-white/70">
+        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        Saving…
+      </span>
+    )
+  }
+  if (status === 'saved') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-white/85">
+        <CheckCheck className="w-3.5 h-3.5" />
+        Saved
+      </span>
+    )
+  }
+  if (status === 'error') {
+    return <span className="inline-flex items-center text-[11px] font-semibold text-white/70">Not saved — retrying</span>
+  }
+  return null
+}
+
+function Legend({ dot, label }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`w-2.5 h-2.5 rounded-full ${dot}`} />
+      {label}
+    </span>
   )
 }

@@ -9,6 +9,7 @@ const statusOptions = [
   { value: '', label: 'All statuses' },
   { value: 'submitted', label: 'Submitted' },
   { value: 'auto_submitted', label: 'Auto Submitted' },
+  { value: 'cheating', label: 'Cheating' },
 ]
 
 const sortOptions = [
@@ -134,6 +135,7 @@ export default function Results() {
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/70">
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">ID</th>
+                    {isQuiz && <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Rank</th>}
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Respondent</th>
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">{isQuiz ? 'Score / Max' : 'Answers'}</th>
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
@@ -142,8 +144,15 @@ export default function Results() {
                 </thead>
                 <tbody>
                   {data.map((row) => (
-                    <motion.tr key={row.submission_id} variants={itemVariants} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/70 transition-colors">
+                    <motion.tr
+                      key={row.submission_id}
+                      variants={itemVariants}
+                      className={`border-b border-gray-50 last:border-0 transition-colors ${
+                        row.status === 'cheating' ? 'bg-incorrect-soft/40 hover:bg-incorrect-soft/60' : 'hover:bg-gray-50/70'
+                      }`}
+                    >
                       <td className="px-5 py-3.5 text-sm font-mono text-gray-400">#{row.submission_id}</td>
+                      {isQuiz && <td className="px-5 py-3.5 text-sm font-semibold tabular-nums text-gray-500">{row.rank ?? '-'}</td>}
                       <td className="px-5 py-3.5 text-sm font-medium text-ink">{row.respondent_name || 'Anonymous'}</td>
                       <td className="px-5 py-3.5 text-sm tabular-nums">
                         {isQuiz ? (
@@ -163,7 +172,9 @@ export default function Results() {
                           <span className="text-gray-600 block max-w-[320px] truncate">{row.answer_summary || '-'}</span>
                         )}
                       </td>
-                      <td className="px-5 py-3.5"><StatusBadge status={row.status} /></td>
+                      <td className="px-5 py-3.5"><StatusBadge status={row.status} />{row.cheat_reason && (
+                        <p className="text-[11px] text-incorrect/80 mt-1 max-w-[180px] truncate" title={row.cheat_reason}>{row.cheat_reason}</p>
+                      )}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-500">{row.submitted_at || '-'}</td>
                     </motion.tr>
                   ))}
@@ -175,13 +186,16 @@ export default function Results() {
           <motion.div variants={containerVariants} initial="hidden" animate="show" className="md:hidden space-y-3">
             {data.map((row) => (
               <motion.div key={row.submission_id} variants={itemVariants}>
-                <Card>
+                <Card className={row.status === 'cheating' ? 'ring-1 ring-incorrect/40 bg-incorrect-soft/30' : undefined}>
                   <div className="flex justify-between items-start mb-3">
                     <div className="min-w-0">
                       <span className="font-medium text-sm text-ink truncate block">{row.respondent_name || 'Anonymous'}</span>
-                      <p className="text-xs text-gray-400 font-mono mt-0.5">#{row.submission_id}</p>
+                      <p className="text-xs text-gray-400 font-mono mt-0.5">#{row.submission_id}{isQuiz && row.rank != null ? ` · #${row.rank}` : ''}</p>
                     </div>
-                    <StatusBadge status={row.status} />
+<StatusBadge status={row.status} />
+                    {row.cheat_reason && (
+                      <p className="text-[11px] text-incorrect/80 mt-1 truncate" title={row.cheat_reason}>{row.cheat_reason}</p>
+                    )}
                   </div>
                   <div className="flex justify-between items-center text-sm text-gray-500">
                     {isQuiz ? (

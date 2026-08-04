@@ -1,5 +1,4 @@
 import secrets
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
@@ -12,7 +11,7 @@ from app.models.question_option import QuestionOption
 from app.models.image import Image
 from app.models.user import User
 from app.services.points import distribute_quiz_points
-from app.utils import file_url, fmt_dt, to_naive_utc, _delete_file
+from app.utils import file_url, fmt_dt, to_naive_utc, now_wib, _delete_file
 from app.schemas.form import (
     FormCreate,
     FormListItem,
@@ -44,6 +43,18 @@ def _parse_enum(val: str, enum_cls, field_name: str):
         )
 
 
+def _apply_setting_chain(update_data: dict, form: Form) -> dict:
+    """Auto-coerce dependent settings so the creator never has to babysit them:
+    is_restricted=true  ⇒ submission_limit='once'
+    submission_limit='once' ⇒ require_login=true
+    """
+    if update_data.get("is_restricted", form.is_restricted):
+        update_data["submission_limit"] = "once"
+    if update_data.get("submission_limit", form.submission_limit) == "once":
+        update_data["require_login"] = True
+    return update_data
+
+
 def _ensure_publishable(form: Form, db: Session) -> None:
     """A form can only be published if it has at least 1 question."""
     if db.query(Question).filter(Question.form_id == form.id).count() == 0:
@@ -73,6 +84,8 @@ def _form_dict(form: Form, request: Request) -> dict:
         "shuffle_questions": form.shuffle_questions,
         "shuffle_options": form.shuffle_options,
         "submission_limit": form.submission_limit.value,
+        "show_leaderboard": form.show_leaderboard,
+        "is_restricted": form.is_restricted,
         "created_at": fmt_dt(form.created_at),
         "updated_at": fmt_dt(form.updated_at),
     }
@@ -113,15 +126,21 @@ def create_form(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    now = datetime.utcnow()
+    now = now_wib()
+    settings = _apply_setting_chain(
+        {"is_restricted": body.is_restricted, "submission_limit": body.submission_limit, "require_login": body.require_login},
+        Form(is_restricted=body.is_restricted, submission_limit=body.submission_limit),
+    )
     form = Form(
         user_id=user.id,
         title=body.title,
         description=body.description,
         type=_parse_enum(body.type, FormType, "type"),
         is_public=body.is_public,
-        require_login=body.require_login,
-        submission_limit=_parse_enum(body.submission_limit, SubmissionLimit, "submission_limit"),
+        require_login=settings["require_login"],
+        submission_limit=_parse_enum(settings["submission_limit"], SubmissionLimit, "submission_limit"),
+        show_leaderboard=body.show_leaderboard,
+        is_restricted=settings["is_restricted"],
         short_code=_generate_short_code(db),
         created_at=now,
         updated_at=now,
@@ -149,6 +168,7 @@ def update_form(
     db: Session = Depends(get_db),
 ):
     update_data = body.model_dump(exclude_unset=True)
+    update_data = _apply_setting_chain(update_data, form)
     will_publish = (
         update_data.get("status") == "published"
         and form.status.value != "published"
@@ -175,7 +195,7 @@ def update_form(
     if will_publish:
         _ensure_publishable(form, db)
 
-    form.updated_at = datetime.utcnow()
+    form.updated_at = now_wib()
     db.commit()
     db.refresh(form)
     return _form_dict(form, request)
@@ -237,6 +257,6 @@ def publish_form(
         _ensure_publishable(form, db)
 
     form.status = _parse_enum(body.status, FormStatus, "status")
-    form.updated_at = datetime.utcnow()
+    form.updated_at = now_wib()
     db.commit()
     return FormPublishResponse(message="Form published", short_code=form.short_code)

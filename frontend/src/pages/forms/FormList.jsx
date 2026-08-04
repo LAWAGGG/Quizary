@@ -110,9 +110,7 @@ export default function FormList() {
                       }`}>
                         <ClipboardList className="w-5 h-5" />
                       </span>
-                      <span className="font-mono text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-lg">
-                        {form.short_code}
-                      </span>
+                      
                     </div>
                     <h3 className="font-display font-semibold text-ink truncate mb-2">{form.title}</h3>
                     {form.description && (

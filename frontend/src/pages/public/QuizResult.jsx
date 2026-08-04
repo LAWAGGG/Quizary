@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, X, Minus, Eye, EyeOff, ArrowRight, ClipboardList } from 'lucide-react'
+import { Check, X, Minus, Eye, EyeOff, ArrowRight, ClipboardList, Trophy, AlertTriangle } from 'lucide-react'
 import { Button, Card, Badge, FallbackPage, DotCorner, AuroraBg } from '../../components/ui'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
@@ -29,6 +29,7 @@ export default function QuizResult() {
   const [error, setError] = useState(null)
   const [countedScore, setCountedScore] = useState(0)
   const [showReview, setShowReview] = useState(false)
+  const [leaderboard, setLeaderboard] = useState(null)
 
   useEffect(() => {
     const sub = api.get(`/submissions/${submissionId}`)
@@ -56,6 +57,14 @@ export default function QuizResult() {
     frame = requestAnimationFrame(animate)
     return () => cancelAnimationFrame(frame)
   }, [data])
+
+  // Read-only leaderboard (FR-38) — shown post-submit when the creator enabled it.
+  useEffect(() => {
+    if (formType !== 'quiz' || !formCode || !publicForm?.show_leaderboard) return
+    api.get(`/q/${formCode}/leaderboard`, { params: { limit: 10, submission_id: submissionId } })
+      .then((res) => setLeaderboard(res.data))
+      .catch(() => setLeaderboard(null))
+  }, [formType, formCode, publicForm?.show_leaderboard, submissionId])
 
   if (loading) {
     return (
@@ -224,6 +233,13 @@ export default function QuizResult() {
             <p className="eyebrow justify-center" style={{ color: palette.base }}>{formTitle}</p>
           )}
 
+          {data.status === 'cheating' && (
+            <div className="inline-flex items-center gap-2 text-sm font-semibold text-incorrect bg-incorrect-soft px-4 py-2.5 rounded-xl mt-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              Quiz dikumpulkan otomatis karena keluar halaman terlalu sering (nilai 0).
+            </div>
+          )}
+
           <div className="relative w-36 h-36 mx-auto mt-5 mb-5">
             <svg className="w-full h-full" viewBox="0 0 128 128">
               <circle cx="64" cy="64" r="56" fill="none" stroke="currentColor" strokeWidth="10" className="text-gray-200" />
@@ -277,6 +293,61 @@ export default function QuizResult() {
             </div>
           )}
         </motion.div>
+
+        {leaderboard && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8"
+          >
+            <Card className="p-5">
+              <div className="flex items-center gap-2.5 mb-4">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-warn-soft text-warn">
+                  <Trophy className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="font-display font-semibold text-ink">Leaderboard</h3>
+                  <p className="text-xs text-gray-400">{leaderboard.total} participant{leaderboard.total !== 1 ? 's' : ''}</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {leaderboard.data.map((row) => {
+                  const isMe = leaderboard.own && row.rank === leaderboard.own.rank
+                  return (
+                    <div
+                      key={row.rank}
+                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl ${
+                        isMe ? 'bg-primary-50 ring-1 ring-primary/30' : 'bg-gray-50'
+                      }`}
+                    >
+                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                        row.rank === 1 ? 'bg-warn text-white' : row.rank === 2 ? 'bg-gray-400 text-white' : row.rank === 3 ? 'bg-orange-400 text-white' : 'bg-gray-200 text-gray-500'
+                      }`}>
+                        {row.rank}
+                      </span>
+                      <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink">
+                        {row.respondent_name}
+                        {isMe && <span className="text-primary text-xs font-semibold ml-1.5">(Kamu)</span>}
+                      </span>
+                      <span className="text-sm font-semibold tabular-nums text-ink">{row.score}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              {leaderboard.own && !leaderboard.data.some((r) => r.rank === leaderboard.own.rank) && (
+                <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-primary-50">
+                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-gray-300 text-white">
+                    {leaderboard.own.rank}
+                  </span>
+                  <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink">
+                    {leaderboard.own.respondent_name} <span className="text-primary text-xs font-semibold">(Kamu)</span>
+                  </span>
+                  <span className="text-sm font-semibold tabular-nums text-ink">{leaderboard.own.score}</span>
+                </div>
+              )}
+            </Card>
+          </motion.div>
+        )}
 
         {totalQ > 0 && (
           <>

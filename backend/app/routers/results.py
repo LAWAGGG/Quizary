@@ -16,6 +16,7 @@ from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
 from app.models.user import User
 from app.services.grading import grade_answer
+from app.services.session_expiry import auto_submit_expired_for_form
 from app.utils import to_naive_utc, fmt_dt, now_wib
 from app.schemas.results import (
     ResultItem,
@@ -42,12 +43,15 @@ def list_results(
     per_page: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
+    # Sweep sesi yang kedaluwarsa supaya tidak ada submission yang menganggur
+    # selamanya di status `in_progress` — dikonversi jadi `auto_submitted`.
+    auto_submit_expired_for_form(db, form)
     q = db.query(Submission).filter(Submission.form_id == form.id)
     if status_filter:
         q = q.filter(Submission.status == status_filter)
 
     if sort == "score_desc":
-        q = q.order_by(Submission.score.desc())
+        q = q.order_by(Submission.score.desc(), Submission.submitted_at.asc(), Submission.id.asc())
     elif sort == "score_asc":
         q = q.order_by(Submission.score.asc())
     else:
@@ -55,6 +59,21 @@ def list_results(
 
     total = q.count()
     subs = q.offset((page - 1) * per_page).limit(per_page).all()
+
+    # Rank global (urutan score DESC) selalu dihitung, tidak tergantung sort —
+    # supaya kolom Rank tampil di seluruh mode sorting. Konsisten dengan leaderboard.
+    rank_map: dict[int, int] = {}
+    if form.type.value == "quiz":
+        ordered = (
+            db.query(Submission.id)
+            .filter(
+                Submission.form_id == form.id,
+                Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted, SubmissionStatus.cheating]),
+            )
+            .order_by(Submission.score.desc(), Submission.submitted_at.asc(), Submission.id.asc())
+            .all()
+        )
+        rank_map = {sid: i + 1 for i, (sid,) in enumerate(ordered)}
 
     answer_summary: dict[int, str] = {}
     if form.type.value != "quiz" and subs:
@@ -92,7 +111,9 @@ def list_results(
             status=s.status.value,
             submitted_at=fmt_dt(to_naive_utc(s.submitted_at)),
             answer_summary=answer_summary.get(s.id, ""),
-        ) for s in subs],
+            rank=rank_map.get(s.id),
+            cheat_reason=s.cheat_reason,
+        ) for i, s in enumerate(subs)],
         meta={"total": total, "page": page, "per_page": per_page},
     )
 
@@ -101,7 +122,7 @@ def list_results(
 def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
     subs = db.query(Submission).filter(
         Submission.form_id == form.id,
-        Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted]),
+        Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted, SubmissionStatus.cheating]),
     ).all()
 
     total = len(subs)
@@ -278,7 +299,7 @@ def _export_columns(form: Form, subs: list[Submission], db: Session):
 def export_excel(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
     subs = db.query(Submission).filter(
         Submission.form_id == form.id,
-        Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted]),
+        Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted, SubmissionStatus.cheating]),
     ).order_by(Submission.created_at.desc()).all()
 
     _, headers, rows = _export_columns(form, subs, db)
@@ -316,7 +337,7 @@ def export_pdf(form: Form = Depends(verify_form_owner), db: Session = Depends(ge
 
     subs = db.query(Submission).filter(
         Submission.form_id == form.id,
-        Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted]),
+        Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted, SubmissionStatus.cheating]),
     ).order_by(Submission.created_at.desc()).all()
 
     _, headers, rows = _export_columns(form, subs, db)

@@ -1,3 +1,4 @@
+import logging
 import os
 
 from fastapi import FastAPI, Request, HTTPException
@@ -10,10 +11,14 @@ from app.routers import auth, forms, questions, profile, public_access, submissi
 
 app = FastAPI(title="Quizary API")
 
+logger = logging.getLogger("quizary")
+
+# allow_credentials=False: auth is Bearer-token based (no cookies), so a
+# wildcard origin is safe. Wildcard + credentials is rejected by browsers.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -51,9 +56,11 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(Exception)
 async def catch_all_handler(request: Request, exc: Exception):
+    # Log full trace server-side; never leak internals (paths, SQL, stack) to clients.
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
-        content={"message": f"Internal error: {type(exc).__name__}: {exc}"},
+        content={"message": "Internal server error"},
     )
 
 

@@ -9,6 +9,7 @@ class SubmissionStatus(str, enum.Enum):
     in_progress = "in_progress"
     submitted = "submitted"
     auto_submitted = "auto_submitted"
+    cheating = "cheating"
 
 
 class Submission(Base):
@@ -21,6 +22,8 @@ class Submission(Base):
     respondent_email = Column(String(150), nullable=True)
     ip_address = Column(String(45), nullable=True)
     status = Column(SAEnum(SubmissionStatus), default=SubmissionStatus.in_progress)
+    tab_exit_count = Column(Integer, default=0)
+    cheat_reason = Column(String(255), nullable=True)
     score = Column(Numeric(8, 2), nullable=True)
     max_score = Column(Numeric(8, 2), nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
