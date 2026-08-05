@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Copy, Check, ArrowLeft, Save, Trash2, ImageUp, Link2, Eye, ChevronDown, Info, Lock, Settings2, Download, QrCode, X } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import api from '../../api/client'
-import { useToast } from '../../context/ToastContext'
+import { useToast } from '../../hooks/useToast'
 import { Button, Input, Textarea, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, PageSkeleton } from '../../components/ui'
 
 function CopyField({ label, value }) {

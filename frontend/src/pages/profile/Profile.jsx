@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Camera } from 'lucide-react'
 import api from '../../api/client'
-import { useAuth } from '../../context/AuthContext'
-import { useToast } from '../../context/ToastContext'
+import { useAuth } from '../../hooks/useAuth'
+import { useToast } from '../../hooks/useToast'
 import { Card, Button, Input, Badge, PageHeader } from '../../components/ui'
 
 export default function Profile() {

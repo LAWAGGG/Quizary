@@ -327,10 +327,6 @@ export default function FormLanding() {
         )}
         <SpotlightCard>
           <Card className="p-6 md:p-7 h-full" style={{ borderColor: palette.border }}>
-            <div className="flex items-center gap-2 mb-4">
-              <AppMark size="sm" />
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Quizary form</span>
-            </div>
             <h1 className="font-display text-2xl font-bold text-ink mb-2">{form.title}</h1>
             {form.description && <p className="text-gray-600 mb-6">{form.description}</p>}
             <Button onClick={handleStart} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }} icon={<ArrowRight className="w-4 h-4" />}>

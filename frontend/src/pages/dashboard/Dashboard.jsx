@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Plus, Eye, ClipboardList, HelpCircle, Send, Users, TrendingUp, Sparkles } from 'lucide-react'
+import { Plus, Eye, ClipboardList, HelpCircle, Send, Users, TrendingUp } from 'lucide-react'
 import api from '../../api/client'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../../hooks/useAuth'
 import { Card, Button, StatusBadge, CardSkeleton, SpotlightCard, AuroraBg } from '../../components/ui'
 
 const STATS = [

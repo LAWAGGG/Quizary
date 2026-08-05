@@ -1,6 +1,7 @@
 from collections import Counter
 from io import BytesIO
 from datetime import datetime
+from html import escape as html_escape
 
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
@@ -227,6 +228,11 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
 
     rate = total_correct / total_answers if total_answers else 0
 
+    sorted_scores = sorted(scores)
+    n = len(sorted_scores)
+    median = (sorted_scores[n // 2] + sorted_scores[(n - 1) // 2]) / 2 if n else 0
+    above_avg = sum(1 for s in scores if s > avg) / total if total else 0
+
     dist: dict[str, int] = {}
     for s in scores:
         if s <= 1:
@@ -243,8 +249,10 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
         type="quiz",
         total_participants=total,
         average_score=round(avg, 2),
+        median_score=round(median, 2),
         highest_score=max(scores),
         lowest_score=min(scores),
+        above_average_pct=round(above_avg, 2),
         correct_rate=round(rate, 2),
         wrong_rate=round(1 - rate, 2),
         score_distribution=[ScoreDistribution(range=k, count=v) for k, v in sorted(dist.items())],
@@ -360,8 +368,8 @@ def export_pdf(form: Form = Depends(verify_form_owner), db: Session = Depends(ge
         elements.append(Paragraph("Belum ada data.", styles["Normal"]))
     else:
         col_w = doc.width / len(headers)
-        table_data = [[Paragraph(str(c), head_style) for c in headers]] + [
-            [Paragraph(str(c), cell_style) for c in row] for row in rows
+        table_data = [[Paragraph(html_escape(str(c)), head_style) for c in headers]] + [
+            [Paragraph(html_escape(str(c)), cell_style) for c in row] for row in rows
         ]
         table = Table(table_data, colWidths=[col_w] * len(headers), repeatRows=1)
         table.setStyle(TableStyle([

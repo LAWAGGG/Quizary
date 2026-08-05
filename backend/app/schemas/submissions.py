@@ -59,6 +59,7 @@ class SavedAnswer(BaseModel):
     question_id: int
     question_text: str
     question_type: str
+    question_image: Optional[str] = None  # full URL to question image, if any
     # What the respondent saved so far (populated regardless of submission status)
     selected_option_ids: list[int] = []
     answer_text: Optional[str] = None

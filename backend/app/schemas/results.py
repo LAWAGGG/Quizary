@@ -57,8 +57,10 @@ class AnalyticsResponse(BaseModel):
     total_participants: int
     # quiz-specific
     average_score: float = 0
+    median_score: float = 0
     highest_score: float = 0
     lowest_score: float = 0
+    above_average_pct: float = 0
     correct_rate: float = 0
     wrong_rate: float = 0
     score_distribution: list[ScoreDistribution] = []

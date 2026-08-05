@@ -524,10 +524,15 @@ def get_submission(
         selected_ids = [ao.option_id for ao in answer.selected_options]
         selected_texts = [opt_text_map[oid] for oid in selected_ids if oid in opt_text_map]
 
+        # Resolve question image URL (first image if any)
+        q_imgs = sorted(q.images, key=lambda i: i.order_index or 0)
+        q_image_url = file_url(request, q_imgs[0].path) if q_imgs else None
+
         answers_data.append(SavedAnswer(
             question_id=q.id,
             question_text=q.question_text,
             question_type=q.type.value,
+            question_image=q_image_url,
             selected_option_ids=selected_ids,
             answer_text=answer.answer_text,
             selected_options=selected_texts,

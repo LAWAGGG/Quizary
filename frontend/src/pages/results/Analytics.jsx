@@ -215,32 +215,33 @@ function QuizAnalytics({ data }) {
           <Card className="h-full">
             <div className="flex items-center gap-2 mb-5">
               <BarChart3 className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold text-ink">Score Distribution</h2>
+              <h2 className="font-display font-semibold text-ink">Score Summary</h2>
             </div>
-            {data.score_distribution.length === 0 ? (
-              <EmptyData />
-            ) : (
-              <div className="space-y-3">
-                {data.score_distribution.map((d) => {
-                  const maxCount = Math.max(...data.score_distribution.map((x) => x.count))
-                  const pct = maxCount ? (d.count / maxCount) * 100 : 0
-                  return (
-                    <div key={d.range} className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-gray-600 w-12">{d.range}</span>
-                      <div className="flex-1 h-6 bg-gray-100 rounded-lg overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${pct}%` }}
-                          transition={{ duration: 0.6, ease: 'easeOut' }}
-                          className="h-full bg-primary rounded-lg"
-                        />
-                      </div>
-                      <span className="text-sm text-gray-500 w-8 text-right tabular-nums">{d.count}</span>
-                    </div>
-                  )
-                })}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-xl bg-gray-50 border border-gray-100 p-4 text-center">
+                <p className="text-xs text-gray-500">Average</p>
+                <p className="font-display text-2xl font-bold tabular-nums mt-1">{data.average_score}</p>
               </div>
-            )}
+              <div className="rounded-xl bg-gray-50 border border-gray-100 p-4 text-center">
+                <p className="text-xs text-gray-500">Median</p>
+                <p className="font-display text-2xl font-bold tabular-nums mt-1">{data.median_score}</p>
+              </div>
+              <div className="rounded-xl bg-correct-soft/60 border border-correct/20 p-4 text-center">
+                <p className="text-xs text-gray-500">Above Average</p>
+                <p className="font-display text-2xl font-bold tabular-nums mt-1 text-correct">
+                  {Math.round(data.above_average_pct * 100)}%
+                </p>
+              </div>
+              <div className="rounded-xl bg-warn-soft/60 border border-warn/20 p-4 text-center">
+                <p className="text-xs text-gray-500">Below Average</p>
+                <p className="font-display text-2xl font-bold tabular-nums mt-1 text-warn">
+                  {Math.round((1 - data.above_average_pct) * 100)}%
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 mt-4 leading-relaxed">
+              Rata-rata & median menunjukkan pusat nilai peserta. Median lebih kebal terhadap outlier (satu nilai ekstrem) daripada rata-rata: jika median jauh di bawah rata-rata, mayoritas peserta dapat nilai rendah tetapi ada beberapa nilai sangat tinggi.
+            </p>
           </Card>
         </motion.div>
       </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle } from 'lucide-react'
+import { Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle } from 'lucide-react'
 import { Button, Input, Textarea, Card, FallbackPage, QuestionMap, ConfirmSubmitModal } from '../../components/ui'
 import { useAutosave } from '../../hooks/useAutosave'
 import { themePalette } from '../../lib/theme'
@@ -18,21 +18,19 @@ function parseDate(str) {
   return new Date(Date.UTC(Y, m - 1, d, (H || 0) - 7, M || 0, S || 0))
 }
 
-function OptionTile({ letter, color, selected, checkbox, children, onClick, disabled }) {
+function OptionTile({ letter, color, selected, checkbox, children, onClick, disabled, image }) {
   return (
     <motion.button
       whileTap={{ scale: 0.96 }}
       onClick={onClick}
       disabled={disabled}
-      className={`relative py-4 px-4 rounded-2xl font-medium text-white text-center min-h-[88px] flex items-center gap-3 transition-all ${
-        selected ? 'ring-2 ring-white ring-offset-2 shadow-lift scale-[1.02]' : 'shadow hover:brightness-110 active:brightness-95'
-      }`}
+      className={`relative py-4 px-4 rounded-2xl font-medium text-white text-center min-h-[88px] flex items-center gap-3 transition-all ${selected ? 'ring-2 ring-white ring-offset-2 shadow-lift scale-[1.02]' : 'shadow hover:brightness-110 active:brightness-95'
+        }`}
       style={{ backgroundColor: color }}
     >
       {checkbox ? (
-        <span className={`flex items-center justify-center w-7 h-7 rounded-lg shrink-0 transition-colors ${
-          selected ? 'bg-white' : 'bg-white/25'
-        }`}>
+        <span className={`flex items-center justify-center w-7 h-7 rounded-lg shrink-0 transition-colors ${selected ? 'bg-white' : 'bg-white/25'
+          }`}>
           {selected && <Check className="w-4 h-4 text-[var(--t,#6C5CE7)]" strokeWidth={3.5} />}
         </span>
       ) : (
@@ -40,7 +38,12 @@ function OptionTile({ letter, color, selected, checkbox, children, onClick, disa
           {letter}
         </span>
       )}
-      <span className="flex-1 leading-snug">{children}</span>
+      {image && (
+        <img src={image.path} alt="" className="max-h-24 w-auto rounded-lg object-contain shrink-0" />
+      )}
+      {children ? <span className="flex-1 leading-snug text-left">{children}</span> : null}
+
+      {!children && !image && <span className="flex-1" />}
       {selected && !checkbox && (
         <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white/25 flex items-center justify-center">
           <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
@@ -62,6 +65,8 @@ export default function AnswerQuiz() {
   const [publicForm, setPublicForm] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [submitError, setSubmitError] = useState(null)   // inline error, tidak redirect ke FallbackPage
+  const [validationErrors, setValidationErrors] = useState({})  // { [qId]: true } soal required kosong
   const [currentIdx, setCurrentIdx] = useState(0)
   const [answers, setAnswers] = useState({})
   const [reviewed, setReviewed] = useState({})
@@ -73,11 +78,12 @@ export default function AnswerQuiz() {
   const [cheatWarn, setCheatWarn] = useState(null)
 
   const timerRef = useRef(null)
+  const questionRefs = useRef({})   // { [qId]: HTMLElement } untuk scroll ke soal bermasalah
 
   const goToResult = useCallback(() => {
     // Keluar dari fullscreen saat selesai (semua jalur: submit, timeout, cheating).
     const ex = document.exitFullscreen || document.webkitExitFullscreen
-    if (ex) Promise.resolve(ex.call(document)).catch(() => {})
+    if (ex) Promise.resolve(ex.call(document)).catch(() => { })
     navigate(`/s/${submissionId}/result?type=${formType}&title=${encodeURIComponent(formTitle)}&code=${formCode}`, { replace: true })
   }, [submissionId, navigate, formType, formTitle, formCode])
 
@@ -146,7 +152,7 @@ export default function AnswerQuiz() {
     if (!formCode) return
     api.get(`/q/${formCode}`)
       .then((res) => setPublicForm(res.data))
-      .catch(() => {})
+      .catch(() => { })
   }, [formCode])
 
   const handleAutoSubmit = useCallback(async () => {
@@ -196,7 +202,7 @@ export default function AnswerQuiz() {
       const el = document.documentElement
       const req = el.requestFullscreen || el.webkitRequestFullscreen
       if (req && !(document.fullscreenElement || document.webkitFullscreenElement)) {
-        Promise.resolve(req.call(el)).catch(() => {})
+        Promise.resolve(req.call(el)).catch(() => { })
       }
     }
     requestFs()
@@ -343,11 +349,19 @@ export default function AnswerQuiz() {
         return { ...a, [qId]: next }
       })
     }
+    // Clear validation error for this question once user picks an answer
+    if (validationErrors[qId]) {
+      setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
+    }
   }
 
   const handleTextChange = (qId, value) => {
     setAnswers((a) => ({ ...a, [qId]: value }))
     save(qId, value)
+    // Clear validation error once user starts typing
+    if (validationErrors[qId] && value.trim()) {
+      setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
+    }
   }
 
   const toggleReview = (qId) => {
@@ -376,6 +390,32 @@ export default function AnswerQuiz() {
 
   const handleSubmitAll = async () => {
     if (submitting) return
+
+    // Frontend validation — cek semua soal required sebelum kirim ke backend
+    const isAnsweredCheck = (val) => Array.isArray(val) ? val.length > 0 : !!val && val.trim().length > 0
+    const errors = {}
+    let firstErrorIdx = -1
+    const qs = data?.questions || []
+    qs.forEach((q, idx) => {
+      if (q.is_required !== false && !isAnsweredCheck(answers[q.id])) {
+        errors[q.id] = true
+        if (firstErrorIdx === -1) firstErrorIdx = idx
+      }
+    })
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors)
+      setSubmitError(null)
+      // Scroll ke soal required pertama yang belum dijawab
+      const firstQ = qs[firstErrorIdx]
+      if (firstQ && questionRefs.current[firstQ.id]) {
+        questionRefs.current[firstQ.id].scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+      return // Jangan kirim ke backend
+    }
+
+    setValidationErrors({})
+    setSubmitError(null)
     setSubmitting(true)
     try {
       await flushAll(answers)
@@ -387,15 +427,15 @@ export default function AnswerQuiz() {
       } else {
         const msg = err.response?.data?.message || err.response?.data?.detail || 'Failed to submit your answers'
         setShowConfirm(false)
-        setError(msg)
+        // Submit error ditampilkan inline, BUKAN redirect ke FallbackPage
+        setSubmitError(msg)
       }
     } finally {
       setSubmitting(false)
     }
   }
 
-  const openConfirm = async () => {
-    await flushAll(answers)
+  const openConfirm = () => {
     setShowConfirm(true)
   }
 
@@ -430,6 +470,9 @@ export default function AnswerQuiz() {
   const current = questions[currentIdx]
   const totalQ = questions.length
 
+  // Helper shared by both quiz and form modes
+  const isAnswered = (val) => Array.isArray(val) ? val.length > 0 : !!val && val.trim().length > 0
+
   if (isQuiz) {
     const currentAnswer = answers[current?.id]
     const hasAnswer = Array.isArray(currentAnswer) ? currentAnswer.length > 0 : currentAnswer?.length > 0
@@ -437,7 +480,6 @@ export default function AnswerQuiz() {
     const isLast = currentIdx === totalQ - 1
     const progress = totalQ > 0 ? ((currentIdx + 1) / totalQ) * 100 : 0
     const canProceed = !isRequired || hasAnswer
-    const isAnswered = (val) => Array.isArray(val) ? val.length > 0 : !!val && val.length > 0
     const answeredMap = {}
     const reviewedMap = {}
     questions.forEach((q, i) => {
@@ -478,26 +520,18 @@ export default function AnswerQuiz() {
         )}
         <header className="px-4 py-3" style={{ background: palette.gradient }}>
           <div className="flex items-center justify-between mb-2.5">
-            <button
-              onClick={() => navigate('/')}
-              className="p-1.5 -ml-1.5 text-white/70 hover:text-white transition-colors"
-              aria-label="Close"
-            >
-              <X className="w-5 h-5" />
-            </button>
             <span className="text-sm font-semibold text-white truncate mx-2">{formTitle}</span>
             <div className="flex items-center gap-2">
               {current && (
                 <SaveIndicator status={statuses[current.id]} />
               )}
               {timeLeft !== null && (
-                <span className={`inline-flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums px-2.5 h-8 rounded-lg transition-colors ${
-                  timeLeft < 30000
-                    ? 'bg-incorrect text-white animate-pulse'
-                    : timeLeft < 60000
-                      ? 'bg-white text-incorrect'
-                      : 'bg-white/15 text-white'
-                }`}>
+                <span className={`inline-flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums px-2.5 h-8 rounded-lg transition-colors ${timeLeft < 30000
+                  ? 'bg-incorrect text-white animate-pulse'
+                  : timeLeft < 60000
+                    ? 'bg-white text-incorrect'
+                    : 'bg-white/15 text-white'
+                  }`}>
                   <Timer className="w-3.5 h-3.5" />
                   {formatTime(timeLeft)}
                 </span>
@@ -515,9 +549,8 @@ export default function AnswerQuiz() {
             </div>
             <button
               onClick={() => setShowMap((v) => !v)}
-              className={`inline-flex items-center gap-1.5 text-xs font-bold shrink-0 px-2 h-8 rounded-lg transition-colors ${
-                showMap ? 'bg-white text-primary' : 'text-white/80 hover:bg-white/15'
-              }`}
+              className={`inline-flex items-center gap-1.5 text-xs font-bold shrink-0 px-2 h-8 rounded-lg transition-colors ${showMap ? 'bg-white text-primary' : 'text-white/80 hover:bg-white/15'
+                }`}
               aria-label="Show question map"
             >
               <Grid3x3 className="w-3.5 h-3.5" />
@@ -545,13 +578,13 @@ export default function AnswerQuiz() {
 
         <div className="flex-1 overflow-y-auto px-4 py-6">
           <AnimatePresence mode="wait" custom={direction}>            <motion.div
-              key={current?.id}
-              custom={direction}
-              initial={{ x: direction * 60, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: direction * -60, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
+            key={current?.id}
+            custom={direction}
+            initial={{ x: direction * 60, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: direction * -60, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
             {current && (
               <div className="max-w-lg mx-auto">
                 <div className="flex items-start justify-between gap-3 mb-1">
@@ -564,9 +597,8 @@ export default function AnswerQuiz() {
                   </div>
                   <button
                     onClick={() => toggleReview(current.id)}
-                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 h-8 rounded-lg transition-colors ${
-                      reviewed[current.id] ? 'bg-warn text-white shadow-chip' : 'bg-white text-gray-400 border border-gray-200 hover:text-warn hover:border-warn'
-                    }`}
+                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 h-8 rounded-lg transition-colors ${reviewed[current.id] ? 'bg-warn text-white shadow-chip' : 'bg-white text-gray-400 border border-gray-200 hover:text-warn hover:border-warn'
+                      }`}
                     aria-pressed={!!reviewed[current.id]}
                   >
                     <Flag className="w-3.5 h-3.5" />
@@ -590,6 +622,7 @@ export default function AnswerQuiz() {
                             color={OPT_COLORS[i % OPT_COLORS.length]}
                             selected={selected}
                             onClick={() => handleSelect(current.id, opt.id)}
+                            image={opt.image}
                           >
                             {opt.option_text}
                           </OptionTile>
@@ -613,6 +646,7 @@ export default function AnswerQuiz() {
                             selected={selected}
                             checkbox
                             onClick={() => handleSelect(current.id, opt.id)}
+                            image={opt.image}
                           >
                             {opt.option_text}
                           </OptionTile>
@@ -647,7 +681,7 @@ export default function AnswerQuiz() {
               </div>
             )}
           </motion.div>
-        </AnimatePresence>
+          </AnimatePresence>
         </div>
 
         <footer className="px-4 py-4 bg-white border-t border-gray-200">
@@ -658,8 +692,15 @@ export default function AnswerQuiz() {
               </Button>
             )}
             {isLast ? (
-              <Button onClick={openConfirm} disabled={submitting} loading={submitting} className="flex-1" style={{ background: palette.cta, color: palette.onBase }} icon={!submitting && <Check className="w-4 h-4" />}>
-                Submit
+              <Button
+                onClick={openConfirm}
+                disabled={submitting || !canProceed}
+                loading={submitting}
+                className="flex-1"
+                style={{ background: palette.cta, color: palette.onBase }}
+                icon={!submitting && <Check className="w-4 h-4" />}
+              >
+                {canProceed ? 'Submit' : 'Answer to submit'}
               </Button>
             ) : (
               <Button onClick={handleNext} disabled={!canProceed} className="flex-1" style={{ background: palette.cta, color: palette.onBase }}>
@@ -701,21 +742,43 @@ export default function AnswerQuiz() {
         </div>
         <div className="space-y-5">
           {questions.map((q) => (
-            <Card key={q.id} className="p-5" style={{ borderColor: palette.border }}>
+            <Card
+              key={q.id}
+              ref={(el) => { if (el) questionRefs.current[q.id] = el }}
+              data-question-id={q.id}
+              className="p-5"
+              style={{
+                borderColor: validationErrors[q.id] ? '#EF4444' : palette.border,
+                borderWidth: validationErrors[q.id] ? '2px' : undefined,
+              }}
+            >
               <div className="flex items-start gap-3 mb-4">
-                <p className="font-semibold text-ink leading-snug">{q.question_text}</p>
+                <div className="flex-1">
+                  <p className="font-semibold text-ink leading-snug">{q.question_text}</p>
+                  {q.is_required !== false && (
+                    <span className="text-[10px] font-semibold text-gray-400 mt-0.5 block">Required</span>
+                  )}
+                </div>
               </div>
+              {validationErrors[q.id] && (
+                <p className="text-xs font-semibold text-red-500 flex items-center gap-1 mb-3">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  This question is required
+                </p>
+              )}
+              {q.image && (
+                <img src={q.image.path} alt="" className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card" />
+              )}
 
               {q.type === 'multiple_choice' && (
                 <div className="space-y-2">
                   {q.options.map((opt, i) => {
-                    const selected = (answers[q.id] || [])[0] === opt.id
+                    const selected = (answers[q.id] || []).includes(opt.id)
                     return (
                       <label
                         key={opt.id}
-                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
-                          selected ? 'border-primary bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
-                        }`}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
+                          }`}
                         style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
                       >
                         <span
@@ -732,6 +795,9 @@ export default function AnswerQuiz() {
                           className="sr-only"
                         />
                         <span className="text-sm text-ink">{opt.option_text}</span>
+                        {opt.image && (
+                          <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                        )}
                       </label>
                     )
                   })}
@@ -745,15 +811,13 @@ export default function AnswerQuiz() {
                     return (
                       <label
                         key={opt.id}
-                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
-                          selected ? 'border-primary bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
-                        }`}
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
+                          }`}
                         style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
                       >
                         <span
-                          className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 transition-colors ${
-                            selected ? '' : 'border-gray-300 bg-white'
-                          }`}
+                          className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 transition-colors ${selected ? '' : 'border-gray-300 bg-white'
+                            }`}
                           style={selected ? { borderColor: palette.base, backgroundColor: palette.base, color: palette.onBase } : undefined}
                         >
                           {selected && <Check className="w-3.5 h-3.5" strokeWidth={3.5} />}
@@ -765,6 +829,9 @@ export default function AnswerQuiz() {
                           className="sr-only"
                         />
                         <span className="text-sm text-ink">{opt.option_text}</span>
+                        {opt.image && (
+                          <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                        )}
                       </label>
                     )
                   })}
@@ -795,9 +862,33 @@ export default function AnswerQuiz() {
 
       <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
         <div className="max-w-lg mx-auto">
-          <Button onClick={handleSubmitAll} disabled={submitting} loading={submitting} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }}>
-            Submit
-          </Button>
+          {submitError && (
+            <p className="text-sm text-red-500 text-center mb-2 flex items-center justify-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              {submitError}
+            </p>
+          )}
+          {(() => {
+            const unansweredCount = questions.filter(
+              (q) => q.is_required !== false && !isAnswered(answers[q.id])
+            ).length
+            return (
+              <>
+                <Button
+                  onClick={handleSubmitAll}
+                  disabled={submitting || unansweredCount > 0}
+                  loading={submitting}
+                  className="w-full"
+                  size="lg"
+                  style={{ background: palette.cta, color: palette.onBase }}
+                >
+                  {unansweredCount > 0
+                    ? `${unansweredCount} required question${unansweredCount > 1 ? 's' : ''} unanswered`
+                    : 'Submit'}
+                </Button>
+              </>
+            )
+          })()}
         </div>
       </footer>
     </div>

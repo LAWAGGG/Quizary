@@ -1,8 +1,8 @@
-import { createContext, useContext, useCallback, useState, useMemo } from 'react'
+import { useCallback, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle2, XCircle, Info, X } from 'lucide-react'
+import { ToastContext } from './ToastContext'
 
-const ToastContext = createContext(null)
 let nextId = 0
 
 const ICONS = {
@@ -78,8 +78,4 @@ export function ToastProvider({ children }) {
       <ToastViewport toasts={toasts} onDismiss={dismiss} />
     </ToastContext.Provider>
   )
-}
-
-export function useToast() {
-  return useContext(ToastContext)
 }

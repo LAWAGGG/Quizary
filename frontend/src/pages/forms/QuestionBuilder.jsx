@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2 } from 'lucide-react'
+import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon } from 'lucide-react'
 import api from '../../api/client'
-import { useToast } from '../../context/ToastContext'
+import { useToast } from '../../hooks/useToast'
 import { Button, Input, Textarea, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton } from '../../components/ui'
 
 const TYPE_LABELS = {
@@ -17,7 +17,8 @@ const TYPE_OPTIONS = ['multiple_choice', 'checkbox', 'short_answer', 'essay']
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
-function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors }) {
+function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, questionId }) {
+  const toast = useToast()
   const [form, setForm] = useState({
     question_text: '',
     type: 'multiple_choice',
@@ -31,6 +32,55 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors }) {
   const ferr = (name) => errors?.[name]
   const optionsErr = Object.keys(errors || {}).some((k) => k.startsWith('options'))
   const optionsMsg = Object.values(errors || {}).find((v, i) => Object.keys(errors)[i]?.startsWith('options'))
+
+  const optionFileRefs = useRef([])
+  const [imgLoading, setImgLoading] = useState(null)
+
+  const uploadOptionImage = async (opt, i) => {
+    const file = optionFileRefs.current[i]?.files?.[0]
+    if (!file || !opt.id || !questionId) return
+    const fd = new FormData()
+    fd.append('file', file)
+    setImgLoading(`opt-${i}`)
+    try {
+      const res = await api.post(`/questions/${questionId}/option/${opt.id}/image`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      toast.success('Option image uploaded')
+      setForm((prev) => ({
+        ...prev,
+        options: prev.options.map((o, idx) => (idx !== i ? o : { ...o, image: { path: res.data.image.path } })),
+      }))
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to upload')
+    } finally {
+      setImgLoading(null)
+      if (optionFileRefs.current[i]) optionFileRefs.current[i].value = ''
+    }
+  }
+
+  const questionFileRef = useRef(null)
+  const [qImgLoading, setQImgLoading] = useState(false)
+
+  const uploadQuestionImage = async () => {
+    const file = questionFileRef.current?.files?.[0]
+    if (!file || !questionId) return
+    const fd = new FormData()
+    fd.append('file', file)
+    setQImgLoading(true)
+    try {
+      const res = await api.post(`/questions/${questionId}/image`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      toast.success('Question image uploaded')
+      setForm((prev) => ({ ...prev, image: { path: res.data.image.path } }))
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to upload')
+    } finally {
+      setQImgLoading(false)
+      if (questionFileRef.current) questionFileRef.current.value = ''
+    }
+  }
 
   const handleTypeChange = (type) => {
     setForm((prev) => ({
@@ -78,6 +128,33 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors }) {
         placeholder="Enter question text..."
         error={ferr('question_text')}
       />
+
+      <div className="flex items-center gap-3">
+        <input
+          ref={questionFileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          disabled={!questionId}
+          onChange={uploadQuestionImage}
+        />
+        <button
+          type="button"
+          onClick={(e) => { e.preventDefault(); questionFileRef.current?.click() }}
+          disabled={!questionId || qImgLoading}
+          className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold border border-gray-200 text-gray-500 hover:text-primary hover:border-primary transition-colors"
+        >
+          {qImgLoading ? (
+            <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <ImageIcon className="w-4 h-4" />
+          )}
+          {qImgLoading ? 'Uploading...' : form.image ? 'Replace question image' : 'Add question image'}
+        </button>
+        {form.image?.path && (
+          <img src={form.image.path} alt="" className="h-10 w-14 object-cover rounded-md border border-gray-200" />
+        )}
+      </div>
 
       <div className="flex items-end gap-4">
         {isQuiz && (
@@ -160,6 +237,35 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors }) {
                   className="input-field flex-1"
                   placeholder={`Option ${LETTERS[i % LETTERS.length]}`}
                 />
+                {opt.image?.path && (
+                  <img src={opt.image.path} alt="" className="w-9 h-9 object-cover rounded-md border border-gray-200 shrink-0" />
+                )}
+                <input
+                  ref={(el) => (optionFileRefs.current[i] = el)}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={!opt.id}
+                  onChange={() => uploadOptionImage(opt, i)}
+                />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    optionFileRefs.current[i]?.click()
+                  }}
+                  disabled={!opt.id || !!imgLoading}
+                  title={opt.id ? 'Upload option image' : 'Save question first to add an image'}
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
+                    opt.image ? 'text-primary hover:bg-primary-soft' : 'text-gray-400 hover:text-primary hover:bg-primary-soft'
+                  }`}
+                >
+                  {imgLoading === `opt-${i}` ? (
+                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <ImageIcon className="w-4 h-4" />
+                  )}
+                </button>
                 <button
                   type="button"
                   onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
@@ -261,6 +367,9 @@ function QuestionCard({ question, index, onEdit, onDelete, onDragStart, onDragOv
                 <span className={`text-sm ${opt.is_correct ? 'text-correct font-medium' : 'text-gray-600'}`}>
                   {opt.option_text}
                 </span>
+                {opt.image?.path && (
+                  <img src={opt.image.path} alt="" className="w-6 h-6 object-cover rounded shrink-0" />
+                )}
               </div>
             ))}
           </div>
@@ -519,6 +628,7 @@ export default function QuestionBuilder() {
                 loading={saveLoading}
                 isQuiz={form.type === 'quiz'}
                 errors={fieldErrors}
+                questionId={editing?.id}
               />
             </Card>
           </motion.div>
@@ -597,8 +707,9 @@ export default function QuestionBuilder() {
                           points: q.points,
                           is_scored: q.is_scored !== false,
                           is_required: q.is_required,
+                          image: q.image,
                           options: q.options?.length
-                            ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct }))
+                            ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct, image: o.image }))
                             : [{ option_text: '', is_correct: false }],
                         }}
                         onSave={(data) => handleSaveQuestion(data)}
@@ -606,6 +717,7 @@ export default function QuestionBuilder() {
                         loading={saveLoading}
                         isQuiz={form.type === 'quiz'}
                         errors={fieldErrors}
+                        questionId={q.id}
                       />
                     </Card>
                   </motion.div>

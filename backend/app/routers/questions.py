@@ -1,4 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import UploadFile, File
+import os
+import uuid
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -6,11 +9,12 @@ from app.dependencies import get_current_user, verify_form_owner
 from app.models.answer import Answer
 from app.models.answer_option import AnswerOption
 from app.models.form import Form
+from app.models.image import Image
 from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
 from app.models.user import User
 from app.services.points import distribute_quiz_points
-from app.utils import file_url, now_wib, _delete_file
+from app.utils import file_url, now_wib, _delete_file, UPLOAD_DIR
 from app.schemas.question import (
     MessageResponse,
     QuestionCreate,
@@ -323,3 +327,67 @@ def reorder_questions(
 
     db.commit()
     return {"message": "Question order updated"}
+
+
+_ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+
+def _store_image(file: UploadFile, subdir: str) -> str:
+    """Save an image upload and return relative path. `file` must be non-null."""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in _ALLOWED_EXT:
+        raise HTTPException(status_code=422, detail="Unsupported file format, use JPG/PNG/GIF/WEBP")
+    filename = f"{uuid.uuid4().hex}{ext}"
+    dest = os.path.join(UPLOAD_DIR, subdir, filename)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, "wb") as f:
+        f.write(file.file.read())
+    return f"{subdir}/{filename}"
+
+
+def _replace_image(owner, subdir: str, file: UploadFile, db: Session, request: Request):
+    """Upload (and replace) the single image for an owner (Question or QuestionOption)."""
+    old = sorted(owner.images, key=lambda i: i.order_index or 0)
+    new_path = _store_image(file, subdir)
+    for img in old:
+        _delete_file(img.path)
+        db.delete(img)
+    db.add(Image(question_id=owner.id if isinstance(owner, Question) else None,
+                 option_id=owner.id if isinstance(owner, QuestionOption) else None,
+                 path=new_path, order_index=0, created_at=now_wib()))
+    db.commit()
+    return file_url(request, new_path)
+
+
+# ── Upload images ─────────────────────────────────────────────────────────────
+
+@router.post("/questions/{question_id}/option/{option_id}/image", status_code=201)
+def upload_option_image(
+    question_id: int,
+    option_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    question = _get_question_or_404(question_id, db)
+    _ensure_owner(question, user, db)
+    opt = db.get(QuestionOption, option_id)
+    if not opt or opt.question_id != question_id:
+        raise HTTPException(status_code=404, detail="Option not found in this question")
+    url = _replace_image(opt, "options", file, db, request)
+    return {"message": "Option image uploaded", "image": {"path": url}}
+
+
+@router.post("/questions/{question_id}/image", status_code=201)
+def upload_question_image(
+    question_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    question = _get_question_or_404(question_id, db)
+    _ensure_owner(question, user, db)
+    url = _replace_image(question, "questions", file, db, request)
+    return {"message": "Question image uploaded", "image": {"path": url}}

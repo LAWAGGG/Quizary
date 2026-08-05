@@ -316,13 +316,11 @@ export default function QuizResult() {
                   return (
                     <div
                       key={row.rank}
-                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl ${
-                        isMe ? 'bg-primary-50 ring-1 ring-primary/30' : 'bg-gray-50'
-                      }`}
+                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl ${isMe ? 'bg-primary-50 ring-1 ring-primary/30' : 'bg-gray-50'
+                        }`}
                     >
-                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                        row.rank === 1 ? 'bg-warn text-white' : row.rank === 2 ? 'bg-gray-400 text-white' : row.rank === 3 ? 'bg-orange-400 text-white' : 'bg-gray-200 text-gray-500'
-                      }`}>
+                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${row.rank === 1 ? 'bg-warn text-white' : row.rank === 2 ? 'bg-gray-400 text-white' : row.rank === 3 ? 'bg-orange-400 text-white' : 'bg-gray-200 text-gray-500'
+                        }`}>
                         {row.rank}
                       </span>
                       <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink">
@@ -378,14 +376,23 @@ export default function QuizResult() {
                             <p className="text-xs text-gray-400 mb-1">Question {i + 1}</p>
                             <p className="font-medium text-ink mb-2 leading-snug">{answer.question_text}</p>
 
+                            {/* Gambar soal — ditampilkan jika ada */}
+                            {answer.question_image && (
+                              <img
+                                src={answer.question_image}
+                                alt=""
+                                className="max-h-40 w-auto rounded-xl object-cover mb-3 shadow-card"
+                              />
+                            )}
+
                             <p className="text-xs text-gray-400">Your answer</p>
-                            <p className="text-sm font-medium text-ink mb-3">
+                            <div className="text-sm font-medium text-ink mb-3">
                               {(answer.question_type === 'multiple_choice' || answer.question_type === 'checkbox')
                                 ? (answer.selected_options?.length > 0
-                                    ? answer.selected_options.join(', ')
-                                    : <span className="text-gray-400 italic">(not answered)</span>)
+                                  ? answer.selected_options.join(', ')
+                                  : <span className="text-gray-400 italic">(not answered)</span>)
                                 : (answer.answer_text || <span className="text-gray-400 italic">(not answered)</span>)}
-                            </p>
+                            </div>
 
                             <div className="flex items-center gap-2">
                               {answer.is_correct === true && <Badge scheme="green">Correct</Badge>}
