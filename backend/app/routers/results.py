@@ -110,6 +110,7 @@ def list_results(
         data=[ResultItem(
             submission_id=s.id,
             respondent_name=s.respondent_name,
+            is_creator=s.user_id == form.user_id,
             score=float(s.score) if s.score is not None else None,
             max_score=float(s.max_score) if s.max_score is not None else None,
             status=s.status.value,

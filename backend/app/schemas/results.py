@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class ResultItem(BaseModel):
     submission_id: int
     respondent_name: Optional[str] = None
+    is_creator: bool = False          # True kalau respondent = pemilik form (creator preview)
     score: Optional[float] = None
     max_score: Optional[float] = None
     status: str

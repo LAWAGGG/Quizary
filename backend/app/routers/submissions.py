@@ -272,7 +272,12 @@ def create_submission(
     same question order and already-saved answers.
     """
     form = db.get(Form, body.form_id)
-    if not form or form.status != FormStatus.published:
+    if not form:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+
+    is_owner = bool(user and form.user_id == user.id)
+    # Publik hanya untuk published. Creator tetap bisa preview form draft/closed.
+    if form.status != FormStatus.published and not is_owner:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
 
     if form.require_login and not user:
@@ -280,11 +285,11 @@ def create_submission(
 
     now = _now()
     ends = form.ends_at
-    if ends and now > ends:
+    if not is_owner and ends and now > ends:
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Form submission period has ended")
 
     starts = form.starts_at
-    if starts and now < starts:
+    if not is_owner and starts and now < starts:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Form is not open yet. Opens at {fmt_dt(starts)}",
@@ -343,7 +348,7 @@ def create_submission(
     # Submission anonim dari IP yang sama TIDAK dihitung untuk user yang login,
     # karena sebuah submission anonim tidak dapat diatribusikan ke akun tertentu
     # dan IP yang dibagi (NAT/dev 127.0.0.1) akan memblokir akun baru secara salah.
-    if form.submission_limit == SubmissionLimit.once:
+    if form.submission_limit == SubmissionLimit.once and not is_owner:
         done_q = db.query(Submission).filter(
             Submission.form_id == form.id,
             Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted, SubmissionStatus.cheating]),

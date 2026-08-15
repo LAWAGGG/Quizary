@@ -13,18 +13,33 @@ from app.services.session_expiry import auto_submit_expired_for_form
 router = APIRouter(tags=["public"])
 
 
-def _get_published_form(short_code: str, db: Session) -> Form:
+def _get_form_by_code(short_code: str, db: Session) -> Form:
     form = db.query(Form).filter(Form.short_code == short_code.upper()).first()
-    # Public access is controlled purely by status: a draft or closed form
-    # behaves like it doesn't exist publicly (404, so it isn't discoverable).
-    if not form or form.status != FormStatus.published:
+    if not form:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    return form
+
+
+def _get_published_form(short_code: str, db: Session) -> Form:
+    """Strict lookup used by leaderboard — only exposed for published forms."""
+    form = _get_form_by_code(short_code, db)
+    if form.status != FormStatus.published:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
     return form
 
 
 @router.get("/q/{short_code}")
-def get_public_form(request: Request, short_code: str, db: Session = Depends(get_db)):
-    form = _get_published_form(short_code, db)
+def get_public_form(
+    request: Request,
+    short_code: str,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    # Public preview: even draft/closed forms are returned so the landing page
+    # can explain the state instead of showing a confusing 404. The creator
+    # (is_owner) gets a preview notice; everyone else sees status-based messaging.
+    form = _get_form_by_code(short_code, db)
+    is_owner = bool(user and form.user_id == user.id)
     question_count = db.query(Question).filter(Question.form_id == form.id).count()
     return {
         "id": form.id,
@@ -45,6 +60,7 @@ def get_public_form(request: Request, short_code: str, db: Session = Depends(get
         "reveal_score": form.reveal_score,
         "reveal_answers": form.reveal_answers,
         "thank_you_message": form.thank_you_message,
+        "is_owner": is_owner,
     }
 
 
@@ -55,13 +71,8 @@ def start_form_check(
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
-    form = _get_published_form(short_code, db)
-
-    if form.require_login and not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Login required to access this form",
-        )
+    form = _get_form_by_code(short_code, db)
+    is_owner = bool(user and form.user_id == user.id)
 
     # Sweep sesi kedaluwarsa — submission yang ditinggal lama di-auto-submit.
     auto_submit_expired_for_form(db, form)
@@ -70,7 +81,28 @@ def start_form_check(
     starts = form.starts_at
     ends = form.ends_at
 
+    # Draft / closed: creator may preview; everyone else gets a clear reason.
+    # Checked BEFORE require_login so a closed/draft form never asks a stranger
+    # to log in — the status message is what matters.
+    if form.status == FormStatus.draft:
+        if is_owner:
+            return {"can_start": True, "form_id": form.id, "require_identity": False, "is_preview": True}
+        return {"can_start": False, "reason": "draft"}
+
+    if form.status == FormStatus.closed:
+        if is_owner:
+            return {"can_start": True, "form_id": form.id, "require_identity": False, "is_preview": True}
+        return {"can_start": False, "reason": "closed"}
+
+    if form.require_login and not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login required to access this form",
+        )
+
     if starts and now < starts:
+        if is_owner:
+            return {"can_start": True, "form_id": form.id, "require_identity": False, "is_preview": True}
         return {
             "can_start": False,
             "reason": "not_started",
@@ -78,6 +110,8 @@ def start_form_check(
         }
 
     if ends and now > ends:
+        if is_owner:
+            return {"can_start": True, "form_id": form.id, "require_identity": False, "is_preview": True}
         return {"can_start": False, "reason": "closed"}
 
     if form.submission_limit == SubmissionLimit.once:
