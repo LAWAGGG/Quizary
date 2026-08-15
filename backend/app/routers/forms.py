@@ -11,7 +11,7 @@ from app.models.question_option import QuestionOption
 from app.models.image import Image
 from app.models.user import User
 from app.services.points import distribute_quiz_points
-from app.utils import file_url, fmt_dt, to_naive_utc, now_wib, _delete_file
+from app.utils import file_url, fmt_dt, now_wib, _delete_file
 from app.schemas.form import (
     FormCreate,
     FormListItem,
@@ -19,7 +19,6 @@ from app.schemas.form import (
     FormPublishRequest,
     FormPublishResponse,
     FormUpdate,
-    MessageResponse,
 )
 
 router = APIRouter(tags=["forms"])
@@ -56,11 +55,17 @@ def _apply_setting_chain(update_data: dict, form: Form) -> dict:
 
 
 def _ensure_publishable(form: Form, db: Session) -> None:
-    """A form can only be published if it has at least 1 question."""
+    """A form can only be published if it has at least 1 question.
+    Quiz forms wajib punya timer (per menit) sebelum bisa dipublikasikan."""
     if db.query(Question).filter(Question.form_id == form.id).count() == 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Form must have at least 1 question before publishing",
+        )
+    if form.type == FormType.quiz and not form.timer_seconds:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Quiz harus memiliki waktu pengerjaan (timer) sebelum dipublikasikan",
         )
 
 
@@ -73,7 +78,6 @@ def _form_dict(form: Form, request: Request) -> dict:
         "type": form.type.value,
         "status": form.status.value,
         "short_code": form.short_code,
-        "is_public": form.is_public,
         "require_login": form.require_login,
         "theme_color": form.theme_color,
         "banner_path": file_url(request, form.banner_path),
@@ -86,6 +90,9 @@ def _form_dict(form: Form, request: Request) -> dict:
         "submission_limit": form.submission_limit.value,
         "show_leaderboard": form.show_leaderboard,
         "is_restricted": form.is_restricted,
+        "show_in_history": form.show_in_history,
+        "reveal_score": form.reveal_score,
+        "reveal_answers": form.reveal_answers,
         "created_at": fmt_dt(form.created_at),
         "updated_at": fmt_dt(form.updated_at),
     }
@@ -136,11 +143,13 @@ def create_form(
         title=body.title,
         description=body.description,
         type=_parse_enum(body.type, FormType, "type"),
-        is_public=body.is_public,
         require_login=settings["require_login"],
         submission_limit=_parse_enum(settings["submission_limit"], SubmissionLimit, "submission_limit"),
         show_leaderboard=body.show_leaderboard,
         is_restricted=settings["is_restricted"],
+        show_in_history=body.show_in_history,
+        reveal_score=body.reveal_score,
+        reveal_answers=body.reveal_answers,
         short_code=_generate_short_code(db),
         created_at=now,
         updated_at=now,
@@ -182,6 +191,14 @@ def update_form(
                 _prepare_quiz_after_form_conversion(form.id, db)
             else:
                 _clear_correct_after_quiz_conversion(form.id, db)
+                # Form → quiz balik: semua setelan khusus quiz di-nonaktifkan,
+                # supaya user tidak perlu kembali ke mode quiz untuk meresetnya.
+                if "timer_seconds" not in update_data:
+                    update_data["timer_seconds"] = None
+                if "show_leaderboard" not in update_data:
+                    update_data["show_leaderboard"] = False
+                if "is_restricted" not in update_data:
+                    update_data["is_restricted"] = False
 
     for field, value in update_data.items():
         if field == "type":
@@ -259,4 +276,7 @@ def publish_form(
     form.status = _parse_enum(body.status, FormStatus, "status")
     form.updated_at = now_wib()
     db.commit()
-    return FormPublishResponse(message="Form published", short_code=form.short_code)
+    return FormPublishResponse(
+        message="Form published" if form.status == FormStatus.published else "Form moved to draft",
+        short_code=form.short_code,
+    )

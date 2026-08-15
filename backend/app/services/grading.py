@@ -17,6 +17,27 @@ from app.models.question import Question, QuestionType
 from app.models.submission import Submission
 
 
+GRADABLE_TYPES = (
+    QuestionType.multiple_choice,
+    QuestionType.checkbox,
+    QuestionType.dropdown,
+    QuestionType.short_answer,
+)
+
+
+def max_score_for(questions) -> float:
+    """Total poin maksimal yang benar-benar bisa diraih.
+
+    Hanya soal `is_scored` dengan tipe yang dinilai otomatis. Essay/date/time/
+    file_upload selalu 0 poin — kalau data lama membawa poin, tidak ikut
+    menambah max_score (mencegah persen ≠ nilai mentah, mis. 67/102).
+    """
+    return float(sum(
+        q.points or 0 for q in questions
+        if q.is_scored and q.type in GRADABLE_TYPES
+    ))
+
+
 def grade_answer(answer: Answer, question: Question):
     """Return (is_correct, points_earned) for a stored answer vs its question.
 
@@ -28,7 +49,7 @@ def grade_answer(answer: Answer, question: Question):
     if not question.is_scored:
         return None, Decimal("0")
 
-    if question.type in (QuestionType.multiple_choice, QuestionType.checkbox):
+    if question.type in (QuestionType.multiple_choice, QuestionType.checkbox, QuestionType.dropdown):
         correct_ids = {o.id for o in question.options if o.is_correct}
         selected_ids = {ao.option_id for ao in answer.selected_options}
         if correct_ids and selected_ids == correct_ids:
@@ -52,7 +73,7 @@ def grade_submission(db: Session, sub: Submission, form: Form):
     """
     questions = db.query(Question).filter(Question.form_id == form.id).all()
     q_map = {q.id: q for q in questions}
-    max_score = float(sum(q.points or 0 for q in questions))
+    max_score = max_score_for(questions)
     total = 0.0
 
     for answer in db.query(Answer).filter(Answer.submission_id == sub.id).all():

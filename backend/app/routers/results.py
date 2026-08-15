@@ -1,11 +1,12 @@
 from collections import Counter
 from io import BytesIO
 from datetime import datetime
-from html import escape as html_escape
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 from app.database import get_db
 from app.dependencies import get_current_user, verify_form_owner
@@ -18,7 +19,7 @@ from app.models.question_option import QuestionOption
 from app.models.user import User
 from app.services.grading import grade_answer
 from app.services.session_expiry import auto_submit_expired_for_form
-from app.utils import to_naive_utc, fmt_dt, now_wib
+from app.utils import to_naive_utc, fmt_dt
 from app.schemas.results import (
     ResultItem,
     ResultListResponse,
@@ -79,7 +80,7 @@ def list_results(
     answer_summary: dict[int, str] = {}
     if form.type.value != "quiz" and subs:
         q_ids = [row[0] for row in db.query(Question.id).filter(Question.form_id == form.id).all()]
-        opt_text = {o.id: o.option_text for o in db.query(QuestionOption).filter(QuestionOption.question_id.in_(q_ids)).all()}
+        opt_text = {o.id: _strip_html(o.option_text) for o in db.query(QuestionOption).filter(QuestionOption.question_id.in_(q_ids)).all()}
         answers = db.query(Answer).filter(
             Answer.submission_id.in_([s.id for s in subs]),
             Answer.question_id.in_(q_ids),
@@ -93,8 +94,10 @@ def list_results(
         q_type = {row.id: row.type for row in db.query(Question.id, Question.type).filter(Question.id.in_(q_ids)).all()}
         by_sub: dict[int, list[str]] = {}
         for a in answers:
-            if q_type.get(a.question_id) in (QuestionType.multiple_choice, QuestionType.checkbox):
+            if q_type.get(a.question_id) in (QuestionType.multiple_choice, QuestionType.checkbox, QuestionType.dropdown):
                 text = ", ".join(ao_by_a.get(a.id, []))
+            elif q_type.get(a.question_id) == QuestionType.file_upload:
+                text = a.answer_file or ""
             else:
                 text = a.answer_text or ""
             if text:
@@ -260,11 +263,19 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
     )
 
 
+def _strip_html(text) -> str:
+    """Buang tag HTML dari teks rich (question/option) untuk export yang bersih."""
+    import re
+    text = str(text or "")
+    text = re.sub(r"<[^>]*>", "", text)
+    return text.strip()
+
+
 def _export_columns(form: Form, subs: list[Submission], db: Session):
     """Build dynamic export: one column per question + Dikirim/Skor/Status."""
     questions = db.query(Question).filter(Question.form_id == form.id).order_by(Question.order_index).all()
     q_ids = [q.id for q in questions]
-    headers = [q.question_text for q in questions] + ["Dikirim", "Skor", "Status"]
+    headers = [_strip_html(q.question_text) for q in questions] + ["Dikirim", "Skor", "Status"]
 
     if not questions:
         return questions, headers, []
@@ -288,8 +299,10 @@ def _export_columns(form: Form, subs: list[Submission], db: Session):
         q = q_by_id.get(a.question_id)
         if not q:
             continue
-        if q.type in (QuestionType.multiple_choice, QuestionType.checkbox):
+        if q.type in (QuestionType.multiple_choice, QuestionType.checkbox, QuestionType.dropdown):
             answer_map[(a.submission_id, a.question_id)] = ", ".join(ao_by_answer.get(a.id, []))
+        elif q.type == QuestionType.file_upload:
+            answer_map[(a.submission_id, a.question_id)] = a.answer_file or a.answer_text or ""
         else:
             answer_map[(a.submission_id, a.question_id)] = a.answer_text or ""
 
@@ -305,9 +318,18 @@ def _export_columns(form: Form, subs: list[Submission], db: Session):
 
 @router.get("/forms/{form_id}/export/excel")
 def export_excel(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
+    # Sesi kedaluwarsa dikonversi dulu jadi auto_submitted supaya datanya ikut
+    # terekspor. Submission in_progress yang masih aktif tetap turut diekspor
+    # (skor kosong) agar pengerjaan yang belum selesai ikut terlihat.
+    auto_submit_expired_for_form(db, form)
     subs = db.query(Submission).filter(
         Submission.form_id == form.id,
-        Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted, SubmissionStatus.cheating]),
+        Submission.status.in_([
+            SubmissionStatus.in_progress,
+            SubmissionStatus.submitted,
+            SubmissionStatus.auto_submitted,
+            SubmissionStatus.cheating,
+        ]),
     ).order_by(Submission.created_at.desc()).all()
 
     _, headers, rows = _export_columns(form, subs, db)
@@ -319,6 +341,30 @@ def export_excel(form: Form = Depends(verify_form_owner), db: Session = Depends(
     for row in rows:
         ws.append(row)
 
+    # Styling: header di-highlight (fill primary, teks putih tebal) + border tipis
+    # di semua sel + wrap text, supaya tabel terbaca jelas walau teks panjang.
+    header_fill = PatternFill("solid", fgColor="6C5CE7")
+    header_font = Font(bold=True, color="FFFFFF")
+    thin = Side(style="thin", color="CBD5E1")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    wrap = Alignment(wrap_text=True, vertical="top")
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = border
+        cell.alignment = wrap
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.border = border
+            cell.alignment = wrap
+    ws.freeze_panes = "A2"
+
+    # Auto width per kolom: ikuti konten terpanjang (header/isi), dibatasi 50
+    # karakter supaya tabel tak melar; teks panjang wrap ke bawah dalam kolom lebar.
+    for i, col in enumerate(ws.columns, 1):
+        max_len = max((len(str(c.value)) for c in col if c.value is not None), default=8)
+        ws.column_dimensions[get_column_letter(i)].width = min(max_len + 2, 50)
+
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -326,71 +372,6 @@ def export_excel(form: Form = Depends(verify_form_owner), db: Session = Depends(
         content=buf.read(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=hasil-{form.short_code}.xlsx"},
-    )
-
-
-@router.get("/forms/{form_id}/export/pdf")
-def export_pdf(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
-    try:
-        from reportlab.lib.pagesizes import A4, landscape
-        from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    except ImportError:
-        from fastapi import HTTPException
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail="PDF export requires reportlab. Install it with: pip install reportlab",
-        )
-
-    subs = db.query(Submission).filter(
-        Submission.form_id == form.id,
-        Submission.status.in_([SubmissionStatus.submitted, SubmissionStatus.auto_submitted, SubmissionStatus.cheating]),
-    ).order_by(Submission.created_at.desc()).all()
-
-    _, headers, rows = _export_columns(form, subs, db)
-
-    buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=landscape(A4))
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle("QuizTitle", parent=styles["Title"], fontSize=16, spaceAfter=2)
-    sub_style = ParagraphStyle("QuizSub", parent=styles["Normal"], fontSize=9, textColor=colors.grey, spaceAfter=10)
-    cell_style = ParagraphStyle("Cell", parent=styles["BodyText"], fontSize=7.5, leading=10)
-    head_style = ParagraphStyle("Head", parent=styles["BodyText"], fontSize=8, leading=10, fontName="Helvetica-Bold", textColor=colors.white)
-
-    elements = [
-        Paragraph(form.title, title_style),
-        Paragraph(f"Diekspor pada {now_wib().strftime('%d-%m-%Y %H:%M')}", sub_style),
-        Spacer(1, 4),
-    ]
-
-    if not headers:
-        elements.append(Paragraph("Belum ada data.", styles["Normal"]))
-    else:
-        col_w = doc.width / len(headers)
-        table_data = [[Paragraph(html_escape(str(c)), head_style) for c in headers]] + [
-            [Paragraph(html_escape(str(c)), cell_style) for c in row] for row in rows
-        ]
-        table = Table(table_data, colWidths=[col_w] * len(headers), repeatRows=1)
-        table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#6C5CE7")),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F4F5F7")]),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 3),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ]))
-        elements.append(table)
-
-    doc.build(elements)
-    buf.seek(0)
-
-    return Response(
-        content=buf.read(),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=hasil-{form.short_code}.pdf"},
     )
 
 

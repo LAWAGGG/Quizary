@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class SubmissionCreateRequest(BaseModel):
@@ -22,6 +22,7 @@ class QuestionWithOptions(BaseModel):
     question_text: str
     order_index: int
     is_required: bool = True
+    section_id: Optional[int] = None
     image: Optional[dict] = None
     options: list[OptionPublic]
 
@@ -38,8 +39,14 @@ class SubmissionCreateResponse(BaseModel):
 
 class AutosaveRequest(BaseModel):
     question_id: int
-    option_ids: Optional[list[int]] = None   # mc / checkbox
-    answer_text: Optional[str] = None        # short_answer / essay
+    option_ids: Optional[list[int]] = None   # mc / checkbox / dropdown
+    answer_text: Optional[str] = None        # short_answer / essay / date / time
+
+    @model_validator(mode="after")
+    def validate_answer_text(self):
+        if self.answer_text is not None and not isinstance(self.answer_text, str):
+            raise ValueError("answer_text must be a string")
+        return self
 
 
 class SubmitResponse(BaseModel):
@@ -63,6 +70,7 @@ class SavedAnswer(BaseModel):
     # What the respondent saved so far (populated regardless of submission status)
     selected_option_ids: list[int] = []
     answer_text: Optional[str] = None
+    answer_file: Optional[str] = None  # full URL to uploaded answer file
     # Grading — only populated after submission is completed
     selected_options: list[str] = []
     is_correct: Optional[bool] = None
@@ -77,8 +85,12 @@ class SubmissionDetailResponse(BaseModel):
     score: Optional[float] = None
     max_score: Optional[float] = None
     submitted_at: Optional[str] = None
+    respondent_name: Optional[str] = None
+    respondent_email: Optional[str] = None
     # For in-progress: questions in order (to allow UI rebuild after reload)
     questions: list[QuestionWithOptions] = []
+    # Sections for grouping questions into pages (title map by id)
+    sections: list[dict] = []
     # For all statuses: saved answers (sparse — only questions answered so far)
     answers: list[SavedAnswer] = []
 
@@ -87,6 +99,7 @@ class SubmissionListItem(BaseModel):
     id: int
     form_title: str
     status: str
+    type: str = "form"
     score: Optional[float] = None
     submitted_at: Optional[str] = None
 

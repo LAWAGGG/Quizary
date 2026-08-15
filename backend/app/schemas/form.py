@@ -45,11 +45,13 @@ class FormCreate(BaseModel):
     title: str = Field(min_length=1, max_length=150)
     description: Optional[str] = None
     type: str = "form"
-    is_public: bool = True
     require_login: bool = False
     submission_limit: str = "unlimited"
     show_leaderboard: bool = False
     is_restricted: bool = False
+    show_in_history: bool = True
+    reveal_score: bool = True
+    reveal_answers: bool = True
 
     @model_validator(mode="after")
     def validate_enums(self):
@@ -64,7 +66,6 @@ class FormUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=150)
     description: Optional[str] = None
     type: Optional[str] = None
-    is_public: Optional[bool] = None
     require_login: Optional[bool] = None
     submission_limit: Optional[str] = None
     theme_color: Optional[str] = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
@@ -76,6 +77,9 @@ class FormUpdate(BaseModel):
     shuffle_options: Optional[bool] = None
     show_leaderboard: Optional[bool] = None
     is_restricted: Optional[bool] = None
+    show_in_history: Optional[bool] = None
+    reveal_score: Optional[bool] = None
+    reveal_answers: Optional[bool] = None
     status: Optional[str] = None
 
     @model_validator(mode="after")

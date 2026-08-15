@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import uuid
 
 import bcrypt
 from jose import jwt, JWTError
@@ -29,7 +30,7 @@ def create_access_token(user_id: int, role: str) -> str:
         "iat": now,
         "exp": now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         # jti acts as a unique token id so individual tokens can be revoked
-        "jti": f"{user_id}-{now.timestamp()}",
+        "jti": uuid.uuid4().hex,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 

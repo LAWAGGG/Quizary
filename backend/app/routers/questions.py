@@ -10,22 +10,25 @@ from app.models.answer import Answer
 from app.models.answer_option import AnswerOption
 from app.models.form import Form
 from app.models.image import Image
-from app.models.question import Question, QuestionType
+from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
 from app.models.user import User
 from app.services.points import distribute_quiz_points
 from app.utils import file_url, now_wib, _delete_file, UPLOAD_DIR
 from app.schemas.question import (
-    MessageResponse,
     QuestionCreate,
     QuestionUpdate,
     ReorderRequest,
+    SectionCreate,
+    SectionUpdate,
 )
 
 router = APIRouter(tags=["questions"])
 
-_OPTION_TYPES = ("multiple_choice", "checkbox")
-_TEXT_TYPES = ("short_answer", "essay")
+_OPTION_TYPES = ("multiple_choice", "checkbox", "dropdown")
+_TEXT_TYPES = ("short_answer", "essay", "date", "time", "file_upload")
+# Types yang tidak pernah dinilai otomatis (tanpa options / tanpa isi teks dinilai)
+_NO_GRADE_TYPES = ("essay", "date", "time", "file_upload")
 
 
 def _get_question_or_404(q_id: int, db: Session) -> Question:
@@ -73,6 +76,7 @@ def _build_question(q: Question, request: Request) -> dict:
         "is_scored": q.is_scored,
         "order_index": q.order_index,
         "is_required": q.is_required,
+        "section_id": q.section_id,
         "options": opts,
         "image": _image_obj(q_img[0], request) if q_img else None,
     }
@@ -95,6 +99,96 @@ def list_questions(
     return {"data": [_build_question(q, request) for q in questions]}
 
 
+# ── Sections (kelompok soal per halaman) ─────────────────────────────────────
+
+def _get_section_or_404(section_id: int, db: Session) -> Section:
+    section = db.get(Section, section_id)
+    if not section:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section tidak ditemukan")
+    return section
+
+
+def _section_dict(section: Section) -> dict:
+    return {
+        "id": section.id,
+        "title": section.title,
+        "order_index": section.order_index,
+        "question_count": len(section.questions),
+    }
+
+
+@router.get("/forms/{form_id}/sections")
+def list_sections(
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    sections = (
+        db.query(Section)
+        .filter(Section.form_id == form.id)
+        .order_by(Section.order_index)
+        .all()
+    )
+    return {"data": [_section_dict(s) for s in sections]}
+
+
+@router.post("/forms/{form_id}/sections", status_code=201)
+def create_section(
+    body: SectionCreate,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    max_order = (
+        db.query(Section.order_index)
+        .filter(Section.form_id == form.id)
+        .order_by(Section.order_index.desc())
+        .first()
+    )
+    next_order = (max_order[0] + 1) if max_order else 0
+    section = Section(
+        form_id=form.id,
+        title=body.title,
+        order_index=next_order,
+        created_at=now_wib(),
+    )
+    db.add(section)
+    db.commit()
+    db.refresh(section)
+    return _section_dict(section)
+
+
+@router.patch("/sections/{section_id}")
+def update_section(
+    section_id: int,
+    body: SectionUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    section = _get_section_or_404(section_id, db)
+    form = db.get(Form, section.form_id)
+    if not form or form.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Anda bukan pemilik form ini")
+    if body.title is not None:
+        section.title = body.title
+    db.commit()
+    db.refresh(section)
+    return _section_dict(section)
+
+
+@router.delete("/sections/{section_id}")
+def delete_section(
+    section_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    section = _get_section_or_404(section_id, db)
+    form = db.get(Form, section.form_id)
+    if not form or form.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Anda bukan pemilik form ini")
+    db.delete(section)
+    db.commit()
+    return {"message": "Section dihapus"}
+
+
 # ── POST /forms/{form_id}/questions ───────────────────────────────────────────
 
 @router.post("/forms/{form_id}/questions", status_code=201)
@@ -112,12 +206,18 @@ def create_question(
     )
     next_order = (max_order[0] + 1) if max_order else 0
 
+    if body.section_id is not None:
+        section = db.get(Section, body.section_id)
+        if not section or section.form_id != form.id:
+            raise HTTPException(status_code=422, detail="Section tidak ditemukan pada form ini")
+
     question = Question(
         form_id=form.id,
         type=QuestionType(body.type),
         question_text=body.question_text,
         points=0 if form.type.value == "quiz" else body.points,
         is_required=body.is_required,
+        section_id=body.section_id,
         order_index=next_order,
         created_at=now_wib(),
     )
@@ -154,6 +254,11 @@ def update_question(
     update_data = body.model_dump(exclude_unset=True)
     options_data = update_data.pop("options", None)
 
+    if update_data.get("section_id") is not None:
+        section = db.get(Section, update_data["section_id"])
+        if not section or section.form_id != question.form_id:
+            raise HTTPException(status_code=422, detail="Section tidak ditemukan pada form ini")
+
     # Determine the effective type after this update
     new_type_str = update_data.get("type") or question.type.value
 
@@ -169,8 +274,15 @@ def update_question(
     # Fix #4 — if switching to a text type, options must be explicitly cleared in DB
     if "type" in update_data:
         new_type = QuestionType(update_data.pop("type"))
-        # Switching FROM option type TO text type → delete all existing options
+        # Switching FROM option type TO text type → delete all existing options,
+        # but never options already chosen by respondents (would corrupt answers).
         if new_type.value in _TEXT_TYPES and question.type.value in _OPTION_TYPES:
+            for opt in list(question.options):
+                if db.query(AnswerOption).filter(AnswerOption.option_id == opt.id).count() > 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Opsi \"{opt.option_text}\" tidak dapat dihapus karena sudah dipilih peserta",
+                    )
             for opt in list(question.options):
                 db.delete(opt)
             db.flush()
@@ -190,9 +302,15 @@ def update_question(
         elif "points" not in update_data:
             update_data["points"] = 0
 
-    # Essay is never graded (grade_answer returns None/0) — it must not carry
-    # points or it inflates max_score beyond what anyone can reach.
-    if question.type.value == "essay":
+    # Quiz pool = 100 (distribute_quiz_points). A fixed points value > 100
+    # would zero out every other scored question — reject instead.
+    if question.type.value not in _NO_GRADE_TYPES and update_data.get("points", 0) > 100:
+        form_type = db.get(Form, question.form_id)
+        if form_type and form_type.type.value == "quiz":
+            raise HTTPException(status_code=422, detail="Poin per soal maksimal 100")
+
+    # Essay & non-graded types never carry points (grade_answer returns None/0)
+    if question.type.value in _NO_GRADE_TYPES:
         update_data["points"] = 0
 
     for field, value in update_data.items():

@@ -15,9 +15,9 @@ router = APIRouter(tags=["public"])
 
 def _get_published_form(short_code: str, db: Session) -> Form:
     form = db.query(Form).filter(Form.short_code == short_code.upper()).first()
-    # FR-18 — is_public must be enforced: a non-public form behaves like it
-    # doesn't exist publicly (404, not 403, so it isn't even discoverable).
-    if not form or form.status != FormStatus.published or not form.is_public:
+    # Public access is controlled purely by status: a draft or closed form
+    # behaves like it doesn't exist publicly (404, so it isn't discoverable).
+    if not form or form.status != FormStatus.published:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
     return form
 
@@ -42,6 +42,8 @@ def get_public_form(request: Request, short_code: str, db: Session = Depends(get
         "submission_limit": form.submission_limit.value,
         "show_leaderboard": form.show_leaderboard,
         "is_restricted": form.is_restricted,
+        "reveal_score": form.reveal_score,
+        "reveal_answers": form.reveal_answers,
         "thank_you_message": form.thank_you_message,
     }
 

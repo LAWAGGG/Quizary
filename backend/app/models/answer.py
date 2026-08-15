@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Text, Boolean, DateTime, ForeignKey, Numeric, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Numeric, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -11,6 +11,7 @@ class Answer(Base):
     submission_id = Column(Integer, ForeignKey("submissions.id", ondelete="CASCADE"), nullable=False)
     question_id = Column(Integer, ForeignKey("questions.id", ondelete="CASCADE"), nullable=False)
     answer_text = Column(Text, nullable=True)
+    answer_file = Column(String(255), nullable=True)
     is_correct = Column(Boolean, nullable=True)
     points_earned = Column(Numeric(8, 2), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=True)

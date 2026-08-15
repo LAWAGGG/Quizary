@@ -33,18 +33,19 @@ class ImageResponse(BaseModel):
 
 
 class QuestionCreate(BaseModel):
-    type: str = Field(pattern=r"^(multiple_choice|checkbox|short_answer|essay)$")
+    type: str = Field(pattern=r"^(multiple_choice|checkbox|dropdown|short_answer|essay|date|time|file_upload)$")
     question_text: str = Field(min_length=1)
     points: int = Field(default=1, ge=0, le=999)
     is_required: bool = True
+    section_id: Optional[int] = None
     options: list[OptionCreate] = []
 
     @model_validator(mode="after")
     def validate_options(self):
-        if self.type in ("multiple_choice", "checkbox") and not self.options:
-            raise ValueError("multiple_choice and checkbox questions require at least 1 option")
-        if self.type in ("short_answer", "essay") and self.options:
-            raise ValueError("short_answer and essay questions must not have options")
+        if self.type in ("multiple_choice", "checkbox", "dropdown") and not self.options:
+            raise ValueError("multiple_choice, checkbox and dropdown questions require at least 1 option")
+        if self.type in ("short_answer", "essay", "date", "time", "file_upload") and self.options:
+            raise ValueError("this question type must not have options")
         # Fix #3 — multiple_choice must have exactly 1 correct answer
         if self.type == "multiple_choice":
             correct_count = sum(1 for o in self.options if o.is_correct)
@@ -54,11 +55,12 @@ class QuestionCreate(BaseModel):
 
 
 class QuestionUpdate(BaseModel):
-    type: Optional[str] = Field(None, pattern=r"^(multiple_choice|checkbox|short_answer|essay)$")
+    type: Optional[str] = Field(None, pattern=r"^(multiple_choice|checkbox|dropdown|short_answer|essay|date|time|file_upload)$")
     question_text: Optional[str] = Field(None, min_length=1)
     points: Optional[int] = Field(None, ge=0, le=999)
     is_scored: Optional[bool] = None
     is_required: Optional[bool] = None
+    section_id: Optional[int] = None
     options: Optional[list[OptionUpdate]] = None
 
     @model_validator(mode="after")
@@ -66,10 +68,10 @@ class QuestionUpdate(BaseModel):
         q_type = self.type
         opts = self.options
         if q_type is not None and opts is not None:
-            if q_type in ("multiple_choice", "checkbox") and len(opts) == 0:
-                raise ValueError("multiple_choice and checkbox questions require at least 1 option")
-            if q_type in ("short_answer", "essay") and len(opts) > 0:
-                raise ValueError("short_answer and essay questions must not have options")
+            if q_type in ("multiple_choice", "checkbox", "dropdown") and len(opts) == 0:
+                raise ValueError("multiple_choice, checkbox and dropdown questions require at least 1 option")
+            if q_type in ("short_answer", "essay", "date", "time", "file_upload") and len(opts) > 0:
+                raise ValueError("this question type must not have options")
             if q_type == "multiple_choice":
                 correct_count = sum(1 for o in opts if o.is_correct is True)
                 if correct_count != 1:
@@ -85,8 +87,26 @@ class QuestionResponse(BaseModel):
     is_scored: bool = True
     order_index: int
     is_required: bool
+    section_id: Optional[int] = None
     options: list[OptionResponse] = []
     images: list[dict] = []
+
+    model_config = {"from_attributes": True}
+
+
+class SectionCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=150)
+
+
+class SectionUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=150)
+
+
+class SectionResponse(BaseModel):
+    id: int
+    title: str
+    order_index: int
+    question_count: int = 0
 
     model_config = {"from_attributes": True}
 

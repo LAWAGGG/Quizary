@@ -1,7 +1,10 @@
 import random
+import re
+import uuid
 from decimal import Decimal
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
@@ -10,15 +13,15 @@ from app.dependencies import get_current_user, get_optional_user
 from app.models.answer import Answer
 from app.models.answer_option import AnswerOption
 from app.models.form import Form, FormStatus, SubmissionLimit
-from app.models.question import Question, QuestionType
+from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
 from app.models.submission import Submission, SubmissionStatus
 from app.models.submission_question_order import SubmissionQuestionOrder
 from app.models.submission_option_order import SubmissionOptionOrder
 from app.models.user import User
-from app.services.grading import grade_submission
+from app.services.grading import grade_submission, max_score_for
 from app.services.session_expiry import expired_at, is_expired, auto_submit_expired_for_form
-from app.utils import now_wib, fmt_dt, file_url
+from app.utils import now_wib, fmt_dt, file_url, UPLOAD_DIR
 from app.schemas.submissions import (
     SubmissionCreateRequest,
     SubmissionCreateResponse,
@@ -50,18 +53,12 @@ def _get_sub_or_404(sub_id: int, db: Session) -> Submission:
 
 
 def _get_question_for_submission(question_id: int, sub: Submission, db: Session) -> Question:
-    row = db.query(SubmissionQuestionOrder).filter(
-        SubmissionQuestionOrder.submission_id == sub.id,
-        SubmissionQuestionOrder.question_id == question_id,
-    ).first()
-    if not row:
+    q = db.get(Question, question_id)
+    if not q or q.form_id != sub.form_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Question not found in this submission",
         )
-    q = db.get(Question, question_id)
-    if not q:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
     return q
 
 
@@ -73,6 +70,83 @@ def _validate_option_ids(option_ids: list[int], question: Question) -> None:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Option {oid} not found in this question",
             )
+
+
+def _validate_date_time(question: Question, value: str) -> None:
+    """Format ketat untuk tipe date/time — cegah input liar dari responden."""
+    if question.type == QuestionType.date and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Format tanggal harus YYYY-MM-DD",
+        )
+    if question.type == QuestionType.time and not re.fullmatch(r"\d{2}:\d{2}", value):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Format waktu harus HH:MM",
+        )
+
+
+# ── POST /submissions/{id}/answers/{question_id}/file ─────────────────────────
+# Upload jawaban file (tipe file_upload). File disimpan di uploads/answer_files/.
+
+ALLOWED_ANSWER_EXT = {
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".txt", ".csv", ".png", ".jpg", ".jpeg", ".zip",
+}
+
+
+@router.post("/submissions/{submission_id}/answers/{question_id}/file")
+def upload_answer_file(
+    submission_id: int,
+    question_id: int,
+    file: UploadFile = File(...),
+    request: Request = None,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    # request di-inject otomatis oleh FastAPI (tipe Request selalu diisi)
+    sub = _get_sub_or_404(submission_id, db)
+    _verify_submission_access(sub, request, user, db)
+    if sub.status != SubmissionStatus.in_progress:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
+
+    question = _get_question_for_submission(question_id, sub, db)
+    if question.type != QuestionType.file_upload:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="File hanya bisa diunggah untuk soal bertipe file upload",
+        )
+
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in ALLOWED_ANSWER_EXT:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Tipe file tidak diizinkan (pdf, doc, xls, ppt, txt, csv, gambar, zip)",
+        )
+
+    # Hapus file jawaban lama supaya tidak menumpuk
+    answer = db.query(Answer).filter(
+        Answer.submission_id == sub.id,
+        Answer.question_id == question_id,
+    ).first()
+    if answer and answer.answer_file:
+        _delete_file(answer.answer_file)
+
+    fname = f"answer_{uuid.uuid4().hex}{ext}"
+    fdir = Path(UPLOAD_DIR) / "answer_files"
+    fdir.mkdir(parents=True, exist_ok=True)
+    fpath = fdir / fname
+    with fpath.open("wb") as out:
+        out.write(file.file.read())
+
+    if not answer:
+        answer = Answer(submission_id=sub.id, question_id=question_id, created_at=now_wib())
+        db.add(answer)
+        db.flush()
+    answer.answer_file = f"answer_files/{fname}"
+    answer.updated_at = now_wib()
+    db.commit()
+    return {"answer_file": file_url(request, answer.answer_file), "filename": file.filename or fname}
 
 
 def _missing_required(sub: Submission, form: Form, db: Session) -> list[str]:
@@ -95,16 +169,20 @@ def _missing_required(sub: Submission, form: Form, db: Session) -> list[str]:
         q = q_map.get(a.question_id)
         if not q:
             continue
-        if q.type in (QuestionType.multiple_choice, QuestionType.checkbox):
+        text = re.sub(r"<[^>]+>", "", q.question_text).strip() or "Soal"
+        if q.type in (QuestionType.multiple_choice, QuestionType.checkbox, QuestionType.dropdown):
             if not a.selected_options:
-                missing.append(q.question_text)
+                missing.append(text)
+        elif q.type == QuestionType.file_upload:
+            if not a.answer_file:
+                missing.append(text)
         elif a.answer_text is None or not a.answer_text.strip():
-            missing.append(q.question_text)
+            missing.append(text)
 
     answered_ids = {a.question_id for a in answers}
     for q in questions:
         if q.id not in answered_ids:
-            missing.append(q.question_text)
+            missing.append(re.sub(r"<[^>]+>", "", q.question_text).strip() or "Soal")
     return missing
 
 
@@ -128,9 +206,21 @@ def _build_questions_response(sub_id: int, request: Request, db: Session) -> lis
         .all()
     )
 
+    # Soal baru yang ditambahkan creator setelah sesi dimulai ikut tampil di
+    # preview responden (urutan snapshot lama dipertahankan, soal baru di akhir).
+    sub = db.get(Submission, sub_id)
+    seen_ids = {q.id for q in ordered_qs}
+    new_qs = (
+        db.query(Question)
+        .filter(Question.form_id == sub.form_id, ~Question.id.in_(seen_ids))
+        .order_by(Question.order_index)
+        .all()
+    )
+    ordered_qs = ordered_qs + new_qs
+
     result = []
     for idx, q in enumerate(ordered_qs):
-        if q.type in (QuestionType.multiple_choice, QuestionType.checkbox):
+        if q.type in (QuestionType.multiple_choice, QuestionType.checkbox, QuestionType.dropdown):
             opt_order = {
                 soo.option_id: soo.order_index
                 for soo in db.query(SubmissionOptionOrder).filter(
@@ -149,6 +239,7 @@ def _build_questions_response(sub_id: int, request: Request, db: Session) -> lis
             question_text=q.question_text,
             order_index=idx,
             is_required=q.is_required,
+            section_id=q.section_id,
             image=_image_obj(q_img[0], request) if q_img else None,
             options=[
                 OptionPublic(
@@ -353,6 +444,13 @@ def autosave(
     question = _get_question_for_submission(body.question_id, sub, db)
     if body.option_ids:
         _validate_option_ids(body.option_ids, question)
+    if body.answer_text is not None:
+        if question.type == QuestionType.file_upload:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Soal file upload dijawab melalui unggah file",
+            )
+        _validate_date_time(question, body.answer_text)
 
     answer = db.query(Answer).filter(
         Answer.submission_id == sub.id,
@@ -496,7 +594,8 @@ def get_submission(
     is_respondent = sub.user_id and user and sub.user_id == user.id
     # Konsisten dengan _verify_submission_access: IP match berlaku juga saat login,
     # agar session anonim yang dibuat sebelum login tetap bisa diakses setelah login.
-    is_same_ip = sub.ip_address and request.client.host == sub.ip_address
+    client_ip = request.client.host if request.client else None
+    is_same_ip = sub.ip_address and client_ip and sub.ip_address == client_ip
 
     if not is_owner and not is_respondent and not is_same_ip:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
@@ -514,6 +613,12 @@ def get_submission(
 
     # Keamanan (FR-34/7.3): jangan bocorkan is_correct/score sebelum submission selesai.
     completed = sub.status in (SubmissionStatus.submitted, SubmissionStatus.auto_submitted, SubmissionStatus.cheating)
+    # Toggle creator (khusus quiz): reveal_score mengontrol angka nilai final,
+    # reveal_answers mengontrol review jawaban (is_correct / points per soal).
+    # Creator selalu boleh melihat keduanya.
+    non_quiz = form.type.value != "quiz"
+    reveal_score = completed and (non_quiz or form.reveal_score or is_owner)
+    reveal_answers = completed and (non_quiz or form.reveal_answers or is_owner)
 
     answers_data: list[SavedAnswer] = []
     for answer in db.query(Answer).filter(Answer.submission_id == sub.id).all():
@@ -535,20 +640,36 @@ def get_submission(
             question_image=q_image_url,
             selected_option_ids=selected_ids,
             answer_text=answer.answer_text,
+            answer_file=file_url(request, answer.answer_file),
             selected_options=selected_texts,
-            is_correct=answer.is_correct if completed else None,
-            points_earned=float(answer.points_earned) if completed and answer.points_earned is not None else None,
+            is_correct=answer.is_correct if reveal_answers else None,
+            points_earned=float(answer.points_earned) if reveal_answers and answer.points_earned is not None else None,
         ))
+
+    sections = [
+        {"id": s.id, "title": s.title}
+        for s in db.query(Section).filter(Section.form_id == form.id).order_by(Section.order_index).all()
+    ]
+
+    # max_score dihitung live dari soal (bukan nilai tersimpan) supaya data
+    # lama yang tersimpan dengan max salah (mis. ikut poin soal non-grade)
+    # langsung tampil benar tanpa menunggu regrade.
+    live_max = max_score_for(
+        db.query(Question).filter(Question.form_id == form.id).all()
+    )
 
     return SubmissionDetailResponse(
         id=sub.id,
         status=sub.status.value,
         started_at=fmt_dt(sub.started_at),
         expired_at=fmt_dt(expired_at(sub, form)),
-        score=float(sub.score) if completed and sub.score is not None else None,
-        max_score=float(sub.max_score) if completed and sub.max_score is not None else None,
+        score=float(sub.score) if reveal_score and sub.score is not None else None,
+        max_score=float(live_max) if reveal_score else None,
         submitted_at=fmt_dt(sub.submitted_at),
+        respondent_name=sub.respondent_name,
+        respondent_email=sub.respondent_email,
         questions=questions,
+        sections=sections,
         answers=answers_data,
     )
 
@@ -560,7 +681,10 @@ def my_submissions(user: User = Depends(get_current_user), db: Session = Depends
     subs = (
         db.query(Submission)
         .join(Form, Submission.form_id == Form.id)
-        .filter(Submission.user_id == user.id)
+        .filter(
+            Submission.user_id == user.id,
+            Form.show_in_history == True,  # noqa: E712 — form yang disetel agar tidak tampil di riwayat disaring
+        )
         .order_by(Submission.created_at.desc())
         .all()
     )
@@ -569,7 +693,13 @@ def my_submissions(user: User = Depends(get_current_user), db: Session = Depends
             id=s.id,
             form_title=s.form.title if s.form else "(deleted)",
             status=s.status.value,
-            score=float(s.score) if s.score is not None else None,
+            type=s.form.type.value if s.form else "form",
+            # Sembunyikan skor pada daftar riwayat responden bila creator mematikan reveal_score (khusus quiz).
+            score=(
+                float(s.score) if s.score is not None and s.form and (
+                    s.form.type.value != "quiz" or s.form.reveal_score
+                ) else None
+            ),
             submitted_at=fmt_dt(s.submitted_at),
         )
         for s in subs

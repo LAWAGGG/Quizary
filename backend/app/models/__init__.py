@@ -1,6 +1,6 @@
 from app.models.user import User
 from app.models.form import Form
-from app.models.question import Question
+from app.models.question import Question, Section
 from app.models.question_option import QuestionOption
 from app.models.image import Image
 from app.models.submission import Submission

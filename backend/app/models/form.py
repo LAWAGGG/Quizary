@@ -31,7 +31,6 @@ class Form(Base):
     type = Column(SAEnum(FormType), default=FormType.form)
     status = Column(SAEnum(FormStatus), default=FormStatus.draft)
     short_code = Column(String(20), unique=True, nullable=False)
-    is_public = Column(Boolean, default=True)
     require_login = Column(Boolean, default=False)
     theme_color = Column(String(20), nullable=True)
     banner_path = Column(String(255), nullable=True)
@@ -44,6 +43,9 @@ class Form(Base):
     submission_limit = Column(SAEnum(SubmissionLimit), default=SubmissionLimit.unlimited)
     show_leaderboard = Column(Boolean, default=False)
     is_restricted = Column(Boolean, default=False)
+    show_in_history = Column(Boolean, default=True)
+    reveal_score = Column(Boolean, default=True)
+    reveal_answers = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=True)
 
