@@ -2,7 +2,6 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
-  headers: { 'Content-Type': 'application/json' },
 })
 
 api.interceptors.request.use((config) => {
@@ -14,7 +13,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401 && !window.location.pathname.includes('/login')) {
+    // Public pages (FormLanding / AnswerQuiz) handle 401 themselves (e.g.
+    // require_login gate). Don't bounce them to /login and lose form context.
+    const path = window.location.pathname
+    const isPublic = path.startsWith('/q/') || path.startsWith('/s/')
+    if (err.response?.status === 401 && !isPublic && !path.includes('/login')) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       window.location.href = '/login'

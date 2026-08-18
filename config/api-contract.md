@@ -110,7 +110,6 @@ Auth: Bearer Token
   "title": "Quiz Matematika Dasar",
   "description": "Quiz materi aljabar",
   "type": "quiz",
-  "is_public": true,
   "require_login": false,
   "submission_limit": "once",
   "show_leaderboard": true,
@@ -126,7 +125,6 @@ Auth: Bearer Token
   "type": "quiz",
   "status": "draft",
   "short_code": "QZM002B",
-  "is_public": true,
   "require_login": false,
   "theme_color": null,
   "banner_path": null,
@@ -155,7 +153,6 @@ Auth: Bearer Token (pemilik)
   "type": "quiz",
   "status": "published",
   "short_code": "QZM002B",
-  "is_public": true,
   "require_login": false,
   "theme_color": "#EF4444",
   "banner_path": "http://localhost:8000/uploads/banners/math-quiz.png",
@@ -293,6 +290,7 @@ Auth: Bearer Token (pemilik)
       "is_scored": true,
       "order_index": 0,
       "is_required": true,
+      "section_id": null,
       "options": [
         { "id": 1, "option_text": "80", "is_correct": false, "order_index": 0, "image": null },
         { "id": 2, "option_text": "96", "is_correct": true, "order_index": 1, "image": null }
@@ -371,7 +369,10 @@ Auth: Bearer Token (pemilik form terkait)
 **Aturan `is_scored`:**
 - `false` → soal tidak dihitung poin (detail-only): poin dipaksa 0, dikeluarkan dari distribusi pool & dari penilaian (muncul "Not graded").
 - `true` → soal ikut pool poin quiz; jika `points` tidak dikirim, kembali ke pool auto-distribusi.
-- Ganti type dari `multiple_choice`/`checkbox` ke `short_answer`/`essay` dengan `options: []` **diperbolehkan** (opsi lama dihapus) — hanya `options` yang berisi item yang ditolak.
+- Ganti type dari `multiple_choice`/`checkbox`/`dropdown` ke `short_answer`/`essay`/`date`/`time`/`file_upload` dengan `options: []` **diperbolehkan** (opsi lama dihapus) — hanya `options` yang berisi item yang ditolak.
+- Tipe soal: `multiple_choice`, `checkbox`, `dropdown` (butuh options; mc & dropdown tepat 1 correct), `short_answer`, `essay`, `date` (jawaban `YYYY-MM-DD`), `time` (jawaban `HH:MM`), `file_upload` (jawaban lewat upload file; tanpa options). `essay`/`date`/`time`/`file_upload` tidak dinilai otomatis (points 0).
+- Setiap soal bisa punya `section_id` (nullable) — kelompok soal per halaman. Section dikelola lewat `GET/POST /forms/{id}/sections`, `PATCH /sections/{id}` (rename), `PATCH /sections/reorder` (urutkan), dan `DELETE /sections/{id}`.
+- Jawaban file: `POST /submissions/{id}/answers/{question_id}/file` (multipart, field `file`). Tipe diizinkan: pdf, doc, docx, xls, xlsx, ppt, pptx, txt, csv, png, jpg, jpeg, zip. Response `{ "answer_file": url, "filename": ... }`.
 
 **Distribusi poin quiz (pool 100):**
 - Tambah/import/hapus soal, atau toggle `is_scored` on → seluruh soal scored dibagi merata (sisa tidak habis dibagi jatuh ke soal terurut awal).
@@ -472,7 +473,8 @@ file: <soal.docx>
 ## 6. Share & Access (Publik)
 
 ### `GET /q/{short_code}`
-Auth: -
+Auth: - (opsional Bearer Token untuk deteksi owner)
+> Form draft/closed tetap dikembalikan (bukan 404) agar landing page bisa menampilkan pesan status. `is_owner` = `true` kalau pemilik form yang login — creator bisa preview + lihat banner info.
 ```json
 // Response 200
 {
@@ -491,8 +493,13 @@ Auth: -
   "submission_limit": "once",
   "show_leaderboard": true,
   "is_restricted": true,
-  "thank_you_message": "Terima kasih telah mengerjakan quiz ini"
+  "thank_you_message": "Terima kasih telah mengerjakan quiz ini",
+  "is_owner": false
 }
+```
+```json
+// Response 200 — status non-publik (draft / closed) tetap dikembalikan
+{ "id": 2, "title": "Quiz Matematika Dasar", "status": "draft", "is_owner": false, ... }
 ```
 ```json
 // Response 404
@@ -501,6 +508,7 @@ Auth: -
 
 ### `GET /q/{short_code}/start`
 Auth: - (atau Bearer Token kalau `require_login=true`)
+> Status dicek sebelum `require_login`: form draft/closed selalu mengembalikan reason (tanpa meminta login). Owner (`is_owner=true`) boleh preview walau draft/closed/belum waktunya → `is_preview=true`.
 ```json
 // Response 200 (boleh mulai)
 { "can_start": true, "form_id": 2, "require_identity": true }
@@ -510,8 +518,16 @@ Auth: - (atau Bearer Token kalau `require_login=true`)
 { "can_start": false, "reason": "not_started", "starts_at": "30-07-2026 18:00:00" }
 ```
 ```json
-// Response 200 (sudah tutup)
+// Response 200 (draft — belum dipublikasikan)
+{ "can_start": false, "reason": "draft" }
+```
+```json
+// Response 200 (sudah tutup — status closed ATAU melewati ends_at)
 { "can_start": false, "reason": "closed" }
+```
+```json
+// Response 200 (owner preview — boleh mulai walau belum publik)
+{ "can_start": true, "form_id": 2, "require_identity": false, "is_preview": true }
 ```
 ```json
 // Response 200 (sudah pernah submit, submission_limit=once)
@@ -524,7 +540,7 @@ Auth: - (atau Bearer Token kalau `require_login=true`)
 
 ### `GET /q/{short_code}/leaderboard`
 Auth: -
-> Hanya tersedia untuk form published + public + `show_leaderboard=true`. Kalau off → **404** (tidak bocor). Submission berstatus `cheating` tidak ikut leaderboard.
+> Hanya tersedia untuk form `published` + `show_leaderboard=true`. Kalau off → **404** (tidak bocor). Submission berstatus `cheating` tidak ikut leaderboard.
 ```json
 // Query params
 ?limit=10&submission_id=11
@@ -846,16 +862,7 @@ Content-Disposition: attachment; filename="hasil-QZM002B.xlsx"
 [binary file]
 ```
 **Struktur kolom (dinamis):** satu kolom per soal (header = teks soal, urut `order_index`), lalu kolom `Dikirim`, `Skor`, `Status`. Jawaban pilihan ganda/checkbox digabung dengan `", "`; teks bebas diambil dari `answer_text`. Baris kosong diisi `-`. Kolom responden/email tidak disertakan.
-
-### `GET /forms/{id}/export/pdf`
-Auth: Bearer Token (pemilik)
-```
-// Response 200
-Content-Type: application/pdf
-Content-Disposition: attachment; filename="hasil-QZM002B.pdf"
-[binary file]
-```
-**Layout:** judul = nama form + baris `Diekspor pada {tanggal}`, tabel landscape dengan kolom sama seperti export Excel (soal + Dikirim + Skor + Status).
+**Styling:** header di-highlight (fill `#6C5CE7`, teks putih tebal), border tipis di semua sel, `wrap_text` aktif, baris header di-freeze.
 
 ---
 
@@ -901,10 +908,15 @@ Auth: Bearer Token
 | POST | `/api/forms/{id}/banner` | Bearer | Upload banner (multipart/form-data) |
 | GET | `/api/forms/{id}/questions` | Bearer | Daftar soal form |
 | POST | `/api/forms/{id}/questions` | Bearer | Tambah soal |
+| GET | `/api/forms/{id}/sections` | Bearer | Daftar section (kelompok soal) |
+| POST | `/api/forms/{id}/sections` | Bearer | Tambah section |
+| PATCH | `/api/sections/{id}` | Bearer | Ubah nama section |
+| DELETE | `/api/sections/{id}` | Bearer | Hapus section (soal tetap ada) |
+| PATCH | `/api/sections/reorder` | Bearer | Urutkan ulang section |
+| POST | `/api/submissions/{id}/answers/{question_id}/file` | Bearer/anon | Upload jawaban file |
 | GET | `/api/forms/{id}/results` | Bearer | Hasil submission (pemilik) |
 | GET | `/api/forms/{id}/analytics` | Bearer | Statistik (pemilik) |
 | GET | `/api/forms/{id}/export/excel` | Bearer | Export Excel (pemilik) |
-| GET | `/api/forms/{id}/export/pdf` | Bearer | Export PDF (pemilik) |
 | POST | `/api/forms/{id}/import/docx` | Bearer | Import soal dari .docx |
 | PUT | `/api/questions/{id}` | Bearer | Update soal |
 | DELETE | `/api/questions/{id}` | Bearer | Hapus soal |

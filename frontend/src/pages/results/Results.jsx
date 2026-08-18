@@ -56,13 +56,13 @@ export default function Results() {
     fetchResults()
   }, [fetchResults])
 
-  const handleExport = async (type) => {
+  const handleExport = async () => {
     try {
-      const res = await api.get(`/forms/${formId}/export/${type}`, { responseType: 'blob' })
+      const res = await api.get(`/forms/${formId}/export/excel`, { responseType: 'blob' })
       const url = URL.createObjectURL(res.data)
       const a = document.createElement('a')
       a.href = url
-      a.download = `results-${formId}.${type === 'excel' ? 'xlsx' : 'pdf'}`
+      a.download = `results-${formId}.xlsx`
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
@@ -92,8 +92,7 @@ export default function Results() {
             <Link to={`/forms/${formId}/analytics`}>
               <Button variant="secondary" icon={<BarChart3 className="w-4 h-4" />}>Analytics</Button>
             </Link>
-            <Button variant="secondary" icon={<Download className="w-4 h-4" />} onClick={() => handleExport('excel')}>Excel</Button>
-            <Button variant="secondary" icon={<Download className="w-4 h-4" />} onClick={() => handleExport('pdf')}>PDF</Button>
+            <Button variant="secondary" icon={<Download className="w-4 h-4" />} onClick={handleExport}>Excel</Button>
           </>
         }
       />
@@ -133,13 +132,13 @@ export default function Results() {
             <Card className="overflow-hidden" padding={false}>
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/70">
-                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">ID</th>
-                    {isQuiz && <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Rank</th>}
-                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Respondent</th>
-                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">{isQuiz ? 'Score / Max' : 'Answers'}</th>
-                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
-                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">Submitted</th>
+                  <tr className="border-b border-gray-100 bg-gray-50/70 dark:border-gray-800 dark:bg-ink-800/50">
+                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">ID</th>
+                    {isQuiz && <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Rank</th>}
+                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Respondent</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{isQuiz ? 'Score / Max' : 'Answers'}</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Submitted</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -148,12 +147,12 @@ export default function Results() {
                       key={row.submission_id}
                       variants={itemVariants}
                       className={`border-b border-gray-50 last:border-0 transition-colors ${
-                        row.status === 'cheating' ? 'bg-incorrect-soft/40 hover:bg-incorrect-soft/60' : 'hover:bg-gray-50/70'
+                        row.status === 'cheating' ? 'bg-incorrect-soft hover:bg-incorrect-soft' : 'hover:bg-gray-50/70 dark:hover:bg-ink-800/50'
                       }`}
                     >
-                      <td className="px-5 py-3.5 text-sm font-mono text-gray-400">#{row.submission_id}</td>
-                      {isQuiz && <td className="px-5 py-3.5 text-sm font-semibold tabular-nums text-gray-500">{row.rank ?? '-'}</td>}
-                      <td className="px-5 py-3.5 text-sm font-medium text-ink">{row.respondent_name || 'Anonymous'}</td>
+                      <td className="px-5 py-3.5 text-sm font-mono text-gray-400 dark:text-gray-500">#{row.submission_id}</td>
+                      {isQuiz && <td className="px-5 py-3.5 text-sm font-semibold tabular-nums text-gray-500 dark:text-gray-400">{row.rank ?? '-'}</td>}
+                      <td className="px-5 py-3.5 text-sm font-medium text-ink dark:text-gray-100">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">(you)</span>}</td>
                       <td className="px-5 py-3.5 text-sm tabular-nums">
                         {isQuiz ? (
                           <span className="inline-flex items-center gap-1.5">
@@ -162,20 +161,20 @@ export default function Results() {
                                 ? 'bg-correct-soft text-correct'
                                 : row.score != null && row.max_score > 0 && row.score / row.max_score >= 0.4
                                   ? 'bg-warn-soft text-warn'
-                                  : 'bg-gray-100 text-gray-600'
+                                  : 'bg-gray-100 dark:bg-ink-800 text-gray-600 dark:text-gray-400'
                             }`}>
                               {row.score ?? '-'}
                             </span>
-                            <span className="text-gray-400">/ {row.max_score ?? '-'}</span>
+                            <span className="text-gray-400 dark:text-gray-500">/ {row.max_score ?? '-'}</span>
                           </span>
                         ) : (
-                          <span className="text-gray-600 block max-w-[320px] truncate">{row.answer_summary || '-'}</span>
+                          <span className="text-gray-600 dark:text-gray-400 block max-w-[320px] truncate">{row.answer_summary || '-'}</span>
                         )}
                       </td>
                       <td className="px-5 py-3.5"><StatusBadge status={row.status} />{row.cheat_reason && (
                         <p className="text-[11px] text-incorrect/80 mt-1 max-w-[180px] truncate" title={row.cheat_reason}>{row.cheat_reason}</p>
                       )}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-500">{row.submitted_at || '-'}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400">{row.submitted_at || '-'}</td>
                     </motion.tr>
                   ))}
                 </tbody>
@@ -186,18 +185,18 @@ export default function Results() {
           <motion.div variants={containerVariants} initial="hidden" animate="show" className="md:hidden space-y-3">
             {data.map((row) => (
               <motion.div key={row.submission_id} variants={itemVariants}>
-                <Card className={row.status === 'cheating' ? 'ring-1 ring-incorrect/40 bg-incorrect-soft/30' : undefined}>
+                <Card className={row.status === 'cheating' ? 'ring-1 ring-incorrect/40 bg-incorrect-soft' : undefined}>
                   <div className="flex justify-between items-start mb-3">
                     <div className="min-w-0">
-                      <span className="font-medium text-sm text-ink truncate block">{row.respondent_name || 'Anonymous'}</span>
-                      <p className="text-xs text-gray-400 font-mono mt-0.5">#{row.submission_id}{isQuiz && row.rank != null ? ` · #${row.rank}` : ''}</p>
+                      <span className="font-medium text-sm text-ink dark:text-gray-100 truncate block">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">(you)</span>}</span>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">#{row.submission_id}{isQuiz && row.rank != null ? ` · #${row.rank}` : ''}</p>
                     </div>
 <StatusBadge status={row.status} />
                     {row.cheat_reason && (
                       <p className="text-[11px] text-incorrect/80 mt-1 truncate" title={row.cheat_reason}>{row.cheat_reason}</p>
                     )}
                   </div>
-                  <div className="flex justify-between items-center text-sm text-gray-500">
+                  <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400">
                     {isQuiz ? (
                       <span className="inline-flex items-center gap-1.5">
                         <span className={`inline-flex items-center justify-center h-6 px-2 rounded-lg text-xs font-semibold ${
@@ -205,11 +204,11 @@ export default function Results() {
                             ? 'bg-correct-soft text-correct'
                             : row.score != null && row.max_score > 0 && row.score / row.max_score >= 0.4
                               ? 'bg-warn-soft text-warn'
-                              : 'bg-gray-100 text-gray-600'
+                              : 'bg-gray-100 dark:bg-ink-800 text-gray-600 dark:text-gray-400'
                         }`}>
                           {row.score ?? '-'}
                         </span>
-                        <span className="text-gray-400 text-xs">/ {row.max_score ?? '-'}</span>
+                        <span className="text-gray-400 dark:text-gray-500 text-xs">/ {row.max_score ?? '-'}</span>
                       </span>
                     ) : (
                       <span className="truncate pr-2">{row.answer_summary || '-'}</span>
@@ -224,7 +223,7 @@ export default function Results() {
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-6">
               <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-              <span className="text-sm text-gray-500 px-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
                 Page {page} of {totalPages}
               </span>
               <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
-import { Button, Input, Textarea, Toggle, Select, Card, PageHeader } from '../../components/ui'
+import { Button, Input, Toggle, Select, Card, PageHeader, RichTextEditor } from '../../components/ui'
 
 export default function FormCreate() {
   const navigate = useNavigate()
@@ -13,7 +13,6 @@ export default function FormCreate() {
     title: '',
     description: '',
     type: 'form',
-    is_public: true,
     require_login: false,
     submission_limit: 'unlimited',
   })
@@ -46,7 +45,7 @@ export default function FormCreate() {
     <div className="max-w-6xl mx-auto">
       <button
         onClick={() => navigate('/forms')}
-        className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-ink transition-colors mb-4"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 transition-colors mb-4"
       >
         <ArrowLeft className="w-4 h-4" /> Back to forms
       </button>
@@ -70,14 +69,15 @@ export default function FormCreate() {
                 error={error}
               />
 
-              <Textarea
-                label="Description"
-                name="description"
-                value={form.description}
-                onChange={handleChange}
-                placeholder="What is this form about?"
-                rows={3}
-              />
+              <div>
+                <span className="field-label">Description</span>
+                <RichTextEditor
+                  value={form.description || ''}
+                  onChange={(html) => setForm((prev) => ({ ...prev, description: html }))}
+                  placeholder="What is this form about?"
+                  minHeight={120}
+                />
+              </div>
 
               <div>
                 <span className="field-label">Type</span>
@@ -93,25 +93,20 @@ export default function FormCreate() {
                       className={`text-left px-4 py-3.5 rounded-xl border-2 transition-all ${
                         form.type === t.value
                           ? 'border-primary bg-primary-50 shadow-chip'
-                          : 'border-gray-200 bg-white hover:border-gray-300'
+                          : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 hover:border-gray-300 dark:hover:border-gray-600'
                       }`}
                     >
-                      <span className={`block text-sm font-semibold ${form.type === t.value ? 'text-primary-700' : 'text-ink'}`}>
+                      <span className={`block text-sm font-semibold ${form.type === t.value ? 'text-primary-700' : 'text-ink dark:text-gray-100'}`}>
                         {t.label}
                       </span>
-                      <span className="block text-xs text-gray-400 mt-0.5">{t.desc}</span>
+                      <span className="block text-xs text-gray-400 dark:text-gray-500 mt-0.5">{t.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
             </Card>
 
-            <Card className="divide-y divide-gray-100">
-              <SettingRow
-                title="Public form"
-                desc="Anyone with the link can answer."
-                control={<Toggle label="Public form" checked={form.is_public} onChange={(v) => setForm((prev) => ({ ...prev, is_public: v }))} />}
-              />
+            <Card className="divide-y divide-gray-100 dark:divide-gray-800">
               <SettingRow
                 title="Require login"
                 desc="Respondents must sign in first."
@@ -143,8 +138,8 @@ function SettingRow({ title, desc, control }) {
   return (
     <div className="flex items-center justify-between gap-4 py-4">
       <div>
-        <p className="text-sm font-medium text-ink">{title}</p>
-        <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
+        <p className="text-sm font-medium text-ink dark:text-gray-100">{title}</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{desc}</p>
       </div>
       {control}
     </div>

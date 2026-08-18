@@ -11,12 +11,12 @@ export function QuestionMap({ total, current, answered, reviewed, onSelect }) {
         const idx = i + 1
         const isActive = current === i
         const cls = isActive
-          ? 'bg-white text-primary border-primary ring-2 ring-primary/30 shadow-chip'
+          ? 'bg-white dark:bg-ink-900 text-primary border-primary ring-2 ring-primary/30 shadow-chip'
           : reviewed[i]
             ? 'bg-warn text-white border-warn'
             : answered[i]
               ? 'bg-correct text-white border-correct'
-              : 'bg-white text-gray-500 border-gray-200 hover:border-primary/40'
+              : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-primary/40'
         return (
           <motion.button
             key={i}

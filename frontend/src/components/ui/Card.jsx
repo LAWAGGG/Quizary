@@ -4,7 +4,7 @@ export const Card = forwardRef(function Card({ children, className = '', padding
   return (
     <div
       ref={ref}
-      className={`bg-white rounded-2xl border border-gray-100 shadow-card ${padding ? 'p-5 md:p-6' : ''} ${className}`}
+      className={`bg-white dark:bg-ink-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-card ${padding ? 'p-5 md:p-6' : ''} ${className}`}
       {...props}
     >
       {children}

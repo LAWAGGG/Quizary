@@ -276,7 +276,6 @@ CREATE TABLE forms (
     status ENUM('draft','published','closed') DEFAULT 'draft',
 
     short_code VARCHAR(20) UNIQUE NOT NULL,
-    is_public BOOLEAN DEFAULT TRUE,
     require_login BOOLEAN DEFAULT FALSE,
 
     theme_color VARCHAR(20) NULL,

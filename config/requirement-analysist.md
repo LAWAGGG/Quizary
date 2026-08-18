@@ -136,7 +136,7 @@ Setiap kebutuhan diberi kode unik (FR-xx). Kolom **Implementasi Teknis** ditamba
 |---|---|---|---|
 | FR-16 | Generate short link | Sistem menghasilkan `short_code` unik otomatis saat form dipublikasikan | Generate string random (`secrets.token_urlsafe` dipotong, atau base62 dari ID), dicek keunikan lewat query sebelum simpan |
 | FR-17 | Generate QR Code | Sistem menghasilkan QR Code yang mengarah ke short link form | Digenerate di **frontend** (library `qrcode.react`) dari `short_code` yang diterima API — backend tidak perlu generate gambar QR, cukup kirim string URL |
-| FR-18 | Mode Public/Private | Admin dapat mengatur form dapat diakses publik atau hanya dengan izin tertentu | Kolom boolean `is_public`, dicek di endpoint publik `GET /q/{short_code}` |
+| FR-18 | Mode Public/Private | Akses publik dikontrol status form: hanya `published` yang dapat diakses via link (`draft`/`closed` → 404) | Dicek di endpoint publik `GET /q/{short_code}` — tanpa kolom `is_public` terpisah |
 | FR-19 | Wajib login | Admin dapat mewajibkan responden login sebelum mengisi form (`require_login`) | Kolom boolean `require_login`, dicek di `GET /q/{short_code}/start`, React redirect ke halaman login kalau `true` dan belum ada token |
 
 ### 3.5 Modul Timer & Kontrol Sesi
@@ -173,7 +173,6 @@ Setiap kebutuhan diberi kode unik (FR-xx). Kolom **Implementasi Teknis** ditamba
 | FR-37 | Statistik | Sistem menghitung nilai rata-rata dan menyediakan grafik distribusi jawaban | Query agregat SQLAlchemy (`func.avg`, `func.max`, `func.min`), grafik dirender di React (library chart seperti `recharts`) |
 | FR-38 | Ranking | Sistem dapat menampilkan peringkat peserta berdasarkan skor (opsional per form) | `ORDER BY score DESC` di query hasil, ranking dihitung di response (index array), bukan kolom tersimpan |
 | FR-39 | Export Excel | Admin dapat mengekspor data hasil ke format Excel | Library `openpyxl`, endpoint return `StreamingResponse` dengan `Content-Type` spreadsheet |
-| FR-40 | Export PDF | Admin dapat mengekspor data hasil ke format PDF | Library `reportlab` atau `weasyprint` (HTML-to-PDF), endpoint return `StreamingResponse` |
 
 ### 3.8 Modul Kustomisasi Tampilan
 
@@ -347,7 +346,7 @@ Tidak ada kebutuhan perangkat keras khusus — sistem berjalan di browser standa
 | Share & Access | FR-16 s.d. FR-19 |
 | Timer & Control | FR-20 s.d. FR-25 |
 | Import Soal | FR-13 s.d. FR-15 |
-| Result & Export | FR-36 s.d. FR-40 |
+| Result & Export | FR-36 s.d. FR-39 |
 | Quiz System (Scoring) | FR-33 s.d. FR-35, FR-38 |
 | Custom Design | FR-41 s.d. FR-43 |
 | User Management | FR-01 s.d. FR-04 |

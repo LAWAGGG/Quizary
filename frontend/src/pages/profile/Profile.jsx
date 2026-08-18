@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Camera } from 'lucide-react'
+import { Camera, Sun, Moon } from 'lucide-react'
 import api from '../../api/client'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
-import { Card, Button, Input, Badge, PageHeader } from '../../components/ui'
+import { useTheme } from '../../hooks/useTheme'
+import { Card, Button, Input, Badge, PageHeader, Toggle } from '../../components/ui'
 
 export default function Profile() {
   const { user, updateUser } = useAuth()
   const toast = useToast()
+  const { theme, toggleTheme } = useTheme()
   const [name, setName] = useState('')
   const [avatar, setAvatar] = useState(null)
   const [avatarPreview, setAvatarPreview] = useState(null)
@@ -79,11 +81,11 @@ export default function Profile() {
         <Card className="p-6 md:p-8">
           <div className="flex flex-col items-center mb-8">
             <div className="relative mb-4">
-              <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 border-4 border-white shadow-lift">
+              <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 dark:bg-ink-800 border-4 border-white dark:border-ink-800 shadow-lift">
                 {avatarPreview ? (
                   <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center font-display text-3xl font-bold text-gray-400 bg-primary-50">
+                  <div className="w-full h-full flex items-center justify-center font-display text-3xl font-bold text-gray-400 dark:text-gray-300 bg-primary-50 dark:bg-primary-900/30">
                     {(user?.name || 'U')[0].toUpperCase()}
                   </div>
                 )}
@@ -118,7 +120,7 @@ export default function Profile() {
                 label="Email"
                 value={user?.email || ''}
                 readOnly
-                className="bg-gray-50 text-gray-500 cursor-not-allowed"
+                className="bg-gray-50 dark:bg-ink-800 text-gray-500 cursor-not-allowed"
               />
               <p className="field-hint">Email cannot be changed.</p>
             </div>
@@ -131,6 +133,22 @@ export default function Profile() {
               <Badge scheme={user?.role === 'admin' ? 'primary' : 'blue'}>
                 {(user?.role || 'user').toUpperCase()}
               </Badge>
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
+              <div>
+                <p className="field-label !mb-1">Appearance</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">Switch between light and dark mode.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Sun className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                <Toggle
+                  label="Dark mode"
+                  checked={theme === 'dark'}
+                  onChange={toggleTheme}
+                />
+                <Moon className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+              </div>
             </div>
 
             <Button onClick={handleSave} loading={saving} className="w-full" size="lg">

@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, X, Minus, Eye, EyeOff, ArrowRight, ClipboardList, Trophy, AlertTriangle } from 'lucide-react'
-import { Button, Card, Badge, FallbackPage, DotCorner, AuroraBg } from '../../components/ui'
+import { Button, Card, Badge, FallbackPage, DotCorner, AuroraBg, RichText } from '../../components/ui'
+import { sanitizeHtml } from '../../lib/sanitize'
+import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 
@@ -18,6 +20,7 @@ function formatSubmitted(str) {
 export default function QuizResult() {
   const { submissionId } = useParams()
   const navigate = useNavigate()
+  const { theme } = useTheme()
   const searchParams = new URLSearchParams(window.location.search)
   const formType = searchParams.get('type') || 'form'
   const formTitle = searchParams.get('title') || ''
@@ -68,7 +71,7 @@ export default function QuizResult() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-paper">
+      <div className="min-h-dvh flex items-center justify-center bg-paper dark:bg-ink-950">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
@@ -92,12 +95,19 @@ export default function QuizResult() {
 
   const isQuiz = formType === 'quiz'
   const canRefill = publicForm?.submission_limit === 'unlimited' && formCode
-  const palette = themePalette(publicForm?.theme_color)
+  const palette = themePalette(publicForm?.theme_color, theme === 'dark')
   const totalQ = data.answers?.length || 0
+  // Creator mengatur apa yang boleh dilihat responden setelah selesai (hanya quiz).
+  // reveal_score → angka nilai final; reveal_answers → ulasan benar/salah per soal.
+  const revealScore = formType !== 'quiz' || (publicForm?.reveal_score !== false)
+  const revealAnswers = formType !== 'quiz' || (publicForm?.reveal_answers !== false)
+
+  // Pesan terima kasih (atau fallback nama form) — dipakai untuk form & quiz.
+  const rawThanks = publicForm?.thank_you_message || ''
+  const hasThanks = rawThanks.replace(/<[^>]*>/g, '').trim().length > 0
+  const thankYou = hasThanks ? rawThanks : `Form ${publicForm?.title || formTitle} submitted successfully!`
 
   if (!isQuiz) {
-    const thankYou = publicForm?.thank_you_message || 'Thank you for your response!'
-
     return (
       <div
         className="theme-surface min-h-dvh bg-paper relative overflow-hidden flex items-center justify-center px-4 py-10"
@@ -144,12 +154,12 @@ export default function QuizResult() {
 
             <div className="text-center">
               <p className="eyebrow justify-center" style={{ color: palette.base }}>Submitted</p>
-              <h1 className="font-display text-2xl md:text-[26px] font-bold text-ink mt-3 leading-snug">
-                {thankYou}
+              <h1 className="font-display text-2xl md:text-[26px] font-bold text-ink dark:text-gray-100 mt-3 leading-snug">
+                <RichText html={thankYou} className="rich-text" />
               </h1>
-              <p className="text-sm text-gray-500 mt-2 leading-relaxed">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
                 {formTitle ? (
-                  <>Your response to <span className="font-semibold text-ink">"{formTitle}"</span> has been recorded.</>
+                  <>Your response to <span className="font-semibold text-ink dark:text-gray-100">"{formTitle}"</span> has been recorded.</>
                 ) : (
                   'Your response has been recorded.'
                 )}
@@ -162,7 +172,7 @@ export default function QuizResult() {
               <MetaChip label="Reference" value={`#${submissionId}`} />
             </div>
 
-            <div className="border-t border-gray-100 mt-7 pt-6">
+            <div className="border-t border-gray-100 dark:border-gray-800 mt-7 pt-6">
               {canRefill ? (
                 <Button
                   onClick={() => navigate(`/q/${formCode}`)}
@@ -201,7 +211,7 @@ export default function QuizResult() {
   const statusIcon = (isCorrect) => {
     if (isCorrect === true) return <span className="w-7 h-7 rounded-full bg-correct-soft text-correct flex items-center justify-center shrink-0"><Check className="w-4 h-4" strokeWidth={3} /></span>
     if (isCorrect === false) return <span className="w-7 h-7 rounded-full bg-incorrect-soft text-incorrect flex items-center justify-center shrink-0"><X className="w-4 h-4" strokeWidth={3} /></span>
-    return <span className="w-7 h-7 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center shrink-0"><Minus className="w-4 h-4" strokeWidth={3} /></span>
+    return <span className="w-7 h-7 rounded-full bg-gray-100 dark:bg-ink-800 text-gray-400 dark:text-gray-500 flex items-center justify-center shrink-0"><Minus className="w-4 h-4" strokeWidth={3} /></span>
   }
 
   return (
@@ -233,6 +243,10 @@ export default function QuizResult() {
             <p className="eyebrow justify-center" style={{ color: palette.base }}>{formTitle}</p>
           )}
 
+          <h1 className="font-display text-2xl md:text-[26px] font-bold text-ink dark:text-gray-100 mt-3 leading-snug">
+            <RichText html={thankYou} className="rich-text" />
+          </h1>
+
           {data.status === 'cheating' && (
             <div className="inline-flex items-center gap-2 text-sm font-semibold text-incorrect bg-incorrect-soft px-4 py-2.5 rounded-xl mt-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -240,57 +254,63 @@ export default function QuizResult() {
             </div>
           )}
 
-          <div className="relative w-36 h-36 mx-auto mt-5 mb-5">
-            <svg className="w-full h-full" viewBox="0 0 128 128">
-              <circle cx="64" cy="64" r="56" fill="none" stroke="currentColor" strokeWidth="10" className="text-gray-200" />
-              <motion.circle
-                cx="64" cy="64" r="56"
-                fill="none"
-                stroke="currentColor"
-                className={percentage >= 70 ? 'text-correct' : percentage >= 40 ? 'text-warn' : 'text-incorrect'}
-                strokeWidth="10"
-                strokeLinecap="round"
-                strokeDasharray={`${percentage * 3.52} 352`}
-                transform="rotate(-90 64 64)"
-                initial={{ strokeDasharray: '0 352' }}
-                animate={{ strokeDasharray: `${percentage * 3.52} 352` }}
-                transition={{ duration: 1, ease: 'easeOut' }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <motion.span
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5 }}
-                  className="font-display text-3xl font-bold text-ink tabular-nums"
-                >
-                  {countedScore}
-                </motion.span>
-                {data.max_score > 0 && (
-                  <span className="text-sm text-gray-400">/{Math.round(data.max_score)}</span>
-                )}
+          {revealScore && (
+            <>
+              <div className="relative w-36 h-36 mx-auto mt-5 mb-5">
+                <svg className="w-full h-full" viewBox="0 0 128 128">
+                  <circle cx="64" cy="64" r="56" fill="none" stroke="currentColor" strokeWidth="10" className="text-gray-200 dark:text-gray-800" />
+                  <motion.circle
+                    cx="64" cy="64" r="56"
+                    fill="none"
+                    stroke="currentColor"
+                    className={percentage >= 70 ? 'text-correct' : percentage >= 40 ? 'text-warn' : 'text-incorrect'}
+                    strokeWidth="10"
+                    strokeLinecap="round"
+                    strokeDasharray={`${percentage * 3.52} 352`}
+                    transform="rotate(-90 64 64)"
+                    initial={{ strokeDasharray: '0 352' }}
+                    animate={{ strokeDasharray: `${percentage * 3.52} 352` }}
+                    transition={{ duration: 1, ease: 'easeOut' }}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    {<motion.span
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.5 }}
+                      className="font-display text-3xl font-bold text-ink dark:text-gray-100 tabular-nums"
+                    >
+                      {countedScore}
+                    </motion.span>}
+                    {data.max_score > 0 && (
+                      <span className="text-sm text-gray-400">/{Math.round(data.max_score)}</span>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {data.max_score > 0 && (
-            <p className="font-display text-xl font-semibold text-ink tabular-nums">{percentage}%</p>
-          )}
-          <p className="text-sm text-gray-500 mt-1">
-            {percentage >= 70
-              ? 'Great job! Solid result.'
-              : percentage >= 40
-                ? 'Good effort — keep practicing.'
-                : 'Keep practicing — you’ll get there.'}
-          </p>
+              {data.max_score > 0 && (
+                <p className="font-display text-xl font-semibold text-ink dark:text-gray-100 tabular-nums">
+                  {`${percentage}%`}
+                </p>
+              )}
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {(percentage >= 70
+                  ? 'Great job! Solid result.'
+                  : percentage >= 40
+                    ? 'Good effort — keep practicing.'
+                    : 'Keep practicing — you’ll get there.')}
+              </p>
 
-          {totalQ > 0 && (
-            <div className="grid grid-cols-3 gap-2.5 mt-6 max-w-sm mx-auto">
-              <MetaChip label="Correct" value={String(correctCount)} />
-              <MetaChip label="Wrong" value={String(wrongCount)} />
-              <MetaChip label="Skipped" value={String(unansweredCount)} />
-            </div>
+              {totalQ > 0 && (
+                <div className="grid grid-cols-3 gap-2.5 mt-6 max-w-sm mx-auto">
+                  <MetaChip label="Correct" value={String(correctCount)} />
+                  <MetaChip label="Wrong" value={String(wrongCount)} />
+                  <MetaChip label="Skipped" value={String(unansweredCount)} />
+                </div>
+              )}
+            </>
           )}
         </motion.div>
 
@@ -306,8 +326,8 @@ export default function QuizResult() {
                   <Trophy className="w-4 h-4" />
                 </span>
                 <div>
-                  <h3 className="font-display font-semibold text-ink">Leaderboard</h3>
-                  <p className="text-xs text-gray-400">{leaderboard.total} participant{leaderboard.total !== 1 ? 's' : ''}</p>
+                  <h3 className="font-display font-semibold text-ink dark:text-gray-100">Leaderboard</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">{leaderboard.total} participant{leaderboard.total !== 1 ? 's' : ''}</p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -316,38 +336,38 @@ export default function QuizResult() {
                   return (
                     <div
                       key={row.rank}
-                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl ${isMe ? 'bg-primary-50 ring-1 ring-primary/30' : 'bg-gray-50'
+                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl ${isMe ? 'bg-primary-50 ring-1 ring-primary/30' : 'bg-gray-50 dark:bg-ink-800/50'
                         }`}
                     >
-                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${row.rank === 1 ? 'bg-warn text-white' : row.rank === 2 ? 'bg-gray-400 text-white' : row.rank === 3 ? 'bg-orange-400 text-white' : 'bg-gray-200 text-gray-500'
+                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${row.rank === 1 ? 'bg-warn text-white' : row.rank === 2 ? 'bg-gray-400 text-white' : row.rank === 3 ? 'bg-orange-400 text-white' : 'bg-gray-200 dark:bg-ink-700 text-gray-500 dark:text-gray-400'
                         }`}>
                         {row.rank}
                       </span>
-                      <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink">
+                      <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink dark:text-gray-100">
                         {row.respondent_name}
                         {isMe && <span className="text-primary text-xs font-semibold ml-1.5">(Kamu)</span>}
                       </span>
-                      <span className="text-sm font-semibold tabular-nums text-ink">{row.score}</span>
+                      <span className="text-sm font-semibold tabular-nums text-ink dark:text-gray-100">{row.score}</span>
                     </div>
                   )
                 })}
               </div>
               {leaderboard.own && !leaderboard.data.some((r) => r.rank === leaderboard.own.rank) && (
-                <div className="mt-2 pt-2 border-t border-gray-100 flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-primary-50">
+                <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-primary-50">
                   <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-gray-300 text-white">
                     {leaderboard.own.rank}
                   </span>
-                  <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink">
+                  <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink dark:text-gray-100">
                     {leaderboard.own.respondent_name} <span className="text-primary text-xs font-semibold">(Kamu)</span>
                   </span>
-                  <span className="text-sm font-semibold tabular-nums text-ink">{leaderboard.own.score}</span>
+                  <span className="text-sm font-semibold tabular-nums text-ink dark:text-gray-100">{leaderboard.own.score}</span>
                 </div>
               )}
             </Card>
           </motion.div>
         )}
 
-        {totalQ > 0 && (
+        {revealAnswers && totalQ > 0 && (
           <>
             <Button
               variant="secondary"
@@ -373,8 +393,8 @@ export default function QuizResult() {
                         <div className="flex items-start gap-3">
                           {statusIcon(answer.is_correct)}
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs text-gray-400 mb-1">Question {i + 1}</p>
-                            <p className="font-medium text-ink mb-2 leading-snug">{answer.question_text}</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Question {i + 1}</p>
+                            <p className="font-medium text-ink dark:text-gray-100 mb-2 leading-snug"><RichText html={answer.question_text} className="rich-text" /></p>
 
                             {/* Gambar soal — ditampilkan jika ada */}
                             {answer.question_image && (
@@ -386,19 +406,23 @@ export default function QuizResult() {
                             )}
 
                             <p className="text-xs text-gray-400">Your answer</p>
-                            <div className="text-sm font-medium text-ink mb-3">
-                              {(answer.question_type === 'multiple_choice' || answer.question_type === 'checkbox')
+                            <div className="text-sm font-medium text-ink dark:text-gray-200 mb-3">
+                              {(answer.question_type === 'multiple_choice' || answer.question_type === 'checkbox' || answer.question_type === 'dropdown')
                                 ? (answer.selected_options?.length > 0
-                                  ? answer.selected_options.join(', ')
+                                  ? answer.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(', ')
                                   : <span className="text-gray-400 italic">(not answered)</span>)
-                                : (answer.answer_text || <span className="text-gray-400 italic">(not answered)</span>)}
+                                : answer.question_type === 'file_upload'
+                                  ? (answer.answer_file
+                                    ? <a href={answer.answer_file} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-primary dark:text-primary-300 underline">Lihat file jawaban</a>
+                                    : <span className="text-gray-400 italic">(not answered)</span>)
+                                  : (answer.answer_text || <span className="text-gray-400 italic">(not answered)</span>)}
                             </div>
 
                             <div className="flex items-center gap-2">
                               {answer.is_correct === true && <Badge scheme="green">Correct</Badge>}
                               {answer.is_correct === false && <Badge scheme="red">Incorrect</Badge>}
                               {answer.is_correct === null && <Badge scheme="gray">Not graded</Badge>}
-                              {answer.points_earned != null && answer.points_earned > 0 && (
+                              {revealScore && answer.points_earned != null && answer.points_earned > 0 && (
                                 <span className="text-xs text-gray-400 tabular-nums">+{answer.points_earned} pts</span>
                               )}
                             </div>
@@ -445,9 +469,9 @@ export default function QuizResult() {
 
 function MetaChip({ label, value }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl bg-gray-50 border border-gray-100 px-2 py-3.5 text-center min-w-0">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
-      <span className="text-sm font-semibold text-ink mt-1 truncate max-w-full">{value}</span>
+    <div className="flex flex-col items-center justify-center rounded-xl bg-gray-50 dark:bg-ink-800/50 border border-gray-100 dark:border-gray-800 px-2 py-3.5 text-center min-w-0">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{label}</span>
+      <span className="text-sm font-semibold text-ink dark:text-gray-100 mt-1 truncate max-w-full">{value}</span>
     </div>
   )
 }

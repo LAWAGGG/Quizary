@@ -77,7 +77,6 @@ def create_handler(body: MyRequest, user: User = Depends(get_current_user), db: 
 | `title` | `string(1-150)` — wajib |
 | `description` | `string?` |
 | `type` | `"form"` / `"quiz"` — default `"form"` |
-| `is_public` | `boolean` — default `true` |
 | `require_login` | `boolean` — default `false` |
 | `submission_limit` | `"unlimited"` / `"once"` — default `"unlimited"` |
 
@@ -154,6 +153,14 @@ Semua opsional. Sama seperti create, plus:
 
 **Source:** `schemas/question.py:ReorderRequest`
 
+#### `PATCH /api/sections/reorder`
+| Field | Rule |
+|---|---|
+| `form_id` | `int` |
+| `orders` | `list(min=1)` — array of section IDs in desired order |
+
+**Source:** `schemas/question.py:SectionReorderRequest`
+
 ### 2.4 Ownership & Authorization
 
 | Endpoint | Mekanisme |
@@ -163,6 +170,7 @@ Semua opsional. Sama seperti create, plus:
 | `GET/POST /api/forms/{form_id}/questions` | `verify_form_owner` → 403 |
 | `PUT/DELETE /api/questions/{id}` | `_ensure_owner` → 403 |
 | `PATCH /api/questions/reorder` | inline check → 403 |
+| `PATCH /api/sections/reorder` | inline check → 403 |
 
 ---
 
@@ -231,6 +239,13 @@ Setiap business logic non-trivial WAJIB di-test:
 | Leaderboard gating | `GET /q/{code}/leaderboard` saat `show_leaderboard=false` → 404 |
 | Leaderboard exclude cheating | Submission `cheating` tidak muncul di daftar leaderboard |
 | Leaderboard own rank | `?submission_id=` → respons punya `own.{rank, score, total}` |
+| Status non-publik dikembalikan | `GET /q/{code}` form `draft`/`closed` → 200 + `status` (bukan 404) |
+| Draft gate (anon) | `GET /q/{code}/start` form `draft` tanpa owner → `can_start=false, reason="draft"` |
+| Closed gate (anon) | `GET /q/{code}/start` form `closed` / lewat `ends_at` → `reason="closed"` (tanpa minta login) |
+| Not started gate (anon) | `GET /q/{code}/start` sebelum `starts_at` → `reason="not_started"` |
+| Owner preview | `GET /q/{code}/start` owner form draft/closed/belum waktunya → `can_start=true, is_preview=true` |
+| Owner preview create | `POST /submissions` owner form `draft`/`closed` → 201 (non-owner → 404) |
+| Owner preview bypass once | Owner form `submission_limit="once"` yang sudah submit tetap bisa preview |
 
 ### 3.3 Edge Case Test
 

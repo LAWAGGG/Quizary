@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle } from 'lucide-react'
-import { Button, Input, Textarea, Card, FallbackPage, QuestionMap, ConfirmSubmitModal } from '../../components/ui'
+import { Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle, Info, ZoomIn, ZoomOut, X, Lock, FileUp } from 'lucide-react'
+import { Button, Input, Textarea, Card, FallbackPage, QuestionMap, ConfirmSubmitModal, RichText } from '../../components/ui'
 import { useAutosave } from '../../hooks/useAutosave'
+import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 
@@ -56,6 +57,7 @@ function OptionTile({ letter, color, selected, checkbox, children, onClick, disa
 export default function AnswerQuiz() {
   const { submissionId } = useParams()
   const navigate = useNavigate()
+  const { theme } = useTheme()
   const searchParams = new URLSearchParams(window.location.search)
   const formType = searchParams.get('type') || 'form'
   const formTitle = searchParams.get('title') || 'Form'
@@ -69,6 +71,8 @@ export default function AnswerQuiz() {
   const [validationErrors, setValidationErrors] = useState({})  // { [qId]: true } soal required kosong
   const [currentIdx, setCurrentIdx] = useState(0)
   const [answers, setAnswers] = useState({})
+  const [fileAnswers, setFileAnswers] = useState({})   // { [qId]: { url, filename } }
+  const [uploading, setUploading] = useState({})       // { [qId]: true } saat upload berjalan
   const [reviewed, setReviewed] = useState({})
   const [showMap, setShowMap] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
@@ -76,6 +80,9 @@ export default function AnswerQuiz() {
   const [timeLeft, setTimeLeft] = useState(null)
   const [direction, setDirection] = useState(1)
   const [cheatWarn, setCheatWarn] = useState(null)
+  const [showInfo, setShowInfo] = useState(false)
+  const [zoomTarget, setZoomTarget] = useState(null)   // { question, options } yang dibuka modal zoom
+  const [zoomScale, setZoomScale] = useState(1)
 
   const timerRef = useRef(null)
   const questionRefs = useRef({})   // { [qId]: HTMLElement } untuk scroll ke soal bermasalah
@@ -114,20 +121,24 @@ export default function AnswerQuiz() {
     try {
       const res = await api.get(`/submissions/${submissionId}`)
       const d = res.data
-      if (d.status === 'submitted' || d.status === 'auto_submitted') {
+      if (d.status === 'submitted' || d.status === 'auto_submitted' || d.status === 'cheating') {
         goToResult()
         return
       }
       setData(d)
       const ans = {}
+      const files = {}
       d.answers.forEach((a) => {
-        if (a.question_type === 'short_answer' || a.question_type === 'essay') {
+        if (a.question_type === 'short_answer' || a.question_type === 'essay' || a.question_type === 'date' || a.question_type === 'time') {
           ans[a.question_id] = a.answer_text || ''
+        } else if (a.question_type === 'file_upload') {
+          if (a.answer_file) files[a.question_id] = { url: a.answer_file, filename: a.answer_file.split('/').pop() }
         } else {
           ans[a.question_id] = a.selected_option_ids || []
         }
       })
       setAnswers(ans)
+      setFileAnswers(files)
 
       if (d.expired_at) {
         const deadline = parseDate(d.expired_at)
@@ -147,6 +158,28 @@ export default function AnswerQuiz() {
   useEffect(() => {
     fetchSubmission()
   }, [fetchSubmission])
+
+  // Poll soal terbaru — creator update form, preview responden ikut ter-update
+  // tanpa perlu refresh manual. Jawaban lokal (answers/fileAnswers) dipertahankan.
+  useEffect(() => {
+    if (!submissionId) return
+    const id = setInterval(async () => {
+      try {
+        const res = await api.get(`/submissions/${submissionId}`)
+        const d = res.data
+        if (d.status === 'submitted' || d.status === 'auto_submitted' || d.status === 'cheating') {
+          goToResult()
+          return
+        }
+        setData((prev) => {
+          if (!prev) return prev
+          return { ...prev, questions: d.questions, sections: d.sections, expired_at: d.expired_at }
+        })
+      } catch { /* poll gagal diabaikan, sesi tetap jalan */ }
+    }, 10000)
+    return () => clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submissionId, goToResult])
 
   useEffect(() => {
     if (!formCode) return
@@ -196,23 +229,72 @@ export default function AnswerQuiz() {
 
   useEffect(() => {
     if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
-    // Fullscreen langsung, tanpa tombol. requestFullscreen() butuh user gesture,
-    // jadi dipicu ulang otomatis pada sentuhan/klik/tekan pertama di halaman kuis.
+    // Kiosk mode — PIN halaman ke fullscreen. requestFullscreen butuh user gesture,
+    // jadi dipicu otomatis pada interaksi pertama. Saat fullscreen keluar / fokus
+    // hilang, kunci penyembunyian muncul (tuple di bawah) sampai responden kembali.
     const requestFs = () => {
       const el = document.documentElement
       const req = el.requestFullscreen || el.webkitRequestFullscreen
-      if (req && !(document.fullscreenElement || document.webkitFullscreenElement)) {
-        Promise.resolve(req.call(el)).catch(() => { })
+      const cur = document.fullscreenElement || document.webkitFullscreenElement
+      if (req && !cur) {
+        Promise.resolve(req.call(el)).then(() => setFsAvailable(true)).catch(() => { })
       }
     }
+    const onFirst = () => {
+      if (!(document.fullscreenElement || document.webkitFullscreenElement)) requestFs()
+    }
     requestFs()
-    document.addEventListener('pointerdown', requestFs, { once: true })
-    document.addEventListener('keydown', requestFs, { once: true })
+    document.addEventListener('pointerdown', onFirst)
+    document.addEventListener('keydown', onFirst)
     return () => {
-      document.removeEventListener('pointerdown', requestFs)
-      document.removeEventListener('keydown', requestFs)
+      document.removeEventListener('pointerdown', onFirst)
+      document.removeEventListener('keydown', onFirst)
     }
   }, [formType, publicForm?.is_restricted, data])
+
+  // Kiosk lock: kunci penuh — sembunyikan seluruh konten saat responden keluar
+  // dari fullscreen / kehilangan fokus / pindah tab. Mencoba interaksi apa pun di
+  // layar kunci langsung mem-buat kembali fullscreen (pin ulang). Anti-cheat tetap
+  // dilaporkan ke server (reportTabExit) — server pemegang penalti.
+  const [kioskLocked, setKioskLocked] = useState(false)
+  const [fsAvailable, setFsAvailable] = useState(false)
+  const kioskTimer = useRef(null)
+  useEffect(() => {
+    if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    const inFullscreen = () => document.fullscreenElement || document.webkitFullscreenElement
+    const lock = () => {
+      clearTimeout(kioskTimer.current)
+      kioskTimer.current = setTimeout(() => setKioskLocked(true), 120)
+    }
+    const unlock = () => {
+      clearTimeout(kioskTimer.current)
+      setKioskLocked(false)
+    }
+    // fullscreenchange dipicu BAIK saat keluar maupun saat masuk kembali — maka
+    // kita biarkan ia toggel keduanya. Kunci hanya bila TIDAK fullscreen; begitu
+    // back ke fullscreen langsung buka kunci (tidak menunggu event focus yang
+    // tidak selalu terpicu setelah cover fullscreen).
+    const onFsChange = () => {
+      if (inFullscreen() && document.visibilityState === 'visible') unlock()
+      else if (fsAvailable) lock()
+    }
+    const onVis = () => { if (document.visibilityState === 'hidden' && fsAvailable) lock() }
+    const onBlur = () => { if (fsAvailable) lock() }
+    const onFocus = () => { if (inFullscreen() && document.visibilityState === 'visible') unlock() }
+    document.addEventListener('fullscreenchange', onFsChange)
+    document.addEventListener('webkitfullscreenchange', onFsChange)
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('blur', onBlur)
+    window.addEventListener('focus', onFocus)
+    return () => {
+      clearTimeout(kioskTimer.current)
+      document.removeEventListener('fullscreenchange', onFsChange)
+      document.removeEventListener('webkitfullscreenchange', onFsChange)
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('blur', onBlur)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [formType, publicForm?.is_restricted, data, fsAvailable])
 
   // Fullscreen anti-cheat (is_restricted quiz). Detects and reports every
   // cheating vector — tab/app switched, fullscreen exited, split-screen,
@@ -255,13 +337,17 @@ export default function AnswerQuiz() {
     const onPiP = () => report('picture-in-picture')
     const onContext = (e) => { e.preventDefault(); report('context-menu') }
     const onCopy = () => report('copy')
+    const onCut = () => report('copy')
+    const onPaste = () => report('copy')
+    const onDragStart = (e) => { e.preventDefault() }
     const onKey = (e) => {
       const k = (e.key || '').toLowerCase()
       const blocked =
         e.key === 'F12' ||
         e.key === 'PrintScreen' || e.key === 'PrtScn' ||
         (e.ctrlKey && ['p', 'u', 's', 'a'].includes(k)) ||
-        (e.ctrlKey && e.shiftKey && ['i', 'j', 'c', 'k'].includes(k))
+        (e.ctrlKey && e.shiftKey && ['i', 'j', 'c', 'k'].includes(k)) ||
+        (e.ctrlKey && ['c', 'x', 'v'].includes(k))
       if (blocked) {
         e.preventDefault()
         report('shortcut')
@@ -277,6 +363,9 @@ export default function AnswerQuiz() {
     document.addEventListener('enterpictureinpicture', onPiP)
     document.addEventListener('contextmenu', onContext)
     document.addEventListener('copy', onCopy)
+    document.addEventListener('cut', onCut)
+    document.addEventListener('paste', onPaste)
+    document.addEventListener('dragstart', onDragStart)
     document.addEventListener('keydown', onKey)
 
     return () => {
@@ -289,6 +378,9 @@ export default function AnswerQuiz() {
       document.removeEventListener('enterpictureinpicture', onPiP)
       document.removeEventListener('contextmenu', onContext)
       document.removeEventListener('copy', onCopy)
+      document.removeEventListener('cut', onCut)
+      document.removeEventListener('paste', onPaste)
+      document.removeEventListener('dragstart', onDragStart)
       document.removeEventListener('keydown', onKey)
       clearTimeout(shrinkTimer)
     }
@@ -309,7 +401,7 @@ export default function AnswerQuiz() {
     const cur = qs[currentIdx]
     if (!cur || showConfirm || showMap) return
     const curAnswer = answers[cur.id]
-    const hasAns = Array.isArray(curAnswer) ? curAnswer.length > 0 : curAnswer?.length > 0
+    const hasAns = isAnswered(cur, curAnswer)
     const isReq = cur.is_required !== false
     const canGo = !isReq || hasAns
     const isLast = currentIdx === qs.length - 1
@@ -335,9 +427,9 @@ export default function AnswerQuiz() {
     const question = data.questions.find((q) => q.id === qId)
     if (!question) return
 
-    if (question.type === 'multiple_choice') {
+    if (question.type === 'multiple_choice' || question.type === 'dropdown') {
       setAnswers((a) => {
-        const next = a[qId]?.[0] === optId ? [] : [optId]
+        const next = optId == null ? [] : a[qId]?.[0] === optId ? [] : [optId]
         save(qId, next)
         return { ...a, [qId]: next }
       })
@@ -364,13 +456,35 @@ export default function AnswerQuiz() {
     }
   }
 
+  const handleFileUpload = async (qId, file) => {
+    if (!file) return
+    setUploading((u) => ({ ...u, [qId]: true }))
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await api.post(`/submissions/${submissionId}/answers/${qId}/file`, fd)
+      setFileAnswers((f) => ({ ...f, [qId]: { url: res.data.answer_file, filename: res.data.filename || file.name } }))
+      setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
+    } catch (err) {
+      setSubmitError(err.response?.data?.detail || err.response?.data?.message || 'Gagal mengunggah file')
+    } finally {
+      setUploading((u) => ({ ...u, [qId]: false }))
+    }
+  }
+
+  const removeFileAnswer = (qId) => {
+    setFileAnswers((f) => { const n = { ...f }; delete n[qId]; return n })
+    setAnswers((a) => { const n = { ...a }; delete n[qId]; return n })
+  }
+
   const toggleReview = (qId) => {
     setReviewed((r) => ({ ...r, [qId]: !r[qId] }))
   }
 
   const handleNext = () => {
     if (!data) return
-    if (currentIdx < data.questions.length - 1) {
+    const total = formType === 'quiz' ? data.questions.length : formPages.length
+    if (currentIdx < total - 1) {
       setDirection(1)
       setCurrentIdx((i) => i + 1)
     }
@@ -392,12 +506,15 @@ export default function AnswerQuiz() {
     if (submitting) return
 
     // Frontend validation — cek semua soal required sebelum kirim ke backend
-    const isAnsweredCheck = (val) => Array.isArray(val) ? val.length > 0 : !!val && val.trim().length > 0
+    const isAnsweredCheck = (q, val) => {
+      if (q?.type === 'file_upload') return !!fileAnswers[q.id]?.url
+      return Array.isArray(val) ? val.length > 0 : !!val && String(val).trim().length > 0
+    }
     const errors = {}
     let firstErrorIdx = -1
     const qs = data?.questions || []
     qs.forEach((q, idx) => {
-      if (q.is_required !== false && !isAnsweredCheck(answers[q.id])) {
+      if (q.is_required !== false && !isAnsweredCheck(q, answers[q.id])) {
         errors[q.id] = true
         if (firstErrorIdx === -1) firstErrorIdx = idx
       }
@@ -406,10 +523,21 @@ export default function AnswerQuiz() {
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors)
       setSubmitError(null)
-      // Scroll ke soal required pertama yang belum dijawab
+      // Scroll ke soal required pertama yang belum dijawab (lompat ke halaman section-nya dulu)
       const firstQ = qs[firstErrorIdx]
-      if (firstQ && questionRefs.current[firstQ.id]) {
-        questionRefs.current[firstQ.id].scrollIntoView({ behavior: 'smooth', block: 'center' })
+      if (firstQ) {
+        if (formType !== 'quiz') {
+          const pi = formPages.findIndex((p) => p.questions.some((x) => x.id === firstQ.id))
+          if (pi >= 0 && pi !== currentIdx) {
+            setDirection(pi > currentIdx ? 1 : -1)
+            setCurrentIdx(pi)
+          }
+        }
+        setTimeout(() => {
+          if (questionRefs.current[firstQ.id]) {
+            questionRefs.current[firstQ.id].scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }, 120)
       }
       return // Jangan kirim ke backend
     }
@@ -441,7 +569,7 @@ export default function AnswerQuiz() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-paper">
+      <div className="min-h-dvh flex items-center justify-center bg-paper dark:bg-ink-950">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
@@ -464,18 +592,37 @@ export default function AnswerQuiz() {
   if (!data) return null
 
   const isQuiz = formType === 'quiz'
-  const palette = themePalette(publicForm?.theme_color)
+  const palette = themePalette(publicForm?.theme_color, theme === 'dark')
+  const isOwnerPreview = publicForm?.is_owner === true && publicForm?.status !== 'published'
+  const sectionsById = Object.fromEntries((data.sections || []).map((s) => [s.id, s.title]))
   const bannerPath = publicForm?.banner_path || null
   const questions = data.questions || []
   const current = questions[currentIdx]
   const totalQ = questions.length
 
+  // Mode form: satu section = satu halaman. Urut ikut order section (section baru = halaman terakhir).
+  const formPages = (() => {
+    if (formType === 'quiz') return []
+    const pages = []
+    ;(data.sections || []).forEach((s) => {
+      const sq = questions.filter((q) => q.section_id === s.id)
+      if (sq.length) pages.push({ title: s.title, questions: sq })
+    })
+    const unassigned = questions.filter((q) => !q.section_id)
+    if (unassigned.length) pages.push({ title: null, questions: unassigned })
+    return pages.length ? pages : [{ title: null, questions }]
+  })()
+  const formPage = formPages[Math.min(currentIdx, formPages.length - 1)]
+
   // Helper shared by both quiz and form modes
-  const isAnswered = (val) => Array.isArray(val) ? val.length > 0 : !!val && val.trim().length > 0
+  const isAnswered = (q, val) => {
+    if (q?.type === 'file_upload') return !!fileAnswers[q.id]?.url
+    return Array.isArray(val) ? val.length > 0 : !!val && String(val).trim().length > 0
+  }
 
   if (isQuiz) {
     const currentAnswer = answers[current?.id]
-    const hasAnswer = Array.isArray(currentAnswer) ? currentAnswer.length > 0 : currentAnswer?.length > 0
+    const hasAnswer = isAnswered(current, currentAnswer)
     const isRequired = current?.is_required !== false
     const isLast = currentIdx === totalQ - 1
     const progress = totalQ > 0 ? ((currentIdx + 1) / totalQ) * 100 : 0
@@ -483,14 +630,14 @@ export default function AnswerQuiz() {
     const answeredMap = {}
     const reviewedMap = {}
     questions.forEach((q, i) => {
-      answeredMap[i] = isAnswered(answers[q.id])
+      answeredMap[i] = isAnswered(q, answers[q.id])
       reviewedMap[i] = !!reviewed[q.id]
     })
     const reviewedCount = Object.values(reviewed).filter(Boolean).length
     const missingRequired = questions
-      .filter((q) => q.is_required !== false && !isAnswered(answers[q.id]))
-      .map((q) => q.question_text)
-    const answeredCount = questions.filter((q) => isAnswered(answers[q.id])).length
+      .filter((q) => q.is_required !== false && !isAnswered(q, answers[q.id]))
+      .map((q) => (q.question_text || '').replace(/<[^>]*>/g, '').trim())
+    const answeredCount = questions.filter((q) => isAnswered(q, answers[q.id])).length
 
     const formatTime = (ms) => {
       if (ms <= 0) return '00:00'
@@ -519,8 +666,19 @@ export default function AnswerQuiz() {
           </motion.div>
         )}
         <header className="px-4 py-3" style={{ background: palette.gradient }}>
+          {isOwnerPreview && <PreviewNotice />}
           <div className="flex items-center justify-between mb-2.5">
-            <span className="text-sm font-semibold text-white truncate mx-2">{formTitle}</span>
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                onClick={() => setShowInfo(true)}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/80 hover:bg-white/15 hover:text-white transition-colors shrink-0"
+                aria-label="Exam info"
+                title="Lihat informasi ujian"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-semibold text-white truncate">{formTitle}</span>
+            </div>
             <div className="flex items-center gap-2">
               {current && (
                 <SaveIndicator status={statuses[current.id]} />
@@ -563,14 +721,14 @@ export default function AnswerQuiz() {
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white border-b border-gray-200 px-4 py-4"
+            className="bg-white dark:bg-ink-900 border-b border-gray-200 dark:border-gray-800 px-4 py-4"
           >
             <div className="max-w-lg mx-auto">
               <QuestionMap total={totalQ} current={currentIdx} answered={answeredMap} reviewed={reviewedMap} onSelect={goToQuestion} />
               <div className="flex flex-wrap items-center gap-4 mt-3 text-[11px] text-gray-400">
                 <Legend dot="bg-correct" label="Answered" />
                 <Legend dot="bg-warn" label="Marked" />
-                <Legend dot="bg-white border border-gray-300" label="Unanswered" />
+                <Legend dot="bg-white dark:bg-ink-800 border border-gray-300 dark:border-gray-600" label="Unanswered" />
               </div>
             </div>
           </motion.div>
@@ -590,14 +748,14 @@ export default function AnswerQuiz() {
                 <div className="flex items-start justify-between gap-3 mb-1">
                   <div className="flex items-center gap-2">
                     {current.is_required === false ? (
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Optional</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-ink-800 px-2 py-0.5 rounded-full">Optional</span>
                     ) : (
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-primary bg-primary-50 px-2 py-0.5 rounded-full">Required</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-primary dark:text-primary-300 bg-primary-50 dark:bg-primary-900/30 px-2 py-0.5 rounded-full">Required</span>
                     )}
                   </div>
                   <button
                     onClick={() => toggleReview(current.id)}
-                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 h-8 rounded-lg transition-colors ${reviewed[current.id] ? 'bg-warn text-white shadow-chip' : 'bg-white text-gray-400 border border-gray-200 hover:text-warn hover:border-warn'
+                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 h-8 rounded-lg transition-colors ${reviewed[current.id] ? 'bg-warn text-white shadow-chip' : 'bg-white dark:bg-ink-800 text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-700 hover:text-warn hover:border-warn'
                       }`}
                     aria-pressed={!!reviewed[current.id]}
                   >
@@ -605,10 +763,29 @@ export default function AnswerQuiz() {
                     {reviewed[current.id] ? 'Marked' : 'Mark for review'}
                   </button>
                 </div>
-                <h2 className="font-display text-xl font-bold text-ink text-center mb-2">{current.question_text}</h2>
-                {current.image && (
-                  <img src={current.image.path} alt="" className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card" />
+                <h2 className="font-display text-xl font-bold text-ink dark:text-gray-100 text-center mb-3"><RichText html={current.question_text} className="rich-text" /></h2>
+                {current.section_id && sectionsById[current.section_id] && (
+                  <p className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500 mb-3">
+                    {sectionsById[current.section_id]}
+                  </p>
                 )}
+                {current.image && (
+                  <img
+                    src={current.image.path}
+                    alt=""
+                    onClick={() => { setZoomTarget(current); setZoomScale(1) }}
+                    className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card cursor-zoom-in"
+                  />
+                )}
+                <div className="flex items-center justify-center">
+                  <button
+                    onClick={() => { setZoomTarget(current); setZoomScale(1) }}
+                    className="inline-flex items-center gap-2 text-xs font-semibold px-4 h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors shadow-chip"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                    Perbesar soal
+                  </button>
+                </div>
                 {current.type === 'multiple_choice' && (
                   <div className="space-y-4">
                     <p className="text-xs text-gray-400 text-center mb-2">Pick one answer</p>
@@ -624,7 +801,7 @@ export default function AnswerQuiz() {
                             onClick={() => handleSelect(current.id, opt.id)}
                             image={opt.image}
                           >
-                            {opt.option_text}
+                            <RichText html={opt.option_text} className="rich-text" />
                           </OptionTile>
                         )
                       })}
@@ -648,7 +825,7 @@ export default function AnswerQuiz() {
                             onClick={() => handleSelect(current.id, opt.id)}
                             image={opt.image}
                           >
-                            {opt.option_text}
+                            <RichText html={opt.option_text} className="rich-text" />
                           </OptionTile>
                         )
                       })}
@@ -678,13 +855,61 @@ export default function AnswerQuiz() {
                     />
                   </div>
                 )}
+              {current.type === 'dropdown' && (
+                  <div className="mt-4">
+                    <select
+                      value={(answers[current.id] || [])[0] ?? ''}
+                      onChange={(e) => handleSelect(current.id, e.target.value === '' ? null : Number(e.target.value))}
+                      className={`input-field text-base h-14 ${validationErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                    >
+                      <option value="">— Pilih jawaban —</option>
+                      {current.options.map((opt, i) => (
+                        <option key={opt.id} value={opt.id}>{LETTERS[i % LETTERS.length]}. {opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {current.type === 'date' && (
+                  <div className="mt-4">
+                    <input
+                      type="date"
+                      value={answers[current.id] || ''}
+                      onChange={(e) => handleTextChange(current.id, e.target.value)}
+                      className={`input-field text-center text-base h-14 ${validationErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                    />
+                  </div>
+                )}
+
+                {current.type === 'time' && (
+                  <div className="mt-4">
+                    <input
+                      type="time"
+                      value={answers[current.id] || ''}
+                      onChange={(e) => handleTextChange(current.id, e.target.value)}
+                      className={`input-field text-center text-base h-14 ${validationErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                    />
+                  </div>
+                )}
+
+                {current.type === 'file_upload' && (
+                  <div className="mt-4">
+                    <FileAnswer
+                      value={fileAnswers[current.id]}
+                      uploading={!!uploading[current.id]}
+                      onFile={(file) => handleFileUpload(current.id, file)}
+                      onRemove={() => removeFileAnswer(current.id)}
+                      error={validationErrors[current.id]}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </motion.div>
           </AnimatePresence>
         </div>
 
-        <footer className="px-4 py-4 bg-white border-t border-gray-200">
+        <footer className="px-4 py-4 bg-white dark:bg-ink-900 border-t border-gray-200 dark:border-gray-800">
           <div className="max-w-lg mx-auto flex gap-3">
             {currentIdx > 0 && (
               <Button variant="secondary" onClick={handlePrev} className="flex-1" icon={<ChevronLeft className="w-4 h-4" />}>
@@ -703,15 +928,12 @@ export default function AnswerQuiz() {
                 {canProceed ? 'Submit' : 'Answer to submit'}
               </Button>
             ) : (
-              <Button onClick={handleNext} disabled={!canProceed} className="flex-1" style={{ background: palette.cta, color: palette.onBase }}>
+              <Button onClick={handleNext} className="flex-1" style={{ background: palette.cta, color: palette.onBase }}>
                 Next
                 <ChevronRight className="w-4 h-4" />
               </Button>
             )}
           </div>
-          {!isLast && !canProceed && (
-            <p className="text-center text-xs text-gray-400 mt-2">Jawab dulu untuk lanjut (soal wajib)</p>
-          )}
         </footer>
 
         <ConfirmSubmitModal
@@ -726,24 +948,59 @@ export default function AnswerQuiz() {
           loading={submitting}
           confirmText="Submit Now"
         />
+
+        <KioskLockOverlay
+          locked={kioskLocked}
+          palette={palette}
+          onResume={() => {
+            const el = document.documentElement
+            const req = el.requestFullscreen || el.webkitRequestFullscreen
+            const cur = document.fullscreenElement || document.webkitFullscreenElement
+            if (req && !cur) Promise.resolve(req.call(el)).catch(() => { })
+          }}
+        />
+        <ExamInfoDrawer show={showInfo} onClose={() => setShowInfo(false)} form={publicForm} data={data} />
+        <ZoomModal
+          target={zoomTarget}
+          scale={zoomScale}
+          onClose={() => { setZoomTarget(null); setZoomScale(1) }}
+          onZoom={(delta) => setZoomScale((s) => Math.min(4, Math.max(1, s + delta)))}
+        />
       </div>
     )
   }
 
   return (
     <div className="theme-surface min-h-dvh bg-paper" style={{ background: palette.pageBg, '--t': palette.base }}>
+      {isOwnerPreview && <PreviewNotice />}
       <div className="max-w-lg mx-auto p-4 pb-28">
         {bannerPath && (
           <img src={bannerPath} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="font-display text-xl font-bold text-ink">{formTitle}</h1>
+          <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100">{formTitle}</h1>
           <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">{totalQ} questions</span>
         </div>
-        <div className="space-y-5">
-          {questions.map((q) => (
-            <Card
-              key={q.id}
+        <AnimatePresence mode="wait" custom={direction}>
+          <motion.div
+            key={currentIdx}
+            custom={direction}
+            initial={{ opacity: 0, x: direction * 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: direction * -30 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="space-y-5">
+              {formPage.title && (
+                <div className="flex items-center gap-3">
+                  <span className="w-1.5 h-6 rounded-full bg-primary shrink-0" />
+                  <h2 className="font-display text-lg font-bold text-ink dark:text-gray-100">{formPage.title}</h2>
+                  <span className="ml-auto text-xs font-semibold text-gray-400">{currentIdx + 1}/{formPages.length}</span>
+                </div>
+              )}
+              {formPage.questions.map((q) => (
+                <Card
+                  key={q.id}
               ref={(el) => { if (el) questionRefs.current[q.id] = el }}
               data-question-id={q.id}
               className="p-5"
@@ -752,13 +1009,21 @@ export default function AnswerQuiz() {
                 borderWidth: validationErrors[q.id] ? '2px' : undefined,
               }}
             >
-              <div className="flex items-start gap-3 mb-4">
-                <div className="flex-1">
-                  <p className="font-semibold text-ink leading-snug">{q.question_text}</p>
+              <div className="mb-4">
+                <div className="flex items-start justify-between gap-4">
+                  <p className="font-semibold text-ink dark:text-gray-100 leading-snug flex-1"><RichText html={q.question_text} className="rich-text" /></p>
                   {q.is_required !== false && (
-                    <span className="text-[10px] font-semibold text-gray-400 mt-0.5 block">Required</span>
+                    <span className="text-[10px] font-semibold text-gray-400 mt-1 shrink-0">Required</span>
                   )}
                 </div>
+                <button
+                  onClick={() => { setZoomTarget(q); setZoomScale(1) }}
+                  className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 h-8 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-500 dark:text-gray-400 hover:text-primary dark:hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                  aria-label="Perbesar soal"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                  Perbesar soal
+                </button>
               </div>
               {validationErrors[q.id] && (
                 <p className="text-xs font-semibold text-red-500 flex items-center gap-1 mb-3">
@@ -767,7 +1032,12 @@ export default function AnswerQuiz() {
                 </p>
               )}
               {q.image && (
-                <img src={q.image.path} alt="" className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card" />
+                <img
+                  src={q.image.path}
+                  alt=""
+                  onClick={() => { setZoomTarget(q); setZoomScale(1) }}
+                  className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card cursor-zoom-in"
+                />
               )}
 
               {q.type === 'multiple_choice' && (
@@ -777,7 +1047,7 @@ export default function AnswerQuiz() {
                     return (
                       <label
                         key={opt.id}
-                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary-50' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
                           }`}
                         style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
                       >
@@ -794,7 +1064,7 @@ export default function AnswerQuiz() {
                           onChange={() => handleSelect(q.id, opt.id)}
                           className="sr-only"
                         />
-                        <span className="text-sm text-ink">{opt.option_text}</span>
+                        <span className="text-sm text-ink dark:text-gray-200"><RichText html={opt.option_text} className="rich-text" /></span>
                         {opt.image && (
                           <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
                         )}
@@ -811,12 +1081,12 @@ export default function AnswerQuiz() {
                     return (
                       <label
                         key={opt.id}
-                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary-50' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
                           }`}
                         style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
                       >
                         <span
-                          className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 transition-colors ${selected ? '' : 'border-gray-300 bg-white'
+                          className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 transition-colors ${selected ? '' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-ink-800'
                             }`}
                           style={selected ? { borderColor: palette.base, backgroundColor: palette.base, color: palette.onBase } : undefined}
                         >
@@ -828,7 +1098,7 @@ export default function AnswerQuiz() {
                           onChange={() => handleSelect(q.id, opt.id)}
                           className="sr-only"
                         />
-                        <span className="text-sm text-ink">{opt.option_text}</span>
+                        <span className="text-sm text-ink dark:text-gray-200"><RichText html={opt.option_text} className="rich-text" /></span>
                         {opt.image && (
                           <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
                         )}
@@ -855,12 +1125,55 @@ export default function AnswerQuiz() {
                   placeholder="Write your answer..."
                 />
               )}
+
+              {q.type === 'dropdown' && (
+                <select
+                  value={(answers[q.id] || [])[0] ?? ''}
+                  onChange={(e) => handleSelect(q.id, e.target.value === '' ? null : Number(e.target.value))}
+                  className={`input-field ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                >
+                  <option value="">— Pilih jawaban —</option>
+                  {q.options.map((opt, i) => (
+                    <option key={opt.id} value={opt.id}>{LETTERS[i % LETTERS.length]}. {opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
+                  ))}
+                </select>
+              )}
+
+              {q.type === 'date' && (
+                <input
+                  type="date"
+                  value={answers[q.id] || ''}
+                  onChange={(e) => handleTextChange(q.id, e.target.value)}
+                  className={`input-field ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                />
+              )}
+
+              {q.type === 'time' && (
+                <input
+                  type="time"
+                  value={answers[q.id] || ''}
+                  onChange={(e) => handleTextChange(q.id, e.target.value)}
+                  className={`input-field ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                />
+              )}
+
+              {q.type === 'file_upload' && (
+                <FileAnswer
+                  value={fileAnswers[q.id]}
+                  uploading={!!uploading[q.id]}
+                  onFile={(file) => handleFileUpload(q.id, file)}
+                  onRemove={() => removeFileAnswer(q.id)}
+                  error={validationErrors[q.id]}
+                />
+              )}
             </Card>
-          ))}
-        </div>
+              ))}
+            </div>
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
+      <footer className="fixed bottom-0 left-0 right-0 bg-white dark:bg-ink-900 border-t border-gray-200 dark:border-gray-800 p-4">
         <div className="max-w-lg mx-auto">
           {submitError && (
             <p className="text-sm text-red-500 text-center mb-2 flex items-center justify-center gap-1.5">
@@ -868,17 +1181,30 @@ export default function AnswerQuiz() {
               {submitError}
             </p>
           )}
-          {(() => {
-            const unansweredCount = questions.filter(
-              (q) => q.is_required !== false && !isAnswered(answers[q.id])
-            ).length
-            return (
-              <>
+          <div className="flex gap-3">
+            {currentIdx > 0 && (
+              <Button variant="secondary" onClick={handlePrev} className="flex-1" icon={<ChevronLeft className="w-4 h-4" />}>
+                Previous
+              </Button>
+            )}
+            {(() => {
+              const unansweredCount = questions.filter(
+                (q) => q.is_required !== false && !isAnswered(q, answers[q.id])
+              ).length
+              if (currentIdx < formPages.length - 1) {
+                return (
+                  <Button onClick={handleNext} className="flex-1" size="lg" style={{ background: palette.cta, color: palette.onBase }}>
+                    Next
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                )
+              }
+              return (
                 <Button
                   onClick={handleSubmitAll}
                   disabled={submitting || unansweredCount > 0}
                   loading={submitting}
-                  className="w-full"
+                  className="flex-1"
                   size="lg"
                   style={{ background: palette.cta, color: palette.onBase }}
                 >
@@ -886,11 +1212,18 @@ export default function AnswerQuiz() {
                     ? `${unansweredCount} required question${unansweredCount > 1 ? 's' : ''} unanswered`
                     : 'Submit'}
                 </Button>
-              </>
-            )
-          })()}
+              )
+            })()}
+          </div>
         </div>
       </footer>
+
+      <ZoomModal
+        target={zoomTarget}
+        scale={zoomScale}
+        onClose={() => { setZoomTarget(null); setZoomScale(1) }}
+        onZoom={(delta) => setZoomScale((s) => Math.min(4, Math.max(1, s + delta)))}
+      />
     </div>
   )
 }
@@ -928,5 +1261,356 @@ function Legend({ dot, label }) {
       <span className={`w-2.5 h-2.5 rounded-full ${dot}`} />
       {label}
     </span>
+  )
+}
+
+function FileAnswer({ value, uploading, onFile, onRemove, error }) {
+  const inputRef = useRef(null)
+  return (
+    <div>
+      {value ? (
+        <div className="flex items-center gap-3 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800">
+          <span className="w-10 h-10 rounded-lg bg-primary-50 dark:bg-primary-900/30 text-primary dark:text-primary-300 flex items-center justify-center shrink-0">
+            <FileUp className="w-5 h-5" />
+          </span>
+          <span className="flex-1 min-w-0 text-sm font-medium text-ink dark:text-gray-100 truncate">{value.filename}</span>
+          <a href={value.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-primary dark:text-primary-300 hover:underline shrink-0">Lihat</a>
+          <button onClick={onRemove} className="text-xs font-medium text-gray-400 hover:text-incorrect shrink-0">Hapus</button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="w-full h-14 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-primary/50 transition-colors flex items-center justify-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-primary"
+        >
+          {uploading ? (
+            <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <FileUp className="w-4 h-4" />
+          )}
+          {uploading ? 'Mengunggah...' : 'Unggah file jawaban'}
+        </button>
+      )}
+      <input ref={inputRef} type="file" className="hidden" onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = '' }} />
+      {error && (
+        <p className="text-xs font-semibold text-incorrect mt-1.5 flex items-center gap-1">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Soal wajib — unggah file dulu
+        </p>
+      )}
+      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">PDF, DOC, XLS, PPT, TXT, CSV, gambar, ZIP</p>
+    </div>
+  )
+}
+
+function KioskLockOverlay({ locked, palette, onResume }) {
+  // Layar kunci full — menutupi SEMUA konten. Interaksi apa pun (klik/keyboard/
+  // sentuh) langsung mem-pin ulang ke fullscreen lewat onResume; konten ujian
+  // tidak terlihat sampai responden kembali benar-benar ke dalam ujian.
+  useEffect(() => {
+    if (!locked) return
+    const tryResume = () => onResume()
+    window.addEventListener('pointerdown', tryResume)
+    window.addEventListener('keydown', tryResume)
+    window.addEventListener('touchstart', tryResume)
+    return () => {
+      window.removeEventListener('pointerdown', tryResume)
+      window.removeEventListener('keydown', tryResume)
+      window.removeEventListener('touchstart', tryResume)
+    }
+  }, [locked, onResume])
+
+  return (
+    <AnimatePresence>
+      {locked && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onResume}
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-6"
+          style={{ background: palette.gradient }}
+        >
+          <div className="text-center text-white">
+            <span className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-white/10 mb-6">
+              <Lock className="w-7 h-7" />
+            </span>
+            <h2 className="font-display text-xl font-bold">Ujian terkunci</h2>
+            <p className="text-white/80 text-sm mt-2 max-w-xs">
+              Kamu keluar dari jendela ujian. Sentuh atau klik di mana saja untuk kembali memin halaman ke fullscreen dan melanjutkan ujian.
+            </p>
+            <button
+              onClick={(e) => { e.stopPropagation(); onResume() }}
+              className="mt-6 inline-flex items-center gap-2 h-12 px-8 rounded-full bg-white text-sm font-bold text-[var(--t,#6C5CE7)] hover:scale-[1.02] active:scale-95 transition-transform shadow-lift"
+            >
+              <Lock className="w-4 h-4" />
+              Kunci ulang &amp; lanjut
+            </button>
+            <p className="text-white/60 text-xs mt-4">
+              Kuis dikumpulkan otomatis dengan nilai 0 jika kamu keluar terlalu sering.
+            </p>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
+function ExamInfoDrawer({ show, onClose, form, data }) {
+  const respondent = data?.respondent_name || ''
+  const respondentEmail = data?.respondent_email || ''
+  const banner = form?.banner_path || null
+  const chip = (label, value) => (
+    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
+      <span className="text-xs text-gray-400 dark:text-gray-500">{label}</span>
+      <span className="text-sm font-medium text-ink dark:text-gray-200 text-right">{value || '—'}</span>
+    </div>
+  )
+  return (
+    <AnimatePresence>
+      {show && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-sm"
+            onClick={onClose}
+          />
+          <motion.aside
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+            className="fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-white dark:bg-ink-900 shadow-lift flex flex-col"
+          >
+            <div className="flex items-center justify-between px-5 h-16 border-b border-gray-100 dark:border-gray-800 shrink-0">
+              <h3 className="font-display font-bold text-ink dark:text-gray-100">Informasi Ujian</h3>
+              <button
+                onClick={onClose}
+                className="p-2 -mr-2 rounded-xl text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+                aria-label="Tutup"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-5">
+              {banner && (
+                <img src={banner} alt="" className="w-full h-28 object-cover rounded-2xl mb-5 shadow-card" />
+              )}
+              <h4 className="font-display font-semibold text-ink dark:text-gray-100 text-lg leading-snug">
+                {form?.title || 'Form'}
+              </h4>
+              {form?.description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 mb-4"><RichText html={form.description} className="rich-text" /></p>}
+
+              <div className="mt-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Identitas Pengisi</p>
+                {chip('Nama', respondent)}
+                {chip('Email', respondentEmail)}
+              </div>
+
+              <div className="mt-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Detail</p>
+                {chip('Jumlah soal', form?.question_count ?? data?.questions?.length ?? '—')}
+                {form?.timer_seconds ? chip('Waktu', `~${Math.ceil(form.timer_seconds / 60)} menit`) : chip('Waktu', 'Tanpa batas')}
+                {form?.submission_limit === 'once' ? chip('Pengiriman', 'Sekali saja') : chip('Pengiriman', 'Bebas')}
+              </div>
+
+              {form?.is_restricted && (
+                <div className="mt-5 rounded-2xl bg-gray-50 dark:bg-ink-800/50 px-4 py-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                    Tetap di tab ini selama ujian berlangsung. Timer berjalan otomatis dan jawaban dikumpulkan saat waktu habis.
+                  </p>
+                </div>
+              )}
+            </div>
+          </motion.aside>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+
+function ZoomModal({ target, scale, onClose, onZoom }) {
+  const STEP = 0.5
+  const optionColor = (i) => OPT_COLORS[i % OPT_COLORS.length]
+  const scrollRef = useRef(null)
+  const contentRef = useRef(null)
+  const [natural, setNatural] = useState({ w: 0, h: 0 })
+  // Konten diberi lebar tetap = lebar area scroll (supaya tidak re-wrap saat zoom),
+  // lalu spacer luar memakai ukuran alami × scale sehingga scroll mengikuti zoom.
+  useEffect(() => {
+    const scroll = scrollRef.current
+    const el = contentRef.current
+    if (!scroll || !el) return
+    const measure = () => {
+      const cs = getComputedStyle(scroll)
+      const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0)
+      const w = Math.max(scroll.clientWidth - pad, 1)
+      const h = el.scrollHeight
+      setNatural((p) => (p.w === w && p.h === h ? p : { w, h }))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(scroll)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [target])
+  // Aksesibilitas: tombol + dan - di keyboard juga memicu zoom (kebutuhan khusus),
+  // wheel (pinch/seret) ikut diperhitungkan untuk pengguna touchpad & mouse.
+  useEffect(() => {
+    if (!target) return
+    const onKey = (e) => {
+      const k = (e.key || '').toLowerCase()
+      if (k === '+' || k === '=') { e.preventDefault(); onZoom(STEP) }
+      else if (k === '-' || k === '_') { e.preventDefault(); onZoom(-STEP) }
+      else if (e.key === 'Escape') { e.preventDefault(); onClose() }
+    }
+    const onWheel = (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault()
+        onZoom(e.deltaY < 0 ? STEP : -STEP)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('wheel', onWheel)
+    }
+  }, [target, onClose, onZoom, STEP])
+  return (
+    <AnimatePresence>
+      {target && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-ink/85 backdrop-blur-sm p-3 sm:p-6"
+          onClick={onClose}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[90dvh] flex flex-col overflow-hidden rounded-3xl bg-white dark:bg-ink-900 shadow-lift relative"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Perbesar soal"
+          >
+            {/* Header ramping: hanya judul panel + tombol tutup, teks soal ada di
+                area zoom supaya seluruh soal (teks+gambar+opsi) terzoom sebagai satu. */}
+            <div className="px-5 sm:px-7 pt-5 sm:pt-6 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+              <div className="flex items-center justify-between gap-3">
+                <p className="eyebrow">Zoom Question</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-mono font-bold text-gray-500 dark:text-gray-300 tabular-nums">
+                    {Math.round(scale * 100)}%
+                  </span>
+                  <button
+                    onClick={onClose}
+                    className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+                    aria-label="Tutup"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Area soal yang diperbesar sebagai SATU kesatuan (zoom full).
+                Konten di-`transform: scale` dari kiri-atas, dan spacer luar diberi
+                lebar/tinggi = ukuran alami × scale supaya area scroll jendela tahu
+                dimensi konten yang membesar → seluruh soal (teks + gambar + opsi)
+                tetap TERGULIR di dalam modal, tidak keluar. */}
+            <div ref={scrollRef} className="flex-1 overflow-auto px-5 sm:px-7 py-5">
+              <div style={{ width: natural.w * scale, height: natural.h * scale }}>
+                <div
+                  ref={contentRef}
+                  style={{
+                    transform: `scale(${scale})`,
+                    transformOrigin: 'top left',
+                    width: natural.w,
+                  }}
+                >
+                  <div className="flex flex-col items-center gap-5">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-ink dark:text-gray-100 text-center leading-snug">
+                      <RichText html={target.question_text} className="rich-text" />
+                    </h3>
+                    {target.image && (
+                      <img
+                        src={target.image.path}
+                        alt=""
+                        className="w-full max-h-[40dvh] object-contain rounded-2xl shadow-card"
+                      />
+                    )}
+
+                    {target.options?.length > 0 && (
+                      <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {target.options.map((opt, i) => (
+                          <div
+                            key={opt.id}
+                            className="flex items-center gap-3 p-4 rounded-2xl text-white font-medium shadow min-h-[64px]"
+                            style={{ backgroundColor: optionColor(i) }}
+                          >
+                            <span className="flex items-center justify-center w-8 h-8 rounded-full bg-white/25 font-mono text-sm font-bold shrink-0">
+                              {LETTERS[i % LETTERS.length]}
+                            </span>
+                            <span className="flex-1 leading-snug text-left"><RichText html={opt.option_text} className="rich-text" /></span>
+                            {opt.image && (
+                              <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Kontrol zoom floating — selalu tersedia, tidak menghalangi isi soal.
+              stopPropagation penting: tanpa ini klik tombol zoom justru menutup modal
+              (event naik ke overlay yang onClick={onClose}). */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="fixed bottom-5 right-5 z-[75] flex items-center gap-2 bg-white dark:bg-ink-800 rounded-2xl shadow-lift border border-gray-200 dark:border-gray-700 p-1.5"
+          >
+            <button
+              onClick={() => onZoom(-STEP)}
+              disabled={scale <= 0.75}
+              className="w-12 h-12 rounded-xl flex items-center justify-center text-gray-600 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-ink-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="Perkecil tampilan soal"
+            >
+              <ZoomOut className="w-5 h-5" />
+            </button>
+            <span className="w-14 text-center text-sm font-mono font-bold text-gray-500 dark:text-gray-300 tabular-nums">
+              {Math.round(scale * 100)}%
+            </span>
+            <button
+              onClick={() => onZoom(STEP)}
+              disabled={scale >= 5}
+              className="w-12 h-12 rounded-xl flex items-center justify-center text-gray-600 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-ink-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="Perbesar tampilan soal"
+            >
+              <ZoomIn className="w-5 h-5" />
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
+function PreviewNotice() {
+  return (
+    <div className="fixed bottom-4 left-4 z-50 max-w-[calc(100%-32px)]">
+      <div className="inline-flex items-center gap-2 bg-ink text-white px-3.5 py-2 rounded-full shadow-lift text-xs">
+        <Lock className="w-3.5 h-3.5 shrink-0" />
+        <span>
+          <span className="font-semibold">Preview mode</span> — belum dipublikasikan
+        </span>
+      </div>
+    </div>
   )
 }

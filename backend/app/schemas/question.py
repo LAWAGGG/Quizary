@@ -102,6 +102,17 @@ class SectionUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=150)
 
 
+class SectionReorderRequest(BaseModel):
+    form_id: int
+    orders: list[int] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_orders(self):
+        if not self.orders:
+            raise ValueError("orders must not be empty")
+        return self
+
+
 class SectionResponse(BaseModel):
     id: int
     title: str

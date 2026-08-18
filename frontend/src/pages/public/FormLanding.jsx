@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Lock, Clock, ArrowRight, CheckCircle2, HelpCircle } from 'lucide-react'
-import { Button, Input, Card, AppMark, FallbackPage, DotCorner, SpotlightCard, AuroraBg } from '../../components/ui'
+import { Button, Input, Card, AppMark, FallbackPage, DotCorner, SpotlightCard, AuroraBg, RichText } from '../../components/ui'
+import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 
@@ -57,6 +58,7 @@ function BlockedState({ background, icon, title, children }) {
 export default function FormLanding() {
   const { shortCode } = useParams()
   const navigate = useNavigate()
+  const { theme } = useTheme()
 
   const [form, setForm] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -116,7 +118,7 @@ export default function FormLanding() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-paper">
+      <div className="min-h-dvh flex items-center justify-center bg-paper dark:bg-ink-950">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
@@ -139,7 +141,42 @@ export default function FormLanding() {
   if (!form) return null
 
   const isQuiz = form.type === 'quiz'
-  const palette = themePalette(form.theme_color)
+  const palette = themePalette(form.theme_color, theme === 'dark')
+  const isOwner = form.is_owner === true
+  const isPreview = isOwner && form.status !== 'published'
+  const startsAt = form.starts_at ? parseDate(form.starts_at) : null
+  const endsAt = form.ends_at ? parseDate(form.ends_at) : null
+
+  // Status/waktu ditampilkan langsung di landing — tidak perlu klik Start dulu.
+  // Creator (is_owner) tidak diblokir: ia bisa preview + lihat banner info.
+  let blocked = null
+  if (!isOwner) {
+    if (form.status === 'closed') {
+      blocked = { title: 'This form is now closed.', desc: 'The creator has closed this form, so no more responses are accepted.' }
+    } else if (form.status === 'draft') {
+      blocked = { title: 'This form is not published yet.', desc: 'The creator hasn\u2019t published this form. Check back later.' }
+    } else if (endsAt && Date.now() > endsAt.getTime()) {
+      blocked = { title: 'This form is now closed.', desc: 'The response period for this form has ended.' }
+    } else if (startsAt && Date.now() < startsAt.getTime()) {
+      blocked = { title: 'This form opens in:', countdown: startsAt }
+    }
+  }
+
+  if (blocked) {
+    return (
+      <BlockedState
+        background={palette.gradient}
+        icon={blocked.countdown ? <Clock className="w-6 h-6 text-white" /> : <Lock className="w-6 h-6 text-white" />}
+        title={blocked.title}
+      >
+        {blocked.countdown ? (
+          <CountdownTo target={blocked.countdown} />
+        ) : (
+          <p className="text-white/70 text-sm mt-2 mb-6">{blocked.desc}</p>
+        )}
+      </BlockedState>
+    )
+  }
 
   if (startState) {
     if (startState.session_expired) {
@@ -192,9 +229,10 @@ export default function FormLanding() {
     }
 
     return (
-      <div className="theme-surface min-h-dvh relative overflow-hidden flex items-center justify-center p-6 bg-paper" style={{ '--t': palette.base }}>
+      <div className="theme-surface min-h-dvh relative overflow-hidden flex items-center justify-center p-6 bg-paper dark:bg-ink-950" style={{ '--t': palette.base }}>
         <DotCorner position="top-left" color={palette.base} />
         <DotCorner position="bottom-right" color={palette.base} />
+        {isPreview && <PreviewNotice />}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -202,11 +240,11 @@ export default function FormLanding() {
         >
           <div className="flex items-center gap-2.5 mb-6 justify-center">
             <AppMark size="sm" />
-            <span className="font-display font-bold text-ink">Quizary</span>
+            <span className="font-display font-bold text-ink dark:text-gray-100">Quizary</span>
           </div>
           <Card className="p-6 md:p-7" style={{ borderColor: palette.border }}>
-            <h2 className="font-display text-xl font-bold text-ink">{form.title}</h2>
-            <p className="text-sm text-gray-500 mt-1 mb-6">Enter your details to begin</p>
+            <h2 className="font-display text-xl font-bold text-ink dark:text-gray-100">{form.title}</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-6">Enter your details to begin</p>
             <form onSubmit={handleSubmitIdentity} className="space-y-4">
               <Input
                 label="Name"
@@ -235,6 +273,7 @@ export default function FormLanding() {
   if (isQuiz) {
     return (
       <div className="min-h-dvh flex flex-col" style={{ background: palette.gradient, '--color-primary': palette.base }}>
+        {isPreview && <PreviewNotice />}
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
           <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full blur-3xl pointer-events-none" style={{ backgroundColor: palette.blobLight }} aria-hidden="true" />
           <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full blur-3xl pointer-events-none" style={{ backgroundColor: palette.blobDark }} aria-hidden="true" />
@@ -246,11 +285,11 @@ export default function FormLanding() {
 
           {form.banner_path && (
             <motion.img
-              initial={{ opacity: 0, scale: 0.9 }}
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               src={form.banner_path}
               alt=""
-              className="w-40 h-40 object-cover rounded-3xl mb-8 shadow-lift border-4 border-white/20"
+              className="w-full max-w-3xl h-52 md:h-64 object-cover rounded-2xl mb-10 shadow-lift border-4 border-white/20"
             />
           )}
 
@@ -269,7 +308,7 @@ export default function FormLanding() {
             transition={{ delay: 0.2 }}
             className="text-base md:text-lg opacity-80 max-w-md text-white mt-4"
           >
-            {form.description}
+            <RichText html={form.description} className="rich-text" />
           </motion.p>
           )}
 
@@ -321,14 +360,15 @@ export default function FormLanding() {
       <div className="absolute inset-0 dot-grid opacity-60 pointer-events-none" aria-hidden="true" />
       <DotCorner position="top-left" color={palette.base} />
       <DotCorner position="bottom-right" color={palette.base} />
+      {isPreview && <PreviewNotice />}
       <div className="flex-1 max-w-lg mx-auto w-full p-6 relative">
         {form.banner_path && (
           <img src={form.banner_path} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
         <SpotlightCard>
           <Card className="p-6 md:p-7 h-full" style={{ borderColor: palette.border }}>
-            <h1 className="font-display text-2xl font-bold text-ink mb-2">{form.title}</h1>
-            {form.description && <p className="text-gray-600 mb-6">{form.description}</p>}
+            <h1 className="font-display text-2xl font-bold text-ink dark:text-gray-100 mb-2">{form.title}</h1>
+            {form.description && <p className="text-gray-600 dark:text-gray-400 mb-6"><RichText html={form.description} className="rich-text" /></p>}
             <Button onClick={handleStart} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }} icon={<ArrowRight className="w-4 h-4" />}>
               Start
             </Button>
@@ -347,9 +387,22 @@ export default function FormLanding() {
 
 function InfoChip({ icon, text }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 bg-white border border-gray-200 px-3 py-1.5 rounded-full shadow-chip">
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-white dark:bg-ink-900 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-full shadow-chip">
       {icon}
       {text}
     </span>
+  )
+}
+
+function PreviewNotice() {
+  return (
+    <div className="fixed bottom-4 left-4 z-50 max-w-[calc(100%-32px)]">
+      <div className="inline-flex items-center gap-2 bg-ink text-white px-3.5 py-2 rounded-full shadow-lift text-xs">
+        <Lock className="w-3.5 h-3.5 shrink-0" />
+        <span>
+          <span className="font-semibold">Preview mode</span> — belum dipublikasikan
+        </span>
+      </div>
+    </div>
   )
 }

@@ -46,20 +46,20 @@ export function AuthShell({ eyebrow, title, subtitle, children, footer }) {
         </div>
       </aside>
 
-      <main className="flex items-center justify-center bg-paper px-4 py-10">
+      <main className="flex items-center justify-center bg-paper dark:bg-ink-950 px-4 py-10">
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-2.5 mb-8">
             <AppMark size="sm" />
-            <span className="font-display font-bold text-lg text-ink">Quizary</span>
+            <span className="font-display font-bold text-lg text-ink dark:text-gray-100">Quizary</span>
           </div>
 
           <p className="eyebrow">{eyebrow}</p>
-          <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-ink">{title}</h1>
-          {subtitle && <p className="mt-1.5 text-sm text-gray-500">{subtitle}</p>}
+          <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-ink dark:text-gray-100">{title}</h1>
+          {subtitle && <p className="mt-1.5 text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>}
 
           <div className="mt-8">{children}</div>
 
-          {footer && <div className="mt-6 text-center text-sm text-gray-500">{footer}</div>}
+          {footer && <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">{footer}</div>}
         </div>
       </main>
     </div>

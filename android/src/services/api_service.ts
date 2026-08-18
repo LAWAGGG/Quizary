@@ -193,7 +193,6 @@ export async function createForm(body: {
   title: string;
   description?: string;
   type: 'form' | 'quiz';
-  is_public?: boolean;
   require_login?: boolean;
   submission_limit?: string;
 }) {

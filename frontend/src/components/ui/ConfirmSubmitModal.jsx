@@ -31,10 +31,10 @@ export function ConfirmSubmitModal({
             initial={{ scale: 0.96, opacity: 0, y: 8 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.96, opacity: 0, y: 8 }}
-            className="bg-white rounded-2xl p-6 w-full max-w-md shadow-lift max-h-[85vh] flex flex-col"
+            className="bg-white dark:bg-ink-900 rounded-2xl p-6 w-full max-w-md shadow-lift max-h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="font-display text-lg font-bold text-ink">{title}</h3>
+            <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100">{title}</h3>
 
             <div className="grid grid-cols-3 gap-2.5 mt-4 shrink-0">
               <SummaryChip
@@ -45,13 +45,13 @@ export function ConfirmSubmitModal({
               />
               <SummaryChip
                 icon={<AlertTriangle className="w-4 h-4" />}
-                tint={missing.length ? 'bg-incorrect-soft text-incorrect' : 'bg-gray-100 text-gray-400'}
+                tint={missing.length ? 'bg-incorrect-soft text-incorrect' : 'bg-gray-100 dark:bg-ink-800 text-gray-400 dark:text-gray-500'}
                 label="Unanswered"
                 value={totalCount - answeredCount}
               />
               <SummaryChip
                 icon={<Flag className="w-4 h-4" />}
-                tint={reviewedCount ? 'bg-warn-soft text-warn' : 'bg-gray-100 text-gray-400'}
+                tint={reviewedCount ? 'bg-warn-soft text-warn' : 'bg-gray-100 dark:bg-ink-800 text-gray-400 dark:text-gray-500'}
                 label="Marked"
                 value={reviewedCount}
               />
@@ -64,7 +64,7 @@ export function ConfirmSubmitModal({
                 </p>
                 <ul className="mt-2 space-y-1 max-h-32 overflow-y-auto pr-1">
                   {missing.map((text, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-600 leading-snug">
+                    <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400 leading-snug">
                       <span className="w-1.5 h-1.5 rounded-full bg-incorrect shrink-0 mt-1.5" />
                       <span className="line-clamp-2">{text}</span>
                     </li>
@@ -73,17 +73,17 @@ export function ConfirmSubmitModal({
               </div>
             )}
 
-            <p className="text-sm text-gray-500 mt-4 shrink-0">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-4 shrink-0">
               {missing.length
                 ? 'Kamu masih bisa kembali dan mengisi soal yang kosong.'
                 : 'Pastikan semua jawaban sudah sesuai sebelum mengirim.'}
             </p>
 
-            <div className="flex gap-3 justify-end mt-5 pt-4 border-t border-gray-100 shrink-0">
+            <div className="flex gap-3 justify-end mt-5 pt-4 border-t border-gray-100 dark:border-gray-800 shrink-0">
               <button
                 onClick={onCancel}
                 disabled={loading}
-                className="h-10 px-4 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                className="h-10 px-4 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors disabled:opacity-50"
               >
                 {missing.length ? 'Back to quiz' : 'Cancel'}
               </button>
@@ -112,10 +112,10 @@ export function ConfirmSubmitModal({
 
 function SummaryChip({ icon, tint, label, value }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl px-2 py-3 text-center border border-gray-100 bg-gray-50">
+    <div className="flex flex-col items-center justify-center rounded-xl px-2 py-3 text-center border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-ink-800/50">
       <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${tint}`}>{icon}</span>
-      <span className="text-sm font-bold text-ink mt-1.5 tabular-nums">{value}</span>
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">{label}</span>
+      <span className="text-sm font-bold text-ink dark:text-gray-100 mt-1.5 tabular-nums">{value}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{label}</span>
     </div>
   )
 }

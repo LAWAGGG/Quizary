@@ -1,54 +1,61 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Copy, Check, ArrowLeft, Save, Trash2, ImageUp, Link2, Eye, ChevronDown, Info, Lock, Settings2, Download, QrCode, X } from 'lucide-react'
+import { Copy, Check, ArrowLeft, Save, Trash2, ImageUp, Link2, ChevronDown, Info, Lock, Settings2, Download, QrCode, X } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
-import { Button, Input, Textarea, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, PageSkeleton } from '../../components/ui'
+import { Button, Input, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, PageSkeleton, RichTextEditor } from '../../components/ui'
 
-function CopyField({ label, value }) {
+function ShareLink({ value }) {
   const [copied, setCopied] = useState(false)
   const handleCopy = () => {
     navigator.clipboard.writeText(value)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+  // Compact: link bisa diklik (buka halaman publik) + tombol copy dalam satu baris.
   return (
-    <div>
-      <label className="field-label">{label}</label>
-      <div className="flex gap-2">
-        <div className="flex-1 min-w-0">
-          <input
-            readOnly
-            value={value}
-            onFocus={(e) => e.target.select()}
-            className="w-full h-11 px-4 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-700 font-mono truncate outline-none"
-          />
-        </div>
-        <Button variant="secondary" size="md" onClick={handleCopy} icon={copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}>
-          {copied ? 'Copied!' : 'Copy'}
-        </Button>
-      </div>
+    <div className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-ink-800/50 px-3.5 h-11">
+      <a
+        href={value}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Buka halaman publik"
+        className="flex-1 min-w-0 font-mono text-sm text-gray-600 dark:text-gray-300 truncate hover:text-primary dark:hover:text-primary-300 transition-colors"
+      >
+        {value}
+      </a>
+      <button
+        type="button"
+        onClick={handleCopy}
+        aria-label="Copy link"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100 shrink-0 transition-colors"
+      >
+        {copied ? <Check className="w-4 h-4 text-correct" /> : <Copy className="w-4 h-4" />}
+        <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
+      </button>
     </div>
   )
 }
 
-function CollapsibleCard({ title, icon, defaultOpen = false, children }) {
-  const [open, setOpen] = useState(defaultOpen)
+function CollapsibleCard({ title, icon, defaultOpen = false, open, onToggle, children }) {
+  const [internal, setInternal] = useState(defaultOpen)
+  const isOpen = open !== undefined ? open : internal
+  const toggle = () => (onToggle ? onToggle(!isOpen) : setInternal(!isOpen))
   return (
     <Card padding={false} className="overflow-hidden">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="w-full flex items-center gap-2.5 px-5 py-4 text-left hover:bg-gray-50/70 transition-colors"
+        onClick={toggle}
+        aria-expanded={isOpen}
+        className="w-full flex items-center gap-2.5 px-5 py-4 text-left hover:bg-gray-50/70 dark:hover:bg-ink-800/40 transition-colors"
       >
         <span className="text-primary shrink-0">{icon}</span>
-        <h2 className="font-display font-semibold text-ink">{title}</h2>
-        <ChevronDown className={`w-4 h-4 text-gray-400 ml-auto shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+        <h2 className="font-display font-semibold text-ink dark:text-gray-100">{title}</h2>
+        <ChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-500 ml-auto shrink-0 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
-      {open && <div className="px-5 pb-5">{children}</div>}
+      {isOpen && <div className="px-5 pb-5">{children}</div>}
     </Card>
   )
 }
@@ -57,8 +64,8 @@ function SettingRow({ title, desc, control }) {
   return (
     <div className="flex items-center justify-between gap-4 py-3">
       <div>
-        <p className="text-sm font-medium text-ink">{title}</p>
-        {desc && <p className="text-xs text-gray-400 mt-0.5">{desc}</p>}
+        <p className="text-sm font-medium text-ink dark:text-gray-100">{title}</p>
+        {desc && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{desc}</p>}
       </div>
       {control}
     </div>
@@ -81,6 +88,16 @@ export default function FormEdit() {
   const [showDelete, setShowDelete] = useState(false)
   const [showQr, setShowQr] = useState(false)
   const [errors, setErrors] = useState({})
+  const titleRef = useRef(null)
+  const timerRef = useRef(null)
+  const [basicOpen, setBasicOpen] = useState(false)
+  const [behaviorOpen, setBehaviorOpen] = useState(false)
+
+  // Buka card + scroll ke input yang error supaya user langsung lihat apa yang kurang.
+  const revealError = (setOpen, ref) => {
+    setOpen(true)
+    setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
+  }
 
   useEffect(() => {
     api.get(`/forms/${id}`)
@@ -97,7 +114,14 @@ export default function FormEdit() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
-    setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
+    if (name === 'type' && value === 'form') {
+      // Ganti tipe form → quiz balik: setelan khusus quiz ikut di-reset agar user
+      // tidak perlu bolak-balik ke mode quiz untuk menonaktifkannya.
+      setForm((prev) => ({ ...prev, type: value, timer_seconds: null, show_leaderboard: false, is_restricted: false }))
+      if (type !== 'checkbox') setTimerMinutes('')
+    } else {
+      setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
+    }
     setErrors((prev) => ({ ...prev, [name]: undefined }))
   }
 
@@ -139,7 +163,6 @@ export default function FormEdit() {
       description: form.description || null,
       type: form.type,
       status: form.status,
-      is_public: form.is_public,
       require_login: form.require_login,
       submission_limit: form.submission_limit,
       theme_color: form.theme_color || null,
@@ -148,6 +171,9 @@ export default function FormEdit() {
       shuffle_options: form.shuffle_options,
       show_leaderboard: form.show_leaderboard,
       is_restricted: form.is_restricted,
+      show_in_history: form.show_in_history !== false,
+      reveal_score: form.reveal_score !== false,
+      reveal_answers: form.reveal_answers !== false,
       starts_at: toBackendDate(form.starts_at),
       ends_at: toBackendDate(form.ends_at),
     }
@@ -159,7 +185,6 @@ export default function FormEdit() {
       description: base.description || null,
       type: base.type,
       status: base.status,
-      is_public: base.is_public,
       require_login: base.require_login,
       submission_limit: base.submission_limit,
       theme_color: base.theme_color || null,
@@ -168,6 +193,9 @@ export default function FormEdit() {
       shuffle_options: base.shuffle_options,
       show_leaderboard: base.show_leaderboard,
       is_restricted: base.is_restricted,
+      show_in_history: base.show_in_history !== false,
+      reveal_score: base.reveal_score !== false,
+      reveal_answers: base.reveal_answers !== false,
       starts_at: base.starts_at,
       ends_at: base.ends_at,
     }
@@ -201,6 +229,8 @@ export default function FormEdit() {
         Object.entries(entry).forEach(([k, v]) => { mapped[k] = v })
       })
       setErrors(mapped)
+      if (mapped.title) revealError(setBasicOpen, titleRef)
+      if (mapped.timer_seconds) revealError(setBehaviorOpen, timerRef)
       const unresolved = data.errors.filter((entry) => Object.keys(entry)[0] === '_schema')
       if (unresolved.length || data.message) {
         toast.error(data.message || 'Invalid fields')
@@ -213,6 +243,13 @@ export default function FormEdit() {
   const handleSave = async () => {
     if (!form.title.trim()) {
       setErrors({ title: 'Title is required' })
+      revealError(setBasicOpen, titleRef)
+      return
+    }
+    // Quiz wajib punya timer (per menit) — dicek juga di backend saat publish.
+    if (form.type === 'quiz' && !timerMinutes) {
+      setErrors({ timer_seconds: 'Quiz harus memiliki waktu pengerjaan (menit)' })
+      revealError(setBehaviorOpen, timerRef)
       return
     }
     setSaving(true)
@@ -301,7 +338,7 @@ export default function FormEdit() {
     <div>
       <button
         onClick={() => navigate('/forms')}
-        className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-ink transition-colors mb-4"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 transition-colors mb-4"
       >
         <ArrowLeft className="w-4 h-4" /> Back to forms
       </button>
@@ -312,7 +349,7 @@ export default function FormEdit() {
         description={
           <span className="inline-flex items-center gap-2">
             <StatusBadge status={form.status} />
-            <span className="text-gray-400">· {form.type === 'quiz' ? 'Quiz' : 'Form'}</span>
+            <span className="text-gray-400 dark:text-gray-500">· {form.type === 'quiz' ? 'Quiz' : 'Form'}</span>
           </span>
         }
       />
@@ -322,7 +359,7 @@ export default function FormEdit() {
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-6">
           <CollapsibleCard title="Share" icon={<Link2 className="w-4 h-4" />} defaultOpen>
-            <CopyField label="Public Link" value={`${window.location.origin}/q/${form.short_code}`} />
+            <ShareLink value={`${window.location.origin}/q/${form.short_code}`} />
             <div className="mt-4">
               <Button
                 variant="secondary"
@@ -333,24 +370,14 @@ export default function FormEdit() {
                 Show QR Code
               </Button>
             </div>
-            <div className="flex gap-2 mt-4">
-              {form.status === 'published' && (
-                <Button
-                  variant="secondary"
-                  className="flex-1"
-                  icon={<Eye className="w-4 h-4" />}
-                  onClick={() => window.open(`/q/${form.short_code}`, '_blank')}
-                >
-                  Open public page
-                </Button>
-              )}
-              <Button onClick={() => setShowDelete(true)} variant="ghost-danger" icon={<Trash2 className="w-4 h-4" />}>
+            <div className="mt-3">
+              <Button onClick={() => setShowDelete(true)} variant="ghost-danger" className="w-full" icon={<Trash2 className="w-4 h-4" />}>
                 Delete
               </Button>
             </div>
           </CollapsibleCard>
 
-          <CollapsibleCard title="Basic Information" icon={<Info className="w-4 h-4" />}>
+          <CollapsibleCard title="Basic Information" icon={<Info className="w-4 h-4" />} open={basicOpen} onToggle={setBasicOpen}>
             <div className="space-y-5">
               <Input
                 label="Title"
@@ -359,26 +386,59 @@ export default function FormEdit() {
                 onChange={handleChange}
                 maxLength={150}
                 error={errors.title}
+                ref={titleRef}
               />
-              <Textarea
-                label="Description"
-                name="description"
-                value={form.description || ''}
-                onChange={handleChange}
-                rows={3}
-                error={errors.description}
-              />
+              <div>
+                <span className="field-label">Description</span>
+                <RichTextEditor
+                  value={form.description || ''}
+                  onChange={(html) => setForm((prev) => ({ ...prev, description: html }))}
+                  placeholder="Describe this form or quiz"
+                  minHeight={120}
+                />
+                {errors.description && <p className="field-error">{errors.description}</p>}
+              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <Select label="Type" name="type" value={form.type} onChange={handleChange} error={errors.type}>
                   <option value="form">Form</option>
                   <option value="quiz">Quiz</option>
                 </Select>
-                <Select label="Status" name="status" value={form.status} onChange={handleChange} error={errors.status}>
-                  <option value="draft">Draft</option>
-                  <option value="published">Published</option>
-                  <option value="closed">Closed</option>
-                </Select>
+                <div>
+                  <label className="field-label !mb-1.5">Public status</label>
+                  <div className="flex h-11 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, status: 'published' }))}
+                      className={`flex-1 text-sm font-semibold transition-colors ${
+                        form.status === 'published' ? 'bg-correct text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
+                      }`}
+                    >
+                      Public
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, status: 'draft' }))}
+                      className={`flex-1 text-sm font-semibold transition-colors ${
+                        form.status !== 'published' && form.status !== 'closed' ? 'bg-gray-700 text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
+                      }`}
+                    >
+                      Draft
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, status: 'closed' }))}
+                      className={`flex-1 text-sm font-semibold transition-colors ${
+                        form.status === 'closed' ? 'bg-incorrect text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
+                      }`}
+                    >
+                      Closed
+                    </button>
+                  </div>
+                  {errors.status && (
+                    <p className="field-error">{errors.status}</p>
+                  )}
+                </div>
               </div>
 
               <Select
@@ -397,12 +457,7 @@ export default function FormEdit() {
           </CollapsibleCard>
 
           <CollapsibleCard title="Access" icon={<Lock className="w-4 h-4" />}>
-            <div className="divide-y divide-gray-100">
-              <SettingRow
-                title="Public form"
-                desc="Anyone with the link can answer."
-                control={<Toggle label="Public form" checked={form.is_public} onChange={(v) => setForm((prev) => ({ ...prev, is_public: v }))} />}
-              />
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
               <SettingRow
                 title="Require login"
                 desc={onceLocked ? 'Automatically required because submission is limited to once.' : 'Respondents must sign in first.'}
@@ -415,11 +470,22 @@ export default function FormEdit() {
                   />
                 }
               />
+              <SettingRow
+                title="Show in submission history"
+                desc={form.show_in_history === false ? 'Hidden from respondents\u2019 My Submissions page.' : 'Appears in respondents\u2019 My Submissions page.'}
+                control={
+                  <Toggle
+                    label="Show in history"
+                    checked={form.show_in_history !== false}
+                    onChange={(v) => setForm((prev) => ({ ...prev, show_in_history: v }))}
+                  />
+                }
+              />
             </div>
           </CollapsibleCard>
 
-          <CollapsibleCard title="Behavior" icon={<Settings2 className="w-4 h-4" />}>
-            <div className="divide-y divide-gray-100">
+          <CollapsibleCard title="Behavior" icon={<Settings2 className="w-4 h-4" />} open={behaviorOpen} onToggle={setBehaviorOpen}>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
               <SettingRow
                 title="Shuffle questions"
                 desc="Randomize the order for each respondent."
@@ -438,6 +504,16 @@ export default function FormEdit() {
                     control={<Toggle label="Show leaderboard" checked={!!form.show_leaderboard} onChange={(v) => toggleSetting('show_leaderboard', v)} />}
                   />
                   <SettingRow
+                    title="Show final score"
+                    desc="If off, respondents finish the quiz without seeing their score."
+                    control={<Toggle label="Show final score" checked={form.reveal_score !== false} onChange={(v) => setForm((prev) => ({ ...prev, reveal_score: v }))} />}
+                  />
+                  <SettingRow
+                    title="Show answer review"
+                    desc="If off, respondents can\u2019t view which answers were correct/wrong."
+                    control={<Toggle label="Show answer review" checked={form.reveal_answers !== false} onChange={(v) => setForm((prev) => ({ ...prev, reveal_answers: v }))} />}
+                  />
+                  <SettingRow
                     title="Fullscreen mode"
                     desc="Respondents must stay on the quiz tab. 3 exits auto-submit the quiz with score 0 (marked as cheating)."
                     control={<Toggle label="Fullscreen mode" checked={isRestricted} onChange={(v) => toggleSetting('is_restricted', v)} />}
@@ -446,15 +522,16 @@ export default function FormEdit() {
               )}
               <div className="py-4">
                 <Input
-                  label="Time limit (minutes)"
+                  label={isQuiz ? 'Time limit (minutes) *' : 'Time limit (minutes)'}
                   type="number"
                   value={timerMinutes}
                   onChange={(e) => { setTimerMinutes(e.target.value); setErrors((p) => ({ ...p, timer_seconds: undefined })) }}
                   placeholder="e.g. 10"
                   min={1}
                   max={1440}
-                  helper="Leave empty for no time limit."
+                  helper={isQuiz ? 'Wajib untuk quiz. Pengerjaan otomatis dikumpulkan saat waktu habis.' : 'Leave empty for no time limit.'}
                   error={errors.timer_seconds}
+                  ref={timerRef}
                 />
               </div>
               <div className="py-4">
@@ -466,7 +543,7 @@ export default function FormEdit() {
                       name="theme_color"
                       value={form.theme_color || '#6C5CE7'}
                       onChange={handleChange}
-                      className={`w-11 h-11 rounded-xl cursor-pointer border border-gray-200 shrink-0 ${errors.theme_color ? 'border-incorrect' : ''}`}
+                      className={`w-11 h-11 rounded-xl cursor-pointer border border-gray-200 dark:border-gray-700 shrink-0 ${errors.theme_color ? 'border-incorrect' : ''}`}
                       aria-label="Theme color"
                     />
                     <input
@@ -507,15 +584,16 @@ export default function FormEdit() {
                 </div>
               </div>
               <div className="py-4">
-                <Textarea
-                  label="Thank you message"
-                  name="thank_you_message"
-                  value={form.thank_you_message || ''}
-                  onChange={handleChange}
-                  rows={2}
-                  placeholder="Thank you for filling out this form"
-                  error={errors.thank_you_message}
-                />
+                <div>
+                  <span className="field-label">Thank you message</span>
+                  <RichTextEditor
+                    value={form.thank_you_message || ''}
+                    onChange={(html) => setForm((prev) => ({ ...prev, thank_you_message: html }))}
+                    placeholder="Thank you for filling out this form"
+                    minHeight={90}
+                  />
+                  {errors.thank_you_message && <p className="field-error">{errors.thank_you_message}</p>}
+                </div>
               </div>
             </div>
           </CollapsibleCard>
@@ -529,7 +607,7 @@ export default function FormEdit() {
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
-                className="w-full h-36 rounded-xl border-2 border-dashed border-gray-200 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-primary"
+                className="w-full h-36 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-2 text-gray-400 dark:text-gray-500 hover:text-primary"
               >
                 <ImageUp className="w-6 h-6" />
                 <span className="text-sm font-medium">Upload a banner</span>
@@ -559,8 +637,8 @@ export default function FormEdit() {
             transition={{ duration: 0.15 }}
             className="fixed bottom-4 inset-x-4 z-50 flex justify-center pointer-events-none"
           >
-            <div className="pointer-events-auto flex items-center gap-3 bg-white border border-gray-200 shadow-lift rounded-2xl px-4 py-3 w-full max-w-md">
-              <p className="text-sm text-gray-500 flex-1 truncate">Unsaved changes</p>
+            <div className="pointer-events-auto flex items-center gap-3 bg-white dark:bg-ink-900 border border-gray-200 dark:border-gray-800 shadow-lift rounded-2xl px-4 py-3 w-full max-w-md">
+              <p className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">Unsaved changes</p>
               <Button variant="ghost" size="sm" onClick={handleDiscard}>Discard</Button>
               <Button size="sm" onClick={handleSave} loading={saving} icon={<Save className="w-4 h-4" />}>
                 {saving ? 'Saving...' : 'Save Changes'}
@@ -594,19 +672,19 @@ export default function FormEdit() {
               initial={{ scale: 0.96, opacity: 0, y: 8 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.96, opacity: 0, y: 8 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-lift relative"
+              className="bg-white dark:bg-ink-900 rounded-2xl p-6 w-full max-w-sm shadow-lift relative"
               onClick={(e) => e.stopPropagation()}
             >
               <button
                 onClick={() => setShowQr(false)}
-                className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
+                className="absolute top-3 right-3 p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-colors"
                 aria-label="Close QR code"
               >
                 <X className="w-5 h-5" />
               </button>
-              <h3 className="font-display text-lg font-bold text-ink mb-1">Scan to open</h3>
-              <p className="text-sm text-gray-500 mb-5">Pindai kode QR untuk membuka {form.title}.</p>
-              <div className="flex justify-center p-4 border border-gray-100 rounded-2xl">
+              <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 mb-1">Scan to open</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Pindai kode QR untuk membuka {form.title}.</p>
+              <div className="flex justify-center p-4 border border-gray-100 dark:border-gray-800 rounded-2xl">
                 <QRCodeCanvas
                   ref={qrRef}
                   value={`${window.location.origin}/q/${form.short_code}`}

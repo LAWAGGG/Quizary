@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Users, Trophy, TrendingUp, TrendingDown, ArrowLeft, BarChart3, ClipboardList } from 'lucide-react'
 import api from '../../api/client'
-import { Card, Button, PageHeader, FormSubNav, CardSkeleton } from '../../components/ui'
+import { Card, Button, PageHeader, FormSubNav, CardSkeleton, RichText } from '../../components/ui'
 
 function StatCard({ label, value, icon: Icon, tint, delay }) {
   return (
@@ -11,7 +11,7 @@ function StatCard({ label, value, icon: Icon, tint, delay }) {
       <Card className="p-5 h-full">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm text-gray-500 truncate">{label}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{label}</p>
             <p className={`font-display text-3xl font-bold tabular-nums mt-2 ${tint.split(' ')[1]}`}>
               {value}
             </p>
@@ -26,7 +26,7 @@ function StatCard({ label, value, icon: Icon, tint, delay }) {
 }
 
 function EmptyData() {
-  return <p className="text-gray-400 text-sm py-8 text-center">No data yet</p>
+  return <p className="text-gray-400 dark:text-gray-500 text-sm py-8 text-center">No data yet</p>
 }
 
 function FormAnalytics({ data }) {
@@ -48,7 +48,7 @@ function FormAnalytics({ data }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <Card className="h-full">
-            <h2 className="font-display font-semibold text-ink mb-5">Response Rate by Question</h2>
+            <h2 className="font-display font-semibold text-ink dark:text-gray-100 mb-5">Response Rate by Question</h2>
             {data.question_stats.length === 0 ? (
               <EmptyData />
             ) : (
@@ -57,8 +57,8 @@ function FormAnalytics({ data }) {
                   const pct = data.total_participants ? Math.round((q.answered / data.total_participants) * 100) : 0
                   return (
                     <div key={q.question_id} className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-gray-600 w-16 truncate">Q{i + 1}</span>
-                      <div className="flex-1 h-6 bg-gray-100 rounded-lg overflow-hidden">
+                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400 w-16 truncate">Q{i + 1}</span>
+                      <div className="flex-1 h-6 bg-gray-100 dark:bg-ink-800 rounded-lg overflow-hidden">
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: `${pct}%` }}
@@ -66,7 +66,7 @@ function FormAnalytics({ data }) {
                           className="h-full bg-primary rounded-lg"
                         />
                       </div>
-                      <span className="text-sm text-gray-500 w-16 text-right tabular-nums">{q.answered}/{data.total_participants}</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400 w-16 text-right tabular-nums">{q.answered}/{data.total_participants}</span>
                     </div>
                   )
                 })}
@@ -79,7 +79,7 @@ function FormAnalytics({ data }) {
           <Card className="h-full">
             <div className="flex items-center gap-2 mb-5">
               <BarChart3 className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold text-ink">Most Selected Answers</h2>
+              <h2 className="font-display font-semibold text-ink dark:text-gray-100">Most Selected Answers</h2>
             </div>
             {data.question_stats.length === 0 ? (
               <EmptyData />
@@ -87,14 +87,14 @@ function FormAnalytics({ data }) {
               <div className="space-y-4">
                 {data.question_stats.map((q, i) => (
                   <div key={q.question_id}>
-                    <p className="text-sm font-medium text-ink truncate">Q{i + 1}</p>
+                    <p className="text-sm font-medium text-ink dark:text-gray-100 truncate">Q{i + 1}</p>
                     {q.most_selected ? (
                       <>
                         <div className="flex justify-between text-sm mt-1">
-                          <span className="text-gray-600 truncate">{q.most_selected}</span>
-                          <span className="text-gray-400 tabular-nums shrink-0 ml-2">{q.most_selected_count} · {q.most_selected_pct}%</span>
+                          <span className="text-gray-600 dark:text-gray-400 truncate">{q.most_selected}</span>
+                          <span className="text-gray-400 dark:text-gray-500 tabular-nums shrink-0 ml-2">{q.most_selected_count} · {q.most_selected_pct}%</span>
                         </div>
-                        <div className="h-3 bg-gray-100 rounded-full overflow-hidden mt-1">
+                        <div className="h-3 bg-gray-100 dark:bg-ink-800 rounded-full overflow-hidden mt-1">
                           <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${Math.min(q.most_selected_pct, 100)}%` }}
@@ -104,12 +104,12 @@ function FormAnalytics({ data }) {
                         </div>
                       </>
                     ) : q.sample_answers.length ? (
-                      <p className="text-xs text-gray-500 mt-1.5 leading-snug line-clamp-2">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-snug line-clamp-2">
                         "{q.sample_answers[0]}"
-                        {q.sample_answers.length > 1 && <span className="text-gray-400"> +{q.sample_answers.length - 1} more</span>}
+                        {q.sample_answers.length > 1 && <span className="text-gray-400 dark:text-gray-500"> +{q.sample_answers.length - 1} more</span>}
                       </p>
                     ) : (
-                      <p className="text-xs text-gray-400 mt-1.5">No responses</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">No responses</p>
                     )}
                   </div>
                 ))}
@@ -122,42 +122,42 @@ function FormAnalytics({ data }) {
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mt-6">
         <Card className="overflow-hidden" padding={false}>
           <div className="p-6 pb-4">
-            <h2 className="font-display font-semibold text-ink">Per-Question Answers</h2>
+            <h2 className="font-display font-semibold text-ink dark:text-gray-100">Per-Question Answers</h2>
           </div>
           {data.question_stats.length === 0 ? (
             <div className="p-6 pt-0">
-              <p className="text-gray-400 text-sm">No data yet</p>
+              <p className="text-gray-400 dark:text-gray-500 text-sm">No data yet</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-t border-gray-100 bg-gray-50/70">
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Question</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Answered</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Skipped</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Most Selected</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Sample Answers</th>
+                  <tr className="border-t border-gray-100 bg-gray-50/70 dark:border-gray-800 dark:bg-ink-800/50">
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Question</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Answered</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Skipped</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Most Selected</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Sample Answers</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.question_stats.map((q, i) => (
-                    <tr key={q.question_id} className="border-t border-gray-50 hover:bg-gray-50/70 transition-colors">
-                      <td className="px-6 py-3.5 text-sm text-ink font-medium">Question {i + 1}</td>
-                      <td className="text-center px-4 py-3.5 text-sm text-gray-700 font-semibold tabular-nums">{q.answered}</td>
-                      <td className="text-center px-4 py-3.5 text-sm text-gray-400 tabular-nums">{q.skipped}</td>
-                      <td className="px-4 py-3.5 text-sm text-ink">
+                    <tr key={q.question_id} className="border-t border-gray-50 hover:bg-gray-50/70 dark:hover:bg-ink-800/50 transition-colors">
+                      <td className="px-6 py-3.5 text-sm text-ink dark:text-gray-100 font-medium">Question {i + 1}</td>
+                      <td className="text-center px-4 py-3.5 text-sm text-gray-700 dark:text-gray-400 font-semibold tabular-nums">{q.answered}</td>
+                      <td className="text-center px-4 py-3.5 text-sm text-gray-400 dark:text-gray-500 tabular-nums">{q.skipped}</td>
+                      <td className="px-4 py-3.5 text-sm text-ink dark:text-gray-100">
                         {q.most_selected ? (
-                          <span className="text-gray-700">{q.most_selected} <span className="text-gray-400">({q.most_selected_count})</span></span>
+                          <span className="text-gray-700 dark:text-gray-400">{q.most_selected} <span className="text-gray-400 dark:text-gray-500">({q.most_selected_count})</span></span>
                         ) : (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-400 dark:text-gray-500">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3.5 text-sm text-gray-500 max-w-[240px]">
+                      <td className="px-4 py-3.5 text-sm text-gray-500 dark:text-gray-400 max-w-[240px]">
                         {q.sample_answers.length ? (
                           <span className="block truncate">"{q.sample_answers.slice(0, 2).join('" • "')}"</span>
                         ) : (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-400 dark:text-gray-500">—</span>
                         )}
                       </td>
                     </tr>
@@ -191,7 +191,7 @@ function QuizAnalytics({ data }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <Card className="h-full">
-            <h2 className="font-display font-semibold text-ink mb-5">Correct / Wrong Rate</h2>
+            <h2 className="font-display font-semibold text-ink dark:text-gray-100 mb-5">Correct / Wrong Rate</h2>
             <div className="space-y-4">
               <RateRow
                 label="Correct"
@@ -215,31 +215,31 @@ function QuizAnalytics({ data }) {
           <Card className="h-full">
             <div className="flex items-center gap-2 mb-5">
               <BarChart3 className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold text-ink">Score Summary</h2>
+              <h2 className="font-display font-semibold text-ink dark:text-gray-100">Score Summary</h2>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-xl bg-gray-50 border border-gray-100 p-4 text-center">
-                <p className="text-xs text-gray-500">Average</p>
+              <div className="rounded-xl bg-gray-50 dark:bg-ink-800/50 border border-gray-100 dark:border-gray-800 p-4 text-center">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Average</p>
                 <p className="font-display text-2xl font-bold tabular-nums mt-1">{data.average_score}</p>
               </div>
-              <div className="rounded-xl bg-gray-50 border border-gray-100 p-4 text-center">
-                <p className="text-xs text-gray-500">Median</p>
+              <div className="rounded-xl bg-gray-50 dark:bg-ink-800/50 border border-gray-100 dark:border-gray-800 p-4 text-center">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Median</p>
                 <p className="font-display text-2xl font-bold tabular-nums mt-1">{data.median_score}</p>
               </div>
-              <div className="rounded-xl bg-correct-soft/60 border border-correct/20 p-4 text-center">
-                <p className="text-xs text-gray-500">Above Average</p>
+              <div className="rounded-xl bg-correct-soft border border-correct/20 p-4 text-center">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Above Average</p>
                 <p className="font-display text-2xl font-bold tabular-nums mt-1 text-correct">
                   {Math.round(data.above_average_pct * 100)}%
                 </p>
               </div>
-              <div className="rounded-xl bg-warn-soft/60 border border-warn/20 p-4 text-center">
-                <p className="text-xs text-gray-500">Below Average</p>
+              <div className="rounded-xl bg-warn-soft border border-warn/20 p-4 text-center">
+                <p className="text-xs text-gray-500 dark:text-gray-400">Below Average</p>
                 <p className="font-display text-2xl font-bold tabular-nums mt-1 text-warn">
                   {Math.round((1 - data.above_average_pct) * 100)}%
                 </p>
               </div>
             </div>
-            <p className="text-xs text-gray-400 mt-4 leading-relaxed">
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-4 leading-relaxed">
               Rata-rata & median menunjukkan pusat nilai peserta. Median lebih kebal terhadap outlier (satu nilai ekstrem) daripada rata-rata: jika median jauh di bawah rata-rata, mayoritas peserta dapat nilai rendah tetapi ada beberapa nilai sangat tinggi.
             </p>
           </Card>
@@ -249,21 +249,21 @@ function QuizAnalytics({ data }) {
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mt-6">
         <Card className="overflow-hidden" padding={false}>
           <div className="p-6 pb-4">
-            <h2 className="font-display font-semibold text-ink">Per-Question Stats</h2>
+            <h2 className="font-display font-semibold text-ink dark:text-gray-100">Per-Question Stats</h2>
           </div>
           {data.per_question_stats.length === 0 ? (
             <div className="p-6 pt-0">
-              <p className="text-gray-400 text-sm">No data yet</p>
+              <p className="text-gray-400 dark:text-gray-500 text-sm">No data yet</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-t border-gray-100 bg-gray-50/70">
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Question</th>
+                  <tr className="border-t border-gray-100 bg-gray-50/70 dark:border-gray-800 dark:bg-ink-800/50">
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Question</th>
                     <th className="text-center px-4 py-3 text-xs font-semibold text-correct uppercase tracking-wider">Correct</th>
                     <th className="text-center px-4 py-3 text-xs font-semibold text-incorrect uppercase tracking-wider">Wrong</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Accuracy</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Accuracy</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -271,9 +271,9 @@ function QuizAnalytics({ data }) {
                     const total = q.correct_count + q.wrong_count
                     const accuracy = total ? Math.round((q.correct_count / total) * 100) : 0
                     return (
-                      <tr key={q.question_id} className="border-t border-gray-50 hover:bg-gray-50/70 transition-colors">
-                        <td className="px-6 py-3.5 text-sm text-ink font-medium">
-                          <span className="block max-w-[280px] truncate">{q.question_text || `Question ${i + 1}`}</span>
+                      <tr key={q.question_id} className="border-t border-gray-50 hover:bg-gray-50/70 dark:hover:bg-ink-800/50 transition-colors">
+                        <td className="px-6 py-3.5 text-sm text-ink dark:text-gray-100 font-medium">
+                          <RichText html={q.question_text || `Question ${i + 1}`} className="rich-text block max-w-[280px] truncate" />
                         </td>
                         <td className="text-center px-4 py-3.5 text-sm text-correct font-semibold tabular-nums">{q.correct_count}</td>
                         <td className="text-center px-4 py-3.5 text-sm text-incorrect font-semibold tabular-nums">{q.wrong_count}</td>
@@ -318,12 +318,12 @@ export default function Analytics() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[1, 2, 3, 4].map((i) => <CardSkeleton key={i} />)}
         </div>
-        <div className="card p-6 animate-pulse mb-8">
+        <div className="card p-6 animate-pulse mb-8 dark:bg-ink-900">
           <div className="h-5 bg-gray-200/60 rounded w-1/3 mb-4" />
           <div className="h-12 bg-gray-200/60 rounded-xl mb-3" />
           <div className="h-12 bg-gray-200/60 rounded-xl" />
         </div>
-        <div className="card p-6 animate-pulse">
+        <div className="card p-6 animate-pulse dark:bg-ink-900">
           <div className="h-5 bg-gray-200/60 rounded w-1/3 mb-4" />
           <div className="h-48 bg-gray-200/60 rounded-xl" />
         </div>
@@ -331,7 +331,7 @@ export default function Analytics() {
     )
   }
 
-  if (!data) return <div className="text-center py-12 text-gray-400">Failed to load data</div>
+  if (!data) return <div className="text-center py-12 text-gray-400 dark:text-gray-500">Failed to load data</div>
 
   const isQuiz = data.type !== 'form'
   const description = isQuiz
@@ -363,9 +363,9 @@ function RateRow({ label, pct, count, barClass, textClass }) {
     <div>
       <div className="flex justify-between text-sm mb-1.5">
         <span className={`font-medium ${textClass}`}>{label} · {pct}%</span>
-        <span className="text-gray-400 tabular-nums">{count} answers</span>
+        <span className="text-gray-400 dark:text-gray-500 tabular-nums">{count} answers</span>
       </div>
-      <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+      <div className="h-3 bg-gray-100 dark:bg-ink-800 rounded-full overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}

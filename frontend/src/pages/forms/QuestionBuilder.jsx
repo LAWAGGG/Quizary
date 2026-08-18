@@ -1,23 +1,46 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon } from 'lucide-react'
+import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers } from 'lucide-react'
+import {
+  DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
+  useSensor, useSensors, useDroppable, closestCorners,
+} from '@dnd-kit/core'
+import {
+  SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
-import { Button, Input, Textarea, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton } from '../../components/ui'
+import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText } from '../../components/ui'
+import SectionManager from '../../components/ui/SectionManager'
 
 const TYPE_LABELS = {
   multiple_choice: 'Multiple Choice',
   checkbox: 'Checkbox',
+  dropdown: 'Dropdown',
   short_answer: 'Short Answer',
   essay: 'Essay',
+  date: 'Date',
+  time: 'Time',
+  file_upload: 'File Upload',
 }
 
-const TYPE_OPTIONS = ['multiple_choice', 'checkbox', 'short_answer', 'essay']
+const TYPE_OPTIONS = ['multiple_choice', 'checkbox', 'dropdown', 'short_answer', 'essay', 'date', 'time', 'file_upload']
+const OPTION_TYPES = ['multiple_choice', 'checkbox', 'dropdown']
+const NO_GRADE_TYPES = ['essay', 'date', 'time', 'file_upload']
+
+const TYPE_HINTS = {
+  dropdown: 'Responden memilih satu jawaban dari daftar dropdown.',
+  date: 'Responden memilih tanggal (YYYY-MM-DD).',
+  time: 'Responden memilih waktu (HH:MM).',
+  file_upload: 'Responden mengunggah file (pdf, doc, xls, ppt, txt, csv, gambar, zip).',
+}
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
-function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, questionId }) {
+function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, questionId, sections }) {
   const toast = useToast()
   const [form, setForm] = useState({
     question_text: '',
@@ -25,6 +48,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     points: 1,
     is_scored: true,
     is_required: true,
+    section_id: null,
     options: [{ option_text: '', is_correct: false }],
     ...(initial || {}),
   })
@@ -86,7 +110,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     setForm((prev) => ({
       ...prev,
       type,
-      options: type === 'multiple_choice' || type === 'checkbox'
+      options: OPTION_TYPES.includes(type)
         ? (prev.options.length ? prev.options : [{ option_text: '', is_correct: false }])
         : [],
     }))
@@ -102,7 +126,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
 
   const setOption = (i, field, value) => {
     setForm((prev) => {
-      if (field === 'is_correct' && prev.type === 'multiple_choice') {
+      if (field === 'is_correct' && (prev.type === 'multiple_choice' || prev.type === 'dropdown')) {
         return { ...prev, options: prev.options.map((o, idx) => ({ ...o, is_correct: idx === i && value })) }
       }
       const opts = prev.options.map((o, idx) => (idx !== i ? o : { ...o, [field]: value }))
@@ -110,8 +134,10 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     })
   }
 
-  const canSave = form.question_text.trim()
-  const needsOptions = form.type === 'multiple_choice' || form.type === 'checkbox'
+  const textOnly = (html) => (html || '').replace(/<[^>]*>/g, '').trim()
+  const canSave = !!textOnly(form.question_text)
+  const needsOptions = OPTION_TYPES.includes(form.type)
+  const noGrade = NO_GRADE_TYPES.includes(form.type)
   const hasCorrect = form.options.some((o) => o.is_correct)
 
   return (
@@ -119,15 +145,33 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
       <Select label="Question Type" value={form.type} onChange={(e) => handleTypeChange(e.target.value)} error={ferr('type')}>
         {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
       </Select>
+      {TYPE_HINTS[form.type] && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 -mt-3">{TYPE_HINTS[form.type]}</p>
+      )}
 
-      <Textarea
-        label="Question"
-        value={form.question_text}
-        onChange={(e) => setForm((p) => ({ ...p, question_text: e.target.value }))}
-        rows={2}
-        placeholder="Enter question text..."
-        error={ferr('question_text')}
-      />
+      {sections?.length > 0 && (
+        <div>
+          <label className="field-label">Section</label>
+          <select
+            value={form.section_id || ''}
+            onChange={(e) => setForm((p) => ({ ...p, section_id: e.target.value ? parseInt(e.target.value) : null }))}
+            className="input-field"
+          >
+            <option value="">— No section —</option>
+            {sections.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
+          </select>
+        </div>
+      )}
+
+      <div>
+        <label className="field-label">Question</label>
+        <RichTextEditor
+          value={form.question_text}
+          onChange={(html) => setForm((p) => ({ ...p, question_text: html }))}
+          placeholder="Enter question text..."
+        />
+        {ferr('question_text') && <p className="field-error">{ferr('question_text')}</p>}
+      </div>
 
       <div className="flex items-center gap-3">
         <input
@@ -142,7 +186,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
           type="button"
           onClick={(e) => { e.preventDefault(); questionFileRef.current?.click() }}
           disabled={!questionId || qImgLoading}
-          className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold border border-gray-200 text-gray-500 hover:text-primary hover:border-primary transition-colors"
+          className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-primary hover:border-primary transition-colors"
         >
           {qImgLoading ? (
             <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -152,12 +196,12 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
           {qImgLoading ? 'Uploading...' : form.image ? 'Replace question image' : 'Add question image'}
         </button>
         {form.image?.path && (
-          <img src={form.image.path} alt="" className="h-10 w-14 object-cover rounded-md border border-gray-200" />
+          <img src={form.image.path} alt="" className="h-10 w-14 object-cover rounded-md border border-gray-200 dark:border-gray-700" />
         )}
       </div>
 
       <div className="flex items-end gap-4">
-        {isQuiz && (
+        {isQuiz && !noGrade && (
           <div className="flex-1">
             {isEditing ? (
               <Input
@@ -174,7 +218,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
             ) : (
               <div>
                 <label className="field-label">Points</label>
-                <p className="text-sm text-gray-400 bg-gray-50 border border-gray-200 rounded-xl px-4 h-11 flex items-center">
+                <p className="text-sm text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-ink-800/50 border border-gray-200 dark:border-gray-700 rounded-xl px-4 h-11 flex items-center">
                   Auto-assigned by system
                 </p>
               </div>
@@ -182,9 +226,9 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
           </div>
         )}
         <div className="flex items-center gap-2.5 h-11 pb-[1px]">
-          {isQuiz && isEditing && (
+          {isQuiz && isEditing && !noGrade && (
             <>
-              <span className="text-sm text-gray-600">Count points</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">Count points</span>
               <Toggle
                 label="Count points"
                 checked={form.is_scored}
@@ -192,7 +236,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
               />
             </>
           )}
-          <span className="text-sm text-gray-600">Required</span>
+          <span className="text-sm text-gray-600 dark:text-gray-400">Required</span>
           <Toggle label="Required" checked={form.is_required} onChange={(v) => setForm((p) => ({ ...p, is_required: v }))} />
         </div>
       </div>
@@ -202,8 +246,8 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
           <div className="flex items-center justify-between mb-2.5">
             <label className="field-label !mb-0">
               Answer options
-              <span className="ml-2 text-xs font-normal text-gray-400">
-                {form.type === 'multiple_choice' ? 'pick one correct' : 'mark each correct'}
+              <span className="ml-2 text-xs font-normal text-gray-400 dark:text-gray-500">
+                {form.type === 'checkbox' ? 'mark each correct' : 'pick one correct'}
               </span>
             </label>
             <button type="button" onClick={addOption} className="text-sm font-medium text-primary hover:underline">
@@ -220,9 +264,8 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                 className="flex items-center gap-2.5"
               >
                 {form.type === 'checkbox' ? (
-                  <span className={`flex items-center justify-center w-7 h-7 rounded-lg border-2 shrink-0 transition-colors ${
-                    opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 bg-white text-transparent'
-                  }`}>
+                  <span className={`flex items-center justify-center w-7 h-7 rounded-lg border-2 shrink-0 transition-colors ${opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 bg-white dark:bg-ink-900 text-transparent'
+                    }`}>
                     {opt.is_correct && <Check className="w-4 h-4" strokeWidth={3.5} />}
                   </span>
                 ) : (
@@ -230,15 +273,17 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                     {opt.is_correct ? <Check className="w-3.5 h-3.5" /> : LETTERS[i % LETTERS.length]}
                   </span>
                 )}
-                <input
-                  type="text"
-                  value={opt.option_text}
-                  onChange={(e) => setOption(i, 'option_text', e.target.value)}
-                  className="input-field flex-1"
-                  placeholder={`Option ${LETTERS[i % LETTERS.length]}`}
-                />
+                <div className="flex-1 min-w-0">
+                  <RichTextEditor
+                    value={opt.option_text}
+                    onChange={(html) => setOption(i, 'option_text', html)}
+                    placeholder={`Option ${LETTERS[i % LETTERS.length]}`}
+                    compact
+                    minHeight={48}
+                  />
+                </div>
                 {opt.image?.path && (
-                  <img src={opt.image.path} alt="" className="w-9 h-9 object-cover rounded-md border border-gray-200 shrink-0" />
+                  <img src={opt.image.path} alt="" className="w-9 h-9 object-cover rounded-md border border-gray-200 dark:border-gray-700 shrink-0" />
                 )}
                 <input
                   ref={(el) => (optionFileRefs.current[i] = el)}
@@ -256,9 +301,8 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                   }}
                   disabled={!opt.id || !!imgLoading}
                   title={opt.id ? 'Upload option image' : 'Save question first to add an image'}
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
-                    opt.image ? 'text-primary hover:bg-primary-soft' : 'text-gray-400 hover:text-primary hover:bg-primary-soft'
-                  }`}
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors shrink-0 ${opt.image ? 'text-primary hover:bg-primary-soft' : 'text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary-soft'
+                    }`}
                 >
                   {imgLoading === `opt-${i}` ? (
                     <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -270,18 +314,17 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                   type="button"
                   onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
                   aria-label={opt.is_correct ? 'Mark as not correct' : 'Mark as correct'}
-                  title={form.type === 'multiple_choice' ? 'Set as correct answer' : 'Toggle correct'}
-                  className={`flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${
-                    opt.is_correct ? 'bg-correct-soft text-correct' : 'bg-gray-100 text-gray-400 hover:text-gray-600'
-                  }`}
+                  title={form.type === 'checkbox' ? 'Toggle correct' : 'Set as correct answer'}
+                  className={`flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${opt.is_correct ? 'bg-correct-soft text-correct' : 'bg-gray-100 dark:bg-ink-800 text-gray-400 dark:text-gray-500 hover:text-gray-600'
+                    }`}
                 >
-                  {form.type === 'multiple_choice' ? (opt.is_correct ? 'Correct' : 'Correct?') : (opt.is_correct ? 'Correct' : 'Mark')}
+                  {form.type === 'checkbox' ? (opt.is_correct ? 'Correct' : 'Mark') : (opt.is_correct ? 'Correct' : 'Correct?')}
                 </button>
                 {form.options.length > 1 && (
                   <button
                     type="button"
                     onClick={() => removeOption(i)}
-                    className="w-9 h-9 rounded-lg text-gray-400 hover:text-incorrect hover:bg-incorrect-soft transition-colors text-lg leading-none"
+                    className="w-9 h-9 rounded-lg text-gray-400 dark:text-gray-500 hover:text-incorrect hover:bg-incorrect-soft transition-colors text-lg leading-none"
                     aria-label="Remove option"
                   >
                     &times;
@@ -309,77 +352,207 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   )
 }
 
-function QuestionCard({ question, index, onEdit, onDelete, onDragStart, onDragOver, onDragEnd, isDragging, isQuiz, selected, onToggleSelect }) {
+function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, onToggleSelect }) {
+  return (
+    <Card className={`transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? 'border-primary/50 shadow-card' : 'hover:border-gray-300 dark:hover:border-gray-700'}`}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-gray-300 dark:text-gray-600 cursor-grab"><GripVertical className="w-5 h-5" /></span>
+          <span className="w-6 h-6 rounded-full bg-ink text-white text-xs font-bold flex items-center justify-center shrink-0">
+            {index + 1}
+          </span>
+          <Badge scheme="gray">{TYPE_LABELS[question.type]}</Badge>
+          {isQuiz && question.is_scored && question.points > 0 && (
+            <span className="text-xs text-gray-400 dark:text-gray-500">{question.points} pts</span>
+          )}
+          {isQuiz && !question.is_scored && (
+            <span className="text-xs text-gray-400 dark:text-gray-500">Not scored</span>
+          )}
+        </div>
+        <div className="flex gap-1 shrink-0 items-center">
+          <button onClick={() => onEdit(question)} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary px-2 py-1 transition-colors">Edit</button>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelect(question.id)}
+            className="w-4 h-4 rounded accent-primary cursor-pointer"
+            aria-label={`Select question ${index + 1}`}
+          />
+        </div>
+      </div>
+
+      <RichText html={question.question_text} className="rich-text block text-[15px] font-medium text-ink dark:text-gray-100 mb-3" />
+
+      {question.options?.length > 0 && (
+        <div className="space-y-1.5">
+          {question.options.map((opt, i) => (
+            <div key={opt.id} className="flex items-center gap-2.5">
+              {question.type === 'checkbox' ? (
+                <span className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 ${opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 text-transparent'}`}>
+                  {opt.is_correct && <Check className="w-3 h-3" strokeWidth={3.5} />}
+                </span>
+              ) : (
+                <span className={`bubble w-6 h-6 text-xs ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
+                  {opt.is_correct ? <Check className="w-3 h-3" /> : LETTERS[i % LETTERS.length]}
+                </span>
+              )}
+              <span className={`text-sm ${opt.is_correct ? 'text-correct font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
+                <RichText html={opt.option_text} className="rich-text" />
+              </span>
+              {opt.image?.path && (
+                <img src={opt.image.path} alt="" className="w-6 h-6 object-cover rounded shrink-0" />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {question.image && (
+        <img src={question.image.path} alt="" className="mt-3 max-h-32 rounded-xl object-cover" />
+      )}
+    </Card>
+  )
+}
+
+function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onToggleSelect }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+    id: question.id,
+    data: { type: 'question', questionId: question.id },
+  })
+  const style = { transform: CSS.Transform.toString(transform), transition }
   return (
     <motion.div
       layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      draggable
-      onDragStart={(e) => onDragStart(e, index)}
-      onDragOver={(e) => onDragOver(e, index)}
-      onDragEnd={onDragEnd}
     >
-      <Card className={`cursor-grab active:cursor-grabbing transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? 'border-primary/50 shadow-card' : 'hover:border-gray-300'}`}>
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <span className="text-gray-300 cursor-grab"><GripVertical className="w-5 h-5" /></span>
-            <span className="w-6 h-6 rounded-full bg-ink text-white text-xs font-bold flex items-center justify-center shrink-0">
-              {index + 1}
-            </span>
-            <Badge scheme="gray">{TYPE_LABELS[question.type]}</Badge>
-            {isQuiz && question.is_scored && question.points > 0 && (
-              <span className="text-xs text-gray-400">{question.points} pts</span>
-            )}
-            {isQuiz && !question.is_scored && (
-              <span className="text-xs text-gray-400">Not scored</span>
-            )}
-          </div>
-          <div className="flex gap-1 shrink-0 items-center">
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={() => onToggleSelect(question.id)}
-              className="w-4 h-4 rounded accent-primary cursor-pointer"
-              aria-label={`Select question ${index + 1}`}
-            />
-            <button onClick={() => onEdit(question)} className="text-xs font-medium text-gray-400 hover:text-primary px-2 py-1 transition-colors">Edit</button>
-            <button onClick={() => onDelete(question)} className="text-xs font-medium text-gray-400 hover:text-incorrect px-2 py-1 transition-colors">Delete</button>
-          </div>
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        className="relative"
+      >
+        <span
+          {...listeners}
+          ref={setActivatorNodeRef}
+          className="absolute left-0 top-3 bottom-3 w-6 flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 dark:text-gray-600"
+        >
+          <GripVertical className="w-5 h-5" />
+        </span>
+        <div className="pl-7">
+          <QuestionCard
+            question={question}
+            index={index}
+            onEdit={onEdit}
+            isDragging={isDragging}
+            isQuiz={isQuiz}
+            selected={selected}
+            onToggleSelect={onToggleSelect}
+          />
         </div>
-
-        <p className="text-[15px] font-medium text-ink mb-3">{question.question_text}</p>
-
-        {question.options?.length > 0 && (
-          <div className="space-y-1.5">
-            {question.options.map((opt, i) => (
-              <div key={opt.id} className="flex items-center gap-2.5">
-                {question.type === 'checkbox' ? (
-                  <span className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 ${opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 text-transparent'}`}>
-                    {opt.is_correct && <Check className="w-3 h-3" strokeWidth={3.5} />}
-                  </span>
-                ) : (
-                  <span className={`bubble w-6 h-6 text-xs ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
-                    {opt.is_correct ? <Check className="w-3 h-3" /> : LETTERS[i % LETTERS.length]}
-                  </span>
-                )}
-                <span className={`text-sm ${opt.is_correct ? 'text-correct font-medium' : 'text-gray-600'}`}>
-                  {opt.option_text}
-                </span>
-                {opt.image?.path && (
-                  <img src={opt.image.path} alt="" className="w-6 h-6 object-cover rounded shrink-0" />
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {question.image && (
-          <img src={question.image.path} alt="" className="mt-3 max-h-32 rounded-xl object-cover" />
-        )}
-      </Card>
+      </div>
     </motion.div>
+  )
+}
+
+function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections }) {
+  return (
+    <div>
+      <SortableQuestionCard
+        question={q}
+        index={index}
+        onEdit={onEdit}
+        isQuiz={isQuiz}
+        selected={selected}
+        onToggleSelect={onToggleSelect}
+      />
+      <AnimatePresence>
+        {editOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden mt-3"
+          >
+            <Card>
+              <h3 className="font-display font-semibold text-ink dark:text-gray-100 mb-5">Edit Question {index + 1}</h3>
+              <QuestionForm
+                initial={{
+                  question_text: q.question_text,
+                  type: q.type,
+                  points: q.points,
+                  is_scored: q.is_scored !== false,
+                  is_required: q.is_required,
+                  section_id: q.section_id || null,
+                  image: q.image,
+                  options: q.options?.length
+                    ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct, image: o.image }))
+                    : [{ option_text: '', is_correct: false }],
+                }}
+                onSave={onSave}
+                onCancel={onCancel}
+                loading={saveLoading}
+                isQuiz={isQuiz}
+                errors={errors}
+                questionId={q.id}
+                sections={sections}
+              />
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSave, onCancel, onDelete }) {
+  return (
+    <div className="flex items-center gap-3 border-b border-gray-200 dark:border-gray-800 pb-2.5">
+      {editing ? (
+        <>
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel() }}
+            className="input-field h-9 text-sm flex-1"
+            autoFocus
+            placeholder="Nama section"
+          />
+          <Button size="sm" onClick={onSave} icon={<Check className="w-3.5 h-3.5" />}>Simpan</Button>
+          <Button size="sm" variant="ghost" onClick={onCancel}>Batal</Button>
+        </>
+      ) : (
+        <>
+          <span className="w-1.5 h-6 rounded-full bg-primary shrink-0" />
+          <h3 className="font-display font-semibold text-ink dark:text-gray-100 flex-1 truncate">
+            {section ? section.title : 'General'}
+          </h3>
+          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">{count} soal</span>
+          {section && (
+            <>
+              <button onClick={onEdit} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary px-2 py-1 transition-colors">Rename</button>
+              <button onClick={onDelete} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-incorrect px-2 py-1 transition-colors">Delete</button>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function SectionDropZone({ sectionId, children }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `section-${sectionId ?? 'none'}`,
+    data: { type: 'section', sectionId: sectionId ?? null },
+  })
+  return (
+    <div
+      ref={setNodeRef}
+      className={`rounded-xl -mx-3 px-3 transition-all ${isOver ? 'ring-2 ring-primary/40 bg-primary-50/40 dark:bg-primary-900/20' : ''}`}
+    >
+      {children}
+    </div>
   )
 }
 
@@ -388,13 +561,21 @@ export default function QuestionBuilder() {
   const navigate = useNavigate()
   const toast = useToast()
   const docxRef = useRef(null)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   const [form, setForm] = useState(null)
   const [questions, setQuestions] = useState([])
+  const [sections, setSections] = useState([])
+  const [newSectionOpen, setNewSectionOpen] = useState(false)
+  const [newSectionTitle, setNewSectionTitle] = useState('')
+  const [editingSectionId, setEditingSectionId] = useState(null)
+  const [sectionTitleDraft, setSectionTitleDraft] = useState('')
+  const [sectionDeleteTarget, setSectionDeleteTarget] = useState(null)
+  const [sectionSaving, setSectionSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
   const [showForm, setShowForm] = useState(false)
-  const [dragIdx, setDragIdx] = useState(null)
   const [reorderSaving, setReorderSaving] = useState(false)
   const [saveLoading, setSaveLoading] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -402,20 +583,30 @@ export default function QuestionBuilder() {
   const [selectedIds, setSelectedIds] = useState([])
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [showBulkDelete, setShowBulkDelete] = useState(false)
+  const [showSectionManager, setShowSectionManager] = useState(false)
+  const [activeDrag, setActiveDrag] = useState(null)
 
-  const load = () => {
-    setLoading(true)
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const load = (silent = false) => {
+    if (!silent) setLoading(true)
     Promise.all([
       api.get(`/forms/${formId}`),
       api.get(`/forms/${formId}/questions`),
+      api.get(`/forms/${formId}/sections`),
     ])
-      .then(([fRes, qRes]) => {
+      .then(([fRes, qRes, sRes]) => {
         setForm(fRes.data)
         setQuestions(qRes.data.data)
+        setSections(sRes.data.data)
         setSelectedIds([])
       })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+      .catch(() => { })
+      .finally(() => { if (!silent) setLoading(false) })
   }
 
   useEffect(() => {
@@ -432,12 +623,13 @@ export default function QuestionBuilder() {
       points: data.points,
       is_scored: data.is_scored !== false,
       is_required: data.is_required,
-      options: (data.type === 'multiple_choice' || data.type === 'checkbox')
+      section_id: data.section_id || null,
+      options: OPTION_TYPES.includes(data.type)
         ? data.options.filter((o) => o.option_text.trim()).map((o) => ({
-            ...(o.id ? { id: o.id } : {}),
-            option_text: o.option_text,
-            is_correct: o.is_correct,
-          }))
+          ...(o.id ? { id: o.id } : {}),
+          option_text: o.option_text,
+          is_correct: o.is_correct,
+        }))
         : [],
     }
     try {
@@ -511,47 +703,88 @@ export default function QuestionBuilder() {
     }
   }
 
-  const handleDragStart = (e, idx) => {
-    setDragIdx(idx)
-    e.dataTransfer.effectAllowed = 'move'
+  const handleDragStart = (event) => {
+    const data = event.active.data.current || {}
+    setActiveDrag({
+      type: data.type,
+      questionId: data.questionId,
+      id: event.active.id,
+    })
   }
 
-  const handleDragOver = (e, idx) => {
-    e.preventDefault()
-    if (dragIdx === null || dragIdx === idx) return
-    const reordered = [...questions]
-    const [moved] = reordered.splice(dragIdx, 1)
-    reordered.splice(idx, 0, moved)
-    setQuestions(reordered)
-    setDragIdx(idx)
-  }
-
-  const handleDragEnd = async () => {
-    setDragIdx(null)
-    const orders = questions.map((q) => q.id)
-    setReorderSaving(true)
-    try {
-      await api.patch('/questions/reorder', { form_id: parseInt(formId), orders })
-    } catch {
-      load()
-    } finally {
-      setReorderSaving(false)
+  const handleDragOver = (event) => {
+    const { active, over } = event
+    if (!over || active.data.current?.type !== 'question') return
+    const activeId = active.id
+    const overId = over.id
+    if (activeId === overId) return
+    const activeIndex = questions.findIndex((q) => q.id === activeId)
+    const overIndex = questions.findIndex((q) => q.id === overId)
+    if (activeIndex !== -1 && overIndex !== -1 && activeIndex !== overIndex) {
+      setQuestions((prev) => arrayMove(prev, activeIndex, overIndex))
     }
   }
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event
+    setActiveDrag(null)
+    if (!over) return
+
+    const type = active.data.current?.type
+
+    if (type === 'question') {
+      const movedQuestionId = active.id
+      const overData = over.data.current
+
+      if (overData?.type === 'section') {
+        const toSection = overData.sectionId ?? null
+        const q = questions.find((qq) => qq.id === movedQuestionId)
+        if (q && q.section_id !== toSection) {
+          try {
+            await api.put(`/questions/${movedQuestionId}`, { section_id: toSection })
+            toast.success('Question moved to another section')
+            load(true)
+            return
+          } catch (err) {
+            toast.error(err.response?.data?.detail || 'Failed to move question')
+            load(true)
+            return
+          }
+        }
+        return
+      }
+
+      setReorderSaving(true)
+      try {
+        await api.patch('/questions/reorder', { form_id: parseInt(formId), orders: questions.map((q) => q.id) })
+      } catch {
+        load(true)
+      } finally {
+        setReorderSaving(false)
+      }
+    }
+  }
+
+  const handleDragCancel = () => setActiveDrag(null)
 
   const handleDocxImport = async (e) => {
     const file = e.target.files[0]
     if (!file) return
+    e.target.value = ''
+    setImporting(true)
     const fd = new FormData()
     fd.append('file', file)
     try {
       await api.post(`/forms/${formId}/import/docx`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
+      setShowImportModal(false)
       toast.success('Questions imported')
       load()
     } catch (err) {
       toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to import DOCX')
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -559,6 +792,47 @@ export default function QuestionBuilder() {
     setEditing(q)
     setShowForm(true)
     setFieldErrors({})
+  }
+
+  const createSection = async () => {
+    if (!newSectionTitle.trim()) return
+    setSectionSaving(true)
+    try {
+      await api.post(`/forms/${formId}/sections`, { title: newSectionTitle.trim() })
+      setNewSectionTitle('')
+      setNewSectionOpen(false)
+      toast.success('Section ditambahkan')
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Gagal menambah section')
+    } finally {
+      setSectionSaving(false)
+    }
+  }
+
+  const renameSection = async (section) => {
+    if (!sectionTitleDraft.trim()) return
+    try {
+      await api.patch(`/sections/${section.id}`, { title: sectionTitleDraft.trim() })
+      setEditingSectionId(null)
+      toast.success('Section diperbarui')
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Gagal memperbarui section')
+    }
+  }
+
+  const deleteSection = async () => {
+    if (!sectionDeleteTarget) return
+    try {
+      await api.delete(`/sections/${sectionDeleteTarget.id}`)
+      setSectionDeleteTarget(null)
+      toast.success('Section dihapus')
+      load()
+    } catch {
+      toast.error('Gagal menghapus section')
+      setSectionDeleteTarget(null)
+    }
   }
 
   if (loading) {
@@ -576,7 +850,7 @@ export default function QuestionBuilder() {
     <div>
       <button
         onClick={() => navigate(`/forms/${formId}`)}
-        className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-ink transition-colors mb-4"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 transition-colors mb-4"
       >
         <ArrowLeft className="w-4 h-4" /> Back to settings
       </button>
@@ -588,10 +862,15 @@ export default function QuestionBuilder() {
         actions={
           <>
             <input ref={docxRef} type="file" accept=".docx" onChange={handleDocxImport} className="hidden" />
-            <Button variant="secondary" onClick={() => docxRef.current?.click()} icon={<Upload className="w-4 h-4" />}>
+            <Button variant="secondary" onClick={() => { if (docxRef.current) docxRef.current.value = ''; setShowImportModal(true) }} icon={<Upload className="w-4 h-4" />}>
               Import DOCX
             </Button>
-              <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />}>
+            {form.type !== 'quiz' && (
+              <Button variant="secondary" onClick={() => setShowSectionManager(true)} icon={<Layers className="w-4 h-4" />}>
+                Manage Sections
+              </Button>
+            )}
+            <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />}>
               Add Question
             </Button>
           </>
@@ -599,6 +878,30 @@ export default function QuestionBuilder() {
       />
 
       <FormSubNav formId={formId} className="mt-5" />
+
+      <SectionManager
+        formId={formId}
+        show={showSectionManager}
+        onClose={() => setShowSectionManager(false)}
+        sections={sections}
+        questions={questions}
+        onSaved={() => load(true)}
+      />
+
+      {newSectionOpen && (
+        <div className="flex gap-2 mt-4">
+          <input
+            value={newSectionTitle}
+            onChange={(e) => setNewSectionTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') createSection() }}
+            className="input-field flex-1"
+            placeholder="Nama section, contoh: Bagian A"
+            autoFocus
+          />
+          <Button onClick={createSection} loading={sectionSaving} disabled={!newSectionTitle.trim()}>Tambah</Button>
+          <Button variant="ghost" onClick={() => setNewSectionOpen(false)}>Batal</Button>
+        </div>
+      )}
 
       {reorderSaving && (
         <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl mt-4 text-sm flex items-center gap-2">
@@ -620,7 +923,7 @@ export default function QuestionBuilder() {
                 <span className="w-6 h-6 rounded-full bg-primary-50 text-primary text-xs font-bold flex items-center justify-center">
                   <Plus className="w-3.5 h-3.5" />
                 </span>
-                <h3 className="font-display font-semibold text-ink">Add New Question</h3>
+                <h3 className="font-display font-semibold text-ink dark:text-gray-100">Add New Question</h3>
               </div>
               <QuestionForm
                 onSave={(data) => handleSaveQuestion(data)}
@@ -629,6 +932,7 @@ export default function QuestionBuilder() {
                 isQuiz={form.type === 'quiz'}
                 errors={fieldErrors}
                 questionId={editing?.id}
+                sections={sections}
               />
             </Card>
           </motion.div>
@@ -642,7 +946,7 @@ export default function QuestionBuilder() {
             title="No questions yet"
             description="Add your first question, or import one from a DOCX file."
             action={
-            <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />}>
+              <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />}>
                 Add Question
               </Button>
             }
@@ -655,9 +959,9 @@ export default function QuestionBuilder() {
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
-              className="sticky top-0 z-20 mt-6 bg-white border border-gray-200 shadow-lift rounded-2xl px-4 py-3 flex items-center gap-3"
+              className="sticky top-0 z-20 mt-6 bg-white dark:bg-ink-900 border border-gray-200 dark:border-gray-700 shadow-lift rounded-2xl px-4 py-3 flex items-center gap-3"
             >
-              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+              <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -674,60 +978,123 @@ export default function QuestionBuilder() {
               </div>
             </motion.div>
           )}
-          <div className="space-y-3 mt-6">
-            {questions.map((q, i) => (
-              <div key={q.id}>
-                <QuestionCard
-                  question={q}
-                  index={i}
-                  onEdit={editQuestion}
-                  onDelete={setDeleteTarget}
-                  onDragStart={handleDragStart}
-                  onDragOver={handleDragOver}
-                  onDragEnd={handleDragEnd}
-                  isDragging={dragIdx === i}
-                  isQuiz={form.type === 'quiz'}
-                  selected={selectedIds.includes(q.id)}
-                  onToggleSelect={toggleSelect}
-                />
-              <AnimatePresence>
-                {showForm && editing?.id === q.id && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden mt-3"
-                  >
-                    <Card>
-                      <h3 className="font-display font-semibold text-ink mb-5">Edit Question {i + 1}</h3>
-                      <QuestionForm
-                        initial={{
-                          question_text: q.question_text,
-                          type: q.type,
-                          points: q.points,
-                          is_scored: q.is_scored !== false,
-                          is_required: q.is_required,
-                          image: q.image,
-                          options: q.options?.length
-                            ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct, image: o.image }))
-                            : [{ option_text: '', is_correct: false }],
-                        }}
-                        onSave={(data) => handleSaveQuestion(data)}
-                        onCancel={() => { setShowForm(false); setEditing(null) }}
-                        loading={saveLoading}
-                        isQuiz={form.type === 'quiz'}
-                        errors={fieldErrors}
-                        questionId={q.id}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
+          >
+            <SortableContext items={questions.map((q) => q.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-8 mt-6">
+                {sections.map((sec) => {
+                  const secQs = questions.filter((q) => q.section_id === sec.id)
+                  if (!secQs.length) return null
+                  return (
+                    <SectionDropZone key={sec.id} sectionId={sec.id}>
+                      <SectionHeader
+                        section={sec}
+                        count={secQs.length}
+                        editing={editingSectionId === sec.id}
+                        draft={sectionTitleDraft}
+                        setDraft={setSectionTitleDraft}
+                        onEdit={() => { setEditingSectionId(sec.id); setSectionTitleDraft(sec.title) }}
+                        onSave={() => renameSection(sec)}
+                        onCancel={() => setEditingSectionId(null)}
+                        onDelete={() => setSectionDeleteTarget(sec)}
                       />
-                    </Card>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          ))}
-          </div>
+                      <div className="space-y-3 mt-3">
+                        {secQs.map((q) => (
+                          <QuestionItem
+                            key={q.id}
+                            q={q}
+                            index={questions.indexOf(q)}
+                            onEdit={editQuestion}
+                            isQuiz={form.type === 'quiz'}
+                            selected={selectedIds.includes(q.id)}
+                            onToggleSelect={toggleSelect}
+                            editOpen={showForm && editing?.id === q.id}
+                            onSave={(data) => handleSaveQuestion(data)}
+                            onCancel={() => { setShowForm(false); setEditing(null) }}
+                            saveLoading={saveLoading}
+                            errors={fieldErrors}
+                            sections={sections}
+                          />
+                        ))}
+                      </div>
+                    </SectionDropZone>
+                  )
+                })}
+                {(() => {
+                  const unassigned = questions.filter((q) => !q.section_id)
+                  if (!unassigned.length) return null
+                  return (
+                    <SectionDropZone key="unassigned" sectionId={null}>
+                      <SectionHeader
+                        section={null}
+                        count={unassigned.length}
+                        editing={false}
+                        draft=""
+                        setDraft={() => { }}
+                        onEdit={() => { }}
+                        onSave={() => { }}
+                        onCancel={() => { }}
+                        onDelete={() => { }}
+                      />
+                      <div className="space-y-3 mt-3">
+                        {unassigned.map((q) => (
+                          <QuestionItem
+                            key={q.id}
+                            q={q}
+                            index={questions.indexOf(q)}
+                            onEdit={editQuestion}
+                            isQuiz={form.type === 'quiz'}
+                            selected={selectedIds.includes(q.id)}
+                            onToggleSelect={toggleSelect}
+                            editOpen={showForm && editing?.id === q.id}
+                            onSave={(data) => handleSaveQuestion(data)}
+                            onCancel={() => { setShowForm(false); setEditing(null) }}
+                            saveLoading={saveLoading}
+                            errors={fieldErrors}
+                            sections={sections}
+                          />
+                        ))}
+                      </div>
+                    </SectionDropZone>
+                  )
+                })()}
+              </div>
+            </SortableContext>
+            <DragOverlay dropAnimation={null}>
+              {activeDrag?.type === 'question' && (() => {
+                const q = questions.find((qq) => qq.id === activeDrag.id)
+                return q ? (
+                  <Card className="shadow-lift border-primary/40">
+                    <div className="flex items-center gap-3">
+                      <span className="text-primary"><GripVertical className="w-5 h-5" /></span>
+                      <Badge scheme="gray">{TYPE_LABELS[q.type]}</Badge>
+                      <span className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[240px]">
+                        {(q.question_text || '').replace(/<[^>]*>/g, '').trim()}
+                      </span>
+                    </div>
+                  </Card>
+                ) : null
+              })()}
+            </DragOverlay>
+          </DndContext>
         </>
       )}
+
+      <ConfirmModal
+        show={!!sectionDeleteTarget}
+        title="Hapus Section?"
+        message={`Section "${sectionDeleteTarget?.title || ''}" akan dihapus. Soal di dalamnya tetap ada, hanya lepas dari section mana pun.`}
+        onConfirm={deleteSection}
+        onCancel={() => setSectionDeleteTarget(null)}
+        confirmText="Delete"
+        variant="danger"
+      />
 
       <ConfirmModal
         show={showBulkDelete}
@@ -737,9 +1104,9 @@ export default function QuestionBuilder() {
             <p>This will permanently delete the selected questions. Review the list below:</p>
             <ul className="mt-2 space-y-1 max-h-44 overflow-y-auto pr-1">
               {questions.filter((q) => selectedIds.includes(q.id)).map((q) => (
-                <li key={q.id} className="flex items-start gap-2 text-xs text-gray-600 leading-snug">
+                <li key={q.id} className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400 leading-snug">
                   <span className="w-1.5 h-1.5 rounded-full bg-incorrect shrink-0 mt-1" />
-                  <span className="line-clamp-2">{q.question_text}</span>
+                  <span className="line-clamp-2">{(q.question_text || '').replace(/<[^>]*>/g, '').trim()}</span>
                 </li>
               ))}
             </ul>
@@ -755,12 +1122,109 @@ export default function QuestionBuilder() {
       <ConfirmModal
         show={!!deleteTarget}
         title="Delete Question?"
-        message={`Delete question "${deleteTarget?.question_text?.slice(0, 50)}..."?`}
+        message={`Delete question "${(deleteTarget?.question_text || '').replace(/<[^>]*>/g, '').slice(0, 50)}..."?`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
         confirmText="Delete"
         variant="danger"
       />
+
+      <AnimatePresence>
+        {showImportModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4 backdrop-blur-sm"
+            onClick={() => { if (!importing) setShowImportModal(false) }}
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0, y: 8 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.96, opacity: 0, y: 8 }}
+              className="bg-white dark:bg-ink-900 rounded-2xl w-full max-w-2xl max-h-[88dvh] flex flex-col shadow-lift"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+                <div className="flex items-center gap-3">
+                  <span className="w-10 h-10 rounded-xl bg-primary-50 text-primary flex items-center justify-center">
+                    <Upload className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100">Import Questions from Word</h3>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">Follow the format below so every question imports correctly</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { if (!importing) setShowImportModal(false) }}
+                  className="p-2 -mr-2 rounded-xl text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                <section>
+                  <h4 className="text-sm font-semibold text-ink dark:text-gray-100 mb-2">How it works</h4>
+                  <ul className="space-y-1.5 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Each question starts with a number followed by a period or closing bracket — e.g. <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">1.</code> or <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">1)</code>.</li>
+                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Answer choices are listed with letters — e.g. <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">A.</code>, <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">B.</code>, etc.</li>
+                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Mark the correct answer with a line like <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">Answer: B</code> or <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">Kunci Jawaban: B</code>.</li>
+                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Multiple correct choices become a checkbox question automatically.</li>
+                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Questions without any choices become essay questions.</li>
+                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Both manually typed numbers and Word's native auto-numbered lists are supported.</li>
+                  </ul>
+                </section>
+
+                <section>
+                  <h4 className="text-sm font-semibold text-ink dark:text-gray-100 mb-2">Example format</h4>
+                  <div className="rounded-xl bg-gray-50 dark:bg-ink-800/60 border border-gray-200 dark:border-gray-700 p-4 font-mono text-[13px] leading-relaxed text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre">
+                    {`1. What is the capital of France?
+   A. London
+   B. Paris
+   C. Berlin
+   D. Madrid
+   Answer: B
+
+2. Which of the following are prime numbers?
+   A. 2
+   B. 4
+   C. 7
+   D. 9
+   Answer: A, C
+
+3. Explain how photosynthesis works.
+`}
+                  </div>
+                  <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                    Question 1 → multiple choice · Question 2 → checkbox (two correct answers) · Question 3 → essay
+                  </p>
+                </section>
+
+                <section>
+                  <h4 className="text-sm font-semibold text-ink dark:text-gray-100 mb-2">Notes</h4>
+                  <ul className="space-y-1 text-xs text-gray-500 dark:text-gray-400 leading-relaxed list-disc pl-4">
+                    <li>Only <span className="font-mono">.docx</span> files are accepted.</li>
+                    <li>Imported questions are appended at the end of the current list.</li>
+                    <li>For quizzes, points are redistributed automatically across all scored questions.</li>
+                    <li>If nothing can be parsed, the import is cancelled and you will be notified.</li>
+                  </ul>
+                </section>
+              </div>
+
+              <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-3 shrink-0">
+                <div className="flex gap-2">
+                  <Button variant="secondary" onClick={() => setShowImportModal(false)} disabled={importing}>Cancel</Button>
+                  <Button onClick={() => docxRef.current?.click()} loading={importing} icon={!importing && <Upload className="w-4 h-4" />}>
+                    {importing ? 'Importing...' : 'Choose .docx file'}
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

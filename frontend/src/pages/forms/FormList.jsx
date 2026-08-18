@@ -53,15 +53,15 @@ export default function FormList() {
             className="pl-10"
             aria-label="Search forms"
           />
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-gray-400" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-gray-400 dark:text-gray-500" />
         </div>
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+        <div className="flex gap-1 bg-gray-100 dark:bg-ink-800 rounded-xl p-1 w-fit">
           {TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => { setActiveTab(tab); setMeta((m) => ({ ...m, page: 1 })) }}
               className={`px-4 h-9 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === tab ? 'bg-white shadow-chip text-primary' : 'text-gray-500 hover:text-ink'
+                activeTab === tab ? 'bg-white dark:bg-ink-900 shadow-chip text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100'
               }`}
             >
               {tab}
@@ -112,9 +112,9 @@ export default function FormList() {
                       </span>
                       
                     </div>
-                    <h3 className="font-display font-semibold text-ink truncate mb-2">{form.title}</h3>
+                    <h3 className="font-display font-semibold text-ink dark:text-gray-100 truncate mb-2">{form.title}</h3>
                     {form.description && (
-                      <p className="text-sm text-gray-400 line-clamp-2 mb-3 flex-1">{form.description}</p>
+                      <p className="text-sm text-gray-400 dark:text-gray-500 line-clamp-2 mb-3 flex-1">{form.description}</p>
                     )}
                     <div className="flex flex-wrap items-center gap-2">
                       <TypeBadge type={form.type} />
@@ -135,7 +135,7 @@ export default function FormList() {
               >
                 Previous
               </Button>
-              <span className="flex items-center text-sm text-gray-500 px-2">
+              <span className="flex items-center text-sm text-gray-500 dark:text-gray-400 px-2">
                 Page {meta.page} of {totalPages}
               </span>
               <Button

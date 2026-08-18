@@ -8,9 +8,9 @@ export function Toggle({ checked, onChange, label, disabled }) {
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200
-        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-white
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-ink-900
         ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
-        ${checked ? 'bg-primary' : 'bg-gray-300'}`}
+        ${checked ? 'bg-primary' : 'bg-gray-300 dark:bg-ink-700'}`}
     >
       <span
         className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-chip transition-transform duration-200

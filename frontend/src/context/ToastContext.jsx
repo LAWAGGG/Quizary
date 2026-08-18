@@ -29,13 +29,13 @@ function ToastViewport({ toasts, onDismiss }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ duration: 0.15 }}
-            className="flex items-start gap-3 rounded-2xl bg-white border border-gray-100 shadow-lift px-4 py-3.5"
+            className="flex items-start gap-3 rounded-2xl bg-white dark:bg-ink-900 border border-gray-100 dark:border-gray-800 shadow-lift px-4 py-3.5"
           >
             <span className={`mt-0.5 shrink-0 ${STYLES[t.type]}`}>{ICONS[t.type]}</span>
-            <p className="text-sm text-ink flex-1 leading-snug">{t.message}</p>
+            <p className="text-sm text-ink dark:text-gray-100 flex-1 leading-snug">{t.message}</p>
             <button
               onClick={() => onDismiss(t.id)}
-              className="p-1 -m-1 rounded-lg text-gray-300 hover:text-gray-500 hover:bg-gray-50 transition-colors"
+              className="p-1 -m-1 rounded-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800 transition-colors"
               aria-label="Dismiss notification"
             >
               <X className="w-4 h-4" />

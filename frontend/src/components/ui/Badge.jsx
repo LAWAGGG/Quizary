@@ -3,7 +3,7 @@ const schemes = {
   green: 'bg-correct-soft text-correct',
   red: 'bg-incorrect-soft text-incorrect',
   yellow: 'bg-warn-soft text-warn',
-  gray: 'bg-gray-100 text-gray-600',
+  gray: 'bg-gray-100 dark:bg-ink-800 text-gray-600 dark:text-gray-400',
   blue: 'bg-blue-50 text-blue-700',
 }
 

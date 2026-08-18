@@ -38,7 +38,7 @@ export default function Dashboard() {
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {[1, 2].map((i) => (
-            <div key={i} className="card p-6 animate-pulse">
+            <div key={i} className="card p-6 animate-pulse dark:bg-ink-900">
               <div className="h-5 bg-gray-200/60 rounded w-1/3 mb-4" />
               <div className="h-48 bg-gray-200/60 rounded-xl" />
             </div>
@@ -90,8 +90,8 @@ export default function Dashboard() {
               <Card className="p-5 h-full hover:border-primary/30 hover:shadow-lift transition-all">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm text-gray-500 truncate">{item.label}</p>
-                    <p className="font-display text-3xl font-bold text-ink mt-2 tabular-nums">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{item.label}</p>
+                    <p className="font-display text-3xl font-bold text-ink dark:text-gray-100 mt-2 tabular-nums">
                       {data?.[item.key] ?? 0}
                     </p>
                   </div>
@@ -109,14 +109,14 @@ export default function Dashboard() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
           <Card className="h-full">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="font-display font-semibold text-ink">Recent Forms</h2>
+              <h2 className="font-display font-semibold text-ink dark:text-gray-100">Recent Forms</h2>
               <Link to="/forms" className="text-sm font-medium text-primary hover:text-primary-600 transition-colors">
                 View all
               </Link>
             </div>
             {!data?.recent_forms?.length ? (
               <div className="text-center py-10">
-                <p className="text-gray-400 text-sm mb-4">No forms yet — create one to start collecting answers.</p>
+                <p className="text-gray-400 dark:text-gray-500 text-sm mb-4">No forms yet — create one to start collecting answers.</p>
                 <Button size="sm" onClick={() => navigate('/forms/new')} icon={<Plus className="w-4 h-4" />}>
                   Create a Form
                 </Button>
@@ -125,16 +125,16 @@ export default function Dashboard() {
               <div className="overflow-x-auto -mx-2 px-2">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="text-left pb-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Title</th>
-                      <th className="text-left pb-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
-                      <th className="text-right pb-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Answers</th>
+                    <tr className="border-b border-gray-100 dark:border-gray-800">
+                      <th className="text-left pb-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Title</th>
+                      <th className="text-left pb-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="text-right pb-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Answers</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data?.recent_forms?.map((f) => (
-                      <tr key={f.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/70 transition-colors">
-                        <td className="py-3.5 pr-3 text-sm font-medium text-ink">
+                      <tr key={f.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/70 dark:hover:bg-ink-800/70 transition-colors">
+                        <td className="py-3.5 pr-3 text-sm font-medium text-ink dark:text-gray-100">
                           <Link to={`/forms/${f.id}/results`} className="hover:text-primary transition-colors">
                             {f.title}
                           </Link>
@@ -142,7 +142,7 @@ export default function Dashboard() {
                         <td className="py-3.5 pr-3">
                           <StatusBadge status={f.status} />
                         </td>
-                        <td className="py-3.5 text-sm text-right text-gray-500 tabular-nums">{f.submission_count}</td>
+                        <td className="py-3.5 text-sm text-right text-gray-500 dark:text-gray-400 tabular-nums">{f.submission_count}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -156,12 +156,12 @@ export default function Dashboard() {
           <Card className="h-full">
             <div className="flex items-center gap-2 mb-5">
               <TrendingUp className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold text-ink">Submission Trend</h2>
+              <h2 className="font-display font-semibold text-ink dark:text-gray-100">Submission Trend</h2>
             </div>
             {!data?.submission_trend?.length ? (
               <div className="flex flex-col items-center justify-center h-48 text-center">
-                <p className="text-gray-300 text-4xl font-display font-bold">0</p>
-                <p className="text-gray-400 text-sm mt-2">Answers will show up here as they come in.</p>
+                <p className="text-gray-300 dark:text-gray-600 text-4xl font-display font-bold">0</p>
+                <p className="text-gray-400 dark:text-gray-500 text-sm mt-2">Answers will show up here as they come in.</p>
               </div>
             ) : (
               <>
@@ -176,14 +176,14 @@ export default function Dashboard() {
                         transition={{ duration: 0.5, delay: 0.5 + i * 0.05 }}
                         className="flex-1 bg-primary rounded-t-lg min-h-[4px] relative group"
                       >
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                           {t.count}
                         </div>
                       </motion.div>
                     )
                   })}
                 </div>
-                <div className="flex justify-between mt-3 text-xs text-gray-400">
+                <div className="flex justify-between mt-3 text-xs text-gray-400 dark:text-gray-500">
                   {data.submission_trend.filter((_, i) => i === 0 || i === data.submission_trend.length - 1).map((t) => (
                     <span key={t.date}>{t.date}</span>
                   ))}

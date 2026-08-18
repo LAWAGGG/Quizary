@@ -189,7 +189,6 @@ export default function FormDetailScreen() {
   const [description, setDescription] = useState('');
   const [formType, setFormType] = useState<'form' | 'quiz'>('form');
   const [status, setStatus] = useState<'draft' | 'published' | 'closed'>('draft');
-  const [isPublic, setIsPublic] = useState(true);
   const [requireLogin, setRequireLogin] = useState(false);
   const [submissionLimit, setSubmissionLimit] = useState('unlimited');
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
@@ -222,7 +221,6 @@ export default function FormDetailScreen() {
     setDescription(f.description || '');
     setFormType(f.type || 'form');
     setStatus(f.status || 'draft');
-    setIsPublic(f.is_public !== false);
     setRequireLogin(f.require_login === true);
     setSubmissionLimit(f.submission_limit || 'unlimited');
     setShuffleQuestions(f.shuffle_questions === true);
@@ -267,7 +265,7 @@ export default function FormDetailScreen() {
       const payload: any = {
         title: title.trim(), description: description.trim() || null,
         type: formType, status,
-        is_public: isPublic, require_login: requireLogin,
+        require_login: requireLogin,
         submission_limit: submissionLimit,
         shuffle_questions: shuffleQuestions, shuffle_options: shuffleOptions,
         timer_seconds: timerMinutes ? parseInt(timerMinutes) * 60 : null,
@@ -528,13 +526,6 @@ export default function FormDetailScreen() {
           {/* Access */}
           <View style={s.card}>
             <View style={s.cardHead}><Ionicons name="lock-closed-outline" size={16} color="#6366F1" /><Text style={s.cardTitle}>Access</Text></View>
-            <View style={s.switchRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.switchLbl}>Public form</Text>
-                <Text style={s.switchSub}>Anyone with the link can answer.</Text>
-              </View>
-              <Switch value={isPublic} onValueChange={setIsPublic} trackColor={{ false: '#E2E8F0', true: '#6366F1' }} />
-            </View>
             <View style={s.switchRow}>
               <View style={{ flex: 1 }}>
                 <Text style={s.switchLbl}>Require login</Text>

@@ -21,6 +21,7 @@ from app.schemas.question import (
     ReorderRequest,
     SectionCreate,
     SectionUpdate,
+    SectionReorderRequest,
 )
 
 router = APIRouter(tags=["questions"])
@@ -106,6 +107,42 @@ def _get_section_or_404(section_id: int, db: Session) -> Section:
     if not section:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section tidak ditemukan")
     return section
+
+
+# ── PATCH /sections/reorder ──────────────────────────────────────────────────
+# Declared BEFORE /sections/{section_id} — FastAPI matches routes in definition
+# order, so "/sections/reorder" must not be captured as a path param.
+
+@router.patch("/sections/reorder")
+def reorder_sections(
+    body: SectionReorderRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    form = db.get(Form, body.form_id)
+    if not form:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    if form.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not the owner of this form")
+
+    section_ids = {row[0] for row in db.query(Section.id).filter(Section.form_id == form.id).all()}
+    if set(body.orders) != section_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="orders must include exactly all sections in this form",
+        )
+
+    for idx, s_id in enumerate(body.orders):
+        s = db.get(Section, s_id)
+        if not s or s.form_id != body.form_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Section {s_id} not found in this form",
+            )
+        s.order_index = idx
+
+    db.commit()
+    return {"message": "Section order updated"}
 
 
 def _section_dict(section: Section) -> dict:

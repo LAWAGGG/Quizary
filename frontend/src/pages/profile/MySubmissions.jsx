@@ -56,20 +56,20 @@ export default function MySubmissions() {
             >
               <Card
                 className="cursor-pointer hover:border-primary/40 hover:shadow-lift transition-all"
-                onClick={() => navigate(`/s/${sub.id}?type=form`)}
+                onClick={() => navigate(`/s/${sub.id}?type=${sub.type || 'form'}`)}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-display font-semibold text-ink truncate">{sub.form_title}</h3>
-                      <ExternalLink className="w-3.5 h-3.5 text-gray-300 shrink-0" />
+                      <h3 className="font-display font-semibold text-ink dark:text-gray-100 truncate">{sub.form_title}</h3>
+                      <ExternalLink className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 shrink-0" />
                     </div>
                     {sub.score !== null && sub.score !== undefined && (
-                      <p className="text-sm text-gray-500 mb-1">
-                        Score: <span className="font-semibold text-ink tabular-nums">{sub.score}</span>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
+                        Score: <span className="font-semibold text-ink dark:text-gray-100 tabular-nums">{sub.score}</span>
                       </p>
                     )}
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
                       {sub.submitted_at ? `Submitted: ${sub.submitted_at}` : 'Not submitted yet'}
                     </p>
                   </div>

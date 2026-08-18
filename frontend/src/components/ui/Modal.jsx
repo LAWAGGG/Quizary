@@ -15,16 +15,16 @@ export function ConfirmModal({ show, title, message, onConfirm, onCancel, loadin
             initial={{ scale: 0.96, opacity: 0, y: 8 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.96, opacity: 0, y: 8 }}
-            className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-lift"
+            className="bg-white dark:bg-ink-900 rounded-2xl p-6 w-full max-w-sm shadow-lift"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="font-display text-lg font-bold text-ink mb-2">{title}</h3>
-            <p className="text-sm text-gray-500 mb-6">{message}</p>
+            <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 mb-2">{title}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{message}</p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={onCancel}
                 disabled={loading}
-                className="h-10 px-4 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                className="h-10 px-4 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>

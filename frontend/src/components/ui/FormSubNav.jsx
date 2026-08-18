@@ -11,7 +11,7 @@ const items = [
 export function FormSubNav({ formId, className = '' }) {
   return (
     <nav
-      className={`inline-flex items-center gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto max-w-full ${className}`}
+      className={`inline-flex items-center gap-1 p-1 bg-gray-100 dark:bg-ink-800 rounded-xl overflow-x-auto max-w-full ${className}`}
       aria-label="Form sections"
     >
       {items.map((item) => (
@@ -21,7 +21,7 @@ export function FormSubNav({ formId, className = '' }) {
           end={item.end}
           className={({ isActive }) =>
             `inline-flex items-center gap-1.5 px-3.5 h-9 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-              isActive ? 'bg-white text-primary shadow-chip' : 'text-gray-500 hover:text-ink hover:bg-white/60'
+              isActive ? 'bg-white dark:bg-ink-900 text-primary shadow-chip' : 'text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-white/60 dark:hover:bg-ink-800'
             }`
           }
         >

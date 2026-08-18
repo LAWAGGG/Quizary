@@ -69,7 +69,7 @@
   }
 
   .card {
-    @apply bg-white rounded-2xl border border-gray-100 shadow-card;
+    @apply bg-white dark:bg-ink-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-card;
   }
 
   .bubble {
@@ -93,6 +93,62 @@
   }
 }
 
+/* ── Dark mode (class on <html>) ──────────────────────────────────────────────
+   Peta ulang token netral (surface/ink/gray) jadi padanan gelap tanpa menyentuh
+   seluruh halaman satu per satu. Warna aksen (primary/correct/warn) dibiarkan. */
+.dark body {
+  @apply bg-ink-950 text-gray-100;
+}
+
+.dark .card {
+  @apply bg-ink-900 border-gray-800;
+}
+
+.dark .input-field,
+.dark .textarea-field {
+  @apply bg-ink-900 border-gray-700 text-gray-100 placeholder:text-gray-500
+    focus:border-primary disabled:bg-ink-800 disabled:text-gray-500;
+}
+
+.dark .field-label {
+  @apply text-gray-200;
+}
+
+.dark .field-hint {
+  @apply text-gray-500;
+}
+
+.dark .bubble-empty {
+  @apply border-gray-700 text-gray-400;
+}
+
+.dark ::selection {
+  @apply bg-primary-800 text-white;
+}
+
+.dark :focus-visible {
+  @apply ring-primary-400 ring-offset-ink-950;
+}
+
+/* Dark mode: tint chips (badge/ikon/state aktif) pakai tint gelap + teks terang,
+   bukan pastel light. Cover base + hover/active variant yang dipakai. */
+.dark .bg-primary-50 { background-color: rgb(108 92 231 / 0.16); }
+.dark .bg-primary-100 { background-color: rgb(108 92 231 / 0.24); }
+.dark .bg-primary-200 { background-color: rgb(108 92 231 / 0.34); }
+.dark .bg-blue-50 { background-color: rgb(59 130 246 / 0.16); }
+.dark .bg-correct-soft { background-color: rgb(16 185 129 / 0.16); }
+.dark .bg-incorrect-soft { background-color: rgb(239 68 68 / 0.16); }
+.dark .bg-warn-soft { background-color: rgb(245 158 11 / 0.16); }
+.dark .bg-red-100 { background-color: rgb(239 68 68 / 0.24); }
+.dark .hover\:bg-primary-50:hover { background-color: rgb(108 92 231 / 0.24); }
+.dark .hover\:bg-primary-100:hover { background-color: rgb(108 92 231 / 0.32); }
+.dark .hover\:bg-incorrect-soft:hover { background-color: rgb(239 68 68 / 0.24); }
+.dark .active\:bg-primary-200:active { background-color: rgb(108 92 231 / 0.42); }
+.dark .active\:bg-red-100:active { background-color: rgb(239 68 68 / 0.32); }
+.dark .text-primary-700 { color: #B8B0F5; }
+.dark .text-blue-700 { color: #93C5FD; }
+.dark .text-primary { color: #9B90F0; }
+
 input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   @apply cursor-pointer;
 }
@@ -100,6 +156,12 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 /* Public theme surface: recolor focus ring/border from --t instead of fixed primary */
 .theme-surface {
   --t: #6C5CE7;
+}
+
+/* Dark mode: themed public pages (form/quiz responden) ikut gelap, aksen tema
+   (--t) dipertahankan lewat color-mix supaya identitas form tidak hilang. */
+.dark .theme-surface {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--t) 16%, #0F172A) 0%, #0F172A 380px) !important;
 }
 
 .theme-surface input:focus,
@@ -164,3 +226,203 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Quill WYSIWYG — selaras dengan design system (radius, border, dark mode) ── */
+/* overflow visible: tooltip link Quill bisa muncul di bawah editor tanpa terpotong */
+.rich-editor {
+  @apply rounded-xl border border-gray-200 bg-white transition-colors duration-150
+    focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10;
+}
+
+.dark .rich-editor {
+  @apply border-gray-700 bg-ink-900;
+}
+
+.rich-editor .ql-toolbar.ql-snow {
+  @apply border-0 border-b border-gray-200 px-3 py-2 bg-gray-50/80;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+
+.dark .rich-editor .ql-toolbar.ql-snow {
+  @apply border-gray-700 bg-ink-800/60;
+}
+
+.rich-editor .ql-container.ql-snow {
+  @apply border-0 text-sm text-ink bg-white;
+}
+
+.dark .rich-editor .ql-container.ql-snow {
+  @apply text-gray-100 bg-ink-900;
+}
+
+/* Tanpa overflow-hidden di wrapper, sudut bawah ql-container perlu radius sendiri
+   supaya bg tetap rapi di dalam border rounded-xl. */
+.rich-editor .ql-container.ql-snow {
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.rich-editor .ql-editor {
+  @apply min-h-0 px-4 py-3;
+}
+
+.rich-editor .ql-editor::before {
+  @apply text-gray-400;
+}
+
+.rich-editor .ql-snow .ql-picker {
+  @apply text-gray-600;
+}
+
+.dark .rich-editor .ql-snow .ql-picker {
+  @apply text-gray-300;
+}
+
+.dark .rich-editor .ql-snow .ql-picker-options {
+  @apply bg-ink-800 border-gray-700;
+}
+
+.dark .rich-editor .ql-snow .ql-stroke {
+  stroke: #9ca3af;
+}
+
+.dark .rich-editor .ql-snow .ql-fill {
+  fill: #9ca3af;
+}
+
+.dark .rich-editor .ql-snow .ql-picker-label:hover .ql-stroke,
+.dark .rich-editor .ql-snow .ql-picker-label:hover .ql-fill,
+.dark .rich-editor .ql-snow .ql-picker-label.ql-active .ql-stroke,
+.dark .rich-editor .ql-snow .ql-picker-label.ql-active .ql-fill,
+.dark .rich-editor .ql-snow .ql-picker-item.ql-selected {
+  stroke: #6C5CE7;
+  fill: #6C5CE7;
+}
+
+.rich-editor-compact .ql-toolbar.ql-snow {
+  @apply py-1;
+}
+
+/* Teks yang dirender dari editor (soal/opsi) — justify elemen inline */
+.rich-text p {
+  margin: 0;
+}
+
+.rich-text p + p {
+  margin-top: 0.5em;
+}
+
+/* Preview WYSIWYG — mirror gaya Quill editor biar hasil render identik:
+   link underline, list marker, heading, blockquote, alignment, spacing. */
+.rich-text a {
+  @apply text-primary dark:text-primary-300 underline;
+  word-break: break-word;
+}
+
+.rich-text h1,
+.rich-text h2,
+.rich-text h3 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0.6em 0 0.3em;
+}
+
+.rich-text h1 { font-size: 2em; }
+.rich-text h2 { font-size: 1.5em; }
+.rich-text h3 { font-size: 1.17em; }
+
+.rich-text blockquote {
+  border-left: 4px solid rgb(108 92 231 / 0.4);
+  padding-left: 16px;
+  margin: 0.5em 0;
+}
+
+/* ── Code block — IDE-like (editor + render) ────────────────────────────── */
+.rich-editor .ql-editor pre.ql-code-block,
+.rich-text pre.ql-code-block {
+  @apply bg-ink-950 text-gray-100 border border-gray-800 rounded-lg;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  padding: 0.75rem 1rem;
+  margin: 0.6em 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  tab-size: 4;
+  position: relative;
+}
+
+/* Syntax token colors — monokai-ish, readable on dark bg */
+.rich-editor .ql-editor pre.ql-code-block .hljs-keyword,
+.rich-text pre.ql-code-block .hljs-keyword,
+.rich-editor .ql-editor pre.ql-code-block .hljs-selector-tag,
+.rich-text pre.ql-code-block .hljs-selector-tag,
+.rich-editor .ql-editor pre.ql-code-block .hljs-literal,
+.rich-text pre.ql-code-block .hljs-literal { color: #c678dd; }
+
+.rich-editor .ql-editor pre.ql-code-block .hljs-string,
+.rich-text pre.ql-code-block .hljs-string,
+.rich-editor .ql-editor pre.ql-code-block .hljs-attr,
+.rich-text pre.ql-code-block .hljs-attr { color: #98c379; }
+
+.rich-editor .ql-editor pre.ql-code-block .hljs-number,
+.rich-text pre.ql-code-block .hljs-number,
+.rich-editor .ql-editor pre.ql-code-block .hljs-title,
+.rich-text pre.ql-code-block .hljs-title { color: #e5c07b; }
+
+.rich-editor .ql-editor pre.ql-code-block .hljs-comment,
+.rich-text pre.ql-code-block .hljs-comment { color: #5c6370; font-style: italic; }
+
+.rich-editor .ql-editor pre.ql-code-block .hljs-built_in,
+.rich-text pre.ql-code-block .hljs-built_in,
+.rich-editor .ql-editor pre.ql-code-block .hljs-type,
+.rich-text pre.ql-code-block .hljs-type { color: #56b6c2; }
+
+/* Language selector yang ditambahkan modul syntax di pojok code block */
+.rich-editor .ql-editor pre.ql-code-block .ql-ui {
+  @apply bg-ink-800 text-gray-300 border border-gray-700 rounded text-[10px] font-sans;
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  padding: 0.1rem 0.35rem;
+  opacity: 0.85;
+}
+
+.rich-text ul,
+.rich-text ol {
+  margin: 0.5em 0;
+  padding-left: 0;
+}
+
+.rich-text li {
+  list-style-type: none;
+  padding-left: 1.5em;
+  position: relative;
+  margin: 0.15em 0;
+}
+
+.rich-text li::before {
+  display: inline-block;
+  margin-left: -1.5em;
+  margin-right: 0.3em;
+  text-align: right;
+  width: 1.2em;
+}
+
+.rich-text ol { counter-reset: list-0; }
+.rich-text li[data-list="ordered"] { counter-increment: list-0; }
+.rich-text li[data-list="ordered"]::before { content: counter(list-0, decimal) '. '; }
+.rich-text li[data-list="bullet"]::before { content: '\2022'; }
+.rich-text li[data-list="checked"]::before { content: '\2611'; }
+.rich-text li[data-list="unchecked"]::before { content: '\2610'; }
+
+.rich-text .ql-align-center { text-align: center; }
+.rich-text .ql-align-right { text-align: right; }
+.rich-text .ql-align-justify { text-align: justify; }
+
+/* Nested list indentation — mirror editor (.ql-indent-*) */
+.rich-text li.ql-indent-1 { padding-left: 4.5em; }
+.rich-text li.ql-indent-2 { padding-left: 7.5em; }
+.rich-text li.ql-indent-3 { padding-left: 10.5em; }

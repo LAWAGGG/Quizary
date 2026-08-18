@@ -29,16 +29,19 @@ export function luminance(hex) {
 /**
  * Derive a full set of related shades + gradients from a single theme color,
  * so interactive UI never reuses the exact same hex everywhere.
+ * `dark` makes the tinted tokens (soft/border/light) mix toward the dark
+ * surface instead of white, so themed pages stay readable in dark mode.
  */
-export function themePalette(hex) {
+export function themePalette(hex, dark = false) {
   const base = hex || '#6C5CE7'
   const onBase = luminance(base) > 0.62 ? '#1F2937' : '#FFFFFF'
+  const tint = dark ? '#0F172A' : '#FFFFFF'
   return {
     base,
     onBase,
-    light: mixHex(base, '#FFFFFF', 0.55),
-    soft: mixHex(base, '#FFFFFF', 0.88),
-    border: mixHex(base, '#FFFFFF', 0.72),
+    light: mixHex(base, tint, dark ? 0.22 : 0.55),
+    soft: mixHex(base, tint, dark ? 0.1 : 0.88),
+    border: mixHex(base, tint, dark ? 0.42 : 0.72),
     dark: mixHex(base, '#000000', 0.28),
     blobLight: mixHex(base, '#FFFFFF', 0.35),
     blobDark: mixHex(base, '#000000', 0.3),

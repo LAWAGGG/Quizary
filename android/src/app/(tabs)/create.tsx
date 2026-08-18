@@ -18,7 +18,6 @@ export default function CreateScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<'form' | 'quiz'>('form');
-  const [isPublic, setIsPublic] = useState(true);
   const [requireLogin, setRequireLogin] = useState(false);
   const [submissionLimit, setSubmissionLimit] = useState('Unlimited');
   const [showLimitDropdown, setShowLimitDropdown] = useState(false);
@@ -45,7 +44,6 @@ export default function CreateScreen() {
         title: title.trim(),
         description: description.trim(),
         type: type,
-        is_public: isPublic,
         require_login: requireLogin,
         submission_limit: submissionLimit === 'Unlimited' ? 'unlimited' : 'once',
       });
@@ -57,7 +55,6 @@ export default function CreateScreen() {
             setTitle('');
             setDescription('');
             setType('form');
-            setIsPublic(true);
             setRequireLogin(false);
             setSubmissionLimit('Unlimited');
             router.push('/(tabs)/library');
@@ -138,14 +135,6 @@ export default function CreateScreen() {
 
       {/* Settings Card */}
       <View style={styles.card}>
-        <View style={styles.switchRow}>
-          <View style={{ flex: 1, paddingRight: 10 }}>
-            <Text style={styles.switchLabel}>Public form</Text>
-            <Text style={styles.switchSub}>Anyone with the link can answer.</Text>
-          </View>
-          <Switch value={isPublic} onValueChange={setIsPublic} trackColor={{ false: '#E2E8F0', true: '#6366F1' }} />
-        </View>
-
         <View style={styles.switchRow}>
           <View style={{ flex: 1, paddingRight: 10 }}>
             <Text style={styles.switchLabel}>Require login</Text>
