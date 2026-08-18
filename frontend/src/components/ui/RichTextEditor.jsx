@@ -68,7 +68,11 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
 
   return (
     <div className={`rich-editor ${compact ? 'rich-editor-compact' : ''}`}>
-      <div ref={containerRef} style={{ minHeight }} />
+      <div
+        ref={containerRef}
+        style={{ minHeight }}
+        onClick={() => quillRef.current?.root.focus()}
+      />
     </div>
   )
 }

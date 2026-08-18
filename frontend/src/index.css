@@ -231,7 +231,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 /* overflow visible: tooltip link Quill bisa muncul di bawah editor tanpa terpotong */
 .rich-editor {
   @apply rounded-xl border border-gray-200 bg-white transition-colors duration-150
-    focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10;
+    focus-within:border-primary;
 }
 
 .dark .rich-editor {
@@ -239,17 +239,20 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 }
 
 .rich-editor .ql-toolbar.ql-snow {
-  @apply border-0 border-b border-gray-200 px-3 py-2 bg-gray-50/80;
+  @apply px-3 py-2 bg-gray-50/80;
+  border: none;
   border-top-left-radius: 12px;
   border-top-right-radius: 12px;
 }
 
 .dark .rich-editor .ql-toolbar.ql-snow {
-  @apply border-gray-700 bg-ink-800/60;
+  @apply bg-ink-800/60;
 }
 
 .rich-editor .ql-container.ql-snow {
-  @apply border-0 text-sm text-ink bg-white;
+  @apply text-sm text-ink bg-white;
+  border: none;
+  cursor: text;
 }
 
 .dark .rich-editor .ql-container.ql-snow {
@@ -259,12 +262,21 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 /* Tanpa overflow-hidden di wrapper, sudut bawah ql-container perlu radius sendiri
    supaya bg tetap rapi di dalam border rounded-xl. */
 .rich-editor .ql-container.ql-snow {
+  border: none;
   border-bottom-left-radius: 12px;
   border-bottom-right-radius: 12px;
 }
 
 .rich-editor .ql-editor {
   @apply min-h-0 px-4 py-3;
+  border: none;
+  outline: none;
+}
+
+.rich-editor .ql-editor:focus {
+  border: none;
+  outline: none;
+  box-shadow: none;
 }
 
 .rich-editor .ql-editor::before {
