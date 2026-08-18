@@ -382,7 +382,9 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
       </div>
 
       <RichText html={question.question_text} className="rich-text block text-[15px] font-medium text-ink dark:text-gray-100 mb-3" />
-
+  {question.image && (
+        <img src={question.image.path} alt="" className="mt-3 max-h-32 rounded-xl object-cover" />
+      )}
       {question.options?.length > 0 && (
         <div className="space-y-1.5">
           {question.options.map((opt, i) => (
@@ -405,10 +407,6 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
             </div>
           ))}
         </div>
-      )}
-
-      {question.image && (
-        <img src={question.image.path} alt="" className="mt-3 max-h-32 rounded-xl object-cover" />
       )}
     </Card>
   )

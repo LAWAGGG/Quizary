@@ -1,5 +1,7 @@
 import re
 import io
+import os
+import uuid
 from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
@@ -8,14 +10,17 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import verify_form_owner
 from app.models.form import Form
+from app.models.image import Image
 from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
 from app.services.points import distribute_quiz_points
-from app.utils import now_wib
+from app.utils import UPLOAD_DIR, now_wib
 
 router = APIRouter(tags=["import"])
 
 WORD_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+A_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
 ANSWER_RE = re.compile(r'(?:Kunci\s*)?(?:Jawaban|Jawab|Answer)\s*[:\-]?\s*([A-Da-d])\b', re.IGNORECASE)
 NUMBERED_RE = re.compile(r'\d+[\.\)]\s*(.+)')
@@ -71,36 +76,63 @@ def _parse_text(raw: str) -> list[dict]:
 # Path 2: import .docx — DIPERBAIKI supaya bisa baca native Word
 # numbered list (numPr), bukan cuma angka yang diketik manual
 # ============================================================
-def _extract_docx_items(doc) -> list[tuple[str, str | None]]:
+def _para_images(p) -> list[tuple[str, bytes]]:
+    """Ambil semua gambar yang tertanam di dalam sebuah paragraf docx.
+
+    Docx adalah file ZIP; gambar dirender lewat relasi rId pada elemen
+    ``<a:blip r:embed="rIdN">``. Blob biner diambil langsung dari part —
+    TANPA base64, sehingga ukuran file asli tidak membengkak 33%.
     """
-    Kembalikan list (text, num_id) per paragraf non-kosong.
+    imgs: list[tuple[str, bytes]] = []
+    for blip in p._p.findall(f".//{A_NS}blip"):
+        rid = blip.get(f"{R_NS}embed")
+        if not rid:
+            continue
+        rel = p.part.rels.get(rid)
+        if rel is None or rel.is_external:
+            continue
+        part = rel.target_part
+        ext = os.path.splitext(str(part.partname))[1].lower()
+        if not ext:
+            ext = ".png"
+        imgs.append((ext, part.blob))
+    return imgs
+
+
+def _extract_docx_items(doc) -> list[tuple[str, str | None, list]]:
+    """
+    Kembalikan list (text, num_id, images) per paragraf yang punya makna.
     num_id None berarti paragraf itu TIDAK memakai numbering otomatis Word
     (baik karena memang teks biasa, maupun karena angkanya diketik manual —
     dua kasus ini tetap bisa dibedakan lewat regex NUMBERED_RE di caller).
+
+    Paragraf text kosong TIDAK di-skip bila ia membawa numbering (nomor soal
+    auto Word) atau gambar (stem soal berupa gambar) — keduanya krusial.
     """
     items = []
     for p in doc.paragraphs:
         text = p.text.strip()
-        if not text:
-            continue
         numPr = p._p.find(f".//{WORD_NS}numPr")
         num_id = None
         if numPr is not None:
             numId_el = numPr.find(f"{WORD_NS}numId")
             if numId_el is not None:
                 num_id = numId_el.get(f"{WORD_NS}val")
-        items.append((text, num_id))
+        imgs = _para_images(p)
+        if not text and num_id is None and not imgs:
+            continue
+        items.append((text, num_id, imgs))
     return items
 
 
-def _parse_docx_items(items: list[tuple[str, str | None]]) -> list[dict]:
+def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
     if not items:
         return []
 
     # Cari numId yang paling sering muncul -> itu kemungkinan besar
     # list penomoran SOAL (karena berulang 1x per soal di sepanjang dokumen),
     # numId lain yang muncul lokal biasanya sub-list opsi jawaban.
-    numid_counts = Counter(nid for _, nid in items if nid is not None)
+    numid_counts = Counter(nid for _, nid, _ in items if nid is not None)
     question_num_id = numid_counts.most_common(1)[0][0] if numid_counts else None
 
     questions: list[dict] = []
@@ -110,23 +142,28 @@ def _parse_docx_items(items: list[tuple[str, str | None]]) -> list[dict]:
 
     def flush():
         nonlocal current
-        if current and current.get("question_text"):
+        if current and (current["question_text"] or current["images"]):
             questions.append(current)
         current = None
 
-    def start_question(text: str):
+    def attach_imgs(target: dict, imgs: list):
+        for ext, blob in imgs:
+            target["images"].append({"ext": ext, "blob": blob})
+
+    def start_question(text: str, imgs: list):
         nonlocal current, active_option_num_id, option_letters
         flush()
-        current = {"question_text": text.strip(), "options": [], "answer_letter": None}
+        current = {"question_text": text.strip(), "options": [], "answer_letter": None, "images": []}
         active_option_num_id = None
         option_letters = iter("ABCDEFGHIJ")
+        attach_imgs(current, imgs)
 
-    for text, num_id in items:
+    for text, num_id, imgs in items:
         # 1) angka diketik manual "1. ..." / "1) ..." (bisa juga muncul di dokumen
         #    yang campur: sebagian numbering manual, sebagian native Word list)
         m = NUMBERED_RE.match(text)
         if m and (num_id is None or num_id == question_num_id):
-            start_question(m.group(1))
+            start_question(m.group(1), imgs)
             continue
 
         # 2) baris "Jawaban: X"
@@ -141,14 +178,17 @@ def _parse_docx_items(items: list[tuple[str, str | None]]) -> list[dict]:
             for om in OPTION_INLINE_RE.finditer(text):
                 opt_text = om.group(2).strip()
                 if opt_text:
-                    current["options"].append({"letter": om.group(1).upper(), "text": opt_text})
+                    opt = {"letter": om.group(1).upper(), "text": opt_text, "images": []}
+                    attach_imgs(opt, imgs)
+                    current["options"].append(opt)
                     found_option = True
         if found_option:
             continue
 
-        # 4) native Word numbered list, numId = numId soal (mayoritas) -> soal baru
+        # 4) native Word numbered list, numId = numId soal (mayoritas) -> soal baru.
+        #    Paragraf bisa text kosong (nomor auto Word ada di paragraf terpisah).
         if num_id is not None and num_id == question_num_id:
-            start_question(text)
+            start_question(text, imgs)
             continue
 
         # 5) native Word numbered list, numId BEDA -> anggap sub-list opsi jawaban
@@ -157,16 +197,24 @@ def _parse_docx_items(items: list[tuple[str, str | None]]) -> list[dict]:
                 active_option_num_id = num_id
                 option_letters = iter("ABCDEFGHIJ")
             letter = next(option_letters, "?")
-            current["options"].append({"letter": letter, "text": text})
+            opt = {"letter": letter, "text": text, "images": []}
+            attach_imgs(opt, imgs)
+            current["options"].append(opt)
             continue
 
         # 6) tidak ada numbering & tidak match pola apapun -> baris lanjutan
-        #    (soal/opsi yang wrap ke baris baru), gabungkan ke item terakhir
+        #    (soal/opsi yang wrap ke baris baru, atau stem soal berupa gambar),
+        #    gabungkan ke item terakhir
         if current is not None:
             if current["options"]:
-                current["options"][-1]["text"] += " " + text
+                last_opt = current["options"][-1]
+                if text:
+                    last_opt["text"] += " " + text
+                attach_imgs(last_opt, imgs)
             else:
-                current["question_text"] += " " + text
+                if text:
+                    current["question_text"] += " " + text
+                attach_imgs(current, imgs)
             continue
 
         # 7) belum ada soal terbuka (misal judul dokumen di baris pertama) -> lewati
@@ -179,12 +227,32 @@ def _parse_docx_items(items: list[tuple[str, str | None]]) -> list[dict]:
         answer_letter = q.pop("answer_letter", None)
         result.append({
             "question_text": q["question_text"],
+            "images": q["images"],
             "options": [
-                {"text": o["text"], "is_correct": o["letter"] == answer_letter}
+                {"text": o["text"], "is_correct": o["letter"] == answer_letter, "images": o["images"]}
                 for o in q["options"]
             ],
         })
     return result
+
+
+_WEB_IMG_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def _save_blob(ext: str, blob: bytes) -> str:
+    """Tulis blob biner docx ke disk uploads, kembalikan path relatif.
+
+    Hanya format web (dapat dirender <img>) yang disimpan; format vektor
+    docx seperti .emf/.wmf di-skip — tidak bisa dirender browser.
+    """
+    if ext not in _WEB_IMG_EXT:
+        return ""
+    filename = f"{uuid.uuid4().hex}{ext}"
+    dest = os.path.join(UPLOAD_DIR, "question-images", filename)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, "wb") as f:
+        f.write(blob)
+    return f"question-images/{filename}"
 
 
 @router.post("/forms/{form_id}/import/docx", status_code=201)
@@ -250,13 +318,37 @@ async def import_docx(
         db.add(q)
         db.flush()
 
+        for i, img in enumerate(q_data["images"]):
+            path = _save_blob(img["ext"], img["blob"])
+            if path:
+                db.add(Image(
+                    question_id=q.id,
+                    path=path,
+                    order_index=i,
+                    created_at=now,
+                ))
+
+        opt_rows = []
         for i, opt in enumerate(q_data["options"]):
-            db.add(QuestionOption(
+            opt_rows.append(QuestionOption(
                 question_id=q.id,
                 option_text=opt["text"],
                 is_correct=opt["is_correct"],
                 order_index=i,
             ))
+            db.add(opt_rows[-1])
+        db.flush()
+
+        for opt_row, opt in zip(opt_rows, q_data["options"]):
+            for j, img in enumerate(opt["images"]):
+                path = _save_blob(img["ext"], img["blob"])
+                if path:
+                    db.add(Image(
+                        option_id=opt_row.id,
+                        path=path,
+                        order_index=j,
+                        created_at=now,
+                    ))
 
         next_order += 1
         count += 1
@@ -295,4 +387,17 @@ D.
         assert all(len(q["options"]) == 5 for q in mc), [len(q["options"]) for q in mc]
         assert any(len(q["options"]) == 0 for q in parsed), "harus ada essay (soal gambar/no.3)"
         print(f"ok docx; {len(parsed)} soal, {len(mc)} MCQ (masing-masing 5 opsi)")
+
+    # fixture nyata: stem soal berupa gambar, nomor soal auto-numbering di
+    # paragraf kosong, opsi teks tanpa numbering -> 20 soal MCQ, 20 gambar stem
+    real = os.path.join(os.path.dirname(__file__), "../../../ULANGAN HARIAN BAHASA INDONESIA.docx")
+    if os.path.exists(real):
+        doc = Document(real)
+        parsed = _parse_docx_items(_extract_docx_items(doc))
+        assert len(parsed) == 20, f"harus 20 soal, dapat {len(parsed)}"
+        assert all(len(q["images"]) == 1 for q in parsed), "tiap soal harus punya 1 gambar stem"
+        assert all(q["images"][0]["ext"] == ".png" for q in parsed), "stem harus PNG"
+        assert all(3 <= len(q["options"]) <= 5 for q in parsed), "opsi 3-5 per soal"
+        assert all(o["text"] for q in parsed for o in q["options"]), "ada opsi kosong"
+        print(f"ok real docx; {len(parsed)} soal, 20 gambar stem PNG, opsi 3-5 per soal")
     print("done")
