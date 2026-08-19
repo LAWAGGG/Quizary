@@ -9,6 +9,8 @@ from app.models.form import Form, FormStatus, FormType, SubmissionLimit
 from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
 from app.models.image import Image
+from app.models.submission import Submission
+from app.models.answer import Answer
 from app.models.user import User
 from app.services.points import distribute_quiz_points
 from app.utils import file_url, fmt_dt, now_wib, _delete_file
@@ -257,6 +259,17 @@ def delete_form(form: Form = Depends(verify_form_owner), db: Session = Depends(g
         for opt in db.query(QuestionOption).filter(QuestionOption.question_id == q.id).all():
             for img in db.query(Image).filter(Image.option_id == opt.id).all():
                 _delete_file(img.path)
+    # File jawaban upload responden (uploads/answer_files/) ikut dihapus —
+    # baris DB-nya hilang via cascade, file di disk tidak, jadi dibersihkan
+    # manual supaya tidak menumpuk dan memberatkan server.
+    file_answers = (
+        db.query(Answer.answer_file)
+        .join(Submission, Answer.submission_id == Submission.id)
+        .filter(Submission.form_id == form.id, Answer.answer_file.isnot(None))
+        .all()
+    )
+    for (path,) in file_answers:
+        _delete_file(path)
     db.delete(form)
     db.commit()
     return {"message": "Form and all related data have been deleted"}

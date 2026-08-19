@@ -22,9 +22,12 @@ WORD_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 A_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
-ANSWER_RE = re.compile(r'(?:Kunci\s*)?(?:Jawaban|Jawab|Answer)\s*[:\-]?\s*([A-Da-d])\b', re.IGNORECASE)
+# Opsi jawaban tidak dibatasi A-D — bebas sampai A-J (10 opsi), konsisten
+# dengan iterator "ABCDEFGHIJ" untuk native Word list di bawah. Huruf tunggal
+# M+ (I/O/Q/X/Y/Z) rentan false-positive sebagai teks biasa, jadi batasi di J.
+ANSWER_RE = re.compile(r'(?:Kunci\s*)?(?:Jawaban|Jawab|Answer)\s*[:\-]?\s*([A-Ja-j])\b', re.IGNORECASE)
 NUMBERED_RE = re.compile(r'\d+[\.\)]\s*(.+)')
-OPTION_INLINE_RE = re.compile(r'(?:^|\s)([A-Da-d])[\.\)]\s*(.*?)(?=\s+[A-Da-d][\.\)]|$)')
+OPTION_INLINE_RE = re.compile(r'(?:^|\s)([A-Ja-j])[\.\)]\s*(.*?)(?=\s+[A-Ja-j][\.\)]|$)')
 
 
 # ============================================================
@@ -370,12 +373,18 @@ C. 256 cara
 3. Opsi gambar/placeholder
 A.
 D.
+4. Soal 5 opsi satu baris dengan kunci E
+Jawaban: E
+A. satu B. dua C. tiga D. empat E. lima
 """
     qs = _parse_text(s)
-    assert len(qs) == 3, qs
+    assert len(qs) == 4, qs
     assert qs[0]["options"] == [], "essay harus disimpan tanpa opsi"
     assert [o["text"] for o in qs[1]["options"]] == ["252 cara", "258 cara", "256 cara"]
     assert qs[2]["options"] == [], "opsi kosong harus dibuang"
+    five = qs[3]
+    assert [o["text"] for o in five["options"]] == ["satu", "dua", "tiga", "empat", "lima"], "opsi E harusnya tidak tertimbun"
+    assert [o["is_correct"] for o in five["options"]] == [False, False, False, False, True], "kunci E harus dikenali"
 
     # fixture: docx dengan native Word numbering (numPr)
     sample = os.path.join(os.path.dirname(__file__), "../../../tmp_test/soal mtk.docx")

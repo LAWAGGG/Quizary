@@ -152,9 +152,12 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
         total_answers = 0
         for q in questions:
             answers = answer_by_q.get(q.id, [])
+            # Jawaban file (tipe file_upload) disimpan di answer_file, bukan
+            # answer_text/selected_options — wajib dihitung juga, kalau tidak
+            # soal upload selalu tampil "0 answered" di analytics.
             non_empty = [
                 a for a in answers
-                if (a.answer_text and a.answer_text.strip()) or a.selected_options
+                if (a.answer_text and a.answer_text.strip()) or a.selected_options or a.answer_file
             ]
             answered = len(non_empty)
             total_answers += answered
@@ -177,8 +180,10 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
             most = max(breakdown, key=lambda b: b.count) if breakdown and any(b.count for b in breakdown) else None
 
             sample_answers = [
-                a.answer_text.strip() for a in non_empty
-                if a.answer_text and a.answer_text.strip()
+                (a.answer_text.strip() if a.answer_text and a.answer_text.strip()
+                 else f"[File] {a.answer_file.rsplit('/', 1)[-1]}")
+                for a in non_empty
+                if (a.answer_text and a.answer_text.strip()) or a.answer_file
             ][:5]
 
             question_stats.append(QuestionStat(

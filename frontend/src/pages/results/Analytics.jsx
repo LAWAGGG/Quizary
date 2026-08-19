@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Users, Trophy, TrendingUp, TrendingDown, ArrowLeft, BarChart3, ClipboardList } from 'lucide-react'
+import { Users, Trophy, TrendingUp, TrendingDown, ArrowLeft, BarChart3, ClipboardList, ChevronDown, CheckCircle2 } from 'lucide-react'
 import api from '../../api/client'
 import { Card, Button, PageHeader, FormSubNav, CardSkeleton, RichText } from '../../components/ui'
 
@@ -29,141 +29,163 @@ function EmptyData() {
   return <p className="text-gray-400 dark:text-gray-500 text-sm py-8 text-center">No data yet</p>
 }
 
+function Donut({ pct, label = 'completion', size = 176, inset = 16 }) {
+  const p = Math.max(0, Math.min(100, Math.round(pct)))
+  return (
+    <div className="relative shrink-0 text-primary" style={{ width: size, height: size }}>
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{ background: `conic-gradient(currentColor ${p * 3.6}deg, rgba(100,116,139,0.15) ${p * 3.6}deg)` }}
+      />
+      <div
+        className="absolute rounded-full bg-white dark:bg-ink-900 border border-gray-100 dark:border-gray-800 flex flex-col items-center justify-center"
+        style={{ inset }}
+      >
+        <span className="font-display text-4xl font-bold tabular-nums text-ink dark:text-gray-100">{p}%</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mt-1">{label}</span>
+      </div>
+    </div>
+  )
+}
+
+function stripHtml(str) {
+  return (str || '').replace(/<[^>]*>/g, '').trim()
+}
+
+function QuestionRow({ q, i, total, open, onToggle }) {
+  const answeredPct = total ? Math.round((q.answered / total) * 100) : 0
+  const text = stripHtml(q.question_text) || `Question ${i + 1}`
+  const isChoice = (q.option_breakdown || []).length > 0
+
+  return (
+    <div className="border-t border-gray-100 dark:border-gray-800 first:border-t-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="w-full flex items-center gap-4 px-6 py-4 text-left hover:bg-gray-50/70 dark:hover:bg-ink-800/50 transition-colors"
+      >
+        <span className="w-8 h-8 rounded-lg bg-primary-50 dark:bg-primary-900/30 text-primary dark:text-primary-300 text-sm font-bold flex items-center justify-center shrink-0">
+          {i + 1}
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-sm font-medium text-ink dark:text-gray-100 truncate">{text}</span>
+          <span className="flex items-center gap-2 mt-1.5">
+            <span className="flex-1 h-2 bg-gray-100 dark:bg-ink-800 rounded-full overflow-hidden">
+              <motion.span
+                initial={{ width: 0 }}
+                animate={{ width: `${answeredPct}%` }}
+                transition={{ duration: 0.6, ease: 'easeOut' }}
+                className="block h-full bg-primary rounded-full"
+              />
+            </span>
+            <span className="text-xs tabular-nums text-gray-500 dark:text-gray-400 shrink-0">
+              {answeredPct}% · {q.answered}/{total}
+            </span>
+          </span>
+        </span>
+        {q.most_selected ? (
+          <span className="hidden md:inline-flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-ink-800 px-2.5 py-1 rounded-full truncate max-w-[220px] shrink-0">
+            <CheckCircle2 className="w-3.5 h-3.5 text-correct shrink-0" />
+            <span className="truncate">{stripHtml(q.most_selected)}</span>
+          </span>
+        ) : null}
+        <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="px-6 pb-5 pl-[72px]">
+          {isChoice ? (
+            <div className="space-y-2.5">
+              {q.option_breakdown.map((o) => (
+                <div key={o.option_id} className="flex items-center gap-3">
+                  <span className="text-sm text-gray-600 dark:text-gray-300 flex-1 min-w-0 truncate">{stripHtml(o.option_text)}</span>
+                  <div className="flex-1 h-2.5 bg-gray-100 dark:bg-ink-800 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.min(o.pct, 100)}%` }}
+                      transition={{ duration: 0.6, ease: 'easeOut' }}
+                      className="h-full bg-primary rounded-full"
+                    />
+                  </div>
+                  <span className="text-xs tabular-nums text-gray-500 dark:text-gray-400 w-20 text-right shrink-0">
+                    {o.count} · {o.pct}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : q.sample_answers.length ? (
+            <div className="space-y-1.5">
+              {q.sample_answers.map((a, j) => (
+                <p key={j} className="text-sm text-gray-600 dark:text-gray-300 leading-snug">"{a}"</p>
+              ))}
+              {q.answered > q.sample_answers.length && (
+                <p className="text-xs text-gray-400">+{q.answered - q.sample_answers.length} more</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 dark:text-gray-500">No responses</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function FormAnalytics({ data }) {
+  const [openIds, setOpenIds] = useState({})
+  const total = data.total_participants
+  const toggle = (id) => setOpenIds((o) => ({ ...o, [id]: !o[id] }))
+
   const stats = [
-    { label: 'Participants', value: data.total_participants, icon: Users, tint: 'bg-primary-50 text-primary' },
+    { label: 'Participants', value: total, icon: Users, tint: 'bg-primary-50 text-primary' },
     { label: 'Total Answers', value: data.total_answers, icon: ClipboardList, tint: 'bg-correct-soft text-correct' },
-    { label: 'Completion Rate', value: `${Math.round(data.completion_rate * 100)}%`, icon: TrendingUp, tint: 'bg-blue-50 text-blue-700' },
     { label: 'Avg / Participant', value: data.avg_answers, icon: TrendingDown, tint: 'bg-warn-soft text-warn' },
   ]
 
   return (
     <>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-        {stats.map((s, i) => (
-          <StatCard key={s.label} {...s} delay={i * 0.06} />
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-          <Card className="h-full">
-            <h2 className="font-display font-semibold text-ink dark:text-gray-100 mb-5">Response Rate by Question</h2>
-            {data.question_stats.length === 0 ? (
-              <EmptyData />
-            ) : (
-              <div className="space-y-3">
-                {data.question_stats.map((q, i) => {
-                  const pct = data.total_participants ? Math.round((q.answered / data.total_participants) * 100) : 0
-                  return (
-                    <div key={q.question_id} className="flex items-center gap-3">
-                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400 w-16 truncate">Q{i + 1}</span>
-                      <div className="flex-1 h-6 bg-gray-100 dark:bg-ink-800 rounded-lg overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${pct}%` }}
-                          transition={{ duration: 0.6, ease: 'easeOut' }}
-                          className="h-full bg-primary rounded-lg"
-                        />
-                      </div>
-                      <span className="text-sm text-gray-500 dark:text-gray-400 w-16 text-right tabular-nums">{q.answered}/{data.total_participants}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+      {/* Ringkasan: donut completion + 3 angka kunci dalam satu band */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+          <Card className="p-6 h-full flex items-center justify-center">
+            <Donut pct={(data.completion_rate || 0) * 100} />
           </Card>
         </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-          <Card className="h-full">
-            <div className="flex items-center gap-2 mb-5">
-              <BarChart3 className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold text-ink dark:text-gray-100">Most Selected Answers</h2>
-            </div>
-            {data.question_stats.length === 0 ? (
-              <EmptyData />
-            ) : (
-              <div className="space-y-4">
-                {data.question_stats.map((q, i) => (
-                  <div key={q.question_id}>
-                    <p className="text-sm font-medium text-ink dark:text-gray-100 truncate">Q{i + 1}</p>
-                    {q.most_selected ? (
-                      <>
-                        <div className="flex justify-between text-sm mt-1">
-                          <span className="text-gray-600 dark:text-gray-400 truncate">{q.most_selected}</span>
-                          <span className="text-gray-400 dark:text-gray-500 tabular-nums shrink-0 ml-2">{q.most_selected_count} · {q.most_selected_pct}%</span>
-                        </div>
-                        <div className="h-3 bg-gray-100 dark:bg-ink-800 rounded-full overflow-hidden mt-1">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${Math.min(q.most_selected_pct, 100)}%` }}
-                            transition={{ duration: 0.8, ease: 'easeOut' }}
-                            className="h-full rounded-full bg-primary"
-                          />
-                        </div>
-                      </>
-                    ) : q.sample_answers.length ? (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-snug line-clamp-2">
-                        "{q.sample_answers[0]}"
-                        {q.sample_answers.length > 1 && <span className="text-gray-400 dark:text-gray-500"> +{q.sample_answers.length - 1} more</span>}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">No responses</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </motion.div>
+        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {stats.map((s, i) => (
+            <StatCard key={s.label} {...s} delay={0.06 + i * 0.06} />
+          ))}
+        </div>
       </div>
 
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mt-6">
+      {/* Rincian per soal — ringkas, expand on demand */}
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mt-6">
         <Card className="overflow-hidden" padding={false}>
-          <div className="p-6 pb-4">
-            <h2 className="font-display font-semibold text-ink dark:text-gray-100">Per-Question Answers</h2>
+          <div className="flex items-center justify-between gap-4 px-6 py-5">
+            <div>
+              <h2 className="font-display font-semibold text-ink dark:text-gray-100">Question Breakdown</h2>
+              <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">
+                {data.question_stats.length} question{data.question_stats.length !== 1 ? 's' : ''} · tap to expand
+              </p>
+            </div>
           </div>
           {data.question_stats.length === 0 ? (
-            <div className="p-6 pt-0">
-              <p className="text-gray-400 dark:text-gray-500 text-sm">No data yet</p>
+            <div className="border-t border-gray-100 dark:border-gray-800">
+              <EmptyData />
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-t border-gray-100 bg-gray-50/70 dark:border-gray-800 dark:bg-ink-800/50">
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Question</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Answered</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Skipped</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Most Selected</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Sample Answers</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.question_stats.map((q, i) => (
-                    <tr key={q.question_id} className="border-t border-gray-50 hover:bg-gray-50/70 dark:hover:bg-ink-800/50 transition-colors">
-                      <td className="px-6 py-3.5 text-sm text-ink dark:text-gray-100 font-medium">Question {i + 1}</td>
-                      <td className="text-center px-4 py-3.5 text-sm text-gray-700 dark:text-gray-400 font-semibold tabular-nums">{q.answered}</td>
-                      <td className="text-center px-4 py-3.5 text-sm text-gray-400 dark:text-gray-500 tabular-nums">{q.skipped}</td>
-                      <td className="px-4 py-3.5 text-sm text-ink dark:text-gray-100">
-                        {q.most_selected ? (
-                          <span className="text-gray-700 dark:text-gray-400">{q.most_selected} <span className="text-gray-400 dark:text-gray-500">({q.most_selected_count})</span></span>
-                        ) : (
-                          <span className="text-gray-400 dark:text-gray-500">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3.5 text-sm text-gray-500 dark:text-gray-400 max-w-[240px]">
-                        {q.sample_answers.length ? (
-                          <span className="block truncate">"{q.sample_answers.slice(0, 2).join('" • "')}"</span>
-                        ) : (
-                          <span className="text-gray-400 dark:text-gray-500">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div>
+              {data.question_stats.map((q, i) => (
+                <QuestionRow
+                  key={q.question_id}
+                  q={q}
+                  i={i}
+                  total={total}
+                  open={!!openIds[q.question_id]}
+                  onToggle={() => toggle(q.question_id)}
+                />
+              ))}
             </div>
           )}
         </Card>
