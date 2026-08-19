@@ -11,28 +11,8 @@ function parseDate(str) {
   if (!str) return new Date()
   const [d, m, Y, H, M, S] = str.split(/[\s:-]+/).map(Number)
   // API times are WIB (UTC+7). Build the absolute instant from WIB components
-  // so the countdown is correct regardless of the viewer's browser timezone.
+  // so the comparison is correct regardless of the viewer's browser timezone.
   return new Date(Date.UTC(Y, m - 1, d, (H || 0) - 7, M || 0, S || 0))
-}
-
-function CountdownTo({ target }) {
-  const [remaining, setRemaining] = useState('')
-
-  useEffect(() => {
-    function tick() {
-      const diff = target.getTime() - Date.now()
-      if (diff <= 0) return setRemaining('Start...')
-      const h = Math.floor(diff / 3600000)
-      const m = Math.floor((diff % 3600000) / 60000)
-      const s = Math.floor((diff % 60000) / 1000)
-      setRemaining(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`)
-    }
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [target])
-
-  return <div className="font-mono text-4xl font-bold tabular-nums mt-4">{remaining}</div>
 }
 
 const BUBBLES = Array.from({ length: 12 }, (_, i) => i)
@@ -148,17 +128,19 @@ export default function FormLanding() {
   const endsAt = form.ends_at ? parseDate(form.ends_at) : null
 
   // Status/waktu ditampilkan langsung di landing — tidak perlu klik Start dulu.
-  // Creator (is_owner) tidak diblokir: ia bisa preview + lihat banner info.
+  // Pemilik (is_owner) tetap dapat preview form draft/closed, tapi form published
+  // terikat jadwal starts_at/ends_at untuk semua orang — tidak ada yang bisa
+  // mengerjakan lebih awal atau setelah ditutup.
   let blocked = null
-  if (!isOwner) {
+  if (!isPreview) {
     if (form.status === 'closed') {
-      blocked = { title: 'This form is now closed.', desc: 'The creator has closed this form, so no more responses are accepted.' }
+      blocked = { title: 'Form is closed', desc: 'The response period for this form has ended.' }
     } else if (form.status === 'draft') {
       blocked = { title: 'This form is not published yet.', desc: 'The creator hasn\u2019t published this form. Check back later.' }
     } else if (endsAt && Date.now() > endsAt.getTime()) {
-      blocked = { title: 'This form is now closed.', desc: 'The response period for this form has ended.' }
+      blocked = { title: 'Form is closed', desc: 'The response period for this form has ended.' }
     } else if (startsAt && Date.now() < startsAt.getTime()) {
-      blocked = { title: 'This form opens in:', countdown: startsAt }
+      blocked = { title: 'Form is not opened', desc: 'This form hasn\u2019t opened yet. Please check back later.' }
     }
   }
 
@@ -166,14 +148,10 @@ export default function FormLanding() {
     return (
       <BlockedState
         background={palette.gradient}
-        icon={blocked.countdown ? <Clock className="w-6 h-6 text-white" /> : <Lock className="w-6 h-6 text-white" />}
+        icon={blocked.title === 'Form is not opened' ? <Clock className="w-6 h-6 text-white" /> : <Lock className="w-6 h-6 text-white" />}
         title={blocked.title}
       >
-        {blocked.countdown ? (
-          <CountdownTo target={blocked.countdown} />
-        ) : (
-          <p className="text-white/70 text-sm mt-2 mb-6">{blocked.desc}</p>
-        )}
+        <p className="text-white/70 text-sm mt-2 mb-6">{blocked.desc}</p>
       </BlockedState>
     )
   }
@@ -213,17 +191,29 @@ export default function FormLanding() {
 
     if (!startState.can_start) {
       const msgs = {
-        not_started: 'This form opens in:',
-        closed: 'This form is now closed.',
+        not_started: 'Form is not opened',
+        closed: 'Form is closed',
+        draft: 'This form is not published yet.',
         already_submitted: 'You have already submitted this form.',
+      }
+      const icons = {
+        not_started: <Clock className="w-6 h-6 text-white" />,
+        closed: <Lock className="w-6 h-6 text-white" />,
+        draft: <Lock className="w-6 h-6 text-white" />,
+        already_submitted: <CheckCircle2 className="w-6 h-6 text-white" />,
       }
       return (
         <BlockedState
           background={palette.gradient}
-          icon={startState.reason === 'already_submitted' ? <CheckCircle2 className="w-6 h-6 text-white" /> : <Clock className="w-6 h-6 text-white" />}
+          icon={icons[startState.reason] || <Lock className="w-6 h-6 text-white" />}
           title={msgs[startState.reason] || 'Access denied'}
         >
-          {startState.reason === 'not_started' && <CountdownTo target={parseDate(startState.starts_at)} />}
+          <p className="text-white/70 text-sm mt-2 mb-6">
+            {startState.reason === 'not_started' && 'This form hasn\u2019t opened yet. Please check back later.'}
+            {startState.reason === 'closed' && 'The response period for this form has ended.'}
+            {startState.reason === 'draft' && 'The creator hasn\u2019t published this form. Check back later.'}
+            {startState.reason === 'already_submitted' && 'You can only submit this form once.'}
+          </p>
         </BlockedState>
       )
     }

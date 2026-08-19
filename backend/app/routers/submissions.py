@@ -284,16 +284,16 @@ def create_submission(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required to access this form")
 
     now = _now()
+    # Owner hanya bebas dari jadwal ketika preview form draft/closed (status
+    # non-published). Form published terikat starts_at/ends_at untuk semua user.
+    is_preview = is_owner and form.status != FormStatus.published
     ends = form.ends_at
-    if not is_owner and ends and now > ends:
-        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Form submission period has ended")
+    if not is_preview and ends and now > ends:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Form is closed")
 
     starts = form.starts_at
-    if not is_owner and starts and now < starts:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Form is not open yet. Opens at {fmt_dt(starts)}",
-        )
+    if not is_preview and starts and now < starts:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Form is not opened")
 
     ip = request.client.host if request.client else None
 

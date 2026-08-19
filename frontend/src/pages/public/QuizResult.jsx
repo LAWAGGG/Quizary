@@ -169,7 +169,6 @@ export default function QuizResult() {
             <div className="grid grid-cols-3 gap-2.5 mt-8">
               <MetaChip label="Questions" value={String(totalQ)} />
               <MetaChip label="Submitted" value={formatSubmitted(data.submitted_at)} />
-              <MetaChip label="Reference" value={`#${submissionId}`} />
             </div>
 
             <div className="border-t border-gray-100 dark:border-gray-800 mt-7 pt-6">

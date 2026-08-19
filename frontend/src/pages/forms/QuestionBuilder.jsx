@@ -357,7 +357,6 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
     <Card className={`transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? 'border-primary/50 shadow-card' : 'hover:border-gray-300 dark:hover:border-gray-700'}`}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-gray-300 dark:text-gray-600 cursor-grab"><GripVertical className="w-5 h-5" /></span>
           <span className="w-6 h-6 rounded-full bg-ink text-white text-xs font-bold flex items-center justify-center shrink-0">
             {index + 1}
           </span>

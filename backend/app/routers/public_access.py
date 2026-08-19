@@ -100,18 +100,13 @@ def start_form_check(
             detail="Login required to access this form",
         )
 
+    # Jadwal (starts_at/ends_at) berlaku untuk SEMUA user, termasuk pemilik.
+    # Form published hanya bisa diisi dalam rentang waktu tersebut — pemilik
+    # tidak dapat preview lebih awal (preview khusus status draft/closed di atas).
     if starts and now < starts:
-        if is_owner:
-            return {"can_start": True, "form_id": form.id, "require_identity": False, "is_preview": True}
-        return {
-            "can_start": False,
-            "reason": "not_started",
-            "starts_at": fmt_dt(starts),
-        }
+        return {"can_start": False, "reason": "not_started"}
 
     if ends and now > ends:
-        if is_owner:
-            return {"can_start": True, "form_id": form.id, "require_identity": False, "is_preview": True}
         return {"can_start": False, "reason": "closed"}
 
     if form.submission_limit == SubmissionLimit.once:

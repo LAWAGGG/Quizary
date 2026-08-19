@@ -483,6 +483,26 @@ export default function AnswerQuiz() {
 
   const handleNext = () => {
     if (!data) return
+    // Mode form: satu section = satu halaman. Semua soal required di section
+    // ini wajib dijawab dulu sebelum lanjut. Kalau belum, tandai merah semua
+    // soal yang kosong + scroll ke soal pertama yang belum terjawab.
+    if (formType !== 'quiz') {
+      const page = formPages[currentIdx]
+      const missing = (page?.questions || []).filter(
+        (q) => q.is_required !== false && !isAnswered(q, answers[q.id])
+      )
+      if (missing.length) {
+        const errs = {}
+        missing.forEach((q) => { errs[q.id] = true })
+        setValidationErrors((e) => ({ ...e, ...errs }))
+        setTimeout(() => {
+          if (questionRefs.current[missing[0].id]) {
+            questionRefs.current[missing[0].id].scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }, 80)
+        return
+      }
+    }
     const total = formType === 'quiz' ? data.questions.length : formPages.length
     if (currentIdx < total - 1) {
       setDirection(1)
@@ -1192,11 +1212,23 @@ export default function AnswerQuiz() {
                 (q) => q.is_required !== false && !isAnswered(q, answers[q.id])
               ).length
               if (currentIdx < formPages.length - 1) {
+                const pageMissing = (formPage?.questions || []).filter(
+                  (q) => q.is_required !== false && !isAnswered(q, answers[q.id])
+                ).length
+                const pageComplete = pageMissing === 0
                 return (
-                  <Button onClick={handleNext} className="flex-1" size="lg" style={{ background: palette.cta, color: palette.onBase }}>
-                    Next
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
+                  <>
+                  
+                    <Button
+                      onClick={handleNext}
+                      className="flex-1"
+                      size="lg"
+                      style={pageComplete ? { background: palette.cta, color: palette.onBase } : { background: '#CBD5E1', color: '#F8FAFC' }}
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  </>
                 )
               }
               return (

@@ -242,10 +242,13 @@ Setiap business logic non-trivial WAJIB di-test:
 | Status non-publik dikembalikan | `GET /q/{code}` form `draft`/`closed` → 200 + `status` (bukan 404) |
 | Draft gate (anon) | `GET /q/{code}/start` form `draft` tanpa owner → `can_start=false, reason="draft"` |
 | Closed gate (anon) | `GET /q/{code}/start` form `closed` / lewat `ends_at` → `reason="closed"` (tanpa minta login) |
-| Not started gate (anon) | `GET /q/{code}/start` sebelum `starts_at` → `reason="not_started"` |
-| Owner preview | `GET /q/{code}/start` owner form draft/closed/belum waktunya → `can_start=true, is_preview=true` |
+| Not started gate (all) | `GET /q/{code}/start` sebelum `starts_at` → `reason="not_started"` — berlaku untuk semua user termasuk pemilik |
+| Closed time gate (all) | `GET /q/{code}/start` lewat `ends_at` → `reason="closed"` — berlaku untuk semua user termasuk pemilik |
+| Owner preview (status) | `GET /q/{code}/start` owner form `draft`/`closed` → `can_start=true, is_preview=true`. Preview hanya berdasarkan status, TIDAK menembus jadwal `starts_at`/`ends_at` pada form `published` |
 | Owner preview create | `POST /submissions` owner form `draft`/`closed` → 201 (non-owner → 404) |
 | Owner preview bypass once | Owner form `submission_limit="once"` yang sudah submit tetap bisa preview |
+| Time gate create (all) | `POST /submissions` sebelum `starts_at` → 403 `"Form is not opened"`; lewat `ends_at` → 410 `"Form is closed"` (owner form `published` tidak dikecualikan) |
+| Jadwal tidak bocor | Response gate tidak menyertakan `starts_at`/`ends_at` (tidak memberi tahu jam buka/tutup) |
 
 ### 3.3 Edge Case Test
 

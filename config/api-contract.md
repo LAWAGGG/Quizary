@@ -508,14 +508,14 @@ Auth: - (opsional Bearer Token untuk deteksi owner)
 
 ### `GET /q/{short_code}/start`
 Auth: - (atau Bearer Token kalau `require_login=true`)
-> Status dicek sebelum `require_login`: form draft/closed selalu mengembalikan reason (tanpa meminta login). Owner (`is_owner=true`) boleh preview walau draft/closed/belum waktunya → `is_preview=true`.
+> Status dicek sebelum `require_login`: form draft/closed selalu mengembalikan reason (tanpa meminta login). Owner (`is_owner=true`) boleh preview form `draft`/`closed` → `is_preview=true`. Jadwal `starts_at`/`ends_at` TIDAK bisa ditembus owner pada form `published` — waktu berlaku untuk semua user.
 ```json
 // Response 200 (boleh mulai)
 { "can_start": true, "form_id": 2, "require_identity": true }
 ```
 ```json
-// Response 200 (belum waktunya)
-{ "can_start": false, "reason": "not_started", "starts_at": "30-07-2026 18:00:00" }
+// Response 200 (belum waktunya — tanpa membocorkan jam buka)
+{ "can_start": false, "reason": "not_started" }
 ```
 ```json
 // Response 200 (draft — belum dipublikasikan)
@@ -526,7 +526,7 @@ Auth: - (atau Bearer Token kalau `require_login=true`)
 { "can_start": false, "reason": "closed" }
 ```
 ```json
-// Response 200 (owner preview — boleh mulai walau belum publik)
+// Response 200 (owner preview — hanya untuk status draft/closed)
 { "can_start": true, "form_id": 2, "require_identity": false, "is_preview": true }
 ```
 ```json
@@ -616,12 +616,12 @@ Auth: - (atau Bearer Token jika login)
 }
 ```
 ```json
-// Response 403 (belum waktunya)
-{ "message": "Form is not open yet. Opens at 30-07-2026 18:00:00" }
+// Response 403 (belum waktunya — tidak membocorkan jam buka)
+{ "message": "Form is not opened" }
 ```
 ```json
 // Response 410 (periode sudah berakhir)
-{ "message": "Form submission period has ended" }
+{ "message": "Form is closed" }
 ```
 ```json
 // Response 410 (session sebelumnya expired)
