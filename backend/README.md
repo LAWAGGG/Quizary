@@ -14,7 +14,7 @@ REST API untuk platform pembuatan form dan quiz. Melayani dashboard admin (manaj
 | Password | bcrypt |
 | Migration | Alembic |
 | Export | OpenPyXL (.xlsx) |
-| Import | python-docx (.docx) |
+| Import | python-docx (.docx, termasuk gambar) |
 
 ## Struktur Folder
 
@@ -27,14 +27,14 @@ backend/
 │   ├── auth.py              # JWT encode/decode, password hash
 │   ├── dependencies.py      # get_current_user, verify_form_owner, get_optional_user
 │   ├── utils.py             # Helper: file_url (path → full URL)
-│   ├── models/              # 10 tabel database (1 file per entitas)
+│   ├── models/              # 11 tabel database (1 file per entitas)
 │   ├── schemas/             # Pydantic request/response per modul
-│   └── routers/             # 9 file router (auth, forms, questions, ...)
-├── uploads/
-│   ├── banners/             # File banner form (di-ignore git)
-│   └── question-images/     # File gambar soal/opsi (di-ignore git)
+│   ├── services/            # Logika non-routing: grading, points, session_expiry
+│   └── routers/             # 8 file router (auth, forms, questions, ...)
 ├── alembic/                 # Database migrations
 ├── requirements.txt
+├── seed.sql                 # Data awal untuk dev
+├── fresh.sh                 # Drop semua tabel + migrate + seed (dev)
 ├── .env.example
 ```
 
@@ -121,7 +121,7 @@ Server berjalan di `http://localhost:8000`. Dokumentasi interaktif di `http://lo
 
 ## API Endpoints
 
-### Authentication
+### Authentication & Profile
 
 | Method | Path | Auth | Deskripsi |
 |---|---|---|---|
@@ -130,6 +130,7 @@ Server berjalan di `http://localhost:8000`. Dokumentasi interaktif di `http://lo
 | POST | `/api/logout` | Bearer | Logout |
 | GET | `/api/me` | Bearer | Profile user |
 | PUT | `/api/me` | Bearer | Update profile |
+| POST | `/api/me/avatar` | Bearer | Upload avatar |
 
 ### Forms
 
@@ -142,6 +143,19 @@ Server berjalan di `http://localhost:8000`. Dokumentasi interaktif di `http://lo
 | DELETE | `/api/forms/{id}` | Bearer | Hapus form + semua data terkait |
 | PATCH | `/api/forms/{id}/publish` | Bearer | Publish / draft form |
 | POST | `/api/forms/{id}/banner` | Bearer | Upload banner form |
+| DELETE | `/api/forms/{id}/banner` | Bearer | Hapus banner form |
+
+Pengaturan form: timer, jadwal buka/tutup (`starts_at`, `ends_at`), shuffle soal/opsi, limit submission, leaderboard, mode restricted, show-in-history, reveal score/answers, theme color.
+
+### Sections
+
+| Method | Path | Auth | Deskripsi |
+|---|---|---|---|
+| GET | `/api/forms/{id}/sections` | Bearer | List section dalam form |
+| POST | `/api/forms/{id}/sections` | Bearer | Tambah section |
+| PATCH | `/api/sections/{id}` | Bearer | Update section |
+| DELETE | `/api/sections/{id}` | Bearer | Hapus section |
+| PATCH | `/api/sections/reorder` | Bearer | Ubah urutan section |
 
 ### Questions
 
@@ -153,15 +167,18 @@ Server berjalan di `http://localhost:8000`. Dokumentasi interaktif di `http://lo
 | DELETE | `/api/questions/{id}` | Bearer | Hapus soal |
 | PATCH | `/api/questions/reorder` | Bearer | Ubah urutan soal |
 
-Tipe soal: `multiple_choice`, `checkbox`, `short_answer`, `essay`.
+Tipe soal: `multiple_choice`, `checkbox`, `dropdown`, `short_answer`, `essay`, `date`, `time`, `file_upload`.
 
 ### Images
 
 | Method | Path | Auth | Deskripsi |
 |---|---|---|---|
-| POST | `/api/questions/{id}/images` | Bearer | Tambah gambar ke soal (file atau link) |
+| POST | `/api/questions/{id}/image` | Bearer | Tambah gambar ke soal (file atau link) |
+| POST | `/api/questions/{id}/option/{option_id}/image` | Bearer | Tambah gambar ke opsi soal |
+| POST | `/api/questions/{id}/images` | Bearer | Tambah banyak gambar ke soal |
 | POST | `/api/options/{id}/images` | Bearer | Tambah gambar ke opsi |
 | DELETE | `/api/images/{id}` | Bearer | Hapus gambar |
+| DELETE | `/api/options/{id}/images/{image_id}` | Bearer | Hapus gambar dari opsi |
 
 ### Public Access
 
@@ -169,16 +186,21 @@ Tipe soal: `multiple_choice`, `checkbox`, `short_answer`, `essay`.
 |---|---|---|---|
 | GET | `/api/q/{short_code}` | — | Lihat informasi form publik |
 | GET | `/api/q/{short_code}/start` | — (opsional) | Cek bisa mulai/ngisi |
+| GET | `/api/q/{short_code}/leaderboard` | — | Papan peringkat (jika diaktifkan) |
 
 ### Submissions
 
 | Method | Path | Auth | Deskripsi |
 |---|---|---|---|
 | POST | `/api/submissions` | — (opsional) | Mulai sesi pengisian |
+| POST | `/api/submissions/{id}/answers/{question_id}/file` | — | Upload jawaban file untuk soal `file_upload` |
 | PATCH | `/api/submissions/{id}/autosave` | — | Auto-save jawaban |
+| POST | `/api/submissions/{id}/tab-exit` | — | Catat keluar tab (anti-cheat) |
 | POST | `/api/submissions/{id}/submit` | — | Submit final |
 | GET | `/api/submissions/{id}` | — (opsional) | Detail submission + hasil |
 | GET | `/api/me/submissions` | Bearer | Riwayat submission user |
+
+Status submission: `in_progress`, `submitted`, `auto_submitted` (timer habis), `cheating` (terdeteksi tab-exit berlebihan).
 
 ### Results & Dashboard
 
@@ -189,23 +211,23 @@ Tipe soal: `multiple_choice`, `checkbox`, `short_answer`, `essay`.
 | GET | `/api/forms/{id}/export/excel` | Bearer | Export Excel (.xlsx) |
 | GET | `/api/dashboard/summary` | Bearer | Ringkasan dashboard |
 
+`/dashboard/summary` mengembalikan `submission_trend` per **form** (bukan per hari) — top 10 form dengan submission terbanyak, dipakai chart di dashboard.
+
+```json
+{
+  "submission_trend": [
+    { "form_id": 2, "title": "Quiz Matematika Dasar", "count": 12 }
+  ]
+}
+```
+
 ### Import
 
 | Method | Path | Auth | Deskripsi |
 |---|---|---|---|
-| POST | `/api/forms/{id}/import/text` | Bearer | Preview import dari text |
-| POST | `/api/forms/{id}/import/docx` | Bearer | Preview import dari .docx |
-| POST | `/api/forms/{id}/import/confirm` | Bearer | Simpan hasil import |
+| POST | `/api/forms/{id}/import/docx` | Bearer | Import soal dari file .docx (termasuk gambar di dalam dokumen) |
 
-Format text import:
-
-```
-1. Apa ibu kota Indonesia?
-A. Bandung
-B. Jakarta
-C. Surabaya
-Jawaban: B
-```
+Import langsung membuat soal sekaligus menyimpan gambar yang ditemukan di dokumen Word.
 
 ## Validasi Input
 
@@ -229,12 +251,13 @@ Semua endpoint dengan request body memiliki validasi Pydantic:
 
 ## File Storage
 
-File upload (banner, gambar soal/opsi) disimpan di:
+File upload (banner, avatar, gambar soal/opsi, jawaban file) disimpan di folder runtime `backend/uploads/` (tidak di-track git):
 
 ```
 backend/uploads/
 ├── banners/           ← Form banner
-└── question-images/   ← Gambar soal/opsi
+├── avatars/           ← Foto profil user
+└── question-images/   ← Gambar soal/opsi + file jawaban
 ```
 
 Di-mount sebagai static files di `/uploads`. Semua response API mengembalikan **full URL** langsung:
@@ -270,11 +293,6 @@ echo "PASS: $PASS | FAIL: $FAIL"
 
 Jalankan test setelah setiap perubahan untuk mastiin gak ada regression.
 
-## Postman
+## Referensi Kontrak API
 
-File `quizary-postman-collection.json` dan `quizary-postman-environment.json` bisa di-import ke Postman:
-
-1. File → Import → pilih kedua file
-2. Pilih environment **Quizary Local**
-3. Jalankan **Register** → **Login** (token otomatis tersimpan)
-4. Lanjut flow: Create Form → Add Questions → Publish → Submission → Results
+Spesifikasi lengkap endpoint (request/response) ada di `config/api-contract.md`, aturan validasi dan checklist testing per endpoint di `config/validation-rules.md`.

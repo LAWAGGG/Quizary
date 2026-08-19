@@ -81,7 +81,8 @@ class RecentForm(BaseModel):
 
 
 class SubmissionTrend(BaseModel):
-    date: str
+    form_id: int
+    title: str
     count: int
 
 

@@ -132,7 +132,7 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data?.recent_forms?.map((f) => (
+                    {data?.recent_forms?.slice(0,3).map((f) => (
                       <tr key={f.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/70 dark:hover:bg-ink-800/70 transition-colors">
                         <td className="py-3.5 pr-3 text-sm font-medium text-ink dark:text-gray-100">
                           <Link to={`/forms/${f.id}/results`} className="hover:text-primary transition-colors">
@@ -165,16 +165,17 @@ export default function Dashboard() {
               </div>
             ) : (
               <>
-                <div className="flex items-end gap-2 h-48">
+                <div className="flex items-end gap-2 h-40">
                   {data?.submission_trend?.map((t, i) => {
                     const height = Math.max((t.count / maxTrend) * 100, 4)
                     return (
                       <motion.div
-                        key={t.date}
+                        key={t.form_id}
                         initial={{ height: 0 }}
                         animate={{ height: `${height}%` }}
                         transition={{ duration: 0.5, delay: 0.5 + i * 0.05 }}
                         className="flex-1 bg-primary rounded-t-lg min-h-[4px] relative group"
+                        title={`${t.title}: ${t.count}`}
                       >
                         <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                           {t.count}
@@ -183,9 +184,11 @@ export default function Dashboard() {
                     )
                   })}
                 </div>
-                <div className="flex justify-between mt-3 text-xs text-gray-400 dark:text-gray-500">
-                  {data.submission_trend.filter((_, i) => i === 0 || i === data.submission_trend.length - 1).map((t) => (
-                    <span key={t.date}>{t.date}</span>
+                <div className="flex gap-2 mt-2">
+                  {data?.submission_trend?.map((t) => (
+                    <span key={t.form_id} className="flex-1 min-w-0 text-center" title={`${t.title} — ${t.count} answer${t.count !== 1 ? 's' : ''}`}>
+                      <span className="block text-[10px] text-gray-400 dark:text-gray-500 truncate">{t.title}</span>
+                    </span>
                   ))}
                 </div>
               </>

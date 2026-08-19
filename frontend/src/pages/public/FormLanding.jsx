@@ -310,7 +310,7 @@ export default function FormLanding() {
           >
             <InfoChip icon={<HelpCircle className="w-3.5 h-3.5" />} text={`${form.question_count ?? 0} question${(form.question_count ?? 0) !== 1 ? 's' : ''}`} />
             {form.timer_seconds > 0 && (
-              <InfoChip icon={<Clock className="w-3.5 h-3.5" />} text={`~${Math.ceil(form.timer_seconds / 60)} min`} />
+              <InfoChip icon={<Clock className="w-3.5 h-3.5" />} text={`${Math.ceil(form.timer_seconds / 60)} min`} />
             )}
           </motion.div>
 
@@ -367,7 +367,7 @@ export default function FormLanding() {
         <div className="flex items-center justify-center gap-3 mt-6">
           <InfoChip icon={<HelpCircle className="w-3.5 h-3.5" />} text={`${form.question_count ?? 0} question${(form.question_count ?? 0) !== 1 ? 's' : ''}`} />
           {form.timer_seconds > 0 && (
-            <InfoChip icon={<Clock className="w-3.5 h-3.5" />} text={`~${Math.ceil(form.timer_seconds / 60)} min`} />
+            <InfoChip icon={<Clock className="w-3.5 h-3.5" />} text={`${Math.ceil(form.timer_seconds / 60)} min`} />
           )}
         </div>
       </div>

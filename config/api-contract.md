@@ -881,8 +881,8 @@ Auth: Bearer Token
     { "id": 2, "title": "Quiz Matematika Dasar", "status": "published", "submission_count": 12 }
   ],
   "submission_trend": [
-    { "date": "2026-07-20", "count": 5 },
-    { "date": "2026-07-21", "count": 8 }
+    { "form_id": 2, "title": "Quiz Matematika Dasar", "count": 12 },
+    { "form_id": 5, "title": "Pendaftaran Lomba Sains", "count": 9 }
   ]
 }
 ```

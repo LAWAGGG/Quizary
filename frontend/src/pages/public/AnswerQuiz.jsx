@@ -1445,7 +1445,7 @@ function ExamInfoDrawer({ show, onClose, form, data }) {
               <div className="mt-4">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Detail</p>
                 {chip('Jumlah soal', form?.question_count ?? data?.questions?.length ?? '—')}
-                {form?.timer_seconds ? chip('Waktu', `~${Math.ceil(form.timer_seconds / 60)} menit`) : chip('Waktu', 'Tanpa batas')}
+                {form?.timer_seconds ? chip('Waktu', `${Math.ceil(form.timer_seconds / 60)} menit`) : chip('Waktu', 'Tanpa batas')}
                 {form?.submission_limit === 'once' ? chip('Pengiriman', 'Sekali saja') : chip('Pengiriman', 'Bebas')}
               </div>
 

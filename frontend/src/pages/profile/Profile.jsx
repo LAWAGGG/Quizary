@@ -1,16 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Camera, Sun, Moon } from 'lucide-react'
+import { Camera } from 'lucide-react'
 import api from '../../api/client'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
-import { useTheme } from '../../hooks/useTheme'
-import { Card, Button, Input, Badge, PageHeader, Toggle } from '../../components/ui'
+import { Card, Button, Input, Badge, PageHeader } from '../../components/ui'
 
 export default function Profile() {
   const { user, updateUser } = useAuth()
   const toast = useToast()
-  const { theme, toggleTheme } = useTheme()
   const [name, setName] = useState('')
   const [avatar, setAvatar] = useState(null)
   const [avatarPreview, setAvatarPreview] = useState(null)
@@ -133,22 +131,6 @@ export default function Profile() {
               <Badge scheme={user?.role === 'admin' ? 'primary' : 'blue'}>
                 {(user?.role || 'user').toUpperCase()}
               </Badge>
-            </div>
-
-            <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800">
-              <div>
-                <p className="field-label !mb-1">Appearance</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">Switch between light and dark mode.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Sun className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                <Toggle
-                  label="Dark mode"
-                  checked={theme === 'dark'}
-                  onChange={toggleTheme}
-                />
-                <Moon className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-              </div>
             </div>
 
             <Button onClick={handleSave} loading={saving} className="w-full" size="lg">

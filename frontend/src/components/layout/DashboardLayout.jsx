@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, ClipboardList, ListChecks, UserRound, X, LogOut, ChevronDown } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, ListChecks, UserRound, X, LogOut, ChevronDown, Sun, Moon } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
+import { useTheme } from '../../hooks/useTheme'
 import { AppMark } from '../ui'
 
 const nav = [
@@ -28,9 +29,8 @@ function Sidebar({ open, onClose, onLogout, user }) {
       </AnimatePresence>
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-white dark:bg-ink-900 border-r border-gray-200 dark:border-gray-800 transition-transform duration-200 ease-out lg:static lg:translate-x-0 ${
-          open ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-white dark:bg-ink-900 border-r border-gray-200 dark:border-gray-800 transition-transform duration-200 ease-out lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         <div className="flex items-center gap-3 px-5 h-16 shrink-0 border-b border-gray-100 dark:border-gray-800">
           <AppMark size="sm" />
@@ -56,8 +56,7 @@ function Sidebar({ open, onClose, onLogout, user }) {
               end={link.end}
               onClick={onClose}
               className={({ isActive }) =>
-                `relative flex items-center gap-3 px-3.5 h-11 rounded-xl text-sm font-medium transition-colors duration-150 ${
-                  isActive ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' : 'text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-ink-800'
+                `relative flex items-center gap-3 px-3.5 h-11 rounded-xl text-sm font-medium transition-colors duration-150 ${isActive ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' : 'text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-ink-800'
                 }`
               }
             >
@@ -98,6 +97,7 @@ function Sidebar({ open, onClose, onLogout, user }) {
 export default function DashboardLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useTheme()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
@@ -199,6 +199,14 @@ export default function DashboardLayout() {
                 )}
               </AnimatePresence>
             </div>
+            <button
+              onClick={toggleTheme}
+              className="p-2.5 rounded-xl text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            >
+              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
           </div>
         </header>
 
