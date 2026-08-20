@@ -248,6 +248,16 @@ def create_question(
         if not section or section.form_id != form.id:
             raise HTTPException(status_code=422, detail="Section tidak ditemukan pada form ini")
 
+    # multiple_choice hanya wajib punya tepat 1 jawaban benar untuk quiz yang
+    # dinilai (count points). Form biasa / kuesioner & soal tidak dinilai bebas.
+    if form.type.value == "quiz" and body.type == "multiple_choice":
+        correct_count = sum(1 for o in body.options if o.is_correct)
+        if correct_count != 1:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="multiple_choice questions must have exactly 1 correct option",
+            )
+
     question = Question(
         form_id=form.id,
         type=QuestionType(body.type),
@@ -286,7 +296,7 @@ def update_question(
     db: Session = Depends(get_db),
 ):
     question = _get_question_or_404(question_id, db)
-    _ensure_owner(question, user, db)
+    form = _ensure_owner(question, user, db)
 
     update_data = body.model_dump(exclude_unset=True)
     options_data = update_data.pop("options", None)
@@ -399,8 +409,10 @@ def update_question(
             ))
 
         # Fix #3 carry-over — re-validate mc has exactly 1 correct after update
+        # (hanya untuk quiz yang dinilai; form biasa/kuesioner & soal tidak
+        # dinilai boleh tanpa jawaban benar)
         db.flush()
-        if new_type_str == "multiple_choice":
+        if new_type_str == "multiple_choice" and form.type.value == "quiz" and question.is_scored:
             correct_count = db.query(QuestionOption).filter(
                 QuestionOption.question_id == question.id,
                 QuestionOption.is_correct == True,  # noqa: E712
@@ -484,14 +496,14 @@ def reorder_questions(
     return {"message": "Question order updated"}
 
 
-_ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+_ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp3", ".wav", ".m4a", ".ogg", ".aac", ".webm"}
 
 
 def _store_image(file: UploadFile, subdir: str) -> str:
-    """Save an image upload and return relative path. `file` must be non-null."""
+    """Save an image or audio upload and return relative path. `file` must be non-null."""
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in _ALLOWED_EXT:
-        raise HTTPException(status_code=422, detail="Unsupported file format, use JPG/PNG/GIF/WEBP")
+        raise HTTPException(status_code=422, detail="Unsupported file format, use image (JPG/PNG/GIF/WEBP) or audio (MP3/WAV/M4A/OGG/AAC/WEBM)")
     filename = f"{uuid.uuid4().hex}{ext}"
     dest = os.path.join(UPLOAD_DIR, subdir, filename)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -501,7 +513,7 @@ def _store_image(file: UploadFile, subdir: str) -> str:
 
 
 def _replace_image(owner, subdir: str, file: UploadFile, db: Session, request: Request):
-    """Upload (and replace) the single image for an owner (Question or QuestionOption)."""
+    """Upload (and replace) the single media (image/audio) for an owner (Question or QuestionOption)."""
     old = sorted(owner.images, key=lambda i: i.order_index or 0)
     new_path = _store_image(file, subdir)
     for img in old:

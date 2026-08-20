@@ -510,13 +510,13 @@ export default function FormEdit() {
                   />
                   <SettingRow
                     title="Show answer review"
-                    desc="If off, respondents can\u2019t view which answers were correct/wrong."
+                    desc="If off, respondents can't view which answers were correct/wrong."
                     control={<Toggle label="Show answer review" checked={form.reveal_answers !== false} onChange={(v) => setForm((prev) => ({ ...prev, reveal_answers: v }))} />}
                   />
                   <SettingRow
-                    title="Fullscreen mode"
-                    desc="Respondents must stay on the quiz tab. 3 exits auto-submit the quiz with score 0 (marked as cheating)."
-                    control={<Toggle label="Fullscreen mode" checked={isRestricted} onChange={(v) => toggleSetting('is_restricted', v)} />}
+                    title="Restrict mode"
+                    desc="Respondents must stay on the quiz tab. 3 exits marked as cheating"
+                    control={<Toggle label="Restrict mode" checked={isRestricted} onChange={(v) => toggleSetting('is_restricted', v)} />}
                   />
                 </>
               )}

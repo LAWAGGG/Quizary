@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Sora:wght@500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -239,10 +239,19 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 }
 
 .rich-editor .ql-toolbar.ql-snow {
-  @apply px-3 py-2 bg-gray-50/80;
+  @apply bg-gray-50/80;
   border: none;
   border-top-left-radius: 12px;
   border-top-right-radius: 12px;
+  max-height: 0;
+  padding: 0;
+  overflow: hidden;
+  transition: max-height 0.18s ease, padding 0.18s ease;
+}
+
+.rich-editor.rich-editor-active .ql-toolbar.ql-snow {
+  @apply px-3 py-2;
+  max-height: 100px;
 }
 
 .dark .rich-editor .ql-toolbar.ql-snow {
@@ -253,10 +262,23 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   @apply text-sm text-ink bg-white;
   border: none;
   cursor: text;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+
+.rich-editor.rich-editor-active .ql-container.ql-snow {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .dark .rich-editor .ql-container.ql-snow {
-  @apply text-gray-100 bg-ink-900;
+  @apply text-white bg-ink-900;
+}
+
+/* Placeholder mode gelap */
+.dark .rich-editor .ql-editor.ql-blank::before {
+  @apply text-gray-500; 
+  color: #6b7280 !important; 
 }
 
 /* Tanpa overflow-hidden di wrapper, sudut bawah ql-container perlu radius sendiri
@@ -314,6 +336,33 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 
 .rich-editor-compact .ql-toolbar.ql-snow {
   @apply py-1;
+}
+
+.rich-editor-compact.rich-editor-active .ql-toolbar.ql-snow {
+  @apply py-1;
+}
+
+/* Tombol insert symbol — konten di-set via pseudo-element supaya bisa
+   diberi title tanpa icon file. */
+.rich-editor .ql-toolbar button.ql-symbol {
+  width: auto;
+  padding: 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  color: #6b7280;
+}
+
+.dark .rich-editor .ql-toolbar button.ql-symbol {
+  color: #9ca3af;
+}
+
+.rich-editor .ql-toolbar button.ql-symbol:hover {
+  color: #6C5CE7;
+}
+
+.rich-editor .ql-toolbar button.ql-symbol::after {
+  content: 'Ω';
 }
 
 /* Teks yang dirender dari editor (soal/opsi) — justify elemen inline */

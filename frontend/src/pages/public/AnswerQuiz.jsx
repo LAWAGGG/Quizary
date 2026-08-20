@@ -6,6 +6,7 @@ import { Button, Input, Textarea, Card, FallbackPage, QuestionMap, ConfirmSubmit
 import { useAutosave } from '../../hooks/useAutosave'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
+import { isAudioUrl } from '../../lib/media'
 import api from '../../api/client'
 
 const OPT_COLORS = ['#3B82F6', '#EF4444', '#F59E0B', '#10B981']
@@ -789,23 +790,27 @@ export default function AnswerQuiz() {
                     {sectionsById[current.section_id]}
                   </p>
                 )}
-                {current.image && (
+                {current.image && (isAudioUrl(current.image.path) ? (
+                  <audio controls src={current.image.path} preload="metadata" className="w-full max-w-sm mx-auto mb-4" />
+                ) : (
                   <img
                     src={current.image.path}
                     alt=""
                     onClick={() => { setZoomTarget(current); setZoomScale(1) }}
                     className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card cursor-zoom-in"
                   />
+                ))}
+                {current.image && !isAudioUrl(current.image.path) && (
+                  <div className="flex items-center justify-center">
+                    <button
+                      onClick={() => { setZoomTarget(current); setZoomScale(1) }}
+                      className="inline-flex items-center gap-2 text-xs font-semibold px-4 h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors shadow-chip"
+                    >
+                      <ZoomIn className="w-4 h-4" />
+                      Perbesar soal
+                    </button>
+                  </div>
                 )}
-                <div className="flex items-center justify-center">
-                  <button
-                    onClick={() => { setZoomTarget(current); setZoomScale(1) }}
-                    className="inline-flex items-center gap-2 text-xs font-semibold px-4 h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors shadow-chip"
-                  >
-                    <ZoomIn className="w-4 h-4" />
-                    Perbesar soal
-                  </button>
-                </div>
                 {current.type === 'multiple_choice' && (
                   <div className="space-y-4">
                     <p className="text-xs text-gray-400 text-center mb-2">Pick one answer</p>
@@ -1051,14 +1056,16 @@ export default function AnswerQuiz() {
                   This question is required
                 </p>
               )}
-              {q.image && (
+              {q.image && (isAudioUrl(q.image.path) ? (
+                <audio controls src={q.image.path} preload="metadata" className="w-full max-w-sm mx-auto mb-4" />
+              ) : (
                 <img
                   src={q.image.path}
                   alt=""
                   onClick={() => { setZoomTarget(q); setZoomScale(1) }}
                   className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card cursor-zoom-in"
                 />
-              )}
+              ))}
 
               {q.type === 'multiple_choice' && (
                 <div className="space-y-2">

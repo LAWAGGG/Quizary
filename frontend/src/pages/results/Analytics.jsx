@@ -366,11 +366,6 @@ export default function Analytics() {
         eyebrow="Insights"
         title="Analytics"
         description={description}
-        actions={
-          <Link to={`/forms/${formId}/results`}>
-            <Button variant="secondary" icon={<ArrowLeft className="w-4 h-4" />}>Results</Button>
-          </Link>
-        }
       />
 
       <FormSubNav formId={formId} className="mt-5" />

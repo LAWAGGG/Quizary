@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Check, X, Minus, Eye, EyeOff, ArrowRight, ClipboardList, Trophy, AlertTriangle } from 'lucide-react'
 import { Button, Card, Badge, FallbackPage, DotCorner, AuroraBg, RichText } from '../../components/ui'
 import { sanitizeHtml } from '../../lib/sanitize'
+import { isAudioUrl } from '../../lib/media'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
@@ -396,13 +397,15 @@ export default function QuizResult() {
                             <p className="font-medium text-ink dark:text-gray-100 mb-2 leading-snug"><RichText html={answer.question_text} className="rich-text" /></p>
 
                             {/* Gambar soal — ditampilkan jika ada */}
-                            {answer.question_image && (
+                            {answer.question_image && (isAudioUrl(answer.question_image) ? (
+                              <audio controls src={answer.question_image} preload="metadata" className="w-full max-w-sm mb-3" />
+                            ) : (
                               <img
                                 src={answer.question_image}
                                 alt=""
                                 className="max-h-40 w-auto rounded-xl object-cover mb-3 shadow-card"
                               />
-                            )}
+                            ))}
 
                             <p className="text-xs text-gray-400">Your answer</p>
                             <div className="text-sm font-medium text-ink dark:text-gray-200 mb-3">

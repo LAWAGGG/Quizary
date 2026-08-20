@@ -146,7 +146,7 @@ export default function DashboardLayout() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-1 ml-auto">
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -157,10 +157,8 @@ export default function DashboardLayout() {
                 <span className="w-8 h-8 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary dark:text-primary-300 flex items-center justify-center text-sm font-bold">
                   {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                 </span>
-                <span className="hidden sm:block text-sm font-medium text-ink dark:text-gray-100">
-                  {user?.name || 'User'}
-                </span>
-                <ChevronDown className={`w-4 h-4 text-gray-300 dark:text-gray-600 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+               
+                {/* <ChevronDown className={`w-4 h-4 text-gray-300 dark:text-gray-600 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} /> */}
               </button>
               <AnimatePresence>
                 {dropdownOpen && (

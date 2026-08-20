@@ -46,11 +46,6 @@ class QuestionCreate(BaseModel):
             raise ValueError("multiple_choice, checkbox and dropdown questions require at least 1 option")
         if self.type in ("short_answer", "essay", "date", "time", "file_upload") and self.options:
             raise ValueError("this question type must not have options")
-        # Fix #3 — multiple_choice must have exactly 1 correct answer
-        if self.type == "multiple_choice":
-            correct_count = sum(1 for o in self.options if o.is_correct)
-            if correct_count != 1:
-                raise ValueError("multiple_choice questions must have exactly 1 correct option")
         return self
 
 
@@ -72,10 +67,6 @@ class QuestionUpdate(BaseModel):
                 raise ValueError("multiple_choice, checkbox and dropdown questions require at least 1 option")
             if q_type in ("short_answer", "essay", "date", "time", "file_upload") and len(opts) > 0:
                 raise ValueError("this question type must not have options")
-            if q_type == "multiple_choice":
-                correct_count = sum(1 for o in opts if o.is_correct is True)
-                if correct_count != 1:
-                    raise ValueError("multiple_choice questions must have exactly 1 correct option")
         return self
 
 

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { BarChart3, Download, ClipboardList } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { BarChart3, Download, ClipboardList, X, Check } from 'lucide-react'
 import api from '../../api/client'
-import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, EmptyState, CardSkeleton } from '../../components/ui'
+import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichText, sanitizeHtml } from '../../components/ui'
+import { isAudioUrl } from '../../lib/media'
 
 const statusOptions = [
   { value: '', label: 'All statuses' },
@@ -28,6 +29,8 @@ export default function Results() {
   const [sort, setSort] = useState('')
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [detail, setDetail] = useState(null)
+  const [detailLoading, setDetailLoading] = useState(false)
 
   const fetchResults = useCallback(async () => {
     setLoading(true)
@@ -60,13 +63,27 @@ export default function Results() {
     try {
       const res = await api.get(`/forms/${formId}/export/excel`, { responseType: 'blob' })
       const url = URL.createObjectURL(res.data)
+      const safeTitle = (formTitle || 'form').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '')
+      const today = new Date().toISOString().slice(0, 10)
       const a = document.createElement('a')
       a.href = url
-      a.download = `results-${formId}.xlsx`
+      a.download = `${safeTitle}_${today}.xlsx`
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  const openDetail = async (id) => {
+    setDetailLoading(true)
+    try {
+      const res = await api.get(`/submissions/${id}`)
+      setDetail(res.data)
+    } catch {
+      setDetail(null)
+    } finally {
+      setDetailLoading(false)
     }
   }
 
@@ -89,9 +106,7 @@ export default function Results() {
         description={`${meta.total} submission${meta.total !== 1 ? 's' : ''}`}
         actions={
           <>
-            <Link to={`/forms/${formId}/analytics`}>
-              <Button variant="secondary" icon={<BarChart3 className="w-4 h-4" />}>Analytics</Button>
-            </Link>
+           
             <Button variant="secondary" icon={<Download className="w-4 h-4" />} onClick={handleExport}>Excel</Button>
           </>
         }
@@ -146,9 +161,10 @@ export default function Results() {
                     <motion.tr
                       key={row.submission_id}
                       variants={itemVariants}
-                      className={`border-b border-gray-50 last:border-0 transition-colors ${
+                      className={`border-b border-gray-50 last:border-0 transition-colors cursor-pointer ${
                         row.status === 'cheating' ? 'bg-incorrect-soft hover:bg-incorrect-soft' : 'hover:bg-gray-50/70 dark:hover:bg-ink-800/50'
                       }`}
+                      onClick={() => openDetail(row.submission_id)}
                     >
                       <td className="px-5 py-3.5 text-sm font-mono text-gray-400 dark:text-gray-500">#{row.submission_id}</td>
                       {isQuiz && <td className="px-5 py-3.5 text-sm font-semibold tabular-nums text-gray-500 dark:text-gray-400">{row.rank ?? '-'}</td>}
@@ -185,7 +201,7 @@ export default function Results() {
           <motion.div variants={containerVariants} initial="hidden" animate="show" className="md:hidden space-y-3">
             {data.map((row) => (
               <motion.div key={row.submission_id} variants={itemVariants}>
-                <Card className={row.status === 'cheating' ? 'ring-1 ring-incorrect/40 bg-incorrect-soft' : undefined}>
+                <Card className={`cursor-pointer ${row.status === 'cheating' ? 'ring-1 ring-incorrect/40 bg-incorrect-soft' : ''}`} onClick={() => openDetail(row.submission_id)}>
                   <div className="flex justify-between items-start mb-3">
                     <div className="min-w-0">
                       <span className="font-medium text-sm text-ink dark:text-gray-100 truncate block">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">(you)</span>}</span>
@@ -231,6 +247,104 @@ export default function Results() {
           )}
         </>
       )}
+
+      <AnimatePresence>
+        {detail && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4 backdrop-blur-sm"
+            onClick={() => setDetail(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0, y: 8 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.96, opacity: 0, y: 8 }}
+              className="bg-white dark:bg-ink-900 rounded-2xl w-full max-w-2xl max-h-[88dvh] flex flex-col shadow-lift"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+                <div className="min-w-0">
+                  <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 truncate">
+                    {detail.respondent_name || 'Anonymous'}
+                  </h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono">
+                    #{detail.id}
+                    {isQuiz && detail.score != null && (
+                      <span className="ml-2 font-semibold tabular-nums text-primary">{detail.score} / {detail.max_score}</span>
+                    )}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDetail(null)}
+                  className="p-2 -mr-2 rounded-xl text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                {detailLoading ? (
+                  <div className="text-sm text-gray-400 text-center py-8">Loading...</div>
+                ) : detail.answers.length === 0 ? (
+                  <div className="text-sm text-gray-400 text-center py-8">Belum ada jawaban.</div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="w-1 h-4 rounded-full bg-primary" />
+                      <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                        Jawaban pengisi · {detail.answers.length} pertanyaan
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      {detail.answers.map((a, i) => (
+                        <div key={a.question_id} className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-ink-800/40 px-4 py-4">
+                          <div className="flex items-start gap-3">
+                            <span className="w-6 h-6 rounded-full bg-primary-50 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                              {i + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm text-ink dark:text-gray-100 leading-snug">
+                                <RichText html={a.question_text} className="rich-text" />
+                              </div>
+                              {a.question_image && (isAudioUrl(a.question_image) ? (
+                                <audio controls src={a.question_image} preload="metadata" className="w-full max-w-sm mt-3" />
+                              ) : (
+                                <img src={a.question_image} alt="" className="max-h-32 w-auto rounded-lg object-cover mt-3" />
+                              ))}
+                              <div className="mt-3">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Jawaban</span>
+                                  <div className="flex-1 border-t border-dashed border-gray-200 dark:border-gray-700" />
+                                  {a.is_correct === true && <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-correct bg-correct-soft px-2 py-0.5 rounded-full"><Check className="w-3 h-3" /> Benar</span>}
+                                  {a.is_correct === false && <span className="text-[10px] font-semibold text-incorrect bg-incorrect-soft px-2 py-0.5 rounded-full">Salah</span>}
+                                </div>
+                                <div className="text-sm font-medium text-ink dark:text-gray-100 bg-white dark:bg-ink-900 border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2.5">
+                                  {a.question_type === 'file_upload'
+                                    ? (a.answer_file
+                                      ? <a href={a.answer_file} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">Lihat file jawaban</a>
+                                      : <span className="text-gray-400 italic">(tidak dijawab)</span>)
+                                    : ['multiple_choice', 'checkbox', 'dropdown'].includes(a.question_type)
+                                      ? (a.selected_options?.length
+                                        ? a.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(' · ')
+                                        : <span className="text-gray-400 italic">(tidak dijawab)</span>)
+                                      : (a.answer_text || <span className="text-gray-400 italic">(tidak dijawab)</span>)}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

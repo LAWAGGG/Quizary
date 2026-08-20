@@ -1,6 +1,7 @@
 from collections import Counter
 from io import BytesIO
 from datetime import datetime
+import re
 
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
@@ -19,7 +20,7 @@ from app.models.question_option import QuestionOption
 from app.models.user import User
 from app.services.grading import grade_answer
 from app.services.session_expiry import auto_submit_expired_for_form
-from app.utils import to_naive_utc, fmt_dt
+from app.utils import to_naive_utc, fmt_dt, now_wib
 from app.schemas.results import (
     ResultItem,
     ResultListResponse,
@@ -374,10 +375,12 @@ def export_excel(form: Form = Depends(verify_form_owner), db: Session = Depends(
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
+    today = now_wib().strftime("%Y-%m-%d")
+    safe_title = re.sub(r"[^\w\-]+", "_", form.title).strip("_") or form.short_code
     return Response(
         content=buf.read(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=hasil-{form.short_code}.xlsx"},
+        headers={"Content-Disposition": f"attachment; filename={safe_title}_{today}.xlsx"},
     )
 
 

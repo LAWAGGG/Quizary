@@ -13,6 +13,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
+import { isAudioUrl } from '../../lib/media'
 import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText } from '../../components/ui'
 import SectionManager from '../../components/ui/SectionManager'
 
@@ -96,7 +97,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
       const res = await api.post(`/questions/${questionId}/image`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      toast.success('Question image uploaded')
+      toast.success('Media uploaded')
       setForm((prev) => ({ ...prev, image: { path: res.data.image.path } }))
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to upload')
@@ -173,11 +174,11 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         {ferr('question_text') && <p className="field-error">{ferr('question_text')}</p>}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <input
           ref={questionFileRef}
           type="file"
-          accept="image/*"
+          accept="image/*,audio/*,.mp3,.wav,.m4a,.ogg,.aac,.webm"
           className="hidden"
           disabled={!questionId}
           onChange={uploadQuestionImage}
@@ -186,6 +187,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
           type="button"
           onClick={(e) => { e.preventDefault(); questionFileRef.current?.click() }}
           disabled={!questionId || qImgLoading}
+          title={questionId ? 'Unggah gambar atau audio (mp3)' : 'Save question first to add media'}
           className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-primary hover:border-primary transition-colors"
         >
           {qImgLoading ? (
@@ -193,11 +195,13 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
           ) : (
             <ImageIcon className="w-4 h-4" />
           )}
-          {qImgLoading ? 'Uploading...' : form.image ? 'Replace question image' : 'Add question image'}
+          {qImgLoading ? 'Uploading...' : form.image ? 'Replace image / audio' : 'Add image or audio'}
         </button>
-        {form.image?.path && (
+        {form.image?.path && (isAudioUrl(form.image.path) ? (
+          <audio controls src={form.image.path} preload="metadata" className="h-10 max-w-[240px] flex-1 min-w-0" />
+        ) : (
           <img src={form.image.path} alt="" className="h-10 w-14 object-cover rounded-md border border-gray-200 dark:border-gray-700" />
-        )}
+        ))}
       </div>
 
       <div className="flex items-end gap-4">
@@ -246,9 +250,6 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
           <div className="flex items-center justify-between mb-2.5">
             <label className="field-label !mb-0">
               Answer options
-              <span className="ml-2 text-xs font-normal text-gray-400 dark:text-gray-500">
-                {form.type === 'checkbox' ? 'mark each correct' : 'pick one correct'}
-              </span>
             </label>
             <button type="button" onClick={addOption} className="text-sm font-medium text-primary hover:underline">
               + Add option
@@ -264,14 +265,30 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                 className="flex items-center gap-2.5"
               >
                 {form.type === 'checkbox' ? (
-                  <span className={`flex items-center justify-center w-7 h-7 rounded-lg border-2 shrink-0 transition-colors ${opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 bg-white dark:bg-ink-900 text-transparent'
-                    }`}>
-                    {opt.is_correct && <Check className="w-4 h-4" strokeWidth={3.5} />}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
+                    aria-label={opt.is_correct ? 'Hapus tanda jawaban benar' : 'Tandai sebagai jawaban benar'}
+                    title={opt.is_correct ? 'Hapus tanda jawaban benar' : 'Tandai sebagai jawaban benar'}
+                    className="shrink-0 rounded-lg transition-transform hover:scale-105 active:scale-95"
+                  >
+                    <span className={`flex items-center justify-center w-7 h-7 rounded-lg border-2 transition-colors ${opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 bg-white dark:bg-ink-900 text-transparent hover:border-primary/60'
+                      }`}>
+                      {opt.is_correct && <Check className="w-4 h-4" strokeWidth={3.5} />}
+                    </span>
+                  </button>
                 ) : (
-                  <span className={`bubble ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
-                    {opt.is_correct ? <Check className="w-3.5 h-3.5" /> : LETTERS[i % LETTERS.length]}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
+                    aria-label={opt.is_correct ? 'Hapus tanda jawaban benar' : 'Tandai sebagai jawaban benar'}
+                    title={opt.is_correct ? 'Hapus tanda jawaban benar' : 'Tandai sebagai jawaban benar'}
+                    className="shrink-0 transition-transform hover:scale-105 active:scale-95"
+                  >
+                    <span className={`bubble ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
+                      {opt.is_correct ? <Check className="w-3.5 h-3.5" /> : LETTERS[i % LETTERS.length]}
+                    </span>
+                  </button>
                 )}
                 <div className="flex-1 min-w-0">
                   <RichTextEditor
@@ -310,16 +327,6 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                     <ImageIcon className="w-4 h-4" />
                   )}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
-                  aria-label={opt.is_correct ? 'Mark as not correct' : 'Mark as correct'}
-                  title={form.type === 'checkbox' ? 'Toggle correct' : 'Set as correct answer'}
-                  className={`flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap ${opt.is_correct ? 'bg-correct-soft text-correct' : 'bg-gray-100 dark:bg-ink-800 text-gray-400 dark:text-gray-500 hover:text-gray-600'
-                    }`}
-                >
-                  {form.type === 'checkbox' ? (opt.is_correct ? 'Correct' : 'Mark') : (opt.is_correct ? 'Correct' : 'Correct?')}
-                </button>
                 {form.options.length > 1 && (
                   <button
                     type="button"
@@ -333,7 +340,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
               </motion.div>
             ))}
           </div>
-          {needsOptions && form.options.length > 0 && !hasCorrect && (
+          {needsOptions && form.options.length > 0 && !hasCorrect && isQuiz && form.is_scored && (
             <p className="text-xs text-warn mt-2">Mark at least one option as correct.</p>
           )}
           {optionsErr && optionsMsg && (
@@ -381,9 +388,11 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
       </div>
 
       <RichText html={question.question_text} className="rich-text block text-[15px] font-medium text-ink dark:text-gray-100 mb-3" />
-  {question.image && (
-        <img src={question.image.path} alt="" className="mt-3 max-h-32 rounded-xl object-cover" />
-      )}
+{question.image && (isAudioUrl(question.image.path) ? (
+        <audio controls src={question.image.path} preload="metadata" className="w-full max-w-sm mb-3" />
+      ) : (
+        <img src={question.image.path} alt="" className="mb-3 max-h-32 rounded-xl object-cover" />
+      ))}
       {question.options?.length > 0 && (
         <div className="space-y-1.5">
           {question.options.map((opt, i) => (
@@ -454,52 +463,60 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
 }
 
 function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections }) {
+  if (editOpen) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+        <Card className="border-primary/50 shadow-card">
+          <div className="flex items-center justify-between gap-3 mb-5">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center shrink-0">
+                {index + 1}
+              </span>
+              <h3 className="font-display font-semibold text-ink dark:text-gray-100">Edit Question {index + 1}</h3>
+            </div>
+            <button
+              onClick={onCancel}
+              className="p-1.5 -mr-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+              aria-label="Cancel edit"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <QuestionForm
+            initial={{
+              question_text: q.question_text,
+              type: q.type,
+              points: q.points,
+              is_scored: q.is_scored !== false,
+              is_required: q.is_required,
+              section_id: q.section_id || null,
+              image: q.image,
+              options: q.options?.length
+                ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct, image: o.image }))
+                : [{ option_text: '', is_correct: false }],
+            }}
+            onSave={onSave}
+            onCancel={onCancel}
+            loading={saveLoading}
+            isQuiz={isQuiz}
+            errors={errors}
+            questionId={q.id}
+            sections={sections}
+          />
+        </Card>
+      </motion.div>
+    )
+  }
+
   return (
-    <div>
-      <SortableQuestionCard
-        question={q}
-        index={index}
-        onEdit={onEdit}
-        isQuiz={isQuiz}
-        selected={selected}
-        onToggleSelect={onToggleSelect}
-      />
-      <AnimatePresence>
-        {editOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden mt-3"
-          >
-            <Card>
-              <h3 className="font-display font-semibold text-ink dark:text-gray-100 mb-5">Edit Question {index + 1}</h3>
-              <QuestionForm
-                initial={{
-                  question_text: q.question_text,
-                  type: q.type,
-                  points: q.points,
-                  is_scored: q.is_scored !== false,
-                  is_required: q.is_required,
-                  section_id: q.section_id || null,
-                  image: q.image,
-                  options: q.options?.length
-                    ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct, image: o.image }))
-                    : [{ option_text: '', is_correct: false }],
-                }}
-                onSave={onSave}
-                onCancel={onCancel}
-                loading={saveLoading}
-                isQuiz={isQuiz}
-                errors={errors}
-                questionId={q.id}
-                sections={sections}
-              />
-            </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+    <SortableQuestionCard
+      question={q}
+      index={index}
+      onEdit={onEdit}
+      isQuiz={isQuiz}
+      selected={selected}
+      onToggleSelect={onToggleSelect}
+    />
   )
 }
 
