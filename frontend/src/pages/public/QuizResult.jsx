@@ -24,6 +24,7 @@ export default function QuizResult() {
   const { theme } = useTheme()
   const searchParams = new URLSearchParams(window.location.search)
   const formType = searchParams.get('type') || 'form'
+  const displayStyle = searchParams.get('style') || 'card'
   const formTitle = searchParams.get('title') || ''
   const formCode = searchParams.get('code') || ''
 

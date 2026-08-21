@@ -62,7 +62,7 @@ export default function FormLanding() {
       const data = res.data
       if (data.can_start && !data.require_identity) {
         const sub = await api.post('/submissions', { form_id: data.form_id })
-        navigate(`/s/${sub.data.submission_id}?type=${form.type}&title=${encodeURIComponent(form.title)}&code=${shortCode}`)
+        navigate(`/s/${sub.data.submission_id}?type=${form.type}&style=${form.display_style || 'card'}&title=${encodeURIComponent(form.title)}&code=${shortCode}`)
       } else {
         setStartState(data)
       }
@@ -70,7 +70,6 @@ export default function FormLanding() {
       if (err.response?.status === 401) {
         setStartState({ requires_login: true })
       } else if (err.response?.status === 410) {
-        // Session sebelumnya habis & auto-submitted — tawarkan mulai baru.
         setStartState({ session_expired: true })
       } else {
         setError(err.response?.data?.message || err.response?.data?.detail || 'Something went wrong')
@@ -88,7 +87,7 @@ export default function FormLanding() {
         respondent_name: name,
         respondent_email: email || undefined,
       })
-      navigate(`/s/${res.data.submission_id}?type=${form.type}&title=${encodeURIComponent(form.title)}&code=${shortCode}`)
+      navigate(`/s/${res.data.submission_id}?type=${form.type}&style=${form.display_style || 'card'}&title=${encodeURIComponent(form.title)}&code=${shortCode}`)
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.detail || 'Failed to start')
     } finally {
@@ -120,7 +119,7 @@ export default function FormLanding() {
 
   if (!form) return null
 
-  const isQuiz = form.type === 'quiz'
+  const displayStyle = form.display_style || 'card'
   const palette = themePalette(form.theme_color, theme === 'dark')
   const isOwner = form.is_owner === true
   const isPreview = isOwner && form.status !== 'published'
@@ -260,7 +259,7 @@ export default function FormLanding() {
     )
   }
 
-  if (isQuiz) {
+  if (displayStyle === 'quiz') {
     return (
       <div className="min-h-dvh flex flex-col" style={{ background: palette.gradient, '--color-primary': palette.base }}>
         {isPreview && <PreviewNotice />}

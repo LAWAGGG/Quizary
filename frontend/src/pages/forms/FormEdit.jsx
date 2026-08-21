@@ -162,6 +162,7 @@ export default function FormEdit() {
       title: form.title,
       description: form.description || null,
       type: form.type,
+      display_style: form.display_style || 'card',
       status: form.status,
       require_login: form.require_login,
       submission_limit: form.submission_limit,
@@ -184,6 +185,7 @@ export default function FormEdit() {
       title: base.title,
       description: base.description || null,
       type: base.type,
+      display_style: base.display_style || 'card',
       status: base.status,
       require_login: base.require_login,
       submission_limit: base.submission_limit,
@@ -247,7 +249,7 @@ export default function FormEdit() {
       return
     }
     // Quiz wajib punya timer (per menit) — dicek juga di backend saat publish.
-    if (form.type === 'quiz' && !timerMinutes) {
+    if (form.display_style === 'quiz' && !timerMinutes) {
       setErrors({ timer_seconds: 'Quiz harus memiliki waktu pengerjaan (menit)' })
       revealError(setBehaviorOpen, timerRef)
       return
@@ -332,7 +334,7 @@ export default function FormEdit() {
 
   const isRestricted = !!form.is_restricted
   const onceLocked = form.submission_limit === 'once'
-  const isQuiz = form.type === 'quiz'
+  const isQuiz = form.display_style === 'quiz'
 
   return (
     <div>
@@ -349,7 +351,7 @@ export default function FormEdit() {
         description={
           <span className="inline-flex items-center gap-2">
             <StatusBadge status={form.status} />
-            <span className="text-gray-400 dark:text-gray-500">· {form.type === 'quiz' ? 'Quiz' : 'Form'}</span>
+            <span className="text-gray-400 dark:text-gray-500">· {(form.display_style || 'card') === 'quiz' ? 'Quiz' : 'Form'} style</span>
           </span>
         }
       />
@@ -439,6 +441,47 @@ export default function FormEdit() {
                     <p className="field-error">{errors.status}</p>
                   )}
                 </div>
+              </div>
+
+              <div>
+                <label className="field-label">Display Style</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, display_style: 'card' }))}
+                    className={`relative rounded-xl border-2 overflow-hidden transition-all ${
+                      (form.display_style || 'card') === 'card'
+                        ? 'border-primary ring-2 ring-primary/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                  >
+                    <img src="/preview-form.png" alt="Card style" className="w-full h-32 object-cover" />
+                    <span className="block text-sm font-medium py-2 text-ink dark:text-gray-100">Card</span>
+                    {(form.display_style || 'card') === 'card' && (
+                      <span className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                        <Check className="w-3 h-3 text-white" />
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, display_style: 'quiz' }))}
+                    className={`relative rounded-xl border-2 overflow-hidden transition-all ${
+                      form.display_style === 'quiz'
+                        ? 'border-primary ring-2 ring-primary/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                  >
+                    <img src="/preview-quiz.png" alt="Quiz style" className="w-full h-32 object-cover" />
+                    <span className="block text-sm font-medium py-2 text-ink dark:text-gray-100">Quiz</span>
+                    {form.display_style === 'quiz' && (
+                      <span className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                        <Check className="w-3 h-3 text-white" />
+                      </span>
+                    )}
+                  </button>
+                </div>
+                {errors.display_style && <p className="field-error">{errors.display_style}</p>}
               </div>
 
               <Select

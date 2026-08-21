@@ -61,6 +61,7 @@ export default function AnswerQuiz() {
   const { theme } = useTheme()
   const searchParams = new URLSearchParams(window.location.search)
   const formType = searchParams.get('type') || 'form'
+  const displayStyle = searchParams.get('style') || 'card'
   const formTitle = searchParams.get('title') || 'Form'
   const formCode = searchParams.get('code') || ''
 
@@ -92,8 +93,8 @@ export default function AnswerQuiz() {
     // Keluar dari fullscreen saat selesai (semua jalur: submit, timeout, cheating).
     const ex = document.exitFullscreen || document.webkitExitFullscreen
     if (ex) Promise.resolve(ex.call(document)).catch(() => { })
-    navigate(`/s/${submissionId}/result?type=${formType}&title=${encodeURIComponent(formTitle)}&code=${formCode}`, { replace: true })
-  }, [submissionId, navigate, formType, formTitle, formCode])
+    navigate(`/s/${submissionId}/result?type=${formType}&style=${displayStyle}&title=${encodeURIComponent(formTitle)}&code=${formCode}`, { replace: true })
+  }, [submissionId, navigate, formType, displayStyle, formTitle, formCode])
 
   const onExpired = useCallback(() => {
     setTimeLeft(0)
@@ -487,7 +488,7 @@ export default function AnswerQuiz() {
     // Mode form: satu section = satu halaman. Semua soal required di section
     // ini wajib dijawab dulu sebelum lanjut. Kalau belum, tandai merah semua
     // soal yang kosong + scroll ke soal pertama yang belum terjawab.
-    if (formType !== 'quiz') {
+    if (!isOneByOne) {
       const page = formPages[currentIdx]
       const missing = (page?.questions || []).filter(
         (q) => q.is_required !== false && !isAnswered(q, answers[q.id])
@@ -504,7 +505,7 @@ export default function AnswerQuiz() {
         return
       }
     }
-    const total = formType === 'quiz' ? data.questions.length : formPages.length
+    const total = formPages.length
     if (currentIdx < total - 1) {
       setDirection(1)
       setCurrentIdx((i) => i + 1)
@@ -547,7 +548,7 @@ export default function AnswerQuiz() {
       // Scroll ke soal required pertama yang belum dijawab (lompat ke halaman section-nya dulu)
       const firstQ = qs[firstErrorIdx]
       if (firstQ) {
-        if (formType !== 'quiz') {
+        if (!isOneByOne) {
           const pi = formPages.findIndex((p) => p.questions.some((x) => x.id === firstQ.id))
           if (pi >= 0 && pi !== currentIdx) {
             setDirection(pi > currentIdx ? 1 : -1)
@@ -612,7 +613,8 @@ export default function AnswerQuiz() {
 
   if (!data) return null
 
-  const isQuiz = formType === 'quiz'
+  const isQuizStyle = displayStyle === 'quiz'
+  const isOneByOne = displayStyle === 'quiz'
   const palette = themePalette(publicForm?.theme_color, theme === 'dark')
   const isOwnerPreview = publicForm?.is_owner === true && publicForm?.status !== 'published'
   const sectionsById = Object.fromEntries((data.sections || []).map((s) => [s.id, s.title]))
@@ -621,14 +623,14 @@ export default function AnswerQuiz() {
   const current = questions[currentIdx]
   const totalQ = questions.length
 
-  // Mode form: satu section = satu halaman. Urut ikut order section (section baru = halaman terakhir).
+  // Mode form: satu section = satu halaman. Quiz style: satu soal = satu halaman.
   const formPages = (() => {
-    if (formType === 'quiz') return []
+    if (isOneByOne) return questions.map((q) => ({ title: null, questions: [q] }))
     const pages = []
-    ;(data.sections || []).forEach((s) => {
-      const sq = questions.filter((q) => q.section_id === s.id)
-      if (sq.length) pages.push({ title: s.title, questions: sq })
-    })
+      ; (data.sections || []).forEach((s) => {
+        const sq = questions.filter((q) => q.section_id === s.id)
+        if (sq.length) pages.push({ title: s.title, questions: sq })
+      })
     const unassigned = questions.filter((q) => !q.section_id)
     if (unassigned.length) pages.push({ title: null, questions: unassigned })
     return pages.length ? pages : [{ title: null, questions }]
@@ -641,7 +643,7 @@ export default function AnswerQuiz() {
     return Array.isArray(val) ? val.length > 0 : !!val && String(val).trim().length > 0
   }
 
-  if (isQuiz) {
+  if (isQuizStyle) {
     const currentAnswer = answers[current?.id]
     const hasAnswer = isAnswered(current, currentAnswer)
     const isRequired = current?.is_required !== false
@@ -880,7 +882,7 @@ export default function AnswerQuiz() {
                     />
                   </div>
                 )}
-              {current.type === 'dropdown' && (
+                {current.type === 'dropdown' && (
                   <div className="mt-4">
                     <select
                       value={(answers[current.id] || [])[0] ?? ''}
@@ -1026,174 +1028,174 @@ export default function AnswerQuiz() {
               {formPage.questions.map((q) => (
                 <Card
                   key={q.id}
-              ref={(el) => { if (el) questionRefs.current[q.id] = el }}
-              data-question-id={q.id}
-              className="p-5"
-              style={{
-                borderColor: validationErrors[q.id] ? '#EF4444' : palette.border,
-                borderWidth: validationErrors[q.id] ? '2px' : undefined,
-              }}
-            >
-              <div className="mb-4">
-                <div className="flex items-start justify-between gap-4">
-                  <p className="font-semibold text-ink dark:text-gray-100 leading-snug flex-1"><RichText html={q.question_text} className="rich-text" /></p>
-                  {q.is_required !== false && (
-                    <span className="text-[10px] font-semibold text-gray-400 mt-1 shrink-0">Required</span>
+                  ref={(el) => { if (el) questionRefs.current[q.id] = el }}
+                  data-question-id={q.id}
+                  className="p-5"
+                  style={{
+                    borderColor: validationErrors[q.id] ? '#EF4444' : palette.border,
+                    borderWidth: validationErrors[q.id] ? '2px' : undefined,
+                  }}
+                >
+                  <div className="mb-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <p className="font-semibold text-ink dark:text-gray-100 leading-snug flex-1"><RichText html={q.question_text} className="rich-text" /></p>
+                      {q.is_required !== false && (
+                        <span className="text-[10px] font-semibold text-gray-400 mt-1 shrink-0">Required</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => { setZoomTarget(q); setZoomScale(1) }}
+                      className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 h-8 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-500 dark:text-gray-400 hover:text-primary dark:hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                      aria-label="Perbesar soal"
+                    >
+                      <ZoomIn className="w-4 h-4" />
+                      Perbesar soal
+                    </button>
+                  </div>
+                  {validationErrors[q.id] && (
+                    <p className="text-xs font-semibold text-red-500 flex items-center gap-1 mb-3">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      This question is required
+                    </p>
                   )}
-                </div>
-                <button
-                  onClick={() => { setZoomTarget(q); setZoomScale(1) }}
-                  className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 h-8 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-500 dark:text-gray-400 hover:text-primary dark:hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
-                  aria-label="Perbesar soal"
-                >
-                  <ZoomIn className="w-4 h-4" />
-                  Perbesar soal
-                </button>
-              </div>
-              {validationErrors[q.id] && (
-                <p className="text-xs font-semibold text-red-500 flex items-center gap-1 mb-3">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                  This question is required
-                </p>
-              )}
-              {q.image && (isAudioUrl(q.image.path) ? (
-                <audio controls src={q.image.path} preload="metadata" className="w-full max-w-sm mx-auto mb-4" />
-              ) : (
-                <img
-                  src={q.image.path}
-                  alt=""
-                  onClick={() => { setZoomTarget(q); setZoomScale(1) }}
-                  className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card cursor-zoom-in"
-                />
-              ))}
-
-              {q.type === 'multiple_choice' && (
-                <div className="space-y-2">
-                  {q.options.map((opt, i) => {
-                    const selected = (answers[q.id] || []).includes(opt.id)
-                    return (
-                      <label
-                        key={opt.id}
-                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary-50' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
-                          }`}
-                        style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
-                      >
-                        <span
-                          className={`bubble w-6 h-6 text-xs ${selected ? 'bubble-selected' : 'bubble-empty'}`}
-                          style={selected ? { borderColor: palette.base, backgroundColor: palette.base, color: palette.onBase } : undefined}
-                        >
-                          {LETTERS[i % LETTERS.length]}
-                        </span>
-                        <input
-                          type="radio"
-                          name={`q-${q.id}`}
-                          checked={selected}
-                          onChange={() => handleSelect(q.id, opt.id)}
-                          className="sr-only"
-                        />
-                        <span className="text-sm text-ink dark:text-gray-200"><RichText html={opt.option_text} className="rich-text" /></span>
-                        {opt.image && (
-                          <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
-                        )}
-                      </label>
-                    )
-                  })}
-                </div>
-              )}
-
-              {q.type === 'checkbox' && (
-                <div className="space-y-2">
-                  {q.options.map((opt) => {
-                    const selected = (answers[q.id] || []).includes(opt.id)
-                    return (
-                      <label
-                        key={opt.id}
-                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary-50' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
-                          }`}
-                        style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
-                      >
-                        <span
-                          className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 transition-colors ${selected ? '' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-ink-800'
-                            }`}
-                          style={selected ? { borderColor: palette.base, backgroundColor: palette.base, color: palette.onBase } : undefined}
-                        >
-                          {selected && <Check className="w-3.5 h-3.5" strokeWidth={3.5} />}
-                        </span>
-                        <input
-                          type="checkbox"
-                          checked={selected}
-                          onChange={() => handleSelect(q.id, opt.id)}
-                          className="sr-only"
-                        />
-                        <span className="text-sm text-ink dark:text-gray-200"><RichText html={opt.option_text} className="rich-text" /></span>
-                        {opt.image && (
-                          <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
-                        )}
-                      </label>
-                    )
-                  })}
-                </div>
-              )}
-
-              {q.type === 'short_answer' && (
-                <Input
-                  value={answers[q.id] || ''}
-                  onChange={(e) => handleTextChange(q.id, e.target.value)}
-                  placeholder="Your answer"
-                />
-              )}
-
-              {q.type === 'essay' && (
-                <Textarea
-                  value={answers[q.id] || ''}
-                  onChange={(e) => handleTextChange(q.id, e.target.value)}
-                  className="min-h-[120px]"
-                  rows={4}
-                  placeholder="Write your answer..."
-                />
-              )}
-
-              {q.type === 'dropdown' && (
-                <select
-                  value={(answers[q.id] || [])[0] ?? ''}
-                  onChange={(e) => handleSelect(q.id, e.target.value === '' ? null : Number(e.target.value))}
-                  className={`input-field ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
-                >
-                  <option value="">— Pilih jawaban —</option>
-                  {q.options.map((opt, i) => (
-                    <option key={opt.id} value={opt.id}>{LETTERS[i % LETTERS.length]}. {opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
+                  {q.image && (isAudioUrl(q.image.path) ? (
+                    <audio controls src={q.image.path} preload="metadata" className="w-full max-w-sm mx-auto mb-4" />
+                  ) : (
+                    <img
+                      src={q.image.path}
+                      alt=""
+                      onClick={() => { setZoomTarget(q); setZoomScale(1) }}
+                      className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card cursor-zoom-in"
+                    />
                   ))}
-                </select>
-              )}
 
-              {q.type === 'date' && (
-                <input
-                  type="date"
-                  value={answers[q.id] || ''}
-                  onChange={(e) => handleTextChange(q.id, e.target.value)}
-                  className={`input-field ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
-                />
-              )}
+                  {q.type === 'multiple_choice' && (
+                    <div className="space-y-2">
+                      {q.options.map((opt, i) => {
+                        const selected = (answers[q.id] || []).includes(opt.id)
+                        return (
+                          <label
+                            key={opt.id}
+                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary-50' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
+                              }`}
+                            style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
+                          >
+                            <span
+                              className={`bubble w-6 h-6 text-xs ${selected ? 'bubble-selected' : 'bubble-empty'}`}
+                              style={selected ? { borderColor: palette.base, backgroundColor: palette.base, color: palette.onBase } : undefined}
+                            >
+                              {LETTERS[i % LETTERS.length]}
+                            </span>
+                            <input
+                              type="radio"
+                              name={`q-${q.id}`}
+                              checked={selected}
+                              onChange={() => handleSelect(q.id, opt.id)}
+                              className="sr-only"
+                            />
+                            <span className="text-sm text-ink dark:text-gray-200"><RichText html={opt.option_text} className="rich-text" /></span>
+                            {opt.image && (
+                              <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                            )}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
 
-              {q.type === 'time' && (
-                <input
-                  type="time"
-                  value={answers[q.id] || ''}
-                  onChange={(e) => handleTextChange(q.id, e.target.value)}
-                  className={`input-field ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
-                />
-              )}
+                  {q.type === 'checkbox' && (
+                    <div className="space-y-2">
+                      {q.options.map((opt) => {
+                        const selected = (answers[q.id] || []).includes(opt.id)
+                        return (
+                          <label
+                            key={opt.id}
+                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary-50' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
+                              }`}
+                            style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
+                          >
+                            <span
+                              className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 transition-colors ${selected ? '' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-ink-800'
+                                }`}
+                              style={selected ? { borderColor: palette.base, backgroundColor: palette.base, color: palette.onBase } : undefined}
+                            >
+                              {selected && <Check className="w-3.5 h-3.5" strokeWidth={3.5} />}
+                            </span>
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => handleSelect(q.id, opt.id)}
+                              className="sr-only"
+                            />
+                            <span className="text-sm text-ink dark:text-gray-200"><RichText html={opt.option_text} className="rich-text" /></span>
+                            {opt.image && (
+                              <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                            )}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
 
-              {q.type === 'file_upload' && (
-                <FileAnswer
-                  value={fileAnswers[q.id]}
-                  uploading={!!uploading[q.id]}
-                  onFile={(file) => handleFileUpload(q.id, file)}
-                  onRemove={() => removeFileAnswer(q.id)}
-                  error={validationErrors[q.id]}
-                />
-              )}
-            </Card>
+                  {q.type === 'short_answer' && (
+                    <Input
+                      value={answers[q.id] || ''}
+                      onChange={(e) => handleTextChange(q.id, e.target.value)}
+                      placeholder="Your answer"
+                    />
+                  )}
+
+                  {q.type === 'essay' && (
+                    <Textarea
+                      value={answers[q.id] || ''}
+                      onChange={(e) => handleTextChange(q.id, e.target.value)}
+                      className="min-h-[120px]"
+                      rows={4}
+                      placeholder="Write your answer..."
+                    />
+                  )}
+
+                  {q.type === 'dropdown' && (
+                    <select
+                      value={(answers[q.id] || [])[0] ?? ''}
+                      onChange={(e) => handleSelect(q.id, e.target.value === '' ? null : Number(e.target.value))}
+                      className={`input-field ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                    >
+                      <option value="">— Pilih jawaban —</option>
+                      {q.options.map((opt, i) => (
+                        <option key={opt.id} value={opt.id}>{LETTERS[i % LETTERS.length]}. {opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
+                      ))}
+                    </select>
+                  )}
+
+                  {q.type === 'date' && (
+                    <input
+                      type="date"
+                      value={answers[q.id] || ''}
+                      onChange={(e) => handleTextChange(q.id, e.target.value)}
+                      className={`input-field ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                    />
+                  )}
+
+                  {q.type === 'time' && (
+                    <input
+                      type="time"
+                      value={answers[q.id] || ''}
+                      onChange={(e) => handleTextChange(q.id, e.target.value)}
+                      className={`input-field ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                    />
+                  )}
+
+                  {q.type === 'file_upload' && (
+                    <FileAnswer
+                      value={fileAnswers[q.id]}
+                      uploading={!!uploading[q.id]}
+                      onFile={(file) => handleFileUpload(q.id, file)}
+                      onRemove={() => removeFileAnswer(q.id)}
+                      error={validationErrors[q.id]}
+                    />
+                  )}
+                </Card>
               ))}
             </div>
           </motion.div>
@@ -1225,7 +1227,7 @@ export default function AnswerQuiz() {
                 const pageComplete = pageMissing === 0
                 return (
                   <>
-                  
+
                     <Button
                       onClick={handleNext}
                       className="flex-1"

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers } from 'lucide-react'
+import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
   useSensor, useSensors, useDroppable, closestCorners,
@@ -41,7 +41,7 @@ const TYPE_HINTS = {
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
-function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, questionId, sections }) {
+function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, questionId, sections, sectionsAllowed }) {
   const toast = useToast()
   const [form, setForm] = useState({
     question_text: '',
@@ -150,7 +150,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         <p className="text-xs text-gray-400 dark:text-gray-500 -mt-3">{TYPE_HINTS[form.type]}</p>
       )}
 
-      {sections?.length > 0 && (
+      {sectionsAllowed && sections?.length > 0 && (
         <div>
           <label className="field-label">Section</label>
           <select
@@ -462,7 +462,7 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
   )
 }
 
-function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections }) {
+function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed }) {
   if (editOpen) {
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
@@ -502,6 +502,7 @@ function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, edit
             errors={errors}
             questionId={q.id}
             sections={sections}
+            sectionsAllowed={sectionsAllowed}
           />
         </Card>
       </motion.div>
@@ -599,6 +600,12 @@ export default function QuestionBuilder() {
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [showSectionManager, setShowSectionManager] = useState(false)
   const [activeDrag, setActiveDrag] = useState(null)
+
+  // Sections hanya untuk: (form + card) atau (quiz + quiz)
+  const sectionsAllowed = form && (
+    (form.type === 'form' && (form.display_style || 'card') === 'card') ||
+    (form.type === 'quiz' && form.display_style === 'quiz')
+  )
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
@@ -879,7 +886,7 @@ export default function QuestionBuilder() {
             <Button variant="secondary" onClick={() => { if (docxRef.current) docxRef.current.value = ''; setShowImportModal(true) }} icon={<Upload className="w-4 h-4" />}>
               Import DOCX
             </Button>
-            {form.type !== 'quiz' && (
+            {sectionsAllowed && (
               <Button variant="secondary" onClick={() => setShowSectionManager(true)} icon={<Layers className="w-4 h-4" />}>
                 Manage Sections
               </Button>
@@ -947,6 +954,7 @@ export default function QuestionBuilder() {
                 errors={fieldErrors}
                 questionId={editing?.id}
                 sections={sections}
+                sectionsAllowed={sectionsAllowed}
               />
             </Card>
           </motion.div>
@@ -1002,82 +1010,106 @@ export default function QuestionBuilder() {
           >
             <SortableContext items={questions.map((q) => q.id)} strategy={verticalListSortingStrategy}>
               <div className="space-y-8 mt-6">
-                {sections.map((sec) => {
-                  const secQs = questions.filter((q) => q.section_id === sec.id)
-                  if (!secQs.length) return null
-                  return (
-                    <SectionDropZone key={sec.id} sectionId={sec.id}>
-                      <SectionHeader
-                        section={sec}
-                        count={secQs.length}
-                        editing={editingSectionId === sec.id}
-                        draft={sectionTitleDraft}
-                        setDraft={setSectionTitleDraft}
-                        onEdit={() => { setEditingSectionId(sec.id); setSectionTitleDraft(sec.title) }}
-                        onSave={() => renameSection(sec)}
-                        onCancel={() => setEditingSectionId(null)}
-                        onDelete={() => setSectionDeleteTarget(sec)}
-                      />
-                      <div className="space-y-3 mt-3">
-                        {secQs.map((q) => (
-                          <QuestionItem
-                            key={q.id}
-                            q={q}
-                            index={questions.indexOf(q)}
-                            onEdit={editQuestion}
-                            isQuiz={form.type === 'quiz'}
-                            selected={selectedIds.includes(q.id)}
-                            onToggleSelect={toggleSelect}
-                            editOpen={showForm && editing?.id === q.id}
-                            onSave={(data) => handleSaveQuestion(data)}
-                            onCancel={() => { setShowForm(false); setEditing(null) }}
-                            saveLoading={saveLoading}
-                            errors={fieldErrors}
-                            sections={sections}
+                {sectionsAllowed ? (
+                  <>
+                    {sections.map((sec) => {
+                      const secQs = questions.filter((q) => q.section_id === sec.id)
+                      if (!secQs.length) return null
+                      return (
+                        <SectionDropZone key={sec.id} sectionId={sec.id}>
+                          <SectionHeader
+                            section={sec}
+                            count={secQs.length}
+                            editing={editingSectionId === sec.id}
+                            draft={sectionTitleDraft}
+                            setDraft={setSectionTitleDraft}
+                            onEdit={() => { setEditingSectionId(sec.id); setSectionTitleDraft(sec.title) }}
+                            onSave={() => renameSection(sec)}
+                            onCancel={() => setEditingSectionId(null)}
+                            onDelete={() => setSectionDeleteTarget(sec)}
                           />
-                        ))}
-                      </div>
-                    </SectionDropZone>
-                  )
-                })}
-                {(() => {
-                  const unassigned = questions.filter((q) => !q.section_id)
-                  if (!unassigned.length) return null
-                  return (
-                    <SectionDropZone key="unassigned" sectionId={null}>
-                      <SectionHeader
-                        section={null}
-                        count={unassigned.length}
-                        editing={false}
-                        draft=""
-                        setDraft={() => { }}
-                        onEdit={() => { }}
-                        onSave={() => { }}
-                        onCancel={() => { }}
-                        onDelete={() => { }}
-                      />
-                      <div className="space-y-3 mt-3">
-                        {unassigned.map((q) => (
-                          <QuestionItem
-                            key={q.id}
-                            q={q}
-                            index={questions.indexOf(q)}
-                            onEdit={editQuestion}
-                            isQuiz={form.type === 'quiz'}
-                            selected={selectedIds.includes(q.id)}
-                            onToggleSelect={toggleSelect}
-                            editOpen={showForm && editing?.id === q.id}
-                            onSave={(data) => handleSaveQuestion(data)}
-                            onCancel={() => { setShowForm(false); setEditing(null) }}
-                            saveLoading={saveLoading}
-                            errors={fieldErrors}
-                            sections={sections}
+                          <div className="space-y-3 mt-3">
+                            {secQs.map((q) => (
+                              <QuestionItem
+                                key={q.id}
+                                q={q}
+                                index={questions.indexOf(q)}
+                                onEdit={editQuestion}
+                                isQuiz={form.type === 'quiz'}
+                                selected={selectedIds.includes(q.id)}
+                                onToggleSelect={toggleSelect}
+                                editOpen={showForm && editing?.id === q.id}
+                                onSave={(data) => handleSaveQuestion(data)}
+                                onCancel={() => { setShowForm(false); setEditing(null) }}
+                                saveLoading={saveLoading}
+                                errors={fieldErrors}
+                                sections={sections}
+                              />
+                            ))}
+                          </div>
+                        </SectionDropZone>
+                      )
+                    })}
+                    {(() => {
+                      const unassigned = questions.filter((q) => !q.section_id)
+                      if (!unassigned.length) return null
+                      return (
+                        <SectionDropZone key="unassigned" sectionId={null}>
+                          <SectionHeader
+                            section={null}
+                            count={unassigned.length}
+                            editing={false}
+                            draft=""
+                            setDraft={() => { }}
+                            onEdit={() => { }}
+                            onSave={() => { }}
+                            onCancel={() => { }}
+                            onDelete={() => { }}
                           />
-                        ))}
-                      </div>
-                    </SectionDropZone>
-                  )
-                })()}
+                          <div className="space-y-3 mt-3">
+                            {unassigned.map((q) => (
+                              <QuestionItem
+                                key={q.id}
+                                q={q}
+                                index={questions.indexOf(q)}
+                                onEdit={editQuestion}
+                                isQuiz={form.type === 'quiz'}
+                                selected={selectedIds.includes(q.id)}
+                                onToggleSelect={toggleSelect}
+                                editOpen={showForm && editing?.id === q.id}
+                                onSave={(data) => handleSaveQuestion(data)}
+                                onCancel={() => { setShowForm(false); setEditing(null) }}
+                                saveLoading={saveLoading}
+                                errors={fieldErrors}
+                                sections={sections}
+                                sectionsAllowed={sectionsAllowed}
+                              />
+                            ))}
+                          </div>
+                        </SectionDropZone>
+                      )
+                    })()}
+                  </>
+                ) : (
+                  questions.map((q) => (
+                              <QuestionItem
+                                key={q.id}
+                                q={q}
+                                index={questions.indexOf(q)}
+                                onEdit={editQuestion}
+                                isQuiz={form.type === 'quiz'}
+                                selected={selectedIds.includes(q.id)}
+                                onToggleSelect={toggleSelect}
+                                editOpen={showForm && editing?.id === q.id}
+                                onSave={(data) => handleSaveQuestion(data)}
+                                onCancel={() => { setShowForm(false); setEditing(null) }}
+                                saveLoading={saveLoading}
+                                errors={fieldErrors}
+                                sections={sections}
+                                sectionsAllowed={sectionsAllowed}
+                              />
+                  ))
+                )}
               </div>
             </SortableContext>
             <DragOverlay dropAnimation={null}>
@@ -1227,7 +1259,15 @@ export default function QuestionBuilder() {
                 </section>
               </div>
 
-              <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-3 shrink-0">
+              <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0">
+                <a
+                  href="/template-soal.docx"
+                  download
+                  className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Template
+                </a>
                 <div className="flex gap-2">
                   <Button variant="secondary" onClick={() => setShowImportModal(false)} disabled={importing}>Cancel</Button>
                   <Button onClick={() => docxRef.current?.click()} loading={importing} icon={!importing && <Upload className="w-4 h-4" />}>

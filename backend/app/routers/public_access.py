@@ -46,6 +46,7 @@ def get_public_form(
         "title": form.title,
         "description": form.description,
         "type": form.type.value,
+        "display_style": form.display_style.value if form.display_style else "card",
         "banner_path": file_url(request, form.banner_path),
         "theme_color": form.theme_color,
         "require_login": form.require_login,

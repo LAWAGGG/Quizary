@@ -10,6 +10,11 @@ class FormType(str, enum.Enum):
     quiz = "quiz"
 
 
+class DisplayStyle(str, enum.Enum):
+    card = "card"
+    quiz = "quiz"
+
+
 class FormStatus(str, enum.Enum):
     draft = "draft"
     published = "published"
@@ -29,6 +34,7 @@ class Form(Base):
     title = Column(String(150), nullable=False)
     description = Column(Text, nullable=True)
     type = Column(SAEnum(FormType), default=FormType.form)
+    display_style = Column(SAEnum(DisplayStyle), default=DisplayStyle.card)
     status = Column(SAEnum(FormStatus), default=FormStatus.draft)
     short_code = Column(String(20), unique=True, nullable=False)
     require_login = Column(Boolean, default=False)

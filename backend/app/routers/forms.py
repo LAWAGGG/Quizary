@@ -78,6 +78,7 @@ def _form_dict(form: Form, request: Request) -> dict:
         "title": form.title,
         "description": form.description,
         "type": form.type.value,
+        "display_style": form.display_style.value if form.display_style else "card",
         "status": form.status.value,
         "short_code": form.short_code,
         "require_login": form.require_login,

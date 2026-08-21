@@ -45,6 +45,7 @@ class FormCreate(BaseModel):
     title: str = Field(min_length=1, max_length=150)
     description: Optional[str] = None
     type: str = "form"
+    display_style: str = "card"
     require_login: bool = False
     submission_limit: str = "unlimited"
     show_leaderboard: bool = False
@@ -57,6 +58,8 @@ class FormCreate(BaseModel):
     def validate_enums(self):
         if self.type not in ("form", "quiz"):
             raise ValueError("type must be 'form' or 'quiz'")
+        if self.display_style not in ("card", "quiz"):
+            raise ValueError("display_style must be 'card' or 'quiz'")
         if self.submission_limit not in ("unlimited", "once"):
             raise ValueError("submission_limit must be 'unlimited' or 'once'")
         return self
@@ -66,6 +69,7 @@ class FormUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=150)
     description: Optional[str] = None
     type: Optional[str] = None
+    display_style: Optional[str] = None
     require_login: Optional[bool] = None
     submission_limit: Optional[str] = None
     theme_color: Optional[str] = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
@@ -86,6 +90,8 @@ class FormUpdate(BaseModel):
     def validate_enums(self):
         if "type" in self.model_fields_set and self.type not in ("form", "quiz"):
             raise ValueError("type must be 'form' or 'quiz'")
+        if "display_style" in self.model_fields_set and self.display_style not in ("card", "quiz"):
+            raise ValueError("display_style must be 'card' or 'quiz'")
         if "submission_limit" in self.model_fields_set and self.submission_limit not in ("unlimited", "once"):
             raise ValueError("submission_limit must be 'unlimited' or 'once'")
         if "status" in self.model_fields_set and self.status not in ("draft", "published", "closed"):
@@ -123,6 +129,7 @@ class FormListItem(BaseModel):
     id: int
     title: str
     type: str
+    display_style: str = "card"
     status: str
     short_code: str
 
