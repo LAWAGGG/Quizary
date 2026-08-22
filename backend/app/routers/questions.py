@@ -560,6 +560,29 @@ def ungroup_questions(
     return {"message": "Grup soal dihapus"}
 
 
+@router.delete("/forms/{form_id}/questions/group/{group_id}/questions/{question_id}")
+def remove_question_from_group(
+    form_id: int,
+    group_id: str,
+    question_id: int,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    q = (
+        db.query(Question)
+        .filter(Question.id == question_id, Question.form_id == form.id)
+        .first()
+    )
+    if not q or q.group_id != group_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Soal tidak ada dalam grup ini",
+        )
+    q.group_id = None
+    db.commit()
+    return {"message": "Soal dikeluarkan dari grup"}
+
+
 _ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp3", ".wav", ".m4a", ".ogg", ".aac", ".webm"}
 
 

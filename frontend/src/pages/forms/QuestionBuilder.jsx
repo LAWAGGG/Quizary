@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, BookOpen } from 'lucide-react'
+import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, BookOpen, Unlink } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
   useSensor, useSensors, useDroppable, closestCorners,
@@ -359,7 +359,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   )
 }
 
-function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, onToggleSelect, groupId, groupSize, onUngroup }) {
+function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, onToggleSelect, groupId, groupSize, onUngroup, onUngroupOne, ungroupingOne }) {
   return (
     <Card className={`transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? 'border-primary/50 shadow-card' : 'hover:border-gray-300 dark:hover:border-gray-700'} ${groupId ? 'border-l-4 !border-l-primary/50' : ''}`}>
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -369,17 +369,29 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
           </span>
           <Badge scheme="gray">{TYPE_LABELS[question.type]}</Badge>
           {groupId && (
-            <button
-              type="button"
-              onClick={onUngroup}
-              title="Soal grup cerita selalu tampil berurutan meski shuffle aktif. Klik untuk membubarkan grup."
-              className="rounded-full transition-transform hover:scale-[1.04] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-            >
-              <Badge scheme="primary">
-                <BookOpen className="w-3 h-3" />
-                Grup cerita · {groupSize} soal
-              </Badge>
-            </button>
+            <span className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onUngroup}
+                title="Soal grup cerita selalu tampil berurutan meski shuffle aktif. Klik untuk membubarkan grup."
+                className="rounded-full transition-transform hover:scale-[1.04] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
+              >
+                <Badge scheme="primary">
+                  <BookOpen className="w-3 h-3" />
+                  Grup cerita · {groupSize} soal
+                </Badge>
+              </button>
+              <button
+                type="button"
+                onClick={onUngroupOne}
+                disabled={ungroupingOne}
+                title="Keluarkan soal ini dari grup"
+                aria-label="Keluarkan soal ini dari grup"
+                className="p-1 rounded-full text-gray-400 dark:text-gray-500 hover:text-incorrect hover:bg-incorrect-soft transition-colors disabled:opacity-50"
+              >
+                <Unlink className="w-3 h-3" />
+              </button>
+            </span>
           )}
           {isQuiz && question.is_scored && question.points > 0 && (
             <span className="text-xs text-gray-400 dark:text-gray-500">{question.points} pts</span>
@@ -433,7 +445,7 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
   )
 }
 
-function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onToggleSelect, groupId, groupSize, onUngroup }) {
+function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onToggleSelect, groupId, groupSize, onUngroup, onUngroupOne, ungroupingOne }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: question.id,
     data: { type: 'question', questionId: question.id },
@@ -471,6 +483,8 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
             groupId={groupId}
             groupSize={groupSize}
             onUngroup={onUngroup}
+            onUngroupOne={onUngroupOne}
+            ungroupingOne={ungroupingOne}
           />
         </div>
       </div>
@@ -478,7 +492,7 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
   )
 }
 
-function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupSize, onUngroup }) {
+function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupSize, onUngroup, onUngroupOne, ungroupingOne }) {
   if (editOpen) {
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
@@ -536,6 +550,8 @@ function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, edit
       groupId={groupId}
       groupSize={groupSize}
       onUngroup={onUngroup}
+      onUngroupOne={onUngroupOne}
+      ungroupingOne={ungroupingOne}
     />
   )
 }
@@ -622,6 +638,7 @@ export default function QuestionBuilder() {
   const [grouping, setGrouping] = useState(false)
   const [ungroupGroupId, setUngroupGroupId] = useState(null)
   const [ungrouping, setUngrouping] = useState(false)
+  const [ungroupingOneId, setUngroupingOneId] = useState(null)
 
   // Sections hanya untuk: semua quiz (style apapun), atau form + card
   const sectionsAllowed = form && (
@@ -728,7 +745,9 @@ export default function QuestionBuilder() {
   })
 
   const selectedQs = questions.filter((q) => selectedIds.includes(q.id))
+  const selectionGrouped = selectedQs.some((q) => q.group_id)
   const canGroup =
+    !selectionGrouped &&
     selectedQs.length >= 2 &&
     selectedQs.every((q) => q.section_id) &&
     new Set(selectedQs.map((q) => q.section_id)).size === 1
@@ -744,6 +763,20 @@ export default function QuestionBuilder() {
       toast.error(err.response?.data?.detail || err.response?.data?.message || 'Gagal mengelompokkan soal')
     } finally {
       setGrouping(false)
+    }
+  }
+
+  const handleUngroupOne = async (q) => {
+    if (!q.group_id) return
+    setUngroupingOneId(q.id)
+    try {
+      await api.delete(`/forms/${formId}/questions/group/${q.group_id}/questions/${q.id}`)
+      toast.success('Soal dikeluarkan dari grup')
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Gagal mengeluarkan soal dari grup')
+    } finally {
+      setUngroupingOneId(null)
     }
   }
 
@@ -1058,17 +1091,19 @@ export default function QuestionBuilder() {
               </label>
               <div className="ml-auto flex gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setSelectedIds([])}>Cancel</Button>
-                <Button
-                  variant="soft"
-                  size="sm"
-                  icon={<BookOpen className="w-4 h-4" />}
-                  loading={grouping}
-                  disabled={!canGroup}
-                  onClick={handleGroup}
-                  title={canGroup ? 'Kelompokkan soal terpilih (cerita/wacana bersama)' : 'Pilih minimal 2 soal dalam section yang sama'}
-                >
-                  Group
-                </Button>
+                {!selectionGrouped && (
+                  <Button
+                    variant="soft"
+                    size="sm"
+                    icon={<BookOpen className="w-4 h-4" />}
+                    loading={grouping}
+                    disabled={!canGroup}
+                    onClick={handleGroup}
+                    title={canGroup ? 'Kelompokkan soal terpilih (cerita/wacana bersama)' : 'Pilih minimal 2 soal dalam section yang sama'}
+                  >
+                    Group
+                  </Button>
+                )}
                 <Button variant="danger" size="sm" onClick={() => setShowBulkDelete(true)} icon={<Trash2 className="w-4 h-4" />}>
                   Delete ({selectedIds.length})
                 </Button>
@@ -1119,10 +1154,12 @@ export default function QuestionBuilder() {
                                 saveLoading={saveLoading}
                                 errors={fieldErrors}
                                 sections={sections}
-                                groupId={q.group_id || null}
-                                groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
-                                onUngroup={() => q.group_id && setUngroupGroupId(q.group_id)}
-                              />
+                                  groupId={q.group_id || null}
+                                  groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
+                                  onUngroup={() => q.group_id && setUngroupGroupId(q.group_id)}
+                                  onUngroupOne={() => handleUngroupOne(q)}
+                                  ungroupingOne={ungroupingOneId === q.id}
+                                />
                             ))}
                           </div>
                         </SectionDropZone>
@@ -1188,6 +1225,8 @@ export default function QuestionBuilder() {
                                  groupId={q.group_id || null}
                                  groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
                                  onUngroup={() => q.group_id && setUngroupGroupId(q.group_id)}
+                                 onUngroupOne={() => handleUngroupOne(q)}
+                                 ungroupingOne={ungroupingOneId === q.id}
                                />
                    ))
                  )}
