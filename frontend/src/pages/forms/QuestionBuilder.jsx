@@ -623,10 +623,10 @@ export default function QuestionBuilder() {
   const [ungroupGroupId, setUngroupGroupId] = useState(null)
   const [ungrouping, setUngrouping] = useState(false)
 
-  // Sections hanya untuk: (form + card) atau (quiz + quiz)
+  // Sections hanya untuk: semua quiz (style apapun), atau form + card
   const sectionsAllowed = form && (
-    (form.type === 'form' && (form.display_style || 'card') === 'card') ||
-    (form.type === 'quiz' && form.display_style === 'quiz')
+    form.type === 'quiz' ||
+    (form.type === 'form' && (form.display_style || 'card') === 'card')
   )
 
   const sensors = useSensors(
