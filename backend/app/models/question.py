@@ -44,6 +44,9 @@ class Question(Base):
     is_scored = Column(Boolean, default=True)
     order_index = Column(Integer, default=0)
     is_required = Column(Boolean, default=True)
+    # Grup soal ber-cerita bersama (wacana). NULL = soal lepas. Anggota grup
+    # di-shuffle sebagai satu blok; cerita ada di question_text anggota terawal.
+    group_id = Column(String(36), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=True)
 

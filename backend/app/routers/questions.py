@@ -17,6 +17,7 @@ from app.services.points import distribute_quiz_points
 from app.utils import file_url, now_wib, _delete_file, UPLOAD_DIR
 from app.schemas.question import (
     QuestionCreate,
+    QuestionGroupRequest,
     QuestionUpdate,
     ReorderRequest,
     SectionCreate,
@@ -78,6 +79,7 @@ def _build_question(q: Question, request: Request) -> dict:
         "order_index": q.order_index,
         "is_required": q.is_required,
         "section_id": q.section_id,
+        "group_id": q.group_id,
         "options": opts,
         "image": _image_obj(q_img[0], request) if q_img else None,
     }
@@ -494,6 +496,68 @@ def reorder_questions(
 
     db.commit()
     return {"message": "Question order updated"}
+
+
+# ── Grup soal ber-cerita bersama (wacana) ────────────────────────────────────
+# Soal satu grup di-shuffle sebagai satu blok utuh; cerita ada di teks soal
+# pertama (order_index terkecil). Anggota grup wajib satu section.
+
+@router.post("/forms/{form_id}/questions/group")
+def group_questions(
+    body: QuestionGroupRequest,
+    request: Request,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    questions = (
+        db.query(Question)
+        .filter(Question.id.in_(body.question_ids), Question.form_id == form.id)
+        .all()
+    )
+    if len(questions) != len(body.question_ids):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Soal tidak ditemukan pada form ini",
+        )
+
+    section_ids = {q.section_id for q in questions}
+    if len(section_ids) != 1 or None in section_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Semua soal harus berada dalam section yang sama",
+        )
+
+    gid = str(uuid.uuid4())
+    for q in questions:
+        q.group_id = gid
+    db.commit()
+    return {
+        "message": "Soal berhasil dikelompokkan",
+        "data": [_build_question(q, request) for q in questions],
+    }
+
+
+@router.delete("/forms/{form_id}/questions/group/{group_id}")
+def ungroup_questions(
+    form_id: int,
+    group_id: str,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    members = (
+        db.query(Question)
+        .filter(Question.form_id == form.id, Question.group_id == group_id)
+        .all()
+    )
+    if not members:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Grup tidak ditemukan",
+        )
+    for q in members:
+        q.group_id = None
+    db.commit()
+    return {"message": "Grup soal dihapus"}
 
 
 _ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp3", ".wav", ".m4a", ".ogg", ".aac", ".webm"}

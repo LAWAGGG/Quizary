@@ -161,6 +161,18 @@ Semua opsional. Sama seperti create, plus:
 
 **Source:** `schemas/question.py:SectionReorderRequest`
 
+#### `POST /api/forms/{form_id}/questions/group`
+| Field | Rule |
+|---|---|
+| `question_ids` | `list(min=2)` — tanpa duplikat; semua id milik form ini (→ 404); semua satu section & tidak null (→ 422) |
+
+Bisnis: grup di-shuffle sebagai blok utuh saat `shuffle_questions` aktif; cerita ada di `question_text` anggota dengan `order_index` terkecil.
+
+**Source:** `schemas/question.py:QuestionGroupRequest`, `routers/submissions.py` (block shuffle)
+
+#### `DELETE /api/forms/{form_id}/questions/group/{group_id}`
+Set `group_id=NULL` untuk semua anggota. 404 jika group_id tidak ada pada form ini.
+
 ### 2.4 Ownership & Authorization
 
 | Endpoint | Mekanisme |
@@ -171,6 +183,8 @@ Semua opsional. Sama seperti create, plus:
 | `PUT/DELETE /api/questions/{id}` | `_ensure_owner` → 403 |
 | `PATCH /api/questions/reorder` | inline check → 403 |
 | `PATCH /api/sections/reorder` | inline check → 403 |
+| `POST /api/forms/{form_id}/questions/group` | `verify_form_owner` → 403 |
+| `DELETE /api/forms/{form_id}/questions/group/{group_id}` | `verify_form_owner` → 403 |
 
 ---
 

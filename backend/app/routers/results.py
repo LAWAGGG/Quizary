@@ -282,12 +282,12 @@ def _export_columns(form: Form, subs: list[Submission], db: Session):
     """Build dynamic export: one column per question + Dikirim/Skor/Status."""
     questions = db.query(Question).filter(Question.form_id == form.id).order_by(Question.order_index).all()
     q_ids = [q.id for q in questions]
-    headers = [_strip_html(q.question_text) for q in questions] + ["Dikirim", "Skor", "Status"]
+    headers = [_strip_html(q.question_text) or f"Soal {i+1}" for i, q in enumerate(questions)] + ["Dikirim", "Skor", "Status"]
 
     if not questions:
         return questions, headers, []
 
-    opt_text = {o.id: o.option_text for o in db.query(QuestionOption).filter(QuestionOption.question_id.in_(q_ids)).all()}
+    opt_text = {o.id: _strip_html(o.option_text) for o in db.query(QuestionOption).filter(QuestionOption.question_id.in_(q_ids)).all()}
     answers = db.query(Answer).filter(
         Answer.question_id.in_(q_ids),
         Answer.submission_id.in_([s.id for s in subs]),
@@ -309,9 +309,9 @@ def _export_columns(form: Form, subs: list[Submission], db: Session):
         if q.type in (QuestionType.multiple_choice, QuestionType.checkbox, QuestionType.dropdown):
             answer_map[(a.submission_id, a.question_id)] = ", ".join(ao_by_answer.get(a.id, []))
         elif q.type == QuestionType.file_upload:
-            answer_map[(a.submission_id, a.question_id)] = a.answer_file or a.answer_text or ""
+            answer_map[(a.submission_id, a.question_id)] = a.answer_file or _strip_html(a.answer_text) or ""
         else:
-            answer_map[(a.submission_id, a.question_id)] = a.answer_text or ""
+            answer_map[(a.submission_id, a.question_id)] = _strip_html(a.answer_text) or ""
 
     rows = []
     for s in subs:

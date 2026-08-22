@@ -531,7 +531,7 @@ export default function FormEdit() {
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               <SettingRow
                 title="Shuffle questions"
-                desc="Randomize the order for each respondent."
+                desc="Randomize the order for each respondent. Questions in a story group always stay together as one block."
                 control={<Toggle label="Shuffle questions" checked={form.shuffle_questions} onChange={(v) => setForm((prev) => ({ ...prev, shuffle_questions: v }))} />}
               />
               <SettingRow

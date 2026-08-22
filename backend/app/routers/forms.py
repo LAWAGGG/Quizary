@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user, verify_form_owner
 from app.models.form import Form, FormStatus, FormType, SubmissionLimit
-from app.models.question import Question, QuestionType
+from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
 from app.models.image import Image
 from app.models.submission import Submission
@@ -158,6 +158,9 @@ def create_form(
         updated_at=now,
     )
     db.add(form)
+    db.flush()
+    # Section default langsung tersedia — memudahkan grup cerita & pengelompokan soal.
+    db.add(Section(form_id=form.id, title="Bagian 1", order_index=0, created_at=now))
     db.commit()
     db.refresh(form)
     return _form_dict(form, request)

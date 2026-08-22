@@ -79,10 +79,21 @@ class QuestionResponse(BaseModel):
     order_index: int
     is_required: bool
     section_id: Optional[int] = None
+    group_id: Optional[str] = None
     options: list[OptionResponse] = []
     images: list[dict] = []
 
     model_config = {"from_attributes": True}
+
+
+class QuestionGroupRequest(BaseModel):
+    question_ids: list[int] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def validate_question_ids(self):
+        if len(set(self.question_ids)) != len(self.question_ids):
+            raise ValueError("question_ids must not contain duplicates")
+        return self
 
 
 class SectionCreate(BaseModel):

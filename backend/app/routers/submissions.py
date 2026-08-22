@@ -240,6 +240,7 @@ def _build_questions_response(sub_id: int, request: Request, db: Session) -> lis
             order_index=idx,
             is_required=q.is_required,
             section_id=q.section_id,
+            group_id=q.group_id,
             image=_image_obj(q_img[0], request) if q_img else None,
             options=[
                 OptionPublic(
@@ -381,7 +382,24 @@ def create_submission(
         .all()
     )
     if form.shuffle_questions:
-        random.shuffle(questions)
+        # Grup soal ber-cerita = satu blok utuh (urutan internal tetap), soal
+        # lepas diacak bebas. ponytail: O(n²) scan; ribuan soal baru ganti dict-pass.
+        seen_groups: set[str] = set()
+        blocks: list[list[Question]] = []
+        for q in questions:  # sudah urut order_index
+            if q.group_id and q.group_id in seen_groups:
+                continue
+            if q.group_id:
+                seen_groups.add(q.group_id)
+                members = sorted(
+                    (x for x in questions if x.group_id == q.group_id),
+                    key=lambda x: x.order_index,
+                )
+                blocks.append(members)
+            else:
+                blocks.append([q])
+        random.shuffle(blocks)
+        questions = [m for block in blocks for m in block]
 
     for idx, q in enumerate(questions):
         db.add(SubmissionQuestionOrder(submission_id=sub.id, question_id=q.id, order_index=idx))

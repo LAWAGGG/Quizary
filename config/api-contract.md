@@ -141,6 +141,8 @@ Auth: Bearer Token
   "updated_at": "30-07-2026 18:00:00"
 }
 ```
+> Setiap form baru otomatis mendapat satu section default **"Bagian 1"** (`order_index=0`) —
+> langsung bisa dipakai untuk mengelompokkan soal ber-cerita tanpa membuat section manual.
 
 ### `GET /forms/{id}`
 Auth: Bearer Token (pemilik)
@@ -398,6 +400,35 @@ Auth: Bearer Token (pemilik)
 // Response 200
 { "message": "Question order updated" }
 ```
+
+### `POST /forms/{id}/questions/group`
+Auth: Bearer Token (pemilik)
+
+Kelompokkan soal ber-cerita bersama (wacana) menjadi satu grup. Saat `shuffle_questions` aktif,
+grup di-shuffle sebagai satu blok utuh (urutan internal tetap); cerita ditulis di `question_text`
+soal dengan `order_index` terkecil di grup. Semua soal wajib satu section.
+```json
+// Request
+{
+  "question_ids": [5, 3, 8]   // min 2, tanpa duplikat, semua milik form ini & satu section
+}
+```
+```json
+// Response 200
+{
+  "message": "Soal berhasil dikelompokkan",
+  "data": [ { "id": 5, "group_id": "b1e0...", "...": "..." } ]
+}
+```
+Error: `404` id bukan milik form ini · `422` beda section / kurang dari 2 soal / id duplikat
+
+### `DELETE /forms/{id}/questions/group/{group_id}`
+Auth: Bearer Token (pemilik)
+```json
+// Response 200
+{ "message": "Grup soal dihapus" }   // semua anggota kembali group_id = null
+```
+Error: `404` grup tidak ada pada form ini
 
 ---
 
@@ -921,6 +952,8 @@ Auth: Bearer Token
 | PUT | `/api/questions/{id}` | Bearer | Update soal |
 | DELETE | `/api/questions/{id}` | Bearer | Hapus soal |
 | PATCH | `/api/questions/reorder` | Bearer | Urutkan ulang soal |
+| POST | `/api/forms/{id}/questions/group` | Bearer | Kelompokkan soal ber-cerita bersama |
+| DELETE | `/api/forms/{id}/questions/group/{group_id}` | Bearer | Bubarkan grup soal |
 | POST | `/api/questions/{id}/images` | Bearer | Upload gambar soal (multipart/form-data) |
 | POST | `/api/options/{id}/images` | Bearer | Upload gambar opsi (multipart/form-data) |
 | DELETE | `/api/images/{id}` | Bearer | Hapus gambar |

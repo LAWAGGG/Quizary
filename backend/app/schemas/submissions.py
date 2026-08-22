@@ -23,6 +23,7 @@ class QuestionWithOptions(BaseModel):
     order_index: int
     is_required: bool = True
     section_id: Optional[int] = None
+    group_id: Optional[str] = None
     image: Optional[dict] = None
     options: list[OptionPublic]
 
