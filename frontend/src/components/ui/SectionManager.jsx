@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { GripVertical, X, Plus, Check } from 'lucide-react'
+import { GripVertical, X, Plus, Check, ChevronDown } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
   useSensor, useSensors, useDraggable, useDroppable, closestCorners,
@@ -16,7 +16,7 @@ import { Button, Badge, ConfirmModal } from '../../components/ui'
 
 const QUESTION_PREFIX = 'q-'
 
-function SortableSectionCard({ section, questions, onDelete, editing, editDraft, setEditDraft, onEditStart, onEditSave, onEditCancel, onUnassign }) {
+function SortableSectionCard({ section, questions, onDelete, editing, editDraft, setEditDraft, onEditStart, onEditSave, onEditCancel, onUnassign, collapsed, onToggleCollapse }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: section.id,
     data: { type: 'section' },
@@ -40,6 +40,15 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
         >
           <GripVertical className="w-5 h-5" />
         </span>
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          aria-expanded={!collapsed}
+          title={collapsed ? 'Tampilkan soal' : 'Sembunyikan soal'}
+          className="p-1 rounded-md text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors shrink-0"
+        >
+          <ChevronDown className={`w-4 h-4 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+        </button>
         <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
         {editing ? (
           <>
@@ -63,7 +72,8 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
         )}
       </div>
 
-      {isDragging ? (
+      {/* Collapsed: header saja — drop ke card tetap berfungsi */}
+      {!collapsed && (isDragging ? (
         <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-3 text-xs text-gray-400 dark:text-gray-500 text-center italic">
           Melepas soal… seret untuk memindahkan
         </div>
@@ -77,7 +87,7 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
         <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-3 text-xs text-gray-400 dark:text-gray-500 text-center italic">
           Drop questions here
         </div>
-      )}
+      ))}
     </div>
   )
 }
@@ -150,6 +160,17 @@ export default function SectionManager({ formId, show, onClose, sections: initia
   const [newSectionTitle, setNewSectionTitle] = useState('')
   const [creatingSection, setCreatingSection] = useState(false)
   const [activeDrag, setActiveDrag] = useState(null)
+  // Default tiap card collapse biar list pendek & drag ringan.
+  const [collapsedIds, setCollapsedIds] = useState(() => new Set())
+
+  const toggleCollapse = (id) => {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
@@ -161,6 +182,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
     if (show) {
       setSections(initialSections || [])
       setQuestions(initialQuestions || [])
+      setCollapsedIds(new Set((initialSections || []).map((s) => s.id)))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show])
@@ -365,8 +387,10 @@ export default function SectionManager({ formId, show, onClose, sections: initia
                       onEditStart={() => { setEditingId(section.id); setEditDraft(section.title) }}
                       onEditSave={() => renameSection(section)}
                       onEditCancel={() => setEditingId(null)}
-                      onDelete={() => setDeleteTarget(section)}
-                      onUnassign={(qId) => moveQuestionToSection(qId, 'unassigned')}
+                       onDelete={() => setDeleteTarget(section)}
+                       onUnassign={(qId) => moveQuestionToSection(qId, 'unassigned')}
+                       collapsed={collapsedIds.has(section.id)}
+                       onToggleCollapse={() => toggleCollapse(section.id)}
                     />
                   ))}
                 </SortableContext>

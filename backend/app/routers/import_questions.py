@@ -5,13 +5,14 @@ import uuid
 from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import Form as ApiForm
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import verify_form_owner
 from app.models.form import Form
 from app.models.image import Image
-from app.models.question import Question, QuestionType
+from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
 from app.services.points import distribute_quiz_points
 from app.utils import UPLOAD_DIR, now_wib
@@ -263,6 +264,7 @@ async def import_docx(
     form: Form = Depends(verify_form_owner),
     db: Session = Depends(get_db),
     file: UploadFile = File(...),
+    section_id: int | None = ApiForm(None),
 ):
     if not file.filename or not file.filename.lower().endswith(".docx"):
         raise HTTPException(
@@ -276,6 +278,26 @@ async def import_docx(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="python-docx is not installed",
         )
+
+    # Soal import masuk ke satu-satunya section form (bila ada), konsisten
+    # dengan add manual di frontend yang auto-assign saat section cuma satu.
+    # Bila section lebih dari satu, section tujuan wajib dipilih.
+    sections = db.query(Section).filter(Section.form_id == form.id).all()
+    if len(sections) > 1 and not section_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Pilih section tujuan terlebih dahulu",
+        )
+    target_section_id = None
+    if section_id:
+        if not any(s.id == section_id for s in sections):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Section tidak ditemukan pada form ini",
+            )
+        target_section_id = section_id
+    elif len(sections) == 1:
+        target_section_id = sections[0].id
 
     content = await file.read()
     doc = Document(io.BytesIO(content))
@@ -315,6 +337,7 @@ async def import_docx(
             type=q_type,
             question_text=q_data["question_text"],
             points=0 if form.type.value == "quiz" else 1,
+            section_id=target_section_id,
             order_index=next_order,
             created_at=now,
         )

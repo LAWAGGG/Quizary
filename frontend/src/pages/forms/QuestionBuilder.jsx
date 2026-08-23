@@ -43,15 +43,17 @@ const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
 function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, questionId, sections, sectionsAllowed }) {
   const toast = useToast()
+  // Satu-satunya section = default tujuan soal baru; select section tak perlu tampil.
+  const singleSectionId = sectionsAllowed && sections?.length === 1 ? sections[0].id : null
   const [form, setForm] = useState({
     question_text: '',
     type: 'multiple_choice',
     points: 1,
     is_scored: true,
     is_required: true,
-    section_id: null,
     options: [{ option_text: '', is_correct: false }],
     ...(initial || {}),
+    section_id: initial?.section_id || singleSectionId,
   })
   const isEditing = !!initial
   const ferr = (name) => errors?.[name]
@@ -150,7 +152,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         <p className="text-xs text-gray-400 dark:text-gray-500 -mt-3">{TYPE_HINTS[form.type]}</p>
       )}
 
-      {sectionsAllowed && sections?.length > 0 && (
+      {sectionsAllowed && sections?.length > 1 && (
         <div>
           <label className="field-label">Section</label>
           <select
@@ -588,6 +590,7 @@ export default function QuestionBuilder() {
   const docxRef = useRef(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [importSectionId, setImportSectionId] = useState('')
 
   const [form, setForm] = useState(null)
   const [questions, setQuestions] = useState([])
@@ -618,6 +621,8 @@ export default function QuestionBuilder() {
     form.type === 'quiz' ||
     (form.type === 'form' && (form.display_style || 'card') === 'card')
   )
+  // Import DOCX wajib pilih section tujuan hanya bila section >1.
+  const importNeedsSection = sectionsAllowed && sections.length > 1
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
@@ -694,8 +699,13 @@ export default function QuestionBuilder() {
     }
   }
 
+  // Loading bersama untuk ConfirmModal (delete soal / section) — hanya satu
+  // modal konfirmasi yang bisa terbuka pada satu waktu.
+  const [confirmLoading, setConfirmLoading] = useState(false)
+
   const handleDelete = async () => {
     if (!deleteTarget) return
+    setConfirmLoading(true)
     try {
       await api.delete(`/questions/${deleteTarget.id}`)
       setDeleteTarget(null)
@@ -704,6 +714,8 @@ export default function QuestionBuilder() {
     } catch {
       toast.error('Failed to delete question')
       setDeleteTarget(null)
+    } finally {
+      setConfirmLoading(false)
     }
   }
 
@@ -850,14 +862,21 @@ export default function QuestionBuilder() {
     const file = e.target.files[0]
     if (!file) return
     e.target.value = ''
+    // Section >1: tujuan import wajib dipilih (divalidasi juga di backend).
+    if (importNeedsSection && !importSectionId) {
+      toast.error('Pilih section tujuan terlebih dahulu')
+      return
+    }
     setImporting(true)
     const fd = new FormData()
     fd.append('file', file)
+    if (importSectionId) fd.append('section_id', importSectionId)
     try {
       await api.post(`/forms/${formId}/import/docx`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       setShowImportModal(false)
+      setImportSectionId('')
       toast.success('Questions imported')
       load()
     } catch (err) {
@@ -903,6 +922,7 @@ export default function QuestionBuilder() {
 
   const deleteSection = async () => {
     if (!sectionDeleteTarget) return
+    setConfirmLoading(true)
     try {
       await api.delete(`/sections/${sectionDeleteTarget.id}`)
       setSectionDeleteTarget(null)
@@ -911,6 +931,8 @@ export default function QuestionBuilder() {
     } catch {
       toast.error('Gagal menghapus section')
       setSectionDeleteTarget(null)
+    } finally {
+      setConfirmLoading(false)
     }
   }
 
@@ -1224,6 +1246,7 @@ export default function QuestionBuilder() {
         message={`Section "${sectionDeleteTarget?.title || ''}" akan dihapus. Soal di dalamnya tetap ada, hanya lepas dari section mana pun.`}
         onConfirm={deleteSection}
         onCancel={() => setSectionDeleteTarget(null)}
+        loading={confirmLoading}
         confirmText="Delete"
         variant="danger"
       />
@@ -1257,6 +1280,7 @@ export default function QuestionBuilder() {
         message={`Delete question "${(deleteTarget?.question_text || '').replace(/<[^>]*>/g, '').slice(0, 50)}..."?`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
+        loading={confirmLoading}
         confirmText="Delete"
         variant="danger"
       />
@@ -1297,6 +1321,22 @@ export default function QuestionBuilder() {
               </div>
 
               <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                {importNeedsSection && (
+                  <section>
+                    <label className="field-label">Section tujuan *</label>
+                    <select
+                      value={importSectionId}
+                      onChange={(e) => setImportSectionId(e.target.value)}
+                      className="input-field"
+                    >
+                      <option value="">— Pilih section —</option>
+                      {sections.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
+                    </select>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                      Semua soal hasil import akan masuk ke section ini.
+                    </p>
+                  </section>
+                )}
                 <section>
                   <h4 className="text-sm font-semibold text-ink dark:text-gray-100 mb-2">How it works</h4>
                   <ul className="space-y-1.5 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
@@ -1356,7 +1396,14 @@ export default function QuestionBuilder() {
                 </a>
                 <div className="flex gap-2">
                   <Button variant="secondary" onClick={() => setShowImportModal(false)} disabled={importing}>Cancel</Button>
-                  <Button onClick={() => docxRef.current?.click()} loading={importing} icon={!importing && <Upload className="w-4 h-4" />}>
+                  <Button
+                    onClick={() => {
+                      if (importNeedsSection && !importSectionId) { toast.error('Pilih section tujuan terlebih dahulu'); return }
+                      docxRef.current?.click()
+                    }}
+                    loading={importing}
+                    icon={!importing && <Upload className="w-4 h-4" />}
+                  >
                     {importing ? 'Importing...' : 'Choose .docx file'}
                   </Button>
                 </div>

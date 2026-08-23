@@ -802,17 +802,17 @@ export default function AnswerQuiz() {
                     className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card cursor-zoom-in"
                   />
                 ))}
-                {current.image && !isAudioUrl(current.image.path) && (
-                  <div className="flex items-center justify-center">
-                    <button
-                      onClick={() => { setZoomTarget(current); setZoomScale(1) }}
-                      className="inline-flex items-center gap-2 text-xs font-semibold px-4 h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors shadow-chip"
-                    >
-                      <ZoomIn className="w-4 h-4" />
-                      Perbesar soal
-                    </button>
-                  </div>
-                )}
+                {/* Perbesar soal tersedia untuk semua tipe soal, dengan/tanpa media */}
+                <div className="flex items-center justify-center">
+                  <button
+                    onClick={() => { setZoomTarget(current); setZoomScale(1) }}
+                    className="inline-flex items-center gap-2 text-xs font-semibold px-4 h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors shadow-chip"
+                    aria-label="Perbesar soal"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                    Perbesar soal
+                  </button>
+                </div>
                 {current.type === 'multiple_choice' && (
                   <div className="space-y-4">
                     <p className="text-xs text-gray-400 text-center mb-2">Pick one answer</p>
@@ -1262,6 +1262,7 @@ export default function AnswerQuiz() {
       <ZoomModal
         target={zoomTarget}
         scale={zoomScale}
+        variant={displayStyle === 'card' ? 'card' : 'quiz'}
         onClose={() => { setZoomTarget(null); setZoomScale(1) }}
         onZoom={(delta) => setZoomScale((s) => Math.min(4, Math.max(1, s + delta)))}
       />
@@ -1473,7 +1474,7 @@ function ExamInfoDrawer({ show, onClose, form, data }) {
   )
 }
 
-function ZoomModal({ target, scale, onClose, onZoom }) {
+function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
   const STEP = 0.5
   const optionColor = (i) => OPT_COLORS[i % OPT_COLORS.length]
   const scrollRef = useRef(null)
@@ -1585,7 +1586,27 @@ function ZoomModal({ target, scale, onClose, onZoom }) {
                       />
                     )}
 
-                    {target.options?.length > 0 && (
+                    {target.options?.length > 0 && (variant === 'card' ? (
+                      /* Mirror opsi gaya card/form: baris ber-border + bubble huruf */
+                      <div className="w-full max-w-xl mx-auto space-y-2">
+                        {target.options.map((opt, i) => (
+                          <div
+                            key={opt.id}
+                            className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800/50"
+                          >
+                            <span className="bubble w-6 h-6 text-xs bubble-empty shrink-0">
+                              {LETTERS[i % LETTERS.length]}
+                            </span>
+                            <span className="flex-1 text-sm text-left leading-snug text-ink dark:text-gray-200">
+                              <RichText html={opt.option_text} className="rich-text" />
+                            </span>
+                            {opt.image && (
+                              <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
                       <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {target.options.map((opt, i) => (
                           <div
@@ -1603,7 +1624,7 @@ function ZoomModal({ target, scale, onClose, onZoom }) {
                           </div>
                         ))}
                       </div>
-                    )}
+                    ))}
                   </div>
                 </div>
               </div>
