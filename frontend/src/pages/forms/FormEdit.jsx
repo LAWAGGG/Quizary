@@ -249,7 +249,7 @@ export default function FormEdit() {
       return
     }
     // Quiz wajib punya timer (per menit) — dicek juga di backend saat publish.
-    if (form.display_style === 'quiz' && !timerMinutes) {
+    if (isQuiz && !timerMinutes) {
       setErrors({ timer_seconds: 'Quiz harus memiliki waktu pengerjaan (menit)' })
       revealError(setBehaviorOpen, timerRef)
       return
@@ -334,7 +334,9 @@ export default function FormEdit() {
 
   const isRestricted = !!form.is_restricted
   const onceLocked = form.submission_limit === 'once'
-  const isQuiz = form.display_style === 'quiz'
+  // isQuiz = tipe form (bukan display style) — setelan & validasi khusus quiz
+  // tetap berlaku berapa pun display style-nya.
+  const isQuiz = form.type === 'quiz'
 
   return (
     <div>

@@ -7,9 +7,9 @@ const schemes = {
   blue: 'bg-blue-50 text-blue-700',
 }
 
-export function Badge({ children, scheme = 'gray', className = '' }) {
+export function Badge({ children, scheme = 'gray', className = '', ...rest }) {
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${schemes[scheme] || schemes.gray} ${className}`}>
+    <span {...rest} className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${schemes[scheme] || schemes.gray} ${className}`}>
       {children}
     </span>
   )
