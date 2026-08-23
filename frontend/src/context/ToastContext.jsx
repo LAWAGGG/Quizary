@@ -29,7 +29,7 @@ function ToastViewport({ toasts, onDismiss }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ duration: 0.15 }}
-            className="flex items-start gap-3 rounded-2xl bg-white dark:bg-ink-900 border border-gray-100 dark:border-gray-800 shadow-lift px-4 py-3.5"
+            className="flex items-start gap-3 rounded-2xl bg-white dark:bg-ink-900 border border-gray-100 dark:border-gray-700 shadow-lift px-4 py-3.5"
           >
             <span className={`mt-0.5 shrink-0 ${STYLES[t.type]}`}>{ICONS[t.type]}</span>
             <p className="text-sm text-ink dark:text-gray-100 flex-1 leading-snug">{t.message}</p>

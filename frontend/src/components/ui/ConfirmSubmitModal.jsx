@@ -79,7 +79,7 @@ export function ConfirmSubmitModal({
                 : 'Pastikan semua jawaban sudah sesuai sebelum mengirim.'}
             </p>
 
-            <div className="flex gap-3 justify-end mt-5 pt-4 border-t border-gray-100 dark:border-gray-800 shrink-0">
+            <div className="flex gap-3 justify-end mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 shrink-0">
               <button
                 onClick={onCancel}
                 disabled={loading}
@@ -112,7 +112,7 @@ export function ConfirmSubmitModal({
 
 function SummaryChip({ icon, tint, label, value }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl px-2 py-3 text-center border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-ink-800/50">
+    <div className="flex flex-col items-center justify-center rounded-xl px-2 py-3 text-center border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-ink-800/50">
       <span className={`w-7 h-7 rounded-lg flex items-center justify-center ${tint}`}>{icon}</span>
       <span className="text-sm font-bold text-ink dark:text-gray-100 mt-1.5 tabular-nums">{value}</span>
       <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{label}</span>

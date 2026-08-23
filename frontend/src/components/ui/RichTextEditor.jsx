@@ -62,15 +62,26 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       onChangeRef.current?.(normalize(quill.root.innerHTML))
     })
 
-    // Toolbar hanya tampil saat editor aktif (fokus). Debounce supaya klik
-    // tombol toolbar tidak menutup toolbar sebelum aksi tercatat.
-    quill.on('selection-change', (range) => {
+    // Toolbar tampil saat editor aktif. Pakai focusin/focusout native (bukan
+    // selection-change Quill) — event selection Quill kadang tidak emit saat
+    // klik/fokus (quill#1324, quill#2186) sehingga toolbar bisa tak muncul.
+    // Debounce supaya klik tombol toolbar tidak menutup toolbar sebelum aksi
+    // tercatat.
+    const wrapper = container.parentNode
+    const onFocusIn = () => {
       if (hideTimer.current) clearTimeout(hideTimer.current)
-      if (range) setActive(true)
-      else hideTimer.current = setTimeout(() => setActive(false), 250)
-    })
+      setActive(true)
+    }
+    const onFocusOut = () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current)
+      hideTimer.current = setTimeout(() => setActive(false), 250)
+    }
+    wrapper?.addEventListener('focusin', onFocusIn)
+    wrapper?.addEventListener('focusout', onFocusOut)
 
     return () => {
+      wrapper?.removeEventListener('focusin', onFocusIn)
+      wrapper?.removeEventListener('focusout', onFocusOut)
       quillRef.current = null
       if (hideTimer.current) clearTimeout(hideTimer.current)
       const parent = container.parentNode
@@ -115,7 +126,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       <div
         ref={containerRef}
         style={{ minHeight }}
-        onClick={() => quillRef.current?.root.focus()}
+        onClick={() => quillRef.current?.focus()}
       />
       {symbolsOpen && (
         <div

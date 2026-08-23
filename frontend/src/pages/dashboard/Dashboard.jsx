@@ -125,7 +125,7 @@ export default function Dashboard() {
               <div className="overflow-x-auto -mx-2 px-2">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-100 dark:border-gray-800">
+                    <tr className="border-b border-gray-100 dark:border-gray-700">
                       <th className="text-left pb-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Title</th>
                       <th className="text-left pb-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status</th>
                       <th className="text-right pb-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Answers</th>

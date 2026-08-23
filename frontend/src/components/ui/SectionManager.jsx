@@ -64,17 +64,17 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
       </div>
 
       {isDragging ? (
-        <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-3 text-xs text-gray-400 dark:text-gray-500 text-center italic">
+        <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-3 text-xs text-gray-400 dark:text-gray-500 text-center italic">
           Melepas soal… seret untuk memindahkan
         </div>
       ) : secQs.length > 0 ? (
-        <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-2 space-y-1.5">
+        <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-2 space-y-1.5">
           {secQs.map((q) => (
             <DraggableQuestion key={q.id} q={q} onUnassign={onUnassign} />
           ))}
         </div>
       ) : (
-        <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-3 text-xs text-gray-400 dark:text-gray-500 text-center italic">
+        <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-3 text-xs text-gray-400 dark:text-gray-500 text-center italic">
           Drop questions here
         </div>
       )}
@@ -317,7 +317,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white dark:bg-ink-900 flex flex-col shadow-lift"
           >
-            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-800 shrink-0">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-700 shrink-0">
               <div>
                 <h2 className="font-display text-lg font-bold text-ink dark:text-gray-100">Manage Sections</h2>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Seret section untuk urutkan · Seret soal untuk pindahkan</p>

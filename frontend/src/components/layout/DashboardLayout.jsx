@@ -29,10 +29,10 @@ function Sidebar({ open, onClose, onLogout, user }) {
       </AnimatePresence>
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-white dark:bg-ink-900 border-r border-gray-200 dark:border-gray-800 transition-transform duration-200 ease-out lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-white dark:bg-ink-900 border-r border-gray-200 dark:border-gray-600 transition-transform duration-200 ease-out lg:static lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'
           }`}
       >
-        <div className="flex items-center gap-3 px-5 h-16 shrink-0 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center gap-3 px-5 h-16 shrink-0 border-b border-gray-100 dark:border-gray-600">
           <AppMark size="sm" />
           <div className="min-w-0">
             <p className="font-display font-bold leading-none text-ink dark:text-gray-100">Quizary</p>
@@ -76,7 +76,7 @@ function Sidebar({ open, onClose, onLogout, user }) {
           ))}
         </nav>
 
-        <div className="p-3 border-t border-gray-100 dark:border-gray-800">
+        <div className="p-3 border-t border-gray-100 dark:border-gray-600">
           <div className="px-3.5 py-3 rounded-xl bg-gray-50 dark:bg-ink-800/50">
             <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Logged in as</p>
             <p className="text-sm font-medium text-ink dark:text-gray-100 truncate mt-1">{user?.name || 'User'}</p>
@@ -128,7 +128,7 @@ export default function DashboardLayout() {
       />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white dark:bg-ink-900 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 lg:px-8 shrink-0">
+        <header className="h-16 bg-white dark:bg-ink-900 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between px-4 lg:px-8 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -167,9 +167,9 @@ export default function DashboardLayout() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.98 }}
                     transition={{ duration: 0.12 }}
-                    className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-ink-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-lift py-1.5 z-50"
+                    className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-ink-900 rounded-2xl border border-gray-100 dark:border-gray-600 shadow-lift py-1.5 z-50"
                   >
-                    <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 mb-1">
+                    <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-600 mb-1">
                       <p className="text-sm font-semibold text-ink dark:text-gray-100 truncate">{user?.name || 'User'}</p>
                       <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">{user?.email || ''}</p>
                     </div>
@@ -185,7 +185,7 @@ export default function DashboardLayout() {
                     >
                       My Submissions
                     </button>
-                    <hr className="my-1 border-gray-100 dark:border-gray-800" />
+                    <hr className="my-1 border-gray-100 dark:border-gray-600" />
                     <button
                       onClick={handleLogout}
                       className="w-full text-left px-4 py-2.5 text-sm text-incorrect hover:bg-incorrect-soft transition-colors inline-flex items-center gap-2"

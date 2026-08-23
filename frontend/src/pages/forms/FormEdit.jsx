@@ -680,7 +680,7 @@ export default function FormEdit() {
             transition={{ duration: 0.15 }}
             className="fixed bottom-4 inset-x-4 z-50 flex justify-center pointer-events-none"
           >
-            <div className="pointer-events-auto flex items-center gap-3 bg-white dark:bg-ink-900 border border-gray-200 dark:border-gray-800 shadow-lift rounded-2xl px-4 py-3 w-full max-w-md">
+            <div className="pointer-events-auto flex items-center gap-3 bg-white dark:bg-ink-900 border border-gray-200 dark:border-gray-700 shadow-lift rounded-2xl px-4 py-3 w-full max-w-md">
               <p className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">Unsaved changes</p>
               <Button variant="ghost" size="sm" onClick={handleDiscard}>Discard</Button>
               <Button size="sm" onClick={handleSave} loading={saving} icon={<Save className="w-4 h-4" />}>
