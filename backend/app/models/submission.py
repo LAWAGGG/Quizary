@@ -18,6 +18,10 @@ class Submission(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     form_id = Column(Integer, ForeignKey("forms.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Token acak khusus sesi ini — responden anonim membuktikan kepemilikan
+    # sesi lewat header X-Submission-Token (IP match hanya fallback untuk
+    # baris lama sebelum kolom ini ada).
+    access_token = Column(String(64), nullable=True, index=True)
     respondent_name = Column(String(100), nullable=True)
     respondent_email = Column(String(150), nullable=True)
     ip_address = Column(String(45), nullable=True)

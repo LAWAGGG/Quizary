@@ -6,6 +6,7 @@ import { Button, Input, Card, AppMark, FallbackPage, DotCorner, SpotlightCard, A
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
+import { saveSessionToken } from '../../lib/sessionToken'
 
 function parseDate(str) {
   if (!str) return new Date()
@@ -62,6 +63,7 @@ export default function FormLanding() {
       const data = res.data
       if (data.can_start && !data.require_identity) {
         const sub = await api.post('/submissions', { form_id: data.form_id })
+        saveSessionToken(sub.data.submission_id, sub.data.access_token)
         navigate(`/s/${sub.data.submission_id}?type=${form.type}&style=${form.display_style || 'card'}&title=${encodeURIComponent(form.title)}&code=${shortCode}`)
       } else {
         setStartState(data)
@@ -87,6 +89,7 @@ export default function FormLanding() {
         respondent_name: name,
         respondent_email: email || undefined,
       })
+      saveSessionToken(res.data.submission_id, res.data.access_token)
       navigate(`/s/${res.data.submission_id}?type=${form.type}&style=${form.display_style || 'card'}&title=${encodeURIComponent(form.title)}&code=${shortCode}`)
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.detail || 'Failed to start')

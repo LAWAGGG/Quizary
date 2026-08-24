@@ -8,6 +8,7 @@ import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import { isAudioUrl } from '../../lib/media'
 import api from '../../api/client'
+import { sessionTokenHeaders } from '../../lib/sessionToken'
 
 const OPT_COLORS = ['#3B82F6', '#EF4444', '#F59E0B', '#10B981']
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -105,7 +106,7 @@ export default function AnswerQuiz() {
     // Fullscreen anti-cheat: every detected violation reports to the server,
     // which owns the penalty. The 3rd violation auto-submits with 0 + 'cheating'.
     try {
-      const res = await api.post(`/submissions/${submissionId}/tab-exit`, reason ? { reason } : undefined)
+      const res = await api.post(`/submissions/${submissionId}/tab-exit`, reason ? { reason } : undefined, { headers: sessionTokenHeaders(submissionId) })
       const d = res.data
       if (d.status === 'cheating' || d.warnings_left === 0) {
         goToResult()
@@ -121,7 +122,7 @@ export default function AnswerQuiz() {
 
   const fetchSubmission = useCallback(async () => {
     try {
-      const res = await api.get(`/submissions/${submissionId}`)
+      const res = await api.get(`/submissions/${submissionId}`, { headers: sessionTokenHeaders(submissionId) })
       const d = res.data
       if (d.status === 'submitted' || d.status === 'auto_submitted' || d.status === 'cheating') {
         goToResult()
@@ -167,7 +168,7 @@ export default function AnswerQuiz() {
     if (!submissionId) return
     const id = setInterval(async () => {
       try {
-        const res = await api.get(`/submissions/${submissionId}`)
+        const res = await api.get(`/submissions/${submissionId}`, { headers: sessionTokenHeaders(submissionId) })
         const d = res.data
         if (d.status === 'submitted' || d.status === 'auto_submitted' || d.status === 'cheating') {
           goToResult()
@@ -194,7 +195,7 @@ export default function AnswerQuiz() {
     try {
       // Flush jawaban yang masih dalam debounce agar tidak hilang saat auto-submit.
       await flushAll(answers)
-      await api.post(`/submissions/${submissionId}/submit`)
+      await api.post(`/submissions/${submissionId}/submit`, undefined, { headers: sessionTokenHeaders(submissionId) })
       goToResult()
     } catch (err) {
       if (err.response?.status === 410) {
@@ -464,7 +465,7 @@ export default function AnswerQuiz() {
     const fd = new FormData()
     fd.append('file', file)
     try {
-      const res = await api.post(`/submissions/${submissionId}/answers/${qId}/file`, fd)
+      const res = await api.post(`/submissions/${submissionId}/answers/${qId}/file`, fd, { headers: sessionTokenHeaders(submissionId) })
       setFileAnswers((f) => ({ ...f, [qId]: { url: res.data.answer_file, filename: res.data.filename || file.name } }))
       setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
     } catch (err) {
@@ -569,7 +570,7 @@ export default function AnswerQuiz() {
     setSubmitting(true)
     try {
       await flushAll(answers)
-      await api.post(`/submissions/${submissionId}/submit`)
+      await api.post(`/submissions/${submissionId}/submit`, undefined, { headers: sessionTokenHeaders(submissionId) })
       goToResult()
     } catch (err) {
       if (err.response?.status === 410) {

@@ -14,7 +14,7 @@ from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
 from app.models.user import User
 from app.services.points import distribute_quiz_points
-from app.utils import file_url, now_wib, _delete_file, UPLOAD_DIR
+from app.utils import file_url, now_wib, write_limited, MAX_IMAGE_BYTES, _delete_file, UPLOAD_DIR
 from app.schemas.question import (
     QuestionCreate,
     QuestionGroupRequest,
@@ -594,8 +594,7 @@ def _store_image(file: UploadFile, subdir: str) -> str:
     filename = f"{uuid.uuid4().hex}{ext}"
     dest = os.path.join(UPLOAD_DIR, subdir, filename)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
-    with open(dest, "wb") as f:
-        f.write(file.file.read())
+    write_limited(file.file, dest, MAX_IMAGE_BYTES)
     return f"{subdir}/{filename}"
 
 

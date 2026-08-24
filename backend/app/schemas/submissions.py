@@ -1,12 +1,12 @@
 from typing import Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class SubmissionCreateRequest(BaseModel):
     form_id: int
-    respondent_name: Optional[str] = None
-    respondent_email: Optional[str] = None
+    respondent_name: Optional[str] = Field(None, max_length=100)
+    respondent_email: Optional[str] = Field(None, max_length=150)
 
 
 class OptionPublic(BaseModel):
@@ -30,6 +30,9 @@ class QuestionWithOptions(BaseModel):
 
 class SubmissionCreateResponse(BaseModel):
     submission_id: int
+    # Token kepemilikan sesi — kirim balik via header X-Submission-Token
+    # pada endpoint autosave/submit/tab-exit/upload/get detail.
+    access_token: Optional[str] = None
     started_at: Optional[str] = None    # "d-m-Y H:i:s"
     expired_at: Optional[str] = None
     questions: list[QuestionWithOptions]
@@ -41,7 +44,7 @@ class SubmissionCreateResponse(BaseModel):
 class AutosaveRequest(BaseModel):
     question_id: int
     option_ids: Optional[list[int]] = None   # mc / checkbox / dropdown
-    answer_text: Optional[str] = None        # short_answer / essay / date / time
+    answer_text: Optional[str] = Field(None, max_length=10_000)  # short_answer / essay / date / time
 
     @model_validator(mode="after")
     def validate_answer_text(self):
@@ -58,7 +61,7 @@ class SubmitResponse(BaseModel):
 
 
 class TabExitRequest(BaseModel):
-    reason: Optional[str] = None
+    reason: Optional[str] = Field(None, max_length=255)
 
 
 # Used in GET /submissions/{id} — includes saved answers for in-progress resume

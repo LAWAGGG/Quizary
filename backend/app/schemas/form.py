@@ -43,7 +43,7 @@ FlexDatetime = Annotated[datetime, BeforeValidator(_parse_datetime)]
 
 class FormCreate(BaseModel):
     title: str = Field(min_length=1, max_length=150)
-    description: Optional[str] = None
+    description: Optional[str] = Field(None, max_length=5000)
     type: str = "form"
     display_style: str = "card"
     require_login: bool = False
@@ -67,13 +67,13 @@ class FormCreate(BaseModel):
 
 class FormUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=150)
-    description: Optional[str] = None
+    description: Optional[str] = Field(None, max_length=5000)
     type: Optional[str] = None
     display_style: Optional[str] = None
     require_login: Optional[bool] = None
     submission_limit: Optional[str] = None
     theme_color: Optional[str] = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
-    thank_you_message: Optional[str] = None
+    thank_you_message: Optional[str] = Field(None, max_length=2000)
     timer_seconds: Optional[int] = Field(None, ge=30, le=86400)
     starts_at: Optional[FlexDatetime] = None
     ends_at: Optional[FlexDatetime] = None

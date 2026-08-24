@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.auth import hash_password, verify_password, create_access_token, revoke_token
 from app.models.user import User
+from app.ratelimit import limit_login, limit_register
 from app.schemas.auth import RegisterRequest, LoginRequest, UserResponse, TokenResponse, MessageResponse
 from app.dependencies import get_current_user, security
 from app.utils import file_url
@@ -24,19 +26,24 @@ def _user_response(user: User, request: Request) -> UserResponse:
 
 
 @router.post("/register", status_code=201)
-def register(request: Request, body: RegisterRequest, db: Session = Depends(get_db)):
+def register(request: Request, body: RegisterRequest, db: Session = Depends(get_db), _rl: None = Depends(limit_register)):
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
     user = User(name=body.name, email=body.email, password=hash_password(body.password))
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Race: dua register email sama bersamaan — unique constraint menangkapnya.
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
     db.refresh(user)
     token = create_access_token(user.id, user.role.value)
     return {"token": token, "user": _user_response(user, request).model_dump()}
 
 
 @router.post("/login")
-def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
+def login(request: Request, body: LoginRequest, db: Session = Depends(get_db), _rl: None = Depends(limit_login)):
     user = db.query(User).filter(User.email == body.email).first()
     if not user or not verify_password(body.password, user.password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
@@ -48,9 +55,10 @@ def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
 def logout(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     _user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     if credentials:
-        revoke_token(credentials.credentials)
+        revoke_token(db, credentials.credentials)
     return MessageResponse(message="Logged out successfully")
 
 

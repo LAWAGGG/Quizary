@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.auth import decode_access_token
+from app.auth import decode_access_token, token_is_revoked
 from app.models.user import User
 from app.models.form import Form
 
@@ -17,7 +17,7 @@ async def get_current_user(
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     payload = decode_access_token(credentials.credentials)
-    if payload is None:
+    if payload is None or token_is_revoked(db, payload):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
     user = db.get(User, int(payload["sub"]))
     if not user:
@@ -45,7 +45,7 @@ async def get_optional_user(
     if not credentials:
         return None
     payload = decode_access_token(credentials.credentials)
-    if payload is None:
+    if payload is None or token_is_revoked(db, payload):
         return None
     user = db.get(User, int(payload["sub"]))
     return user

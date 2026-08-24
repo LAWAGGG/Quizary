@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from 'react'
 import api from '../api/client'
+import { sessionTokenHeaders } from '../lib/sessionToken'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -18,7 +19,7 @@ export function useAutosave({ submissionId, onExpired }) {
   const flush = useCallback(async (qId, payload) => {
     const attempt = async (retriesLeft = 2) => {
       try {
-        const res = await api.patch(`/submissions/${submissionId}/autosave`, payload)
+        const res = await api.patch(`/submissions/${submissionId}/autosave`, payload, { headers: sessionTokenHeaders(submissionId) })
         if (res.status === 410 || (res.data && res.data.detail && String(res.data.detail).toLowerCase().includes('expired'))) {
           onExpired?.()
           return

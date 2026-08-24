@@ -27,8 +27,10 @@ router = APIRouter(tags=["forms"])
 
 
 def _generate_short_code(db: Session) -> str:
+    # token_urlsafe(8) ≈ 64 bit entropy — mencegah enumerasi kode form
+    # (draft tetap rahasia lewat keamanan kode, bukan auth).
     while True:
-        code = secrets.token_urlsafe(4).upper()
+        code = secrets.token_urlsafe(8).replace("-", "A").replace("_", "B").upper()
         if not db.query(Form).filter(Form.short_code == code).first():
             return code
 
@@ -114,9 +116,13 @@ def list_forms(
 ):
     q = db.query(Form).filter(Form.user_id == user.id)
     if status_filter:
-        q = q.filter(Form.status == status_filter)
+        if status_filter not in FormStatus.__members__:
+            raise HTTPException(status_code=422, detail="status must be draft, published, or closed")
+        q = q.filter(Form.status == FormStatus[status_filter])
     if type_filter:
-        q = q.filter(Form.type == type_filter)
+        if type_filter not in FormType.__members__:
+            raise HTTPException(status_code=422, detail="type must be form or quiz")
+        q = q.filter(Form.type == FormType[type_filter])
 
     total = q.count()
     forms = q.order_by(Form.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()

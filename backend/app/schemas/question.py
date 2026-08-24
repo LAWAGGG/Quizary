@@ -4,13 +4,13 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class OptionCreate(BaseModel):
-    option_text: str = Field(min_length=1)
+    option_text: str = Field(min_length=1, max_length=2000)
     is_correct: bool = False
 
 
 class OptionUpdate(BaseModel):
     id: Optional[int] = None
-    option_text: Optional[str] = Field(None, min_length=1)
+    option_text: Optional[str] = Field(None, min_length=1, max_length=2000)
     is_correct: Optional[bool] = None
 
 
@@ -34,7 +34,7 @@ class ImageResponse(BaseModel):
 
 class QuestionCreate(BaseModel):
     type: str = Field(pattern=r"^(multiple_choice|checkbox|dropdown|short_answer|essay|date|time|file_upload)$")
-    question_text: str = Field(min_length=1)
+    question_text: str = Field(min_length=1, max_length=5000)
     points: int = Field(default=1, ge=0, le=999)
     is_required: bool = True
     section_id: Optional[int] = None
@@ -51,7 +51,7 @@ class QuestionCreate(BaseModel):
 
 class QuestionUpdate(BaseModel):
     type: Optional[str] = Field(None, pattern=r"^(multiple_choice|checkbox|dropdown|short_answer|essay|date|time|file_upload)$")
-    question_text: Optional[str] = Field(None, min_length=1)
+    question_text: Optional[str] = Field(None, min_length=1, max_length=5000)
     points: Optional[int] = Field(None, ge=0, le=999)
     is_scored: Optional[bool] = None
     is_required: Optional[bool] = None

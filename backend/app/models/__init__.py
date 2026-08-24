@@ -8,3 +8,4 @@ from app.models.answer import Answer
 from app.models.answer_option import AnswerOption
 from app.models.submission_question_order import SubmissionQuestionOrder
 from app.models.submission_option_order import SubmissionOptionOrder
+from app.models.revoked_token import RevokedToken

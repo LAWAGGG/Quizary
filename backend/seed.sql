@@ -1,6 +1,8 @@
 -- ============================================
 -- Quizary — Seed Data (contoh data realistik)
 -- ============================================
+-- PERINGATAN: JANGAN jalankan di produksi. Semua akun di sini memakai
+-- password yang sama dan mudah ditebak ("password") dengan role admin.
 -- Jalankan setelah migration: mysql -u faqih -p fastapi_quizary < seed.sql
 
 SET foreign_key_checks = 0;

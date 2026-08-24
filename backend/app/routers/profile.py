@@ -11,7 +11,7 @@ from app.models.question import Question
 from app.models.question_option import QuestionOption
 from app.models.user import User
 from app.schemas.auth import MessageResponse, UserResponse
-from app.utils import UPLOAD_DIR, file_url, now_wib, _delete_file
+from app.utils import UPLOAD_DIR, MAX_IMAGE_BYTES, file_url, now_wib, write_limited, _delete_file
 
 router = APIRouter(tags=["profile & media"])
 
@@ -40,8 +40,7 @@ def _save_upload(file: UploadFile, subdir: str) -> str:
         raise HTTPException(status_code=422, detail="Unsupported file format, use JPG/PNG/GIF/WEBP")
     filename = f"{uuid.uuid4().hex}{ext}"
     dest = os.path.join(UPLOAD_DIR, subdir, filename)
-    with open(dest, "wb") as f:
-        f.write(file.file.read())
+    write_limited(file.file, dest, MAX_IMAGE_BYTES)
     return f"{subdir}/{filename}"
 
 

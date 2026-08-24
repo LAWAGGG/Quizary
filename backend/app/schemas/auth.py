@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field, model_validator
 class RegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     email: str = Field(min_length=5, max_length=150, pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
-    password: str = Field(min_length=8, max_length=255)
+    # bcrypt hanya memproses 72 byte pertama — batasi di sini supaya tidak 500.
+    password: str = Field(min_length=8, max_length=72)
     password_confirmation: str
 
     @model_validator(mode="after")
@@ -18,7 +19,7 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     email: str = Field(min_length=5, max_length=150, pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
-    password: str = Field(min_length=1)
+    password: str = Field(min_length=1, max_length=72)
 
 
 class UserResponse(BaseModel):

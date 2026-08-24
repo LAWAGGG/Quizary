@@ -1,10 +1,11 @@
 import random
 import re
+import secrets
 import uuid
 from decimal import Decimal
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status, UploadFile, File
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
@@ -19,9 +20,10 @@ from app.models.submission import Submission, SubmissionStatus
 from app.models.submission_question_order import SubmissionQuestionOrder
 from app.models.submission_option_order import SubmissionOptionOrder
 from app.models.user import User
+from app.ratelimit import limit_submission_create
 from app.services.grading import grade_submission, max_score_for
 from app.services.session_expiry import expired_at, is_expired, auto_submit_expired_for_form
-from app.utils import now_wib, fmt_dt, file_url, UPLOAD_DIR
+from app.utils import now_wib, fmt_dt, file_url, UPLOAD_DIR, MAX_ANSWER_FILE_BYTES, write_limited
 from app.schemas.submissions import (
     SubmissionCreateRequest,
     SubmissionCreateResponse,
@@ -101,12 +103,13 @@ def upload_answer_file(
     question_id: int,
     file: UploadFile = File(...),
     request: Request = None,
+    x_submission_token: str | None = Header(None, alias="X-Submission-Token"),
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
     # request di-inject otomatis oleh FastAPI (tipe Request selalu diisi)
     sub = _get_sub_or_404(submission_id, db)
-    _verify_submission_access(sub, request, user, db)
+    _verify_submission_access(sub, request, user, db, x_submission_token)
     if sub.status != SubmissionStatus.in_progress:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
 
@@ -136,8 +139,7 @@ def upload_answer_file(
     fdir = Path(UPLOAD_DIR) / "answer_files"
     fdir.mkdir(parents=True, exist_ok=True)
     fpath = fdir / fname
-    with fpath.open("wb") as out:
-        out.write(file.file.read())
+    write_limited(file.file, str(fpath), MAX_ANSWER_FILE_BYTES)
 
     if not answer:
         answer = Answer(submission_id=sub.id, question_id=question_id, created_at=now_wib())
@@ -263,6 +265,7 @@ def create_submission(
     request: Request,
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
+    _rl: None = Depends(limit_submission_create),
 ):
     """
     Start a new submission session and receive all questions ordered for this session.
@@ -338,6 +341,7 @@ def create_submission(
         # Return the existing session with the same question order — idempotent resume.
         return SubmissionCreateResponse(
             submission_id=existing.id,
+            access_token=existing.access_token,
             started_at=fmt_dt(existing.started_at),
             expired_at=fmt_dt(expired_at(existing, form)),
             questions=_build_questions_response(existing.id, request, db),
@@ -365,6 +369,7 @@ def create_submission(
     sub = Submission(
         form_id=form.id,
         user_id=user.id if user else None,
+        access_token=secrets.token_urlsafe(32),
         respondent_name=body.respondent_name or (user.name if user else None),
         respondent_email=body.respondent_email or (user.email if user else None),
         ip_address=ip,
@@ -414,6 +419,7 @@ def create_submission(
 
     return SubmissionCreateResponse(
         submission_id=sub.id,
+        access_token=sub.access_token,
         started_at=fmt_dt(sub.started_at),
         expired_at=fmt_dt(expired_at(sub, form)),
         questions=_build_questions_response(sub.id, request, db),
@@ -423,17 +429,27 @@ def create_submission(
 
 # ── PATCH /submissions/{id}/autosave ─────────────────────────────────────────
 
-def _verify_submission_access(sub: Submission, request: Request, user: User | None, db: Session) -> None:
+def _verify_submission_access(
+    sub: Submission,
+    request: Request,
+    user: User | None,
+    db: Session,
+    session_token: str | None = None,
+) -> None:
     form = db.get(Form, sub.form_id)
     if form and user and form.user_id == user.id:
         return
     if sub.user_id and user and sub.user_id == user.id:
         return
-    # Only trust the direct peer IP. X-Forwarded-For is client-supplied and can
-    # be spoofed to impersonate another respondent's session.
-    client_ip = request.client.host if request.client else None
-    if sub.ip_address and client_ip and sub.ip_address == client_ip:
+    # Token sesi: bukti kepemilikan utama untuk responden anonim.
+    if session_token and sub.access_token and secrets.compare_digest(session_token, sub.access_token):
         return
+    # Legacy: baris lama tanpa access_token masih boleh via IP peer langsung.
+    # (X-Forwarded-For sengaja tidak dipercaya — bisa dipalsukan klien.)
+    if not sub.access_token:
+        client_ip = request.client.host if request.client else None
+        if sub.ip_address and client_ip and sub.ip_address == client_ip:
+            return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
 
@@ -442,11 +458,12 @@ def autosave(
     submission_id: int,
     body: AutosaveRequest,
     request: Request,
+    x_submission_token: str | None = Header(None, alias="X-Submission-Token"),
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
     sub = _get_sub_or_404(submission_id, db)
-    _verify_submission_access(sub, request, user, db)
+    _verify_submission_access(sub, request, user, db, x_submission_token)
     form = db.get(Form, sub.form_id)
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
@@ -511,11 +528,12 @@ def report_tab_exit(
     submission_id: int,
     request: Request,
     body: TabExitRequest | None = None,
+    x_submission_token: str | None = Header(None, alias="X-Submission-Token"),
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
     sub = _get_sub_or_404(submission_id, db)
-    _verify_submission_access(sub, request, user, db)
+    _verify_submission_access(sub, request, user, db, x_submission_token)
     form = db.get(Form, sub.form_id)
     if not form:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
@@ -558,11 +576,12 @@ def report_tab_exit(
 def submit_answers(
     submission_id: int,
     request: Request,
+    x_submission_token: str | None = Header(None, alias="X-Submission-Token"),
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
     sub = _get_sub_or_404(submission_id, db)
-    _verify_submission_access(sub, request, user, db)
+    _verify_submission_access(sub, request, user, db, x_submission_token)
     form = db.get(Form, sub.form_id)
     if not form:
         raise HTTPException(status_code=404, detail="Form not found")
@@ -605,6 +624,7 @@ def submit_answers(
 def get_submission(
     submission_id: int,
     request: Request,
+    x_submission_token: str | None = Header(None, alias="X-Submission-Token"),
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
@@ -615,12 +635,19 @@ def get_submission(
 
     is_owner = user and form.user_id == user.id
     is_respondent = sub.user_id and user and sub.user_id == user.id
-    # Konsisten dengan _verify_submission_access: IP match berlaku juga saat login,
-    # agar session anonim yang dibuat sebelum login tetap bisa diakses setelah login.
-    client_ip = request.client.host if request.client else None
-    is_same_ip = sub.ip_address and client_ip and sub.ip_address == client_ip
+    has_session_token = bool(
+        x_submission_token
+        and sub.access_token
+        and secrets.compare_digest(x_submission_token, sub.access_token)
+    )
+    # Legacy: baris tanpa access_token masih boleh via IP peer langsung,
+    # agar session anonim lama tetap bisa diakses setelah login.
+    is_same_ip = False
+    if not sub.access_token:
+        client_ip = request.client.host if request.client else None
+        is_same_ip = bool(sub.ip_address and client_ip and sub.ip_address == client_ip)
 
-    if not is_owner and not is_respondent and not is_same_ip:
+    if not is_owner and not is_respondent and not has_session_token and not is_same_ip:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     # Ordered questions (respects per-submission shuffle stored in DB)

@@ -30,6 +30,15 @@ os.makedirs(os.path.join(UPLOAD_DIR, "avatars"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     errors = []

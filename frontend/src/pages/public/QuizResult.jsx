@@ -8,6 +8,7 @@ import { isAudioUrl } from '../../lib/media'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
+import { sessionTokenHeaders } from '../../lib/sessionToken'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -37,7 +38,7 @@ export default function QuizResult() {
   const [leaderboard, setLeaderboard] = useState(null)
 
   useEffect(() => {
-    const sub = api.get(`/submissions/${submissionId}`)
+    const sub = api.get(`/submissions/${submissionId}`, { headers: sessionTokenHeaders(submissionId) })
       .then((res) => setData(res.data))
       .catch((err) => setError(err.response?.data?.message || 'Failed to load results'))
     const pub = formCode
@@ -66,7 +67,7 @@ export default function QuizResult() {
   // Read-only leaderboard (FR-38) — shown post-submit when the creator enabled it.
   useEffect(() => {
     if (formType !== 'quiz' || !formCode || !publicForm?.show_leaderboard) return
-    api.get(`/q/${formCode}/leaderboard`, { params: { limit: 10, submission_id: submissionId } })
+    api.get(`/q/${formCode}/leaderboard`, { params: { limit: 10, submission_id: submissionId }, headers: sessionTokenHeaders(submissionId) })
       .then((res) => setLeaderboard(res.data))
       .catch(() => setLeaderboard(null))
   }, [formType, formCode, publicForm?.show_leaderboard, submissionId])

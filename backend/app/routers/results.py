@@ -51,7 +51,9 @@ def list_results(
     auto_submit_expired_for_form(db, form)
     q = db.query(Submission).filter(Submission.form_id == form.id)
     if status_filter:
-        q = q.filter(Submission.status == status_filter)
+        if status_filter not in SubmissionStatus.__members__:
+            raise HTTPException(status_code=422, detail="status must be in_progress, submitted, auto_submitted, or cheating")
+        q = q.filter(Submission.status == SubmissionStatus[status_filter])
 
     if sort == "score_desc":
         q = q.order_by(Submission.score.desc(), Submission.submitted_at.asc(), Submission.id.asc())
@@ -278,11 +280,27 @@ def _strip_html(text) -> str:
     return text.strip()
 
 
+# Karakter pembuka yang membuat Excel menafsirkan sel sebagai formula.
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _safe_cell(value):
+    """Netralkan Excel formula injection dari konten milik responden.
+
+    openpyxl menulis string berawalan '=' sebagai formula aktif; jawaban seperti
+    '=WEBSERVICE(...)' akan dieksekusi saat file dibuka. Prefiks apostrof
+    memaksa sel dirender sebagai teks biasa (perilaku standar Excel).
+    """
+    if isinstance(value, str) and value[:1] in _FORMULA_PREFIXES:
+        return "'" + value
+    return value
+
+
 def _export_columns(form: Form, subs: list[Submission], db: Session):
     """Build dynamic export: one column per question + Dikirim/Skor/Status."""
     questions = db.query(Question).filter(Question.form_id == form.id).order_by(Question.order_index).all()
     q_ids = [q.id for q in questions]
-    headers = [_strip_html(q.question_text) or f"Soal {i+1}" for i, q in enumerate(questions)] + ["Dikirim", "Skor", "Status"]
+    headers = [_safe_cell(_strip_html(q.question_text) or f"Soal {i+1}") for i, q in enumerate(questions)] + ["Dikirim", "Skor", "Status"]
 
     if not questions:
         return questions, headers, []
@@ -315,7 +333,7 @@ def _export_columns(form: Form, subs: list[Submission], db: Session):
 
     rows = []
     for s in subs:
-        row = [answer_map.get((s.id, q.id), "") or "-" for q in questions]
+        row = [_safe_cell(answer_map.get((s.id, q.id), "") or "-") for q in questions]
         row.append(fmt_dt(to_naive_utc(s.submitted_at)) or "-")
         row.append(float(s.score) if s.score is not None else "-")
         row.append(s.status.value)

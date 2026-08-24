@@ -15,4 +15,8 @@ missing = [k for k, v in required.items() if not v]
 if missing:
     raise RuntimeError(f"Missing env vars: {', '.join(missing)}. Check .env file.")
 
+if len(SECRET_KEY) < 32:
+    # JWT HS256 dengan secret pendek bisa di-brute-force dari token yang bocor.
+    raise RuntimeError("SECRET_KEY must be at least 32 characters long")
+
 DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"

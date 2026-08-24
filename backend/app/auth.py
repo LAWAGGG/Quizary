@@ -2,16 +2,13 @@ from datetime import datetime, timedelta, timezone
 import uuid
 
 import bcrypt
-from jose import jwt, JWTError
+import jwt  # PyJWT
+from jwt import InvalidTokenError
 
 from app.config import SECRET_KEY
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
-
-# In-memory token blacklist — holds revoked JTIs until they expire naturally.
-# For multi-process deployments swap this for a Redis set.
-_revoked_tokens: set[str] = set()
 
 
 def hash_password(password: str) -> str:
@@ -37,21 +34,38 @@ def create_access_token(user_id: int, role: str) -> str:
 
 def decode_access_token(token: str) -> dict | None:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        jti = payload.get("jti")
-        if jti and jti in _revoked_tokens:
-            return None
-        return payload
-    except JWTError:
+        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except InvalidTokenError:
         return None
 
 
-def revoke_token(token: str) -> None:
-    """Add this token's jti to the blacklist."""
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        jti = payload.get("jti")
-        if jti:
-            _revoked_tokens.add(jti)
-    except JWTError:
-        pass
+# ── Revocation (DB-backed, aman lintas worker & restart) ─────────────────────
+
+def revoke_token(db, token: str) -> None:
+    """Blacklist a token's jti until its natural expiry."""
+    from app.models.revoked_token import RevokedToken
+
+    payload = decode_access_token(token)
+    jti = payload.get("jti") if payload else None
+    if not jti:
+        return
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    exp_raw = payload.get("exp")
+    expires_at = (
+        datetime.fromtimestamp(exp_raw, tz=timezone.utc).replace(tzinfo=None)
+        if exp_raw else now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    # Buang baris expired sekalian — tabel tetap ramping tanpa cron.
+    db.query(RevokedToken).filter(RevokedToken.expires_at < now).delete()
+    if not db.query(RevokedToken.id).filter(RevokedToken.jti == jti).first():
+        db.add(RevokedToken(jti=jti, expires_at=expires_at))
+    db.commit()
+
+
+def token_is_revoked(db, payload: dict | None) -> bool:
+    from app.models.revoked_token import RevokedToken
+
+    jti = payload.get("jti") if payload else None
+    if not jti:
+        return False
+    return db.query(RevokedToken.id).filter(RevokedToken.jti == jti).first() is not None

@@ -1,10 +1,54 @@
 import os
 from datetime import datetime, timezone, timedelta
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 WIB = timezone(timedelta(hours=7))
 
 UPLOAD_DIR = "uploads"
+
+# Batas ukuran upload — streaming per-chunk supaya file besar tidak
+# dimuat utuh ke memori sebelum ditolak.
+CHUNK_SIZE = 1024 * 1024  # 1 MB
+MAX_IMAGE_BYTES = 5 * CHUNK_SIZE        # banner / avatar / media soal & opsi
+MAX_ANSWER_FILE_BYTES = 25 * CHUNK_SIZE # jawaban file_upload responden
+MAX_DOCX_BYTES = 10 * CHUNK_SIZE        # import soal .docx
+
+
+def _reject_too_large():
+    raise HTTPException(status_code=413, detail="Ukuran file terlalu besar")
+
+
+def read_limited(fileobj, max_bytes: int) -> bytes:
+    """Baca seluruh stream ke memori dengan batas ukuran."""
+    buf = bytearray()
+    while True:
+        chunk = fileobj.read(CHUNK_SIZE)
+        if not chunk:
+            break
+        buf.extend(chunk)
+        if len(buf) > max_bytes:
+            _reject_too_large()
+    return bytes(buf)
+
+
+def write_limited(fileobj, dest: str, max_bytes: int) -> int:
+    """Tulis stream ke disk dengan batas ukuran. Return jumlah byte tertulis."""
+    written = 0
+    try:
+        with open(dest, "wb") as out:
+            while True:
+                chunk = fileobj.read(CHUNK_SIZE)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > max_bytes:
+                    _reject_too_large()
+                out.write(chunk)
+    except Exception:
+        if os.path.isfile(dest):
+            os.remove(dest)
+        raise
+    return written
 
 
 def _delete_file(path: str | None) -> None:

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+import secrets
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -138,13 +140,17 @@ def get_leaderboard(
     request: Request,
     limit: int = Query(10, ge=1, le=50),
     submission_id: int | None = Query(None),
+    x_submission_token: str | None = Header(None, alias="X-Submission-Token"),
     db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
 ):
     """Public, read-only Top-N leaderboard for quiz forms (FR-38).
 
     Only exposed when the creator enabled `show_leaderboard`. Cheating
     submissions are excluded (score 0, visible only to the creator).
-    Optional `submission_id` returns the caller's own rank/entry too.
+    Optional `submission_id` returns the caller's own rank/entry too —
+    only when the caller proves ownership of that submission (token/user/
+    IP legacy), otherwise it is silently omitted.
     """
     form = _get_published_form(short_code, db)
     if not form.show_leaderboard:
@@ -173,8 +179,36 @@ def get_leaderboard(
     own = None
     if submission_id:
         sub = db.get(Submission, submission_id)
-        if sub and sub.form_id == form.id and sub.status in (SubmissionStatus.submitted, SubmissionStatus.auto_submitted):
+        if (
+            sub
+            and sub.form_id == form.id
+            and sub.status in (SubmissionStatus.submitted, SubmissionStatus.auto_submitted)
+            and _owns_submission(db, form, sub, request, user, x_submission_token)
+        ):
             rank = next((i + 1 for i, s in enumerate(ranked) if s.id == sub.id), None)
             own = {**entry(sub, rank or len(ranked) + 1), "total": total}
 
     return {"data": data, "total": total, "own": own}
+
+
+def _owns_submission(
+    db: Session,
+    form: Form,
+    sub: Submission,
+    request: Request,
+    user: User | None,
+    session_token: str | None,
+) -> bool:
+    """Kepemilikan submission untuk endpoint publik (aturan sama dengan
+    _verify_submission_access di submissions router)."""
+    if user and form.user_id == user.id:
+        return True
+    if sub.user_id and user and sub.user_id == user.id:
+        return True
+    if session_token and sub.access_token and secrets.compare_digest(session_token, sub.access_token):
+        return True
+    if not sub.access_token:
+        client_ip = request.client.host if request.client else None
+        if sub.ip_address and client_ip and sub.ip_address == client_ip:
+            return True
+    return False

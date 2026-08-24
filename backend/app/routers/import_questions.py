@@ -15,7 +15,7 @@ from app.models.image import Image
 from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
 from app.services.points import distribute_quiz_points
-from app.utils import UPLOAD_DIR, now_wib
+from app.utils import UPLOAD_DIR, MAX_DOCX_BYTES, now_wib, read_limited
 
 router = APIRouter(tags=["import"])
 
@@ -260,7 +260,7 @@ def _save_blob(ext: str, blob: bytes) -> str:
 
 
 @router.post("/forms/{form_id}/import/docx", status_code=201)
-async def import_docx(
+def import_docx(
     form: Form = Depends(verify_form_owner),
     db: Session = Depends(get_db),
     file: UploadFile = File(...),
@@ -299,7 +299,7 @@ async def import_docx(
     elif len(sections) == 1:
         target_section_id = sections[0].id
 
-    content = await file.read()
+    content = read_limited(file.file, MAX_DOCX_BYTES)
     doc = Document(io.BytesIO(content))
 
     items = _extract_docx_items(doc)
