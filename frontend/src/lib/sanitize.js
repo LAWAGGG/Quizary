@@ -71,3 +71,13 @@ export function sanitizeHtml(html = '') {
   const doc = new DOMParser().parseFromString(html, 'text/html')
   return serialize(doc.body)
 }
+
+/** Buang tag HTML → teks polos (untuk URL param, nama file, teks 1 baris). */
+export function stripTags(html = '') {
+  return String(html || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+}

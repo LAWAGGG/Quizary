@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Plus, ClipboardList, Search, Trophy, HelpCircle } from 'lucide-react'
 import api from '../../api/client'
-import { Button, Input, Card, PageHeader, EmptyState, CardSkeleton, SpotlightCard } from '../../components/ui'
+import { Button, Input, Card, PageHeader, EmptyState, CardSkeleton, SpotlightCard, RichText } from '../../components/ui'
 
 const TABS = ['All', 'Draft', 'Published', 'Closed']
 
@@ -13,13 +13,20 @@ const STATUS_DOT = {
   closed: 'bg-incorrect',
 }
 
-// Warna tema form → CSS vars: --tb (base), --tbb (border), --ts (soft/wash).
-// Tanpa tema → fallback palet primary aplikasi (border tetap ada untuk semua).
+// Warna tema form → CSS vars: --tb (base), --tbb (border light), --tbbd
+// (border dark — alpha lebih tinggi agar tetap terlihat di latar gelap),
+// --ts (soft/wash). Tanpa tema → fallback palet primary aplikasi.
 function themeVars(color) {
   if (!color) {
-    return { '--tb': 'var(--color-primary)', '--tbb': 'rgba(108,92,231,0.35)', '--ts': 'rgba(108,92,231,0.14)' }
+    // Ungu default (primary-400-ish) — hover tetap ungu cerah, bukan gelap.
+    return {
+      '--tb': '#8B7CF6',
+      '--tbb': 'rgba(139,124,246,0.45)',
+      '--tbbd': 'rgba(139,124,246,0.55)',
+      '--ts': 'rgba(139,124,246,0.14)',
+    }
   }
-  return { '--tb': color, '--tbb': `${color}59`, '--ts': `${color}24` }
+  return { '--tb': color, '--tbb': `${color}59`, '--tbbd': `${color}b3`, '--ts': `${color}24` }
 }
 
 function FormTypeCluster({ form }) {
@@ -56,16 +63,15 @@ function FormVisual({ form }) {
       <img
         src={form.banner_path}
         alt=""
-        className="relative h-28 w-full object-cover rounded-xl border-2 mb-3"
-        style={{ borderColor: 'var(--tbb)' }}
+        className="relative h-28 w-full object-cover rounded-xl border-2 border-[var(--tbb)] dark:border-[var(--tbbd)] mb-3"
         loading="lazy"
       />
     )
   }
   return (
     <div
-      className="relative h-28 w-full rounded-xl border-2 mb-3 overflow-hidden flex items-center justify-center"
-      style={{ borderColor: 'var(--tbb)', background: 'linear-gradient(180deg, var(--ts) 0%, transparent 70%)' }}
+      className="relative h-28 w-full rounded-xl border-2 border-[var(--tbb)] dark:border-[var(--tbbd)] mb-3 overflow-hidden flex items-center justify-center"
+      style={{ background: 'linear-gradient(180deg, var(--ts) 0%, transparent 70%)' }}
     >
       {form.type === 'quiz'
         ? <Trophy className="w-12 h-12 opacity-15" style={{ color: 'var(--tb)' }} />
@@ -170,7 +176,7 @@ export default function FormList() {
               >
                 <SpotlightCard className="h-full" intensity={0.1}>
                   <Card
-                    className="cursor-pointer transition-all duration-300 ease-in-out h-full flex flex-col relative overflow-hidden group border-2 border-[var(--tbb)]"
+                    className="cursor-pointer transition-all duration-300 ease-in-out h-full flex flex-col relative overflow-hidden group border-2 border-[var(--tbb)] dark:border-[var(--tbbd)] hover:border-[var(--tb)] hover:shadow-[0_14px_36px_-14px_var(--tb)]"
                     style={themeVars(form.theme_color)}
                   >
                     <div
@@ -179,7 +185,7 @@ export default function FormList() {
                       aria-hidden="true"
                     />
                     <FormVisual form={form} />
-                    <h1 className="relative text-xl font-display font-semibold text-ink dark:text-gray-100 mb-1">{form.title}</h1>
+                    <h1 className="relative text-xl font-display font-semibold text-ink dark:text-gray-100 mb-1 truncate"><RichText html={form.title} /></h1>
                     {form.description && (
                       <p className="relative text-sm text-gray-400 dark:text-gray-500 line-clamp-2 mb-3 flex-1 pr-16">{form.description}</p>
                     )}

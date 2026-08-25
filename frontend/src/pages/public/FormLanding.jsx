@@ -7,6 +7,7 @@ import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 import { saveSessionToken } from '../../lib/sessionToken'
+import { stripTags } from '../../lib/sanitize'
 
 const BUBBLES = Array.from({ length: 12 }, (_, i) => i)
 
@@ -56,7 +57,7 @@ export default function FormLanding() {
       if (data.can_start && !data.require_identity) {
         const sub = await api.post('/submissions', { form_id: data.form_id })
         saveSessionToken(sub.data.submission_id, sub.data.access_token)
-        navigate(`/s/${sub.data.submission_id}?type=${form.type}&style=${form.display_style || 'card'}&title=${encodeURIComponent(form.title)}&code=${shortCode}`)
+        navigate(`/s/${sub.data.submission_id}?type=${form.type}&style=${form.display_style || 'card'}&title=${encodeURIComponent(stripTags(form.title))}&code=${shortCode}`)
       } else {
         setStartState(data)
       }
@@ -82,7 +83,7 @@ export default function FormLanding() {
         respondent_email: email || undefined,
       })
       saveSessionToken(res.data.submission_id, res.data.access_token)
-      navigate(`/s/${res.data.submission_id}?type=${form.type}&style=${form.display_style || 'card'}&title=${encodeURIComponent(form.title)}&code=${shortCode}`)
+      navigate(`/s/${res.data.submission_id}?type=${form.type}&style=${form.display_style || 'card'}&title=${encodeURIComponent(stripTags(form.title))}&code=${shortCode}`)
     } catch (err) {
       setError(err.response?.data?.message || err.response?.data?.detail || 'Failed to start')
     } finally {
@@ -167,7 +168,7 @@ export default function FormLanding() {
           icon={<Lock className="w-6 h-6 text-white" />}
           title="Sign in required"
         >
-          <p className="text-white/70 text-sm mt-2 mb-6">You need to sign in to access {form.title}.</p>
+          <p className="text-white/70 text-sm mt-2 mb-6">You need to sign in to access {stripTags(form.title)}.</p>
           <Button variant="secondary" size="xl" onClick={() => navigate('/login')}>
             Login
           </Button>
@@ -219,7 +220,7 @@ export default function FormLanding() {
             <span className="font-display font-bold text-ink dark:text-gray-100">Quizary</span>
           </div>
           <Card className="p-6 md:p-7" style={{ borderColor: palette.border }}>
-            <h2 className="font-display text-xl font-bold text-ink dark:text-gray-100">{form.title}</h2>
+            <h2 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={form.title} /></h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-6">Enter your details to begin</p>
             <form onSubmit={handleSubmitIdentity} className="space-y-4">
               <Input
@@ -275,7 +276,7 @@ export default function FormLanding() {
             transition={{ delay: 0.1 }}
             className="font-display text-4xl md:text-5xl font-bold leading-tight text-white max-w-2xl"
           >
-            {form.title}
+            <RichText html={form.title} />
           </motion.h1>
           {form.description && (
           <motion.p
@@ -343,7 +344,7 @@ export default function FormLanding() {
         )}
         <SpotlightCard>
           <Card className="p-6 md:p-7 h-full" style={{ borderColor: palette.border }}>
-            <h1 className="font-display text-2xl font-bold text-ink dark:text-gray-100 mb-2">{form.title}</h1>
+            <h1 className="font-display text-2xl font-bold text-ink dark:text-gray-100 mb-2"><RichText html={form.title} /></h1>
             {form.description && <p className="text-gray-600 dark:text-gray-400 mb-6"><RichText html={form.description} className="rich-text" /></p>}
             <Button onClick={handleStart} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }} icon={<ArrowRight className="w-4 h-4" />}>
               Start

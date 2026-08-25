@@ -799,7 +799,7 @@ def my_submissions(user: User = Depends(get_current_user), db: Session = Depends
     data = [
         SubmissionListItem(
             id=s.id,
-            form_title=s.form.title if s.form else "(deleted)",
+            form_title=re.sub(r"<[^>]*>", "", s.form.title) if s.form else "(deleted)",
             status=s.status.value,
             type=s.form.type.value if s.form else "form",
             # Sembunyikan skor pada daftar riwayat responden bila creator mematikan reveal_score (khusus quiz).

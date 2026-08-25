@@ -470,7 +470,7 @@ def export_excel(form: Form = Depends(verify_form_owner), db: Session = Depends(
     wb.save(buf)
     buf.seek(0)
     today = now_wib().strftime("%Y-%m-%d")
-    safe_title = re.sub(r"[^\w\-]+", "_", form.title).strip("_") or form.short_code
+    safe_title = re.sub(r"[^\w\-]+", "_", _strip_html(form.title)).strip("_") or form.short_code
     return Response(
         content=buf.read(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -493,7 +493,7 @@ def dashboard_summary(user: User = Depends(get_current_user), db: Session = Depe
     recent = sorted(forms, key=lambda f: f.created_at or datetime(2000, 1, 1), reverse=True)[:5]
     sub_count_by_form = Counter(s.form_id for s in subs)
     recent_data = [
-        RecentForm(id=f.id, title=f.title, status=f.status.value, submission_count=sub_count_by_form.get(f.id, 0))
+        RecentForm(id=f.id, title=_strip_html(f.title), status=f.status.value, submission_count=sub_count_by_form.get(f.id, 0))
         for f in recent
     ]
 
@@ -501,7 +501,7 @@ def dashboard_summary(user: User = Depends(get_current_user), db: Session = Depe
     # form, sehingga di chart langsung terlihat form mana yang paling banyak
     # mendapat jawaban. Dibatasi 10 teratas agar tidak penuh.
     form_count = Counter(s.form_id for s in subs)
-    title_by_id = {f.id: f.title for f in forms}
+    title_by_id = {f.id: _strip_html(f.title) for f in forms}
     trend = [
         SubmissionTrend(form_id=fid, title=title_by_id.get(fid, "(deleted)"), count=c)
         for fid, c in sorted(form_count.items(), key=lambda x: -x[1])[:10]

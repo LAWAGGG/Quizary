@@ -9,6 +9,7 @@ import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 import { sessionTokenHeaders } from '../../lib/sessionToken'
+import { stripTags } from '../../lib/sanitize'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -108,7 +109,7 @@ export default function QuizResult() {
   // Pesan terima kasih (atau fallback nama form) — dipakai untuk form & quiz.
   const rawThanks = publicForm?.thank_you_message || ''
   const hasThanks = rawThanks.replace(/<[^>]*>/g, '').trim().length > 0
-  const thankYou = hasThanks ? rawThanks : `Form ${publicForm?.title || formTitle} submitted successfully!`
+  const thankYou = hasThanks ? rawThanks : `Form ${stripTags(publicForm?.title) || formTitle} submitted successfully!`
 
   if (!isQuiz) {
     return (

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Annotated
+import re
 
 from pydantic import BaseModel, Field, model_validator, BeforeValidator
 
@@ -41,8 +42,15 @@ def _fmt_dt(dt: datetime | None) -> str | None:
 FlexDatetime = Annotated[datetime, BeforeValidator(_parse_datetime)]
 
 
+def _title_has_text(v: str) -> str:
+    """Judul rich text: HTML boleh, tapi harus punya teks nyata."""
+    if not re.sub(r"<[^>]*>", "", v or "").strip():
+        raise ValueError("Title tidak boleh kosong")
+    return v
+
+
 class FormCreate(BaseModel):
-    title: str = Field(min_length=1, max_length=150)
+    title: str = Field(min_length=1, max_length=1000)
     description: Optional[str] = Field(None, max_length=5000)
     type: str = "form"
     display_style: str = "card"
@@ -56,6 +64,11 @@ class FormCreate(BaseModel):
     timer_seconds: Optional[int] = Field(None, ge=30, le=86400)
 
     @model_validator(mode="after")
+    def validate_title(self):
+        _title_has_text(self.title)
+        return self
+
+    @model_validator(mode="after")
     def validate_enums(self):
         if self.type not in ("form", "quiz"):
             raise ValueError("type must be 'form' or 'quiz'")
@@ -67,7 +80,7 @@ class FormCreate(BaseModel):
 
 
 class FormUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=1, max_length=150)
+    title: Optional[str] = Field(None, min_length=1, max_length=1000)
     description: Optional[str] = Field(None, max_length=5000)
     type: Optional[str] = None
     display_style: Optional[str] = None
@@ -86,6 +99,12 @@ class FormUpdate(BaseModel):
     reveal_score: Optional[bool] = None
     reveal_answers: Optional[bool] = None
     status: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_title(self):
+        if self.title is not None:
+            _title_has_text(self.title)
+        return self
 
     @model_validator(mode="after")
     def validate_enums(self):

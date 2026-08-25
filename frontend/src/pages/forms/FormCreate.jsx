@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
+import { stripTags } from '../../lib/sanitize'
 import { Button, Input, Toggle, Select, Card, PageHeader, RichTextEditor } from '../../components/ui'
 
 export default function FormCreate() {
@@ -26,8 +27,8 @@ export default function FormCreate() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.title.trim()) { setError('Title is required'); return }
-    if (form.title.length > 150) { setError('Title max 150 characters'); return }
+    if (!stripTags(form.title)) { setError('Title is required'); return }
+    if (form.title.length > 1000) { setError('Title max 1000 characters'); return }
     setLoading(true)
     setError('')
     try {
@@ -59,15 +60,16 @@ export default function FormCreate() {
 
           <form onSubmit={handleSubmit} className="space-y-5 mt-6">
             <Card className="space-y-5">
-              <Input
-                label="Title"
-                name="title"
-                value={form.title}
-                onChange={(e) => { handleChange(e); setError('') }}
-                placeholder="e.g. Weekly Pop Quiz"
-                maxLength={150}
-                error={error}
-              />
+              <div>
+                <span className="field-label">Title</span>
+                <RichTextEditor
+                  value={form.title || ''}
+                  onChange={(html) => { setForm((prev) => ({ ...prev, title: html })); setError('') }}
+                  placeholder="e.g. Weekly Pop Quiz"
+                  minHeight={60}
+                />
+                {error && <p className="field-error mt-1">{error}</p>}
+              </div>
 
               <div>
                 <span className="field-label">Description</span>

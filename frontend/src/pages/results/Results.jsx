@@ -5,6 +5,7 @@ import { BarChart3, Download, ClipboardList, X, Check, AlertTriangle } from 'luc
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
+import { stripTags } from '../../lib/sanitize'
 import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichText, ConfirmModal, sanitizeHtml } from '../../components/ui'
 import { isAudioUrl } from '../../lib/media'
 
@@ -155,7 +156,7 @@ export default function Results() {
 
   useEffect(() => {
     api.get(`/forms/${formId}`).then((res) => {
-      setFormTitle(res.data.title)
+      setFormTitle(stripTags(res.data.title))
       setIsQuiz(res.data.type === 'quiz')
     }).catch(() => {})
   }, [formId])

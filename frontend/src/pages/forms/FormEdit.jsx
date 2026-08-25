@@ -5,7 +5,8 @@ import { Copy, Check, ArrowLeft, Save, Trash2, ImageUp, Link2, ChevronDown, Info
 import { QRCodeCanvas } from 'qrcode.react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
-import { Button, Input, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, PageSkeleton, RichTextEditor } from '../../components/ui'
+import { Button, Input, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, PageSkeleton, RichTextEditor, RichText } from '../../components/ui'
+import { stripTags } from '../../lib/sanitize'
 
 function ShareLink({ value }) {
   const [copied, setCopied] = useState(false)
@@ -246,7 +247,7 @@ export default function FormEdit() {
   }
 
   const handleSave = async () => {
-    if (!form.title.trim()) {
+    if (!stripTags(form.title)) {
       setErrors({ title: 'Title is required' })
       revealError(setBasicOpen, titleRef)
       return
@@ -352,7 +353,7 @@ export default function FormEdit() {
 
       <PageHeader
         eyebrow="Form workspace"
-        title={form.title || 'Form Settings'}
+        title={stripTags(form.title) || 'Form Settings'}
         description={
           <span className="inline-flex items-center gap-2">
             <StatusBadge status={form.status} />
@@ -386,15 +387,16 @@ export default function FormEdit() {
 
           <CollapsibleCard title="Basic Information" icon={<Info className="w-4 h-4" />} open={basicOpen} onToggle={setBasicOpen}>
             <div className="space-y-5">
-              <Input
-                label="Title"
-                name="title"
-                value={form.title}
-                onChange={handleChange}
-                maxLength={150}
-                error={errors.title}
-                ref={titleRef}
-              />
+              <div ref={titleRef}>
+                <span className="field-label">Title</span>
+                <RichTextEditor
+                  value={form.title || ''}
+                  onChange={(html) => setForm((prev) => ({ ...prev, title: html }))}
+                  placeholder="Judul form"
+                  minHeight={60}
+                />
+                {errors.title && <p className="field-error mt-1">{errors.title}</p>}
+              </div>
               <div>
                 <span className="field-label">Description</span>
                 <RichTextEditor
@@ -734,7 +736,7 @@ export default function FormEdit() {
                 <X className="w-5 h-5" />
               </button>
               <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 mb-1">Scan to open</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Pindai kode QR untuk membuka {form.title}.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Pindai kode QR untuk membuka {stripTags(form.title)}.</p>
               <div className="flex justify-center p-4 border border-gray-100 dark:border-gray-800 rounded-2xl">
                 <QRCodeCanvas
                   ref={qrRef}
