@@ -255,8 +255,8 @@ export default function FormLanding() {
           <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full blur-3xl pointer-events-none" style={{ backgroundColor: palette.blobDark }} aria-hidden="true" />
 
           <div className="flex items-center gap-2.5 mb-10">
-            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white text-sm font-bold text-[var(--color-primary)]">Q</span>
-            <span className="font-display font-bold text-white">Quizary</span>
+            <img src="/Quizary_Logo_White.png" alt="Quizary" className="w-8 h-8" />
+            <span className="font-display font-bold text-white text-2xl">Quizary</span>
           </div>
 
           {form.banner_path && (

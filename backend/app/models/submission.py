@@ -10,6 +10,9 @@ class SubmissionStatus(str, enum.Enum):
     submitted = "submitted"
     auto_submitted = "auto_submitted"
     cheating = "cheating"
+    # Anti-cheat: pelanggaran ke-3 — layar responden dikunci, creator memutuskan
+    # lanjut / finalisasi 0. Tak diputuskan 5 menit → otomatis cheating (sweep).
+    locked = "locked"
 
 
 class Submission(Base):

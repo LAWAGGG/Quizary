@@ -31,6 +31,7 @@ export function StatusBadge({ status }) {
     auto_submitted: { scheme: 'yellow', label: 'Auto Submitted' },
     in_progress: { scheme: 'blue', label: 'In Progress' },
     cheating: { scheme: 'red', label: 'Cheating' },
+    locked: { scheme: 'yellow', label: 'Locked' },
   }
   const s = map[status] || { scheme: 'gray', label: status }
   return <Badge scheme={s.scheme}>{s.label}</Badge>

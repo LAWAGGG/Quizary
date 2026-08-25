@@ -25,6 +25,12 @@ class ResultDeleteRequest(BaseModel):
     submission_ids: list[int] = Field(min_length=1, max_length=1000)
 
 
+class ResultStatusRequest(BaseModel):
+    # Creator mengatur ulang status hasil secara universal: buka kembali
+    # (in_progress), sahkan (submitted), atau vonis curang (cheating, nilai 0).
+    status: str = Field(pattern="^(in_progress|submitted|cheating)$")
+
+
 class PerQuestionStat(BaseModel):
     question_id: int
     question_text: str = ""

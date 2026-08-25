@@ -22,7 +22,7 @@ from app.models.submission_option_order import SubmissionOptionOrder
 from app.models.user import User
 from app.ratelimit import limit_submission_create
 from app.services.grading import grade_submission, max_score_for
-from app.services.session_expiry import display_deadline, is_expired, auto_submit_expired_for_form
+from app.services.session_expiry import display_deadline, is_expired, auto_submit_expired_for_form, finalize_locked
 from app.utils import now_wib, fmt_dt, file_url, UPLOAD_DIR, MAX_ANSWER_FILE_BYTES, write_limited
 from app.schemas.submissions import (
     SubmissionCreateRequest,
@@ -110,6 +110,8 @@ def upload_answer_file(
     # request di-inject otomatis oleh FastAPI (tipe Request selalu diisi)
     sub = _get_sub_or_404(submission_id, db)
     _verify_submission_access(sub, request, user, db, x_submission_token)
+    if sub.status == SubmissionStatus.locked:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ujian dikunci — menunggu keputusan pengawas")
     if sub.status != SubmissionStatus.in_progress:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
 
@@ -491,6 +493,8 @@ def autosave(
     if form.require_login and not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required to access this form")
 
+    if sub.status == SubmissionStatus.locked:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ujian dikunci — menunggu keputusan pengawas")
     if sub.status != SubmissionStatus.in_progress:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
 
@@ -559,6 +563,8 @@ def report_tab_exit(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
     if form.type.value != "quiz" or not form.is_restricted:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Fullscreen mode is not enabled for this form")
+    if sub.status == SubmissionStatus.locked:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ujian dikunci — menunggu keputusan pengawas")
     if sub.status != SubmissionStatus.in_progress:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
 
@@ -571,15 +577,17 @@ def report_tab_exit(
         sub.cheat_reason = "; ".join(reasons[-5:])[:255]
 
     if sub.tab_exit_count >= CHEAT_THRESHOLD:
-        grade_submission(db, sub, form)   # fills per-answer grading + max_score
-        sub.status = SubmissionStatus.cheating
-        sub.submitted_at = _now()
-        sub.score = Decimal("0")          # nilai 0 untuk penyontek
+        # Bukan langsung nilai 0 — kunci layar, creator yang memutuskan
+        # (lanjut / finalisasi) lewat POST /forms/{id}/results/{sid}/decision.
+        # Tak diputuskan 5 menit → sweep otomatis finalisasi curang.
+        sub.status = SubmissionStatus.locked
+        sub.updated_at = _now()
         db.commit()
         return {
-            "message": "Anda keluar dari halaman terlalu sering. Jawaban dikumpulkan otomatis.",
-            "status": "cheating",
+            "message": "Pelanggaran terdeteksi. Ujian dikunci sementara — menunggu keputusan pengawas.",
+            "status": "locked",
             "warnings_left": 0,
+            "cheat_reason": sub.cheat_reason,
         }
 
     db.commit()
@@ -609,6 +617,8 @@ def submit_answers(
     if form.require_login and not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required to access this form")
 
+    if sub.status == SubmissionStatus.locked:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ujian dikunci — menunggu keputusan pengawas")
     if sub.status != SubmissionStatus.in_progress:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
 
@@ -652,6 +662,11 @@ def get_submission(
     form = db.get(Form, sub.form_id)
     if not form:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+
+    # Fallback 5 menit: locked yang tak diputuskan creator otomatis jadi cheating —
+    # dijalankan di sini supaya responden yang poll melihat status final tanpa
+    # menunggu creator membuka dashboard.
+    finalize_locked(db, sub, form)
 
     is_owner = user and form.user_id == user.id
     is_respondent = sub.user_id and user and sub.user_id == user.id

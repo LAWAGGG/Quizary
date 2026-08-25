@@ -6,6 +6,7 @@ any in-progress submission past its deadline the next time the form or its
 results are accessed.
 """
 from datetime import timedelta
+from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
@@ -15,6 +16,9 @@ from app.services.grading import grade_submission
 from app.utils import now_wib
 
 MAX_SESSION_HOURS = 24
+# Fallback anti-cheat: creator tidak memutuskan submission `locked` dalam
+# 5 menit → otomatis difinalisasi curang (nilai 0). Waktu lock = updated_at.
+LOCK_DECISION_MINUTES = 5
 
 
 def expired_at(sub: Submission, form: Form):
@@ -49,21 +53,40 @@ def display_deadline(sub: Submission, form: Form):
     return exp or ends
 
 
+def finalize_locked(db: Session, sub: Submission, form: Form) -> bool:
+    """Fallback: submission `locked` tak diputuskan creator dalam 5 menit →
+    otomatis cheating (nilai 0). Return True kalau finalisasi terjadi."""
+    if sub.status != SubmissionStatus.locked:
+        return False
+    if sub.updated_at and (now_wib() - sub.updated_at).total_seconds() < LOCK_DECISION_MINUTES * 60:
+        return False
+    sub.status = SubmissionStatus.cheating
+    sub.submitted_at = now_wib()
+    grade_submission(db, sub, form)
+    sub.score = Decimal("0")
+    db.commit()
+    return True
+
+
 def is_expired(sub: Submission, form: Form) -> bool:
     exp = expired_at(sub, form)
     return exp is not None and now_wib() > exp
 
 
 def auto_submit_expired_for_form(db: Session, form: Form) -> int:
-    """Lazy sweep: auto-submit every in-progress submission past its deadline."""
+    """Lazy sweep: auto-submit submission in_progress yang lewat deadline,
+    dan finalisasi locked yang tidak diputuskan creator dalam 5 menit."""
     now = now_wib()
     count = 0
     subs = db.query(Submission).filter(
         Submission.form_id == form.id,
-        Submission.status == SubmissionStatus.in_progress,
+        Submission.status.in_([SubmissionStatus.in_progress, SubmissionStatus.locked]),
     ).all()
     for s in subs:
-        if is_expired(s, form):
+        if s.status == SubmissionStatus.locked:
+            if finalize_locked(db, s, form):
+                count += 1
+        elif is_expired(s, form):
             s.status = SubmissionStatus.auto_submitted
             s.submitted_at = now
             grade_submission(db, s, form)

@@ -83,6 +83,8 @@ export default function AnswerQuiz() {
   const [timeLeft, setTimeLeft] = useState(null)
   const [direction, setDirection] = useState(1)
   const [cheatWarn, setCheatWarn] = useState(null)
+  // Submission dilock anti-cheat (pelanggaran ke-3): menunggu keputusan creator.
+  const [lockedInfo, setLockedInfo] = useState(null)
   const [showInfo, setShowInfo] = useState(false)
   const [zoomTarget, setZoomTarget] = useState(null)   // { question, options } yang dibuka modal zoom
   const [zoomScale, setZoomScale] = useState(1)
@@ -103,12 +105,16 @@ export default function AnswerQuiz() {
   }, [goToResult])
 
   const reportTabExit = useCallback(async (reason = '') => {
-    // Fullscreen anti-cheat: every detected violation reports to the server,
-    // which owns the penalty. The 3rd violation auto-submits with 0 + 'cheating'.
+    // Fullscreen anti-cheat: pelanggaran dilaporkan ke server (server pegang penalti).
+    // Pelanggaran ke-3 → submission 'locked': layar dikunci, creator memutuskan
+    // lanjut / finalisasi. Tak diputuskan 5 menit → otomatis cheating (sweep).
     try {
       const res = await api.post(`/submissions/${submissionId}/tab-exit`, reason ? { reason } : undefined, { headers: sessionTokenHeaders(submissionId) })
       const d = res.data
-      if (d.status === 'cheating' || d.warnings_left === 0) {
+      if (d.status === 'locked') {
+        setCheatWarn(null)
+        setLockedInfo({ reason: d.cheat_reason || reason })
+      } else if (d.status === 'cheating' || d.warnings_left === 0) {
         goToResult()
       } else {
         setCheatWarn({ left: d.warnings_left, reason, at: Date.now() })
@@ -128,6 +134,7 @@ export default function AnswerQuiz() {
         goToResult()
         return
       }
+      setLockedInfo(d.status === 'locked' ? { reason: d.cheat_reason || '' } : null)
       setData(d)
       const ans = {}
       const files = {}
@@ -171,6 +178,9 @@ export default function AnswerQuiz() {
           goToResult()
           return
         }
+        // Creator memutuskan submission yang dilock: in_progress = buka kunci,
+        // selain itu sudah ditangani goToResult di atas.
+        setLockedInfo(d.status === 'locked' ? { reason: d.cheat_reason || '' } : null)
         setData((prev) => {
           if (!prev) return prev
           return { ...prev, questions: d.questions, sections: d.sections, expired_at: d.expired_at }
@@ -267,6 +277,31 @@ export default function AnswerQuiz() {
     }
   }, [formType, publicForm?.is_restricted, data])
 
+  // Keyboard virtual (restricted): lacak tinggi keyboard via visualViewport.
+  // Dipakai untuk (1) menyesuaikan tinggi layout supaya input tetap terlihat,
+  // (2) menahan deteksi curang palsu — keyboard menyusutkan viewport dan bisa
+  // memicu blur, yang tanpa ini tercatat sebagai split-screen / window-blur.
+  const [kbInset, setKbInset] = useState(0)
+  const kbInsetRef = useRef(0)
+  useEffect(() => {
+    if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    const vv = window.visualViewport
+    if (!vv) return
+    const onVV = () => {
+      const kb = Math.round(Math.max(0, window.innerHeight - vv.height - vv.offsetTop))
+      const open = kb > 150 // di bawah ambang = bukan keyboard
+      kbInsetRef.current = open ? kb : 0
+      setKbInset(kbInsetRef.current)
+    }
+    vv.addEventListener('resize', onVV)
+    vv.addEventListener('scroll', onVV)
+    onVV()
+    return () => {
+      vv.removeEventListener('resize', onVV)
+      vv.removeEventListener('scroll', onVV)
+    }
+  }, [formType, publicForm?.is_restricted, data])
+
   // Kiosk lock: kunci penuh — sembunyikan seluruh konten saat responden keluar
   // dari fullscreen / kehilangan fokus / pindah tab. Mencoba interaksi apa pun di
   // layar kunci langsung mem-buat kembali fullscreen (pin ulang). Anti-cheat tetap
@@ -294,7 +329,9 @@ export default function AnswerQuiz() {
       else if (fsAvailable) lock()
     }
     const onVis = () => { if (document.visibilityState === 'hidden' && fsAvailable) lock() }
-    const onBlur = () => { if (fsAvailable) lock() }
+    // Keyboard virtual bisa memicu blur di beberapa keyboard (mis. Gboard) —
+    // jangan kunci saat itu; app-switch nyata tetap tertangkap visibilitychange.
+    const onBlur = () => { if (fsAvailable && !kbInsetRef.current) lock() }
     const onFocus = () => { if (inFullscreen() && document.visibilityState === 'visible') unlock() }
     document.addEventListener('fullscreenchange', onFsChange)
     document.addEventListener('webkitfullscreenchange', onFsChange)
@@ -333,15 +370,16 @@ export default function AnswerQuiz() {
       if (!inFullscreen()) report('left-fullscreen')
     }
     const onVis = () => { if (document.visibilityState === 'hidden') report('tab-hidden') }
-    const onBlur = () => report('window-blur')
+    const onBlur = () => { if (!kbInsetRef.current) report('window-blur') }
 
     // Split-screen / floating window: only meaningful while fullscreen is ON —
     // in fullscreen the content should cover the whole screen, so any large
     // shrink means the app was split, resized, or another app floated over it.
-    // The soft keyboard is handled by visualViewport, not window resize.
+    // Keyboard virtual juga menyusutkan innerHeight di Android — abaikan saat
+    // kbInset aktif (sudah diidentifikasi sebagai keyboard via visualViewport).
     let shrinkTimer = null
     const onResize = () => {
-      if (!inFullscreen()) return
+      if (!inFullscreen() || kbInsetRef.current) return
       if (window.screen.height - window.innerHeight > 120) {
         clearTimeout(shrinkTimer)
         shrinkTimer = setTimeout(() => report('split-screen'), 300)
@@ -690,7 +728,7 @@ export default function AnswerQuiz() {
     const answeredCount = questions.filter((q) => isAnswered(q, answers[q.id])).length
 
     return (
-      <div className="theme-surface h-dvh flex flex-col bg-paper" style={{ '--t': palette.base }}>
+      <div className="theme-surface h-dvh flex flex-col bg-paper" style={{ '--t': palette.base, ...(kbInset ? { height: `calc(100dvh - ${kbInset}px)` } : {}) }}>
         {cheatWarn && (
           <motion.div
             initial={{ opacity: 0, y: -12 }}
@@ -1292,6 +1330,7 @@ export default function AnswerQuiz() {
         </div>
       </footer>
 
+      <CheatLockOverlay info={lockedInfo} />
       <KioskLockOverlay locked={kioskLocked} palette={palette} onResume={pinToFullscreen} />
       <ExamInfoDrawer show={showInfo} onClose={() => setShowInfo(false)} form={publicForm} data={data} />
 
@@ -1378,6 +1417,42 @@ function FileAnswer({ value, uploading, onFile, onRemove, error }) {
       )}
       <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">PDF, DOC, XLS, PPT, TXT, CSV, gambar, ZIP</p>
     </div>
+  )
+}
+
+function CheatLockOverlay({ info }) {
+  // Layar lock anti-cheat: pelanggaran ke-3. Responden tidak bisa berbuat apa-
+  // pun — menunggu creator memutuskan (lanjut / nilai 0, maks 5 menit; lewat
+  // waktu → sweep otomatis finalisasi). Poll 10 dtk membuka lock bila dilepas.
+  return (
+    <AnimatePresence>
+      {info && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-ink"
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="text-center text-white max-w-lg"
+          >
+            <span className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-incorrect/20 mb-6">
+              <AlertTriangle className="w-8 h-8 text-incorrect" />
+            </span>
+            <p className="font-display text-2xl font-bold">Anda terdeteksi melakukan pelanggaran</p>
+            {info.reason && (
+              <p className="text-sm text-white/70 mt-2">Pelanggaran terakhir: {info.reason}</p>
+            )}
+            <p className="text-sm text-white/70 mt-4 leading-relaxed">
+              Ujian dikunci sementara. Jawaban Anda tetap tersimpan dan akan ditinjau
+              oleh pengawas (maksimal 5 menit). Jangan tutup halaman ini.
+            </p>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 

@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, BookOpen, Unlink, ChevronDown } from 'lucide-react'
+import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, BookOpen, Unlink, ChevronDown, ChevronUp } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
-  useSensor, useSensors, useDroppable, closestCorners,
+  useDndContext, useSensor, useSensors, closestCorners,
 } from '@dnd-kit/core'
 import {
   SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable,
@@ -428,15 +428,22 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
   )
 }
 
-function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onToggleSelect, groupId, groupSize }) {
+function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onToggleSelect, groupId, groupSize, onMove, isFirst, isLast }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: question.id,
     data: { type: 'question', questionId: question.id },
   })
-  const style = { transform: CSS.Transform.toString(transform), transition }
+  const { active } = useDndContext()
+  // Selama drag aktif: tanpa transisi displacement. Animasi perpindahan kartu
+  // mengubah rect tiap frame → dnd-kit (useRects) mengukur ulang → dragOver
+  // terpicu ulang → loop "Maximum update depth exceeded". Snap instan = stabil.
+  const style = { transform: CSS.Transform.toString(transform), transition: active ? undefined : transition }
+  // ponytail: TANPA framer `layout` di sini — layout animation mengubah rect
+  // elemen tiap frame selama drag, dnd-kit (useRects) mengukur ulang → setState
+  // berulang → "Maximum update depth exceeded". dnd-kit sudah menganimasikan
+  // reorder via transform+transition sendiri.
   return (
     <motion.div
-      layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -20 }}
@@ -450,11 +457,31 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
         <span
           {...listeners}
           ref={setActivatorNodeRef}
-          className="absolute left-0 top-3 bottom-3 w-6 flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 dark:text-gray-600"
+          className="absolute left-0 top-3 bottom-3 w-6 hidden md:flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 dark:text-gray-600"
         >
           <GripVertical className="w-5 h-5" />
         </span>
-        <div className="pl-7">
+        {onMove && (
+          <div className="absolute right-0 top-2 flex md:hidden flex-col gap-1">
+            <button
+              onClick={() => onMove(index, -1)}
+              disabled={isFirst}
+              aria-label="Naikkan soal"
+              className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => onMove(index, 1)}
+              disabled={isLast}
+              aria-label="Turunkan soal"
+              className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        <div className={`pl-7 md:pl-7 pr-9 md:pr-0`}>
           <QuestionCard
             question={question}
             index={index}
@@ -472,7 +499,7 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
   )
 }
 
-function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupSize }) {
+function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupSize, onMove, totalCount }) {
   if (editOpen) {
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
@@ -529,6 +556,9 @@ function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, edit
       onToggleSelect={onToggleSelect}
       groupId={groupId}
       groupSize={groupSize}
+      onMove={onMove}
+      isFirst={index === 0}
+      isLast={index === totalCount - 1}
     />
   )
 }
@@ -580,18 +610,10 @@ function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSav
 }
 
 function SectionDropZone({ sectionId, children }) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: `section-${sectionId ?? 'none'}`,
-    data: { type: 'section', sectionId: sectionId ?? null },
-  })
-  return (
-    <div
-      ref={setNodeRef}
-      className={`rounded-xl -mx-3 px-3 transition-all ${isOver ? 'ring-2 ring-primary/40 bg-primary-50/40 dark:bg-primary-900/20' : ''}`}
-    >
-      {children}
-    </div>
-  )
+  // ponytail: tidak lagi droppable — pindah section lewat dropdown di edit soal.
+  // Drag kini murni untuk reorder; drop target section menghilangkan sumber
+  // loop pengukuran dnd-kit (setState di tengah drag).
+  return <div className="rounded-xl -mx-3 px-3">{children}</div>
 }
 
 export default function QuestionBuilder() {
@@ -824,60 +846,46 @@ export default function QuestionBuilder() {
     })
   }
 
-  const handleDragOver = (event) => {
-    const { active, over } = event
-    if (!over || active.data.current?.type !== 'question') return
-    const activeId = active.id
-    const overId = over.id
-    if (activeId === overId) return
-    const activeIndex = questions.findIndex((q) => q.id === activeId)
-    const overIndex = questions.findIndex((q) => q.id === overId)
-    if (activeIndex !== -1 && overIndex !== -1 && activeIndex !== overIndex) {
-      setQuestions((prev) => arrayMove(prev, activeIndex, overIndex))
-    }
-  }
-
   const handleDragEnd = async (event) => {
     const { active, over } = event
     setActiveDrag(null)
     if (!over) return
 
-    const type = active.data.current?.type
-
-    if (type === 'question') {
-      const movedQuestionId = active.id
-      const overData = over.data.current
-
-      if (overData?.type === 'section') {
-        const toSection = overData.sectionId ?? null
-        const q = questions.find((qq) => qq.id === movedQuestionId)
-        if (q && q.section_id !== toSection) {
-          try {
-            await api.put(`/questions/${movedQuestionId}`, { section_id: toSection })
-            toast.success('Question moved to another section')
-            load(true)
-            return
-          } catch (err) {
-            toast.error(err.response?.data?.detail || 'Failed to move question')
-            load(true)
-            return
-          }
-        }
-        return
-      }
-
-      setReorderSaving(true)
-      try {
-        await api.patch('/questions/reorder', { form_id: parseInt(formId), orders: questions.map((q) => q.id) })
-      } catch {
-        load(true)
-      } finally {
-        setReorderSaving(false)
-      }
+    // Hanya reorder antar soal. Pindah section lewat dropdown di edit soal —
+    // tidak ada setState di tengah drag = loop pengukuran dnd-kit mustahil.
+    if (active.data.current?.type !== 'question' || over.data.current?.type !== 'question') return
+    const from = questions.findIndex((q) => q.id === active.id)
+    const to = questions.findIndex((q) => q.id === over.id)
+    if (from === -1 || to === -1 || from === to) return
+    const next = arrayMove(questions, from, to)
+    setQuestions(next)
+    setReorderSaving(true)
+    try {
+      await api.patch('/questions/reorder', { form_id: parseInt(formId), orders: next.map((q) => q.id) })
+    } catch {
+      load(true)
+    } finally {
+      setReorderSaving(false)
     }
   }
 
   const handleDragCancel = () => setActiveDrag(null)
+
+  // Pindah soal via tombol panah (andalan di mobile — drag sentuh sering bentrok scroll).
+  const moveQuestion = async (index, dir) => {
+    const to = index + dir
+    if (to < 0 || to >= questions.length) return
+    const next = arrayMove(questions, index, to)
+    setQuestions(next)
+    setReorderSaving(true)
+    try {
+      await api.patch('/questions/reorder', { form_id: parseInt(formId), orders: next.map((q) => q.id) })
+    } catch {
+      load(true)
+    } finally {
+      setReorderSaving(false)
+    }
+  }
 
   const handleDocxImport = async (e) => {
     const file = e.target.files[0]
@@ -1131,7 +1139,6 @@ export default function QuestionBuilder() {
             sensors={sensors}
             collisionDetection={closestCorners}
             onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
           >
@@ -1177,6 +1184,10 @@ export default function QuestionBuilder() {
                                   sections={sections}
                                     groupId={q.group_id || null}
                                     groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
+                                    onMove={moveQuestion}
+                                    totalCount={questions.length}
+                                 onMove={moveQuestion}
+                                 totalCount={questions.length}
                                   />
                               ))}
                             </div>
@@ -1253,6 +1264,8 @@ export default function QuestionBuilder() {
                                  sectionsAllowed={sectionsAllowed}
                                  groupId={q.group_id || null}
                                  groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
+                                 onMove={moveQuestion}
+                                 totalCount={questions.length}
                                />
                    ))
                  )}

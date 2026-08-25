@@ -700,11 +700,15 @@ Auth: - (sesuai submission) atau Bearer Token (pemilik form)
 }
 ```
 ```json
-// Response 200 — exit ke-3 → auto-submit, nilai 0, status cheating
+// Response 200 — exit ke-3 → submission DIKUNCI (status locked), bukan langsung 0.
+// Layar responden menampilkan pesan pelanggaran; creator memutuskan lewat
+// PATCH /forms/{id}/results/{submission_id}/status. Tak diputuskan 5 menit →
+// sweep otomatis finalisasi sebagai cheating (nilai 0).
 {
-  "message": "Anda keluar dari halaman terlalu sering. Jawaban dikumpulkan otomatis.",
-  "status": "cheating",
-  "warnings_left": 0
+  "message": "Pelanggaran terdeteksi. Ujian dikunci sementara — menunggu keputusan pengawas.",
+  "status": "locked",
+  "warnings_left": 0,
+  "cheat_reason": "left-fullscreen; tab-hidden"
 }
 ```
 ```json
@@ -712,8 +716,33 @@ Auth: - (sesuai submission) atau Bearer Token (pemilik form)
 { "message": "Fullscreen mode is not enabled for this form" }
 ```
 ```json
-// Response 409 (submission sudah selesai)
+// Response 409 (submission sudah selesai / sedang locked)
 { "message": "Submission already completed" }
+```
+
+### `PATCH /forms/{form_id}/results/{submission_id}/status`
+Auth: Bearer Token (pemilik)
+> Creator mengatur ulang status hasil secara universal: membuka submission yang
+> salah terkunci/tertandai, mensahkan, atau memvonis curang. `in_progress` =
+> jawaban utuh, `submitted_at`/`score` dikosongkan (responden lanjut, deadline
+> tetap); `submitted` = grading normal dari jawaban tersimpan; `cheating` =
+> grading + **nilai 0**. Status `auto_submitted`/`locked` tidak bisa di-set manual
+> (dihasilkan sistem).
+```json
+// Request
+{ "status": "in_progress" | "submitted" | "cheating" }
+```
+```json
+// Response 200
+{ "submission_id": 11, "status": "cheating", "score": 0, "message": "Submission dinilai curang (nilai 0)" }
+```
+```json
+// Response 422 — status di luar pilihan
+{ "message": "Invalid fields", "errors": [{ "status": "String should match pattern '^(in_progress|submitted|cheating)$'" }] }
+```
+```json
+// Response 404 — submission bukan milik form ini
+{ "message": "Hasil tidak ditemukan" }
 ```
 
 ### `POST /submissions/{id}/submit`

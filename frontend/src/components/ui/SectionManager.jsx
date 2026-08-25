@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { GripVertical, X, Plus, Check, ChevronDown } from 'lucide-react'
+import { GripVertical, X, Plus, Check, ChevronDown, ChevronUp } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
-  useSensor, useSensors, useDraggable, useDroppable, closestCorners,
+  useSensor, useSensors, useDraggable, useDroppable, pointerWithin,
 } from '@dnd-kit/core'
 import {
   SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable,
@@ -16,7 +16,7 @@ import { Button, Badge, ConfirmModal } from '../../components/ui'
 
 const QUESTION_PREFIX = 'q-'
 
-function SortableSectionCard({ section, questions, onDelete, editing, editDraft, setEditDraft, onEditStart, onEditSave, onEditCancel, onUnassign, collapsed, onToggleCollapse }) {
+function SortableSectionCard({ section, questions, onDelete, editing, editDraft, setEditDraft, onEditStart, onEditSave, onEditCancel, onUnassign, collapsed, onToggleCollapse, onMove, isFirst, isLast }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: section.id,
     data: { type: 'section' },
@@ -35,11 +35,33 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
           {...attributes}
           {...listeners}
           ref={setActivatorNodeRef}
-          className="text-gray-300 dark:text-gray-600 cursor-grab active:cursor-grabbing"
+          className="hidden md:block text-gray-300 dark:text-gray-600 cursor-grab active:cursor-grabbing"
           title="Seret untuk mengubah urutan section"
         >
           <GripVertical className="w-5 h-5" />
         </span>
+        {onMove && (
+          <span className="flex md:hidden flex-col gap-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => onMove(-1)}
+              disabled={isFirst}
+              aria-label="Naikkan section"
+              className="w-6 h-6 rounded-md bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all"
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onMove(1)}
+              disabled={isLast}
+              aria-label="Turunkan section"
+              className="w-6 h-6 rounded-md bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          </span>
+        )}
         <button
           type="button"
           onClick={onToggleCollapse}
@@ -226,10 +248,32 @@ export default function SectionManager({ formId, show, onClose, sections: initia
     const { active, over } = event
     if (!over) return
     if (active.data.current?.type !== 'section') return
-    const oldIndex = sections.findIndex((s) => s.id === active.id)
-    const newIndex = sections.findIndex((s) => s.id === over.id)
-    if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
-      setSections((prev) => arrayMove(prev, oldIndex, newIndex))
+    // Functional update — hindari swap ping-pong dari indeks closure basi.
+    setSections((prev) => {
+      const from = prev.findIndex((s) => s.id === active.id)
+      const to = prev.findIndex((s) => s.id === over.id)
+      if (from === -1 || to === -1 || from === to) return prev
+      return arrayMove(prev, from, to)
+    })
+  }
+
+  const handleDragCancel = () => setActiveDrag(null)
+
+  // Pindah section via tombol panah (mobile — drag sentuh sering bentrok scroll).
+  const moveSection = async (index, dir) => {
+    const to = index + dir
+    if (to < 0 || to >= sections.length) return
+    const next = arrayMove(sections, index, to)
+    setSections(next)
+    setSectionReordering(true)
+    try {
+      await api.patch('/sections/reorder', { form_id: parseInt(formId), orders: next.map((s) => s.id) })
+      onSaved()
+    } catch {
+      toast.error('Gagal menyimpan urutan section')
+      load()
+    } finally {
+      setSectionReordering(false)
     }
   }
 
@@ -240,20 +284,41 @@ export default function SectionManager({ formId, show, onClose, sections: initia
 
     const type = active.data.current?.type
 
+    // Resolusi drop target: drop boleh di mana saja DI DALAM section tujuan —
+    // termasuk di atas kartu soalnya (id ber-prefix 'q-'). Tanpa ini, drop di
+    // atas kartu soal tidak melakukan apa-apa dan drop ke pool salah mengenai
+    // section terdekat (collision rect corner).
+    const resolveTarget = () => {
+      if (typeof over.id === 'string' && over.id.startsWith(QUESTION_PREFIX)) {
+        const overQ = questions.find((qq) => qq.id === Number(over.id.slice(QUESTION_PREFIX.length)))
+        if (!overQ) return null
+        return overQ.section_id === null ? 'unassigned' : overQ.section_id
+      }
+      return over.id
+    }
+
     if (type === 'question') {
       const qId = Number(active.data.current.questionId)
-      if (over.id === 'unassigned') {
+      const target = resolveTarget()
+      if (target === 'unassigned') {
         await moveQuestionToSection(qId, 'unassigned')
-      } else if (typeof over.id === 'number') {
-        await moveQuestionToSection(qId, over.id)
+      } else if (typeof target === 'number') {
+        await moveQuestionToSection(qId, target)
       }
       return
     }
 
-    if (type === 'section' && typeof over.id === 'number') {
+    if (type === 'section') {
+      const target = resolveTarget()
+      if (typeof target !== 'number') return
+      const oldIndex = sections.findIndex((s) => s.id === active.id)
+      const newIndex = sections.findIndex((s) => s.id === target)
+      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return
+      const next = arrayMove(sections, oldIndex, newIndex)
+      setSections(next)
       setSectionReordering(true)
       try {
-        await api.patch('/sections/reorder', { form_id: parseInt(formId), orders: sections.map((s) => s.id) })
+        await api.patch('/sections/reorder', { form_id: parseInt(formId), orders: next.map((s) => s.id) })
         onSaved()
       } catch {
         toast.error('Gagal menyimpan urutan section')
@@ -354,7 +419,10 @@ export default function SectionManager({ formId, show, onClose, sections: initia
 
             <DndContext
               sensors={sensors}
-              collisionDetection={closestCorners}
+              // pointerWithin: drop hanya mengenai droppable yang DIBAWAH POINTER —
+              // closestCorners memilih rect terdekat, sehingga drop ke pool
+              // bisa salah mendarat di section terdekat (bug lama).
+              collisionDetection={pointerWithin}
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
               onDragEnd={handleDragEnd}
@@ -375,23 +443,26 @@ export default function SectionManager({ formId, show, onClose, sections: initia
                 )}
 
                 <SortableContext items={sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-                  {sections.map((section) => (
-                    <SortableSectionCard
-                      key={section.id}
-                      section={section}
-                      questions={questions}
-                      editing={editingId === section.id}
-                      editDraft={editDraft}
-                      setEditDraft={setEditDraft}
-                      onEditStart={() => { setEditingId(section.id); setEditDraft(section.title) }}
-                      onEditSave={() => renameSection(section)}
-                      onEditCancel={() => setEditingId(null)}
-                       onDelete={() => setDeleteTarget(section)}
-                       onUnassign={(qId) => moveQuestionToSection(qId, 'unassigned')}
-                       collapsed={collapsedIds.has(section.id)}
-                       onToggleCollapse={() => toggleCollapse(section.id)}
-                    />
-                  ))}
+                  {sections.map((section, secIdx) => (
+                     <SortableSectionCard
+                       key={section.id}
+                       section={section}
+                       questions={questions}
+                       editing={editingId === section.id}
+                       editDraft={editDraft}
+                       setEditDraft={setEditDraft}
+                       onEditStart={() => { setEditingId(section.id); setEditDraft(section.title) }}
+                       onEditSave={() => renameSection(section)}
+                       onEditCancel={() => setEditingId(null)}
+                        onDelete={() => setDeleteTarget(section)}
+                        onUnassign={(qId) => moveQuestionToSection(qId, 'unassigned')}
+                        collapsed={collapsedIds.has(section.id)}
+                        onToggleCollapse={() => toggleCollapse(section.id)}
+                        onMove={(dir) => moveSection(secIdx, dir)}
+                        isFirst={secIdx === 0}
+                        isLast={secIdx === sections.length - 1}
+                     />
+                   ))}
                 </SortableContext>
 
                 {newSectionOpen ? (

@@ -21,8 +21,10 @@ from app.models.user import User
 from app.services.grading import grade_answer
 from app.services.session_expiry import auto_submit_expired_for_form
 from app.utils import to_naive_utc, fmt_dt, now_wib, _delete_file
+from app.services.grading import grade_submission
 from app.schemas.results import (
     ResultDeleteRequest,
+    ResultStatusRequest,
     ResultItem,
     ResultListResponse,
     AnalyticsResponse,
@@ -153,6 +155,51 @@ def delete_results(
         db.delete(s)
     db.commit()
     return {"deleted": len(subs), "message": f"{len(subs)} hasil berhasil dihapus"}
+
+
+# ── PATCH /forms/{form_id}/results/{submission_id}/status ────────────────────
+
+@router.patch("/forms/{form_id}/results/{submission_id}/status")
+def set_result_status(
+    body: ResultStatusRequest,
+    submission_id: int,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    """Creator mengatur ulang status hasil secara universal — membuka submission
+    yang terkunci/ditandai salah, mensahkan, atau memvonis curang (nilai 0)."""
+    sub = db.query(Submission).filter(
+        Submission.id == submission_id, Submission.form_id == form.id
+    ).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Hasil tidak ditemukan")
+
+    now = now_wib()
+    if body.status == "in_progress":
+        sub.status = SubmissionStatus.in_progress
+        sub.submitted_at = None
+        sub.score = None
+        message = "Submission dibuka kembali — responden dapat melanjutkan"
+    elif body.status == "submitted":
+        sub.status = SubmissionStatus.submitted
+        sub.submitted_at = sub.submitted_at or now
+        grade_submission(db, sub, form)
+        message = "Submission disahkan"
+    else:  # cheating
+        sub.status = SubmissionStatus.cheating
+        sub.submitted_at = sub.submitted_at or now
+        grade_submission(db, sub, form)
+        sub.score = 0
+        message = "Submission dinilai curang (nilai 0)"
+
+    sub.updated_at = now
+    db.commit()
+    return {
+        "submission_id": sub.id,
+        "status": sub.status.value,
+        "score": float(sub.score) if sub.score is not None else None,
+        "message": message,
+    }
 
 
 @router.get("/forms/{form_id}/analytics", response_model=AnalyticsResponse)

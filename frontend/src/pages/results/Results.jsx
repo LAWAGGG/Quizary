@@ -12,7 +12,22 @@ const statusOptions = [
   { value: 'submitted', label: 'Submitted' },
   { value: 'auto_submitted', label: 'Auto Submitted' },
   { value: 'cheating', label: 'Cheating' },
+  { value: 'locked', label: 'Locked' },
 ]
+
+const statusTargets = [
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'submitted', label: 'Submitted' },
+  { value: 'cheating', label: 'Cheating' },
+]
+
+const STATUS_LABELS = {
+  in_progress: 'In Progress',
+  submitted: 'Submitted',
+  auto_submitted: 'Auto Submitted',
+  cheating: 'Cheating',
+  locked: 'Locked',
+}
 
 const sortOptions = [
   { value: '', label: 'Newest' },
@@ -65,6 +80,47 @@ export default function Results() {
       setDeleting(false)
     }
   }
+
+  // Creator mengatur ulang status hasil (universal): buka kembali, sahkan,
+  // atau vonis curang. Konfirmasi hanya untuk cheating (nilai 0).
+  const [statusTarget, setStatusTarget] = useState(null) // { id, status }
+  const [statusSaving, setStatusSaving] = useState(false)
+
+  const applyStatus = async ({ id, status }) => {
+    setStatusSaving(true)
+    try {
+      const res = await api.patch(`/forms/${formId}/results/${id}/status`, { status })
+      toast.success(res.data.message || 'Status diperbarui')
+      setStatusTarget(null)
+      setDetail((prev) => (prev && prev.id === id ? { ...prev, status: res.data.status, score: res.data.score } : prev))
+      fetchResults()
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Gagal mengubah status')
+    } finally {
+      setStatusSaving(false)
+    }
+  }
+
+  const requestStatus = ({ id, status, current }) => {
+    if (status === current) return
+    if (status === 'cheating') setStatusTarget({ id, status })
+    else applyStatus({ id, status })
+  }
+
+  const StatusSelect = ({ row }) => (
+    <Select
+      value={row.status}
+      onClick={(e)=>e.stopPropagation()}
+      onChange={(e) => requestStatus({ id: row.submission_id, status: e.target.value, current: row.status })}
+      aria-label={`Ubah status #${row.submission_id}`}
+      className="!h-8 !text-xs w-36"
+    >
+      <option value={row.status} disabled>{STATUS_LABELS[row.status] || row.status}</option>
+      {statusTargets.filter((t) => t.value !== row.status).map((t) => (
+        <option key={t.value} value={t.value}>{t.label}</option>
+      ))}
+    </Select>
+  )
 
   const fetchResults = useCallback(async () => {
     setLoading(true)
@@ -252,7 +308,7 @@ export default function Results() {
                           <span className="text-gray-600 dark:text-gray-400 block max-w-[320px] truncate">{row.answer_summary || '-'}</span>
                         )}
                       </td>
-                      <td className="px-5 py-3.5"><StatusBadge status={row.status} />{row.cheat_reason && (
+                      <td className="px-5 py-3.5"><StatusSelect row={row} />{row.cheat_reason && (
                         <p className="text-[11px] text-incorrect/80 mt-1 max-w-[180px] truncate" title={row.cheat_reason}>{row.cheat_reason}</p>
                       )}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400">{row.submitted_at || '-'}</td>
@@ -356,7 +412,7 @@ export default function Results() {
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-3 text-xs">
                   <span className="inline-flex items-center gap-1.5">
                     <span className="text-gray-400 dark:text-gray-500">Status</span>
-                    <StatusBadge status={detail.status} />
+                    <StatusSelect row={{ submission_id: detail.id, status: detail.status }} />
                   </span>
                   {isQuiz && (
                     <span className="inline-flex items-center gap-1.5">
@@ -370,14 +426,21 @@ export default function Results() {
                   </span>
                 </div>
 
-                {detail.status === 'cheating' && (
-                  <div className="mt-3 rounded-xl bg-incorrect-soft border border-incorrect/30 px-4 py-3">
-                    <p className="text-xs font-semibold text-incorrect flex items-center gap-1.5">
+                {/* Catatan pelanggaran tetap tampil walau status kini bukan cheating —
+                    riwayat contek penting untuk konteks nilai yang ada. */}
+                {(detail.cheat_reason || detail.tab_exit_count > 0) && (
+                  <div className={`mt-3 rounded-xl border px-4 py-3 ${detail.status === 'cheating' ? 'bg-incorrect-soft border-incorrect/30' : 'bg-warn-soft border-warn/30'}`}>
+                    <p className={`text-xs font-semibold flex items-center gap-1.5 ${detail.status === 'cheating' ? 'text-incorrect' : 'text-warn'}`}>
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      Terdeteksi curang — keluar tab/fullscreen {detail.tab_exit_count || 0}x
+                      {detail.status === 'cheating'
+                        ? 'Terdeteksi curang — keluar tab/fullscreen'
+                        : 'Ada catatan pelanggaran (keluar tab/fullscreen)'}
+                      {' '}{detail.tab_exit_count || 0}x
                     </p>
                     {detail.cheat_reason && (
-                      <p className="text-[11px] text-incorrect/80 mt-1">Pencatatan terakhir: {detail.cheat_reason}</p>
+                      <p className={`text-[11px] mt-1 ${detail.status === 'cheating' ? 'text-incorrect/80' : 'text-warn/80'}`}>
+                        Pencatatan terakhir: {detail.cheat_reason}
+                      </p>
                     )}
                   </div>
                 )}
@@ -472,6 +535,16 @@ export default function Results() {
         loading={deleting}
         onConfirm={handleDeleteSelected}
         onCancel={() => setShowDelete(false)}
+      />
+
+      <ConfirmModal
+        show={!!statusTarget}
+        title="Status curang?"
+        message={`Submission #${statusTarget?.id} akan diberi status Cheating dengan nilai 0.`}
+        confirmText="Ya, nilai 0"
+        loading={statusSaving}
+        onConfirm={() => applyStatus(statusTarget)}
+        onCancel={() => setStatusTarget(null)}
       />
     </div>
   )
