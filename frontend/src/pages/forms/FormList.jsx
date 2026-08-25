@@ -1,11 +1,78 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Plus, ClipboardList, Search } from 'lucide-react'
+import { Plus, ClipboardList, Search, Trophy, HelpCircle } from 'lucide-react'
 import api from '../../api/client'
-import { Button, Input, StatusBadge, TypeBadge, Card, PageHeader, EmptyState, CardSkeleton, SpotlightCard } from '../../components/ui'
+import { Button, Input, Card, PageHeader, EmptyState, CardSkeleton, SpotlightCard } from '../../components/ui'
 
 const TABS = ['All', 'Draft', 'Published', 'Closed']
+
+const STATUS_DOT = {
+  published: 'bg-correct',
+  draft: 'bg-gray-400',
+  closed: 'bg-incorrect',
+}
+
+// Warna tema form → CSS vars: --tb (base), --tbb (border), --ts (soft/wash).
+// Tanpa tema → fallback palet primary aplikasi (border tetap ada untuk semua).
+function themeVars(color) {
+  if (!color) {
+    return { '--tb': 'var(--color-primary)', '--tbb': 'rgba(108,92,231,0.35)', '--ts': 'rgba(108,92,231,0.14)' }
+  }
+  return { '--tb': color, '--tbb': `${color}59`, '--ts': `${color}24` }
+}
+
+function FormTypeCluster({ form }) {
+  const isQuiz = form.type === 'quiz'
+  return (
+    <div className="absolute bottom-3 right-3 z-10 flex -space-x-2">
+      <span
+        className="relative z-30 w-9 h-9 rounded-xl border-2 flex items-center justify-center shadow-chip transition-all duration-200 ease-in-out group-hover:-translate-y-1 group-hover:-rotate-6"
+        style={{ backgroundColor: 'var(--ts)', color: 'var(--tb)', borderColor: 'var(--ts)' }}
+        title={isQuiz ? 'Quiz' : 'Form'}
+      >
+        {isQuiz ? <Trophy className="w-4 h-4" /> : <ClipboardList className="w-4 h-4" />}
+      </span>
+      <span
+        className="relative z-20 h-9 px-2.5 rounded-xl border-2 flex items-center gap-1 text-xs font-bold tabular-nums shadow-chip bg-white dark:bg-ink-800 text-gray-600 dark:text-gray-300 transition-all duration-200 ease-in-out group-hover:-translate-y-2 delay-[40ms]"
+        style={{ borderColor: 'var(--ts)' }}
+        title={`${form.question_count} soal`}
+      >
+        <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
+        {form.question_count}
+      </span>
+      <span className="relative z-10 w-9 h-9 rounded-xl border-2 flex items-center justify-center bg-white dark:bg-ink-800 shadow-chip transition-all duration-200 ease-in-out group-hover:-translate-y-3 delay-[80ms]" style={{ borderColor: 'var(--ts)' }} title={form.status}>
+        <span className={`w-3 h-3 rounded-full ${STATUS_DOT[form.status] || 'bg-gray-400'}`} />
+      </span>
+    </div>
+  )
+}
+
+// Area visual atas kartu: banner asli bila ada, fallback gradasi tema + ikon
+// type besar samar (bukan mock palsu — tetap jujur merepresentasikan form).
+function FormVisual({ form }) {
+  if (form.banner_path) {
+    return (
+      <img
+        src={form.banner_path}
+        alt=""
+        className="relative h-28 w-full object-cover rounded-xl border-2 mb-3"
+        style={{ borderColor: 'var(--tbb)' }}
+        loading="lazy"
+      />
+    )
+  }
+  return (
+    <div
+      className="relative h-28 w-full rounded-xl border-2 mb-3 overflow-hidden flex items-center justify-center"
+      style={{ borderColor: 'var(--tbb)', background: 'linear-gradient(180deg, var(--ts) 0%, transparent 70%)' }}
+    >
+      {form.type === 'quiz'
+        ? <Trophy className="w-12 h-12 opacity-15" style={{ color: 'var(--tb)' }} />
+        : <ClipboardList className="w-12 h-12 opacity-15" style={{ color: 'var(--tb)' }} />}
+    </div>
+  )
+}
 
 export default function FormList() {
   const navigate = useNavigate()
@@ -102,24 +169,23 @@ export default function FormList() {
                 className="h-full"
               >
                 <SpotlightCard className="h-full" intensity={0.1}>
-                  <Card className="cursor-pointer hover:border-primary/40 hover:shadow-lift transition-all h-full flex flex-col relative overflow-hidden group">
-                    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-primary-400 to-primary-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <div className="flex items-start justify-between gap-3 mb-4">
-                      <span className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-chip ${
-                        form.type === 'quiz' ? 'bg-primary-50 text-primary' : 'bg-blue-50 text-blue-700'
-                      }`}>
-                        <ClipboardList className="w-5 h-5" />
-                      </span>
-                      
-                    </div>
-                    <h3 className="font-display font-semibold text-ink dark:text-gray-100 truncate mb-2">{form.title}</h3>
+                  <Card
+                    className="cursor-pointer transition-all duration-300 ease-in-out h-full flex flex-col relative overflow-hidden group border-2 border-[var(--tbb)]"
+                    style={themeVars(form.theme_color)}
+                  >
+                    <div
+                      className="absolute inset-0 pointer-events-none transition-opacity duration-300 opacity-55 group-hover:opacity-95"
+                      style={{ background: 'radial-gradient(130% 100% at 100% 100%, var(--ts) 0%, transparent 75%)' }}
+                      aria-hidden="true"
+                    />
+                    <FormVisual form={form} />
+                    <h1 className="relative text-xl font-display font-semibold text-ink dark:text-gray-100 mb-1">{form.title}</h1>
                     {form.description && (
-                      <p className="text-sm text-gray-400 dark:text-gray-500 line-clamp-2 mb-3 flex-1">{form.description}</p>
+                      <p className="relative text-sm text-gray-400 dark:text-gray-500 line-clamp-2 mb-3 flex-1 pr-16">{form.description}</p>
                     )}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <TypeBadge type={form.type} />
-                      <StatusBadge status={form.status} />
-                    </div>
+                    {/* ruang untuk klaster pojok kanan-bawah */}
+                    <div className="relative h-6" />
+                    <FormTypeCluster form={form} />
                   </Card>
                 </SpotlightCard>
               </motion.div>

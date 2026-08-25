@@ -133,6 +133,9 @@ class FormListItem(BaseModel):
     display_style: str = "card"
     status: str
     short_code: str
+    theme_color: Optional[str] = None
+    banner_path: Optional[str] = None
+    question_count: int = 0
 
     model_config = {"from_attributes": True}
 

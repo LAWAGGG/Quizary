@@ -1,6 +1,7 @@
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -107,6 +108,7 @@ def _form_dict(form: Form, request: Request) -> dict:
 
 @router.get("/forms", response_model=FormListResponse)
 def list_forms(
+    request: Request,
     status_filter: str | None = Query(None, alias="status"),
     type_filter: str | None = Query(None, alias="type"),
     page: int = Query(1, ge=1),
@@ -127,8 +129,25 @@ def list_forms(
     total = q.count()
     forms = q.order_by(Form.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
 
+    # Hitungan soal per form — satu query GROUP BY, dipetakan ke card list.
+    counts: dict[int, int] = {}
+    if forms:
+        rows = (
+            db.query(Question.form_id, func.count(Question.id))
+            .filter(Question.form_id.in_([f.id for f in forms]))
+            .group_by(Question.form_id)
+            .all()
+        )
+        counts = {fid: n for fid, n in rows}
+
     return FormListResponse(
-        data=[FormListItem.model_validate(f) for f in forms],
+        data=[
+            FormListItem.model_validate(f).model_copy(update={
+                "question_count": counts.get(f.id, 0),
+                "banner_path": file_url(request, f.banner_path),
+            })
+            for f in forms
+        ],
         meta={"total": total, "page": page, "per_page": per_page},
     )
 
