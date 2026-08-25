@@ -63,14 +63,14 @@ function FormVisual({ form }) {
       <img
         src={form.banner_path}
         alt=""
-        className="relative h-28 w-full object-cover rounded-xl border-2 border-[var(--tbb)] dark:border-[var(--tbbd)] mb-3"
+        className="relative h-30 w-full object-cover rounded-xl border-2 border-[var(--tbb)] dark:border-[var(--tbbd)] mb-3"
         loading="lazy"
       />
     )
   }
   return (
     <div
-      className="relative h-28 w-full rounded-xl border-2 border-[var(--tbb)] dark:border-[var(--tbbd)] mb-3 overflow-hidden flex items-center justify-center"
+      className="relative h-44 w-full rounded-xl border-2 border-[var(--tbb)] dark:border-[var(--tbbd)] mb-3 overflow-hidden flex items-center justify-center"
       style={{ background: 'linear-gradient(180deg, var(--ts) 0%, transparent 70%)' }}
     >
       {form.type === 'quiz'
