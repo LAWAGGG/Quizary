@@ -53,6 +53,7 @@ class FormCreate(BaseModel):
     show_in_history: bool = True
     reveal_score: bool = True
     reveal_answers: bool = True
+    timer_seconds: Optional[int] = Field(None, ge=30, le=86400)
 
     @model_validator(mode="after")
     def validate_enums(self):

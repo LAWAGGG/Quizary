@@ -22,7 +22,7 @@ from app.models.submission_option_order import SubmissionOptionOrder
 from app.models.user import User
 from app.ratelimit import limit_submission_create
 from app.services.grading import grade_submission, max_score_for
-from app.services.session_expiry import expired_at, is_expired, auto_submit_expired_for_form
+from app.services.session_expiry import display_deadline, is_expired, auto_submit_expired_for_form
 from app.utils import now_wib, fmt_dt, file_url, UPLOAD_DIR, MAX_ANSWER_FILE_BYTES, write_limited
 from app.schemas.submissions import (
     SubmissionCreateRequest,
@@ -343,7 +343,7 @@ def create_submission(
             submission_id=existing.id,
             access_token=existing.access_token,
             started_at=fmt_dt(existing.started_at),
-            expired_at=fmt_dt(expired_at(existing, form)),
+            expired_at=fmt_dt(display_deadline(existing, form)),
             questions=_build_questions_response(existing.id, request, db),
             resumed=True,
         )
@@ -421,7 +421,7 @@ def create_submission(
         submission_id=sub.id,
         access_token=sub.access_token,
         started_at=fmt_dt(sub.started_at),
-        expired_at=fmt_dt(expired_at(sub, form)),
+        expired_at=fmt_dt(display_deadline(sub, form)),
         questions=_build_questions_response(sub.id, request, db),
         resumed=False,
     )
@@ -733,7 +733,7 @@ def get_submission(
         id=sub.id,
         status=sub.status.value,
         started_at=fmt_dt(sub.started_at),
-        expired_at=fmt_dt(expired_at(sub, form)),
+        expired_at=fmt_dt(display_deadline(sub, form)),
         score=float(sub.score) if reveal_score and sub.score is not None else None,
         max_score=float(live_max) if reveal_score else None,
         submitted_at=fmt_dt(sub.submitted_at),

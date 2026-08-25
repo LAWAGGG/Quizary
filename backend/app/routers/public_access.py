@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_optional_user
-from app.utils import file_url, now_wib, fmt_dt
+from app.utils import file_url, now_wib
 from app.models.form import Form, FormStatus, SubmissionLimit
 from app.models.question import Question
 from app.models.submission import Submission, SubmissionStatus
@@ -53,8 +53,8 @@ def get_public_form(
         "theme_color": form.theme_color,
         "require_login": form.require_login,
         "status": form.status.value,
-        "starts_at": fmt_dt(form.starts_at),
-        "ends_at": fmt_dt(form.ends_at),
+        # ponytail: jadwal (starts_at/ends_at) sengaja tidak diekspos ke responden —
+        # penegakan tetap lewat GET /q/{code}/start dan sweep sesi di server.
         "timer_seconds": form.timer_seconds,
         "question_count": question_count,
         "submission_limit": form.submission_limit.value,

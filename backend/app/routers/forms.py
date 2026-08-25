@@ -159,6 +159,7 @@ def create_form(
         show_in_history=body.show_in_history,
         reveal_score=body.reveal_score,
         reveal_answers=body.reveal_answers,
+        timer_seconds=body.timer_seconds,
         short_code=_generate_short_code(db),
         created_at=now,
         updated_at=now,

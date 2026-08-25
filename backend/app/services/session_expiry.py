@@ -35,6 +35,20 @@ def expired_at(sub: Submission, form: Form):
     return cap
 
 
+def display_deadline(sub: Submission, form: Form):
+    """Batas waktu untuk DITAMPILKAN ke responden: hanya timer creator atau
+    end date jadwal. Batas internal 24 jam anti-sesi zombie tidak diekspos —
+    tanpa keduanya, responden tidak perlu melihat countdown."""
+    started = sub.started_at
+    if not started:
+        return None
+    exp = started + timedelta(seconds=form.timer_seconds) if form.timer_seconds else None
+    ends = form.ends_at
+    if exp and ends:
+        return min(exp, ends)
+    return exp or ends
+
+
 def is_expired(sub: Submission, form: Form) -> bool:
     exp = expired_at(sub, form)
     return exp is not None and now_wib() > exp

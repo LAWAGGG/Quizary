@@ -8,14 +8,6 @@ import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 import { saveSessionToken } from '../../lib/sessionToken'
 
-function parseDate(str) {
-  if (!str) return new Date()
-  const [d, m, Y, H, M, S] = str.split(/[\s:-]+/).map(Number)
-  // API times are WIB (UTC+7). Build the absolute instant from WIB components
-  // so the comparison is correct regardless of the viewer's browser timezone.
-  return new Date(Date.UTC(Y, m - 1, d, (H || 0) - 7, M || 0, S || 0))
-}
-
 const BUBBLES = Array.from({ length: 12 }, (_, i) => i)
 
 function BlockedState({ background, icon, title, children }) {
@@ -126,23 +118,15 @@ export default function FormLanding() {
   const palette = themePalette(form.theme_color, theme === 'dark')
   const isOwner = form.is_owner === true
   const isPreview = isOwner && form.status !== 'published'
-  const startsAt = form.starts_at ? parseDate(form.starts_at) : null
-  const endsAt = form.ends_at ? parseDate(form.ends_at) : null
 
-  // Status/waktu ditampilkan langsung di landing — tidak perlu klik Start dulu.
-  // Pemilik (is_owner) tetap dapat preview form draft/closed, tapi form published
-  // terikat jadwal starts_at/ends_at untuk semua orang — tidak ada yang bisa
-  // mengerjakan lebih awal atau setelah ditutup.
+  // Status dicek di landing; jadwal (starts_at/ends_at) tidak diekspos ke
+  // responden — penegakan jadwal tetap di server via GET /start.
   let blocked = null
   if (!isPreview) {
     if (form.status === 'closed') {
       blocked = { title: 'Form is closed', desc: 'The response period for this form has ended.' }
     } else if (form.status === 'draft') {
       blocked = { title: 'This form is not published yet.', desc: 'The creator hasn\u2019t published this form. Check back later.' }
-    } else if (endsAt && Date.now() > endsAt.getTime()) {
-      blocked = { title: 'Form is closed', desc: 'The response period for this form has ended.' }
-    } else if (startsAt && Date.now() < startsAt.getTime()) {
-      blocked = { title: 'Form is not opened', desc: 'This form hasn\u2019t opened yet. Please check back later.' }
     }
   }
 

@@ -142,11 +142,8 @@ export default function AnswerQuiz() {
       })
       setAnswers(ans)
       setFileAnswers(files)
-
-      if (d.expired_at) {
-        const deadline = parseDate(d.expired_at)
-        if (deadline) setTimeLeft(deadline.getTime() - Date.now())
-      }
+      // timeLeft sengaja tidak di-set di sini — interval countdown di bawah
+      // satu-satunya owner-nya, dan hanya jalan kalau form memang ber-timer.
     } catch (err) {
       if (err.response?.status === 403) {
         setError('Access denied')
@@ -207,7 +204,10 @@ export default function AnswerQuiz() {
   }, [submissionId, goToResult, flushAll, answers])
 
   useEffect(() => {
-    if (!data || formType !== 'quiz' || !data.expired_at) return
+    // Countdown jalan untuk SEMUA tipe form (quiz & form) selama ada deadline
+    // nyata dari backend (timer creator atau jadwal tutup). Batas internal
+    // 24 jam anti-sesi zombie tidak pernah diekspos.
+    if (!data || !data.expired_at) return
     const deadline = parseDate(data.expired_at)
     if (!deadline) return
 
@@ -738,7 +738,7 @@ export default function AnswerQuiz() {
             </div>
             <button
               onClick={() => setShowMap((v) => !v)}
-              className={`inline-flex items-center gap-1.5 text-xs font-bold shrink-0 px-2 h-8 rounded-lg transition-colors ${showMap ? 'bg-white text-primary' : 'text-white/80 hover:bg-white/15'
+              className={`inline-flex items-center gap-1.5 text-xs font-bold shrink-0 px-2 h-8 rounded-lg transition-colors ${showMap ? 'bg-white text-[var(--t)]' : 'text-white/80 hover:bg-white/15'
                 }`}
               aria-label="Show question map"
             >
@@ -781,7 +781,7 @@ export default function AnswerQuiz() {
                     {current.is_required === false ? (
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-ink-800 px-2 py-0.5 rounded-full">Optional</span>
                     ) : (
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-primary dark:text-primary-300 bg-primary-50 dark:bg-primary-900/30 px-2 py-0.5 rounded-full">Required</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--t)] bg-[var(--t-soft)] px-2 py-0.5 rounded-full">Required</span>
                     )}
                   </div>
                   <button
@@ -814,7 +814,7 @@ export default function AnswerQuiz() {
                 <div className="flex items-center justify-center">
                   <button
                     onClick={() => { setZoomTarget(current); setZoomScale(1) }}
-                    className="inline-flex items-center gap-2 text-xs font-semibold px-4 h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors shadow-chip"
+                    className="inline-flex items-center gap-2 text-xs font-semibold px-4 h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-600 dark:text-gray-300 hover:text-[var(--t)] hover:border-[var(--t-border)] hover:bg-[var(--t-soft)] transition-colors shadow-chip"
                     aria-label="Perbesar soal"
                   >
                     <ZoomIn className="w-4 h-4" />
@@ -1065,7 +1065,7 @@ export default function AnswerQuiz() {
             <div className="space-y-5">
               {formPage.title && (
                 <div className="flex items-center gap-3">
-                  <span className="w-1.5 h-6 rounded-full bg-primary shrink-0" />
+                  <span className="w-1.5 h-6 rounded-full bg-[var(--t)] shrink-0" />
                   <h2 className="font-display text-lg font-bold text-ink dark:text-gray-100">{formPage.title}</h2>
                   <span className="ml-auto text-xs font-semibold text-gray-400">{currentIdx + 1}/{formPages.length}</span>
                 </div>
@@ -1090,7 +1090,7 @@ export default function AnswerQuiz() {
                     </div>
                     <button
                       onClick={() => { setZoomTarget(q); setZoomScale(1) }}
-                      className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 h-8 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-500 dark:text-gray-400 hover:text-primary dark:hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                      className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 h-8 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-500 dark:text-gray-400 hover:text-[var(--t)] hover:border-[var(--t-border)] hover:bg-[var(--t-soft)] transition-colors"
                       aria-label="Perbesar soal"
                     >
                       <ZoomIn className="w-4 h-4" />
@@ -1121,7 +1121,7 @@ export default function AnswerQuiz() {
                         return (
                           <label
                             key={opt.id}
-                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary-50' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
+                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-[var(--t)] bg-[var(--t-soft)]' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
                               }`}
                             style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
                           >
@@ -1155,7 +1155,7 @@ export default function AnswerQuiz() {
                         return (
                           <label
                             key={opt.id}
-                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-primary bg-primary-50' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
+                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-[var(--t)] bg-[var(--t-soft)]' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
                               }`}
                             style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
                           >
@@ -1345,11 +1345,11 @@ function FileAnswer({ value, uploading, onFile, onRemove, error }) {
     <div>
       {value ? (
         <div className="flex items-center gap-3 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800">
-          <span className="w-10 h-10 rounded-lg bg-primary-50 dark:bg-primary-900/30 text-primary dark:text-primary-300 flex items-center justify-center shrink-0">
+          <span className="w-10 h-10 rounded-lg bg-[var(--t-soft)] text-[var(--t)] flex items-center justify-center shrink-0">
             <FileUp className="w-5 h-5" />
           </span>
           <span className="flex-1 min-w-0 text-sm font-medium text-ink dark:text-gray-100 truncate">{value.filename}</span>
-          <a href={value.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-primary dark:text-primary-300 hover:underline shrink-0">Lihat</a>
+          <a href={value.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[var(--t)] hover:underline shrink-0">Lihat</a>
           <button onClick={onRemove} className="text-xs font-medium text-gray-400 hover:text-incorrect shrink-0">Hapus</button>
         </div>
       ) : (
@@ -1357,7 +1357,7 @@ function FileAnswer({ value, uploading, onFile, onRemove, error }) {
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
-          className="w-full h-14 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-primary/50 transition-colors flex items-center justify-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-primary"
+          className="w-full h-14 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-[var(--t-border)] transition-colors flex items-center justify-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-[var(--t)]"
         >
           {uploading ? (
             <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />

@@ -113,7 +113,8 @@ Auth: Bearer Token
   "require_login": false,
   "submission_limit": "once",
   "show_leaderboard": true,
-  "is_restricted": true
+  "is_restricted": true,
+  "timer_seconds": 600
 }
 ```
 ```json
@@ -505,7 +506,7 @@ file: <soal.docx>
 
 ### `GET /q/{short_code}`
 Auth: - (opsional Bearer Token untuk deteksi owner)
-> Form draft/closed tetap dikembalikan (bukan 404) agar landing page bisa menampilkan pesan status. `is_owner` = `true` kalau pemilik form yang login — creator bisa preview + lihat banner info.
+> Form draft/closed tetap dikembalikan (bukan 404) agar landing page bisa menampilkan pesan status. `is_owner` = `true` kalau pemilik form yang login — creator bisa preview + lihat banner info. Jadwal `starts_at`/`ends_at` sengaja TIDAK dikembalikan — penegakan jadwal lewat `/start`, countdown pengerjaan lewat `expired_at` di submission.
 ```json
 // Response 200
 {
@@ -517,8 +518,6 @@ Auth: - (opsional Bearer Token untuk deteksi owner)
   "theme_color": "#EF4444",
   "require_login": false,
   "status": "published",
-  "starts_at": "30-07-2026 18:00:00",
-  "ends_at": "31-07-2026 18:00:00",
   "timer_seconds": 600,
   "question_count": 10,
   "submission_limit": "once",

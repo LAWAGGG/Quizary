@@ -153,15 +153,27 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   @apply cursor-pointer;
 }
 
-/* Public theme surface: recolor focus ring/border from --t instead of fixed primary */
+/* Public theme surface: recolor focus ring/border from --t instead of fixed primary.
+   --t-soft / --t-border = varian tint dari warna tema creator untuk badge,
+   hover, dan state terpilih — dipakai lewat arbitrary value Tailwind
+   (bg-[var(--t-soft)] dst) supaya hover/transition tetap jalan via class. */
 .theme-surface {
   --t: #6C5CE7;
+  --t-soft: color-mix(in srgb, var(--t) 12%, white);
+  --t-border: color-mix(in srgb, var(--t) 38%, white);
 }
 
 /* Dark mode: themed public pages (form/quiz responden) ikut gelap, aksen tema
    (--t) dipertahankan lewat color-mix supaya identitas form tidak hilang. */
 .dark .theme-surface {
   background: linear-gradient(180deg, color-mix(in srgb, var(--t) 16%, #0F172A) 0%, #0F172A 380px) !important;
+  --t-soft: color-mix(in srgb, var(--t) 24%, #0F172A);
+  --t-border: color-mix(in srgb, var(--t) 48%, #0F172A);
+}
+
+/* Seleksi teks ikut warna tema halaman publik */
+.theme-surface ::selection {
+  background: color-mix(in srgb, var(--t) 30%, transparent);
 }
 
 .theme-surface input:focus,

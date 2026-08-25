@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Copy, Check, ArrowLeft, Save, Trash2, ImageUp, Link2, ChevronDown, Info, Lock, Settings2, Download, QrCode, X } from 'lucide-react'
+import { Copy, Check, ArrowLeft, Save, Trash2, ImageUp, Link2, ChevronDown, Info, Lock, Settings2, Download, QrCode, X, Palette } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
@@ -90,8 +90,10 @@ export default function FormEdit() {
   const [errors, setErrors] = useState({})
   const titleRef = useRef(null)
   const timerRef = useRef(null)
+  const designRef = useRef(null)
   const [basicOpen, setBasicOpen] = useState(false)
   const [behaviorOpen, setBehaviorOpen] = useState(false)
+  const [designOpen, setDesignOpen] = useState(false)
 
   // Buka card + scroll ke input yang error supaya user langsung lihat apa yang kurang.
   const revealError = (setOpen, ref) => {
@@ -233,6 +235,7 @@ export default function FormEdit() {
       setErrors(mapped)
       if (mapped.title) revealError(setBasicOpen, titleRef)
       if (mapped.timer_seconds) revealError(setBehaviorOpen, timerRef)
+      if (mapped.display_style || mapped.theme_color) revealError(setDesignOpen, designRef)
       const unresolved = data.errors.filter((entry) => Object.keys(entry)[0] === '_schema')
       if (unresolved.length || data.message) {
         toast.error(data.message || 'Invalid fields')
@@ -445,8 +448,25 @@ export default function FormEdit() {
                 </div>
               </div>
 
+              <Select
+                label="Submission limit"
+                name="submission_limit"
+                value={isRestricted ? 'once' : form.submission_limit}
+                onChange={(e) => { handleChange(e); toggleSetting('submission_limit', e.target.value) }}
+                disabled={isRestricted}
+                error={errors.submission_limit}
+                helper={isRestricted ? 'Locked to Once while fullscreen mode is on.' : undefined}
+              >
+                <option value="unlimited">Unlimited</option>
+                <option value="once">Once per person</option>
+              </Select>
+            </div>
+          </CollapsibleCard>
+
+          <CollapsibleCard title="Design" icon={<Palette className="w-4 h-4" />} open={designOpen} onToggle={setDesignOpen}>
+            <div ref={designRef} className="space-y-5">
               <div>
-                <label className="field-label">Display Style</label>
+                <label className="field-label">Design type</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -486,18 +506,27 @@ export default function FormEdit() {
                 {errors.display_style && <p className="field-error">{errors.display_style}</p>}
               </div>
 
-              <Select
-                label="Submission limit"
-                name="submission_limit"
-                value={isRestricted ? 'once' : form.submission_limit}
-                onChange={(e) => { handleChange(e); toggleSetting('submission_limit', e.target.value) }}
-                disabled={isRestricted}
-                error={errors.submission_limit}
-                helper={isRestricted ? 'Locked to Once while fullscreen mode is on.' : undefined}
-              >
-                <option value="unlimited">Unlimited</option>
-                <option value="once">Once per person</option>
-              </Select>
+              <div>
+                <label className="field-label">Theme color</label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="color"
+                    name="theme_color"
+                    value={form.theme_color || '#6C5CE7'}
+                    onChange={handleChange}
+                    className={`w-11 h-11 rounded-xl cursor-pointer border border-gray-200 dark:border-gray-700 shrink-0 ${errors.theme_color ? 'border-incorrect' : ''}`}
+                    aria-label="Theme color"
+                  />
+                  <input
+                    name="theme_color"
+                    value={form.theme_color || ''}
+                    onChange={handleChange}
+                    className={`input-field font-mono ${errors.theme_color ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                    placeholder="#6C5CE7"
+                  />
+                </div>
+                {errors.theme_color && <p className="field-error">{errors.theme_color}</p>}
+              </div>
             </div>
           </CollapsibleCard>
 
@@ -578,29 +607,6 @@ export default function FormEdit() {
                   error={errors.timer_seconds}
                   ref={timerRef}
                 />
-              </div>
-              <div className="py-4">
-                <div>
-                  <label className="field-label">Theme color</label>
-                  <div className="flex gap-2 items-center">
-                    <input
-                      type="color"
-                      name="theme_color"
-                      value={form.theme_color || '#6C5CE7'}
-                      onChange={handleChange}
-                      className={`w-11 h-11 rounded-xl cursor-pointer border border-gray-200 dark:border-gray-700 shrink-0 ${errors.theme_color ? 'border-incorrect' : ''}`}
-                      aria-label="Theme color"
-                    />
-                    <input
-                      name="theme_color"
-                      value={form.theme_color || ''}
-                      onChange={handleChange}
-                      className={`input-field font-mono ${errors.theme_color ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
-                      placeholder="#6C5CE7"
-                    />
-                  </div>
-                  {errors.theme_color && <p className="field-error">{errors.theme_color}</p>}
-                </div>
               </div>
               <div className="py-4">
                 <div className="grid grid-cols-2 gap-4">
