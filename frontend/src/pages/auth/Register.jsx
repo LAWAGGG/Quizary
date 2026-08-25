@@ -89,7 +89,7 @@ export default function Register() {
     <AuthShell
       eyebrow="Get started"
       title="Create your account"
-      subtitle="Build, share, and grade quizzes in minutes."
+      subtitle="Forms and quizzes with auto-grading."
       footer={
         <>
           Already have an account?{' '}

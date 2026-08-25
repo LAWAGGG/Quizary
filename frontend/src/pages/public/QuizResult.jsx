@@ -87,7 +87,7 @@ export default function QuizResult() {
   if (error) {
     return (
       <FallbackPage
-        title="Oops"
+        title="Something went wrong"
         message={error}
         action={<Button variant="secondary" onClick={() => navigate('/')} className="w-full">Go home</Button>}
       />

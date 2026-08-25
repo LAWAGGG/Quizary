@@ -36,7 +36,6 @@ function Sidebar({ open, onClose, onLogout, user }) {
           <AppMark size="sm" />
           <div className="min-w-0">
             <p className="font-display font-bold leading-none text-ink dark:text-gray-100">Quizary</p>
-            <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium mt-1">Form &amp; Quiz Studio</p>
           </div>
           <button
             onClick={onClose}

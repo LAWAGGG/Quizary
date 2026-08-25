@@ -120,10 +120,9 @@ export default function Profile() {
                 readOnly
                 className="bg-gray-50 dark:bg-ink-800 text-gray-500 cursor-not-allowed"
               />
-              <p className="field-hint">Email cannot be changed.</p>
             </div>
 
-            <div className="flex items-center justify-between">
+            {/* <div className="flex items-center justify-between">
               <div>
                 <p className="field-label !mb-1">Role</p>
                 <p className="text-xs text-gray-400">Permissions granted to your account.</p>
@@ -131,7 +130,7 @@ export default function Profile() {
               <Badge scheme={user?.role === 'admin' ? 'primary' : 'blue'}>
                 {(user?.role || 'user').toUpperCase()}
               </Badge>
-            </div>
+            </div> */}
 
             <Button onClick={handleSave} loading={saving} className="w-full" size="lg">
               Save Changes

@@ -65,7 +65,7 @@ export default function Dashboard() {
             <h1 className="font-display text-2xl md:text-3xl font-bold mt-2">
               Welcome back, {firstName}
             </h1>
-            <p className="text-white/75 text-sm mt-1.5">Here's how your forms are performing today.</p>
+            <p className="text-white/75 text-sm mt-1.5">Your forms and answers.</p>
           </div>
           <div className="flex gap-2 shrink-0">
             <Button variant="secondary" onClick={() => navigate('/forms')} icon={<Eye className="w-4 h-4" />}>

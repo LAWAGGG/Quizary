@@ -353,7 +353,7 @@ export default function FormEdit() {
         description={
           <span className="inline-flex items-center gap-2">
             <StatusBadge status={form.status} />
-            <span className="text-gray-400 dark:text-gray-500">· {(form.display_style || 'card') === 'quiz' ? 'Quiz' : 'Form'} style</span>
+            <span className="text-gray-400 dark:text-gray-500"></span>
           </span>
         }
       />

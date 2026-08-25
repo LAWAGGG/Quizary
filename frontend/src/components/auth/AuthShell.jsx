@@ -23,8 +23,8 @@ export function AuthShell({ eyebrow, title, subtitle, children, footer }) {
             Make a quiz.<br />Share a link.<br />Read the answers.
           </h2>
           <p className="mt-4 text-white/50 text-base leading-relaxed">
-            The fastest way to gather answers, grade them automatically, and see where your
-            respondents really stand.
+            Quizzes get scheduled timers, anti-cheat, auto-grading, and leaderboards.
+            Surveys stay plain and simple.
           </p>
         </div>
 

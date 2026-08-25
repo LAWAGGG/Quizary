@@ -55,13 +55,13 @@ export default function FormList() {
           />
           <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-gray-400 dark:text-gray-500" />
         </div>
-        <div className="flex gap-1 bg-gray-100 dark:bg-ink-800 rounded-xl p-1 w-fit">
+        <div className="flex gap-1 bg-gray-100 dark:bg-ink rounded-xl p-1 w-fit">
           {TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => { setActiveTab(tab); setMeta((m) => ({ ...m, page: 1 })) }}
               className={`px-4 h-9 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === tab ? 'bg-white dark:bg-ink-900 shadow-chip text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100'
+                activeTab === tab ? 'bg-white dark:bg-ink-800 shadow-chip text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100'
               }`}
             >
               {tab}

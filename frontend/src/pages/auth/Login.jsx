@@ -71,7 +71,6 @@ export default function Login() {
     <AuthShell
       eyebrow="Welcome back"
       title="Sign in to your account"
-      subtitle="Pick up where you left off and keep collecting answers."
       footer={
         <>
           Don&apos;t have an account?{' '}

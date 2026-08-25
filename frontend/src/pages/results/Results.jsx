@@ -318,19 +318,29 @@ export default function Results() {
                                 <div className="flex items-center gap-2 mb-1.5">
                                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Jawaban</span>
                                   <div className="flex-1 border-t border-dashed border-gray-200 dark:border-gray-700" />
-                                  {a.is_correct === true && <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-correct bg-correct-soft px-2 py-0.5 rounded-full"><Check className="w-3 h-3" /> Benar</span>}
-                                  {a.is_correct === false && <span className="text-[10px] font-semibold text-incorrect bg-incorrect-soft px-2 py-0.5 rounded-full">Salah</span>}
                                 </div>
-                                <div className="text-sm font-medium text-ink dark:text-gray-100 bg-white dark:bg-ink-900 border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2.5">
-                                  {a.question_type === 'file_upload'
-                                    ? (a.answer_file
-                                      ? <a href={a.answer_file} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">Lihat file jawaban</a>
-                                      : <span className="text-gray-400 italic">(tidak dijawab)</span>)
-                                    : ['multiple_choice', 'checkbox', 'dropdown'].includes(a.question_type)
-                                      ? (a.selected_options?.length
-                                        ? a.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(' · ')
+                                <div className="flex items-center gap-3 bg-white dark:bg-ink-900 border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2.5">
+                                  <div className="flex-1 min-w-0 text-sm font-medium text-ink dark:text-gray-100">
+                                    {a.question_type === 'file_upload'
+                                      ? (a.answer_file
+                                        ? <a href={a.answer_file} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">Lihat file jawaban</a>
                                         : <span className="text-gray-400 italic">(tidak dijawab)</span>)
-                                      : (a.answer_text || <span className="text-gray-400 italic">(tidak dijawab)</span>)}
+                                      : ['multiple_choice', 'checkbox', 'dropdown'].includes(a.question_type)
+                                        ? (a.selected_options?.length
+                                          ? a.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(' · ')
+                                          : <span className="text-gray-400 italic">(tidak dijawab)</span>)
+                                        : (a.answer_text || <span className="text-gray-400 italic">(tidak dijawab)</span>)}
+                                  </div>
+                                  {a.is_correct === true && (
+                                    <span className="w-6 h-6 rounded-full bg-correct-soft text-correct flex items-center justify-center shrink-0" title="Benar">
+                                      <Check className="w-3.5 h-3.5" />
+                                    </span>
+                                  )}
+                                  {a.is_correct === false && (
+                                    <span className="w-6 h-6 rounded-full bg-incorrect-soft text-incorrect flex items-center justify-center shrink-0" title="Salah">
+                                      <X className="w-4 h-4" />
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>

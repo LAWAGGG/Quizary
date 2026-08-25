@@ -49,7 +49,6 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
         >
           <ChevronDown className={`w-4 h-4 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
         </button>
-        <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
         {editing ? (
           <>
             <input

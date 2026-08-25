@@ -605,7 +605,7 @@ export default function AnswerQuiz() {
   if (error) {
     return (
       <FallbackPage
-        title="Oops"
+        title="Something went wrong"
         message={error}
         action={<Button variant="secondary" onClick={() => navigate('/')} className="w-full">Go home</Button>}
       />
@@ -623,6 +623,20 @@ export default function AnswerQuiz() {
   const questions = data.questions || []
   const current = questions[currentIdx]
   const totalQ = questions.length
+
+  const formatTime = (ms) => {
+    if (ms <= 0) return '00:00'
+    const m = Math.floor(ms / 60000)
+    const s = Math.floor((ms % 60000) / 1000)
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
+
+  const pinToFullscreen = () => {
+    const el = document.documentElement
+    const req = el.requestFullscreen || el.webkitRequestFullscreen
+    const cur = document.fullscreenElement || document.webkitFullscreenElement
+    if (req && !cur) Promise.resolve(req.call(el)).catch(() => { })
+  }
 
   // Mode form: satu section = satu halaman. Quiz style: satu soal = satu halaman.
   const formPages = (() => {
@@ -662,13 +676,6 @@ export default function AnswerQuiz() {
       .filter((q) => q.is_required !== false && !isAnswered(q, answers[q.id]))
       .map((q) => (q.question_text || '').replace(/<[^>]*>/g, '').trim())
     const answeredCount = questions.filter((q) => isAnswered(q, answers[q.id])).length
-
-    const formatTime = (ms) => {
-      if (ms <= 0) return '00:00'
-      const m = Math.floor(ms / 60000)
-      const s = Math.floor((ms % 60000) / 1000)
-      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-    }
 
     return (
       <div className="theme-surface h-dvh flex flex-col bg-paper" style={{ '--t': palette.base }}>
@@ -980,12 +987,7 @@ export default function AnswerQuiz() {
         <KioskLockOverlay
           locked={kioskLocked}
           palette={palette}
-          onResume={() => {
-            const el = document.documentElement
-            const req = el.requestFullscreen || el.webkitRequestFullscreen
-            const cur = document.fullscreenElement || document.webkitFullscreenElement
-            if (req && !cur) Promise.resolve(req.call(el)).catch(() => { })
-          }}
+          onResume={pinToFullscreen}
         />
         <ExamInfoDrawer show={showInfo} onClose={() => setShowInfo(false)} form={publicForm} data={data} />
         <ZoomModal
@@ -1000,14 +1002,56 @@ export default function AnswerQuiz() {
 
   return (
     <div className="theme-surface min-h-dvh bg-paper" style={{ background: palette.pageBg, '--t': palette.base }}>
+      {/* Fitur quiz aktif (timer / restricted) tetap tampil di design form —
+          render-nya mengikuti state yang sudah di-gate backend. */}
+      {cheatWarn && (
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-24px)] max-w-lg"
+        >
+          <div className="flex items-start gap-3 bg-incorrect text-white px-4 py-3.5 rounded-2xl shadow-lift">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-semibold">Aktivitas mencurigakan terdeteksi ({cheatWarn.reason || 'keluar halaman'}).</p>
+              <p className="text-white/85 mt-0.5">
+                Peringatan {3 - cheatWarn.left}/2. Melanjutkan akan mengumpulkan jawaban otomatis dengan nilai 0.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
       {isOwnerPreview && <PreviewNotice />}
       <div className="max-w-lg mx-auto p-4 pb-28">
         {bannerPath && (
           <img src={bannerPath} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between gap-3 mb-6">
           <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100">{formTitle}</h1>
-          <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">{totalQ} questions</span>
+          <div className="flex items-center gap-2 shrink-0">
+            {timeLeft !== null && (
+              <span className={`inline-flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums px-2.5 h-8 rounded-lg transition-colors ${timeLeft < 30000
+                ? 'bg-incorrect text-white animate-pulse'
+                : timeLeft < 60000
+                  ? 'bg-incorrect-soft text-incorrect'
+                  : 'bg-gray-100 dark:bg-ink-800 text-gray-600 dark:text-gray-300'
+                }`}>
+                <Timer className="w-3.5 h-3.5" />
+                {formatTime(timeLeft)}
+              </span>
+            )}
+            {formType === 'quiz' && (
+              <button
+                onClick={() => setShowInfo(true)}
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+                aria-label="Exam info"
+                title="Lihat informasi ujian"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            )}
+            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">{totalQ} questions</span>
+          </div>
         </div>
         <AnimatePresence mode="wait" custom={direction}>
           <motion.div
@@ -1217,48 +1261,36 @@ export default function AnswerQuiz() {
                 Previous
               </Button>
             )}
-            {(() => {
-              const unansweredCount = questions.filter(
-                (q) => q.is_required !== false && !isAnswered(q, answers[q.id])
-              ).length
-              if (currentIdx < formPages.length - 1) {
-                const pageMissing = (formPage?.questions || []).filter(
-                  (q) => q.is_required !== false && !isAnswered(q, answers[q.id])
-                ).length
-                const pageComplete = pageMissing === 0
-                return (
-                  <>
-
-                    <Button
-                      onClick={handleNext}
-                      className="flex-1"
-                      size="lg"
-                      style={pageComplete ? { background: palette.cta, color: palette.onBase } : { background: '#CBD5E1', color: '#F8FAFC' }}
-                    >
-                      Next
-                      <ChevronRight className="w-4 h-4" />
-                    </Button>
-                  </>
-                )
-              }
-              return (
-                <Button
-                  onClick={handleSubmitAll}
-                  disabled={submitting || unansweredCount > 0}
-                  loading={submitting}
-                  className="flex-1"
-                  size="lg"
-                  style={{ background: palette.cta, color: palette.onBase }}
-                >
-                  {unansweredCount > 0
-                    ? `${unansweredCount} required question${unansweredCount > 1 ? 's' : ''} unanswered`
-                    : 'Submit'}
-                </Button>
-              )
-            })()}
+            {currentIdx < formPages.length - 1 ? (
+              <Button
+                onClick={handleNext}
+                className="flex-1"
+                size="lg"
+                style={{ background: palette.cta, color: palette.onBase }}
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            ) : (
+              // ponytail: tombol tidak pernah di-disable — klik saat ada required
+              // kosong otomatis lompat ke soal itu (handleSubmitAll) dengan border error.
+              <Button
+                onClick={handleSubmitAll}
+                disabled={submitting}
+                loading={submitting}
+                className="flex-1"
+                size="lg"
+                style={{ background: palette.cta, color: palette.onBase }}
+              >
+                Submit
+              </Button>
+            )}
           </div>
         </div>
       </footer>
+
+      <KioskLockOverlay locked={kioskLocked} palette={palette} onResume={pinToFullscreen} />
+      <ExamInfoDrawer show={showInfo} onClose={() => setShowInfo(false)} form={publicForm} data={data} />
 
       <ZoomModal
         target={zoomTarget}

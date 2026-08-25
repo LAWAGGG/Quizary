@@ -659,6 +659,24 @@ def get_submission(
     ).filter(Question.form_id == form.id).all()
     opt_text_map = {o.id: o.option_text for o in all_options}
 
+    # Label opsi = huruf sesuai urutan yang dilihat responden (bisa ter-shuffle
+    # per-submission via SubmissionOptionOrder), fallback ke urutan editor.
+    sub_opt_order = {
+        soo.option_id: soo.order_index
+        for soo in db.query(SubmissionOptionOrder).filter(
+            SubmissionOptionOrder.submission_id == sub.id
+        ).all()
+    }
+    opts_by_q: dict[int, list] = {}
+    for o in all_options:
+        opts_by_q.setdefault(o.question_id, []).append(o)
+    opt_label_map: dict[int, str] = {}
+    for opts in opts_by_q.values():
+        opts.sort(key=lambda o: sub_opt_order.get(o.id, o.order_index or 0))
+        for i, o in enumerate(opts):
+            if i < 8:  # sama dengan LETTERS di frontend
+                opt_label_map[o.id] = f"{'ABCDEFGH'[i]}. "
+
     q_map = {q.id: q for q in db.query(Question).filter(Question.form_id == form.id).all()}
 
     # Keamanan (FR-34/7.3): jangan bocorkan is_correct/score sebelum submission selesai.
@@ -677,7 +695,10 @@ def get_submission(
             continue
 
         selected_ids = [ao.option_id for ao in answer.selected_options]
-        selected_texts = [opt_text_map[oid] for oid in selected_ids if oid in opt_text_map]
+        selected_texts = [
+            opt_label_map.get(oid, "") + opt_text_map[oid]
+            for oid in selected_ids if oid in opt_text_map
+        ]
 
         # Resolve question image URL (first image if any)
         q_imgs = sorted(q.images, key=lambda i: i.order_index or 0)

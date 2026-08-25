@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, BookOpen, Unlink } from 'lucide-react'
+import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, BookOpen, Unlink, ChevronDown } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
   useSensor, useSensors, useDroppable, closestCorners,
@@ -366,7 +366,7 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
     <Card className={`transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? 'border-primary/50 shadow-card' : 'hover:border-gray-300 dark:hover:border-gray-700'} ${groupId ? 'border-l-4 !border-l-primary/50' : ''}`}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="w-6 h-6 rounded-full bg-ink text-white text-xs font-bold flex items-center justify-center shrink-0">
+          <span className="w-6 h-6 rounded-full bg-ink dark:dark:bg-ink-800 text-white text-xs font-bold flex items-center justify-center shrink-0">
             {index + 1}
           </span>
           <Badge scheme="gray">{TYPE_LABELS[question.type]}</Badge>
@@ -533,7 +533,7 @@ function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, edit
   )
 }
 
-function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSave, onCancel, onDelete }) {
+function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSave, onCancel, onDelete, collapsible, collapsed, onToggle }) {
   return (
     <div className="flex items-center gap-3 border-b border-gray-200 dark:border-gray-800 pb-2.5">
       {editing ? (
@@ -551,6 +551,17 @@ function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSav
         </>
       ) : (
         <>
+          {collapsible && (
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={!collapsed}
+              title={collapsed ? 'Tampilkan soal' : 'Sembunyikan soal'}
+              className="p-1 -ml-1 rounded-md text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors shrink-0"
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+            </button>
+          )}
           <span className="w-1.5 h-6 rounded-full bg-primary shrink-0" />
           <h3 className="font-display font-semibold text-ink dark:text-gray-100 flex-1 truncate">
             {section ? section.title : 'General'}
@@ -612,6 +623,16 @@ export default function QuestionBuilder() {
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [showBulkDelete, setShowBulkDelete] = useState(false)
   const [showSectionManager, setShowSectionManager] = useState(false)
+  // Section yang dilipat (accordion) — biar gampang cari soal di form panjang.
+  const [collapsedSections, setCollapsedSections] = useState(() => new Set())
+  const toggleSectionCollapse = (id) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
   const [activeDrag, setActiveDrag] = useState(null)
   const [grouping, setGrouping] = useState(false)
   const [ungrouping, setUngrouping] = useState(false)
@@ -959,7 +980,7 @@ export default function QuestionBuilder() {
       <PageHeader
         eyebrow={form.type === 'quiz' ? 'Quiz builder' : 'Form builder'}
         title={form.title}
-        description={`${questions.length} question${questions.length !== 1 ? 's' : ''} · drag to reorder`}
+        description={`${questions.length} question${questions.length !== 1 ? 's' : ''}`}
         actions={
           <>
             <input ref={docxRef} type="file" accept=".docx" onChange={handleDocxImport} className="hidden" />
@@ -1041,7 +1062,9 @@ export default function QuestionBuilder() {
         )}
       </AnimatePresence>
 
-      {questions.length === 0 && !showForm ? (
+      {/* Empty state generik hanya kalau memang tidak ada section utk ditampilkan;
+          kalau ada section, biarkan list tampil dengan hint "belum ada soal". */}
+      {questions.length === 0 && !showForm && (!sectionsAllowed || sections.length === 0) ? (
         <Card className="mt-6">
           <EmptyState
             icon={<HelpCircle className="w-6 h-6" />}
@@ -1118,7 +1141,7 @@ export default function QuestionBuilder() {
                   <>
                     {sections.map((sec) => {
                       const secQs = questions.filter((q) => q.section_id === sec.id)
-                      if (!secQs.length) return null
+                      const collapsed = collapsedSections.has(sec.id)
                       return (
                         <SectionDropZone key={sec.id} sectionId={sec.id}>
                           <SectionHeader
@@ -1131,34 +1154,44 @@ export default function QuestionBuilder() {
                             onSave={() => renameSection(sec)}
                             onCancel={() => setEditingSectionId(null)}
                             onDelete={() => setSectionDeleteTarget(sec)}
+                            collapsible
+                            collapsed={collapsed}
+                            onToggle={() => toggleSectionCollapse(sec.id)}
                           />
-                          <div className="space-y-3 mt-3">
-                            {secQs.map((q) => (
-                              <QuestionItem
-                                key={q.id}
-                                q={q}
-                                index={questions.indexOf(q)}
-                                onEdit={editQuestion}
-                                isQuiz={form.type === 'quiz'}
-                                selected={selectedIds.includes(q.id)}
-                                onToggleSelect={toggleSelect}
-                                editOpen={showForm && editing?.id === q.id}
-                                onSave={(data) => handleSaveQuestion(data)}
-                                onCancel={() => { setShowForm(false); setEditing(null) }}
-                                saveLoading={saveLoading}
-                                errors={fieldErrors}
-                                sections={sections}
-                                  groupId={q.group_id || null}
-                                  groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
-                                />
-                            ))}
-                          </div>
+                          {!collapsed && (secQs.length ? (
+                            <div className="space-y-3 mt-3">
+                              {secQs.map((q) => (
+                                <QuestionItem
+                                  key={q.id}
+                                  q={q}
+                                  index={questions.indexOf(q)}
+                                  onEdit={editQuestion}
+                                  isQuiz={form.type === 'quiz'}
+                                  selected={selectedIds.includes(q.id)}
+                                  onToggleSelect={toggleSelect}
+                                  editOpen={showForm && editing?.id === q.id}
+                                  onSave={(data) => handleSaveQuestion(data)}
+                                  onCancel={() => { setShowForm(false); setEditing(null) }}
+                                  saveLoading={saveLoading}
+                                  errors={fieldErrors}
+                                  sections={sections}
+                                    groupId={q.group_id || null}
+                                    groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
+                                  />
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-xs text-gray-400 dark:text-gray-500 italic">
+                              Belum ada soal di section ini.
+                            </p>
+                          ))}
                         </SectionDropZone>
                       )
                     })}
                     {(() => {
                       const unassigned = questions.filter((q) => !q.section_id)
                       if (!unassigned.length) return null
+                      const collapsed = collapsedSections.has('unassigned')
                       return (
                         <SectionDropZone key="unassigned" sectionId={null}>
                           <SectionHeader
@@ -1171,27 +1204,32 @@ export default function QuestionBuilder() {
                             onSave={() => { }}
                             onCancel={() => { }}
                             onDelete={() => { }}
+                            collapsible
+                            collapsed={collapsed}
+                            onToggle={() => toggleSectionCollapse('unassigned')}
                           />
-                          <div className="space-y-3 mt-3">
-                            {unassigned.map((q) => (
-                              <QuestionItem
-                                key={q.id}
-                                q={q}
-                                index={questions.indexOf(q)}
-                                onEdit={editQuestion}
-                                isQuiz={form.type === 'quiz'}
-                                selected={selectedIds.includes(q.id)}
-                                onToggleSelect={toggleSelect}
-                                editOpen={showForm && editing?.id === q.id}
-                                onSave={(data) => handleSaveQuestion(data)}
-                                onCancel={() => { setShowForm(false); setEditing(null) }}
-                                saveLoading={saveLoading}
-                                errors={fieldErrors}
-                                sections={sections}
-                                sectionsAllowed={sectionsAllowed}
-                              />
-                            ))}
-                          </div>
+                          {!collapsed && (
+                            <div className="space-y-3 mt-3">
+                              {unassigned.map((q) => (
+                                <QuestionItem
+                                  key={q.id}
+                                  q={q}
+                                  index={questions.indexOf(q)}
+                                  onEdit={editQuestion}
+                                  isQuiz={form.type === 'quiz'}
+                                  selected={selectedIds.includes(q.id)}
+                                  onToggleSelect={toggleSelect}
+                                  editOpen={showForm && editing?.id === q.id}
+                                  onSave={(data) => handleSaveQuestion(data)}
+                                  onCancel={() => { setShowForm(false); setEditing(null) }}
+                                  saveLoading={saveLoading}
+                                  errors={fieldErrors}
+                                  sections={sections}
+                                  sectionsAllowed={sectionsAllowed}
+                                />
+                              ))}
+                            </div>
+                          )}
                         </SectionDropZone>
                       )
                     })()}
