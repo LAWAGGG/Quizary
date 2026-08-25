@@ -204,10 +204,9 @@ def update_form(
                 _prepare_quiz_after_form_conversion(form.id, db)
             else:
                 _clear_correct_after_quiz_conversion(form.id, db)
-                # Form → quiz balik: semua setelan khusus quiz di-nonaktifkan,
+                # Form → quiz balik: setelan khusus quiz di-nonaktifkan,
                 # supaya user tidak perlu kembali ke mode quiz untuk meresetnya.
-                if "timer_seconds" not in update_data:
-                    update_data["timer_seconds"] = None
+                # timer_seconds TIDAK di-reset — time limit berlaku untuk kedua tipe.
                 if "show_leaderboard" not in update_data:
                     update_data["show_leaderboard"] = False
                 if "is_restricted" not in update_data:

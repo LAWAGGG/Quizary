@@ -117,10 +117,10 @@ export default function FormEdit() {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target
     if (name === 'type' && value === 'form') {
-      // Ganti tipe form → quiz balik: setelan khusus quiz ikut di-reset agar user
+      // Ganti tipe form → quiz balik: setelan khusus quiz di-reset agar user
       // tidak perlu bolak-balik ke mode quiz untuk menonaktifkannya.
-      setForm((prev) => ({ ...prev, type: value, timer_seconds: null, show_leaderboard: false, is_restricted: false }))
-      if (type !== 'checkbox') setTimerMinutes('')
+      // Timer TIDAK ikut di-reset — time limit berlaku untuk kedua tipe.
+      setForm((prev) => ({ ...prev, type: value, show_leaderboard: false, is_restricted: false }))
     } else {
       setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
     }

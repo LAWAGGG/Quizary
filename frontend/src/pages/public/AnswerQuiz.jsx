@@ -189,17 +189,29 @@ export default function AnswerQuiz() {
   }, [formCode])
 
   const handleAutoSubmit = useCallback(async () => {
+    // Auto-submit karena waktu habis: server bisa saja sudah meng-auto-submit
+    // sesi lewat sweep/autosave (410/409) — itu sukses, jawaban sudah aman.
+    const finish = () => goToResult()
+    const submit = async () => api.post(`/submissions/${submissionId}/submit`, undefined, { headers: sessionTokenHeaders(submissionId) })
     try {
-      // Flush jawaban yang masih dalam debounce agar tidak hilang saat auto-submit.
       await flushAll(answers)
-      await api.post(`/submissions/${submissionId}/submit`, undefined, { headers: sessionTokenHeaders(submissionId) })
-      goToResult()
+      await submit()
+      finish()
     } catch (err) {
-      if (err.response?.status === 410) {
-        goToResult()
-      } else {
-        setError(err.response?.data?.message || err.response?.data?.detail || 'Gagal mengirim jawaban')
+      const status = err.response?.status
+      if (status === 409 || status === 410) return finish()
+      // Selisih jam klien vs server di detik terakhir: coba lagi sebentar,
+      // server akan menganggap sesi kedaluwarsa dan memproses auto-submit.
+      for (let i = 0; i < 2 && status !== undefined; i++) {
+        await new Promise((r) => setTimeout(r, 1000))
+        try {
+          await submit()
+          return finish()
+        } catch (e) {
+          if (e.response?.status === 409 || e.response?.status === 410) return finish()
+        }
       }
+      finish()
     }
   }, [submissionId, goToResult, flushAll, answers])
 
