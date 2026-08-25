@@ -29,10 +29,6 @@ export default function LoginScreen() {
     }
   };
 
-  const handleGuest = () => {
-    router.replace('/(tabs)/join');
-  };
-
   return (
     <View style={styles.container}>
       {/* Logo */}
@@ -76,18 +72,8 @@ export default function LoginScreen() {
           {loading ? (
             <ActivityIndicator color="#FFF" />
           ) : (
-            <Text style={styles.loginBtnText}>Login sebagai Creator</Text>
+            <Text style={styles.loginBtnText}>Masuk ke Akun</Text>
           )}
-        </TouchableOpacity>
-
-        <View style={styles.divider}>
-          <View style={styles.line} />
-          <Text style={styles.orText}>atau</Text>
-          <View style={styles.line} />
-        </View>
-
-        <TouchableOpacity style={styles.guestBtn} onPress={handleGuest} activeOpacity={0.85}>
-          <Text style={styles.guestBtnText}>Masuk Sebagai Guest (Student)</Text>
         </TouchableOpacity>
 
         <View style={styles.registerContainer}>

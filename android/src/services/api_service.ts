@@ -256,6 +256,20 @@ export async function deleteQuestion(questionId: string | number) {
   return fetchWithAuth(`/questions/${questionId}`, { method: 'DELETE' });
 }
 
+export async function uploadQuestionImage(questionId: string | number, fileUri: string, mimeType = 'image/jpeg') {
+  const fd = new FormData();
+  const filename = fileUri.split('/').pop() || 'question_image.jpg';
+  fd.append('file', { uri: fileUri, name: filename, type: mimeType } as any);
+  return fetchMultipart(`/questions/${questionId}/image`, 'POST', fd);
+}
+
+export async function uploadOptionImage(questionId: string | number, optionId: string | number, fileUri: string, mimeType = 'image/jpeg') {
+  const fd = new FormData();
+  const filename = fileUri.split('/').pop() || 'option_image.jpg';
+  fd.append('file', { uri: fileUri, name: filename, type: mimeType } as any);
+  return fetchMultipart(`/questions/${questionId}/option/${optionId}/image`, 'POST', fd);
+}
+
 export async function reorderQuestions(formId: string | number, orders: number[]) {
   return fetchWithAuth('/questions/reorder', {
     method: 'PATCH',
@@ -277,10 +291,15 @@ export async function importDocx(formId: string | number, fileUri: string) {
 
 // ── 5. PUBLIC ACCESS (RESPONDENT / GUEST) ────────────────────
 export async function getPublicForm(shortCode: string) {
-  const res = await fetch(`${BASE_URL}/q/${shortCode}`);
+  let cleanCode = (shortCode || '').trim();
+  if (cleanCode.includes('/q/')) {
+    const parts = cleanCode.split('/q/');
+    cleanCode = parts[parts.length - 1].split('/')[0].split('?')[0];
+  }
+  const res = await fetch(`${BASE_URL}/q/${cleanCode.toUpperCase()}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(extractErrorMessage(err, 'Quiz / Form tidak ditemukan.'));
+    throw new Error(extractErrorMessage(err, 'Quiz / Form tidak ditemukan atau belum dipublikasikan.'));
   }
   return res.json();
 }
@@ -321,6 +340,18 @@ export async function getSubmissionDetail(submissionId: string | number) {
 
 export async function getMySubmissions() {
   return fetchWithAuth('/me/submissions');
+}
+
+export async function uploadAnswerFile(
+  submissionId: string | number,
+  questionId: string | number,
+  fileUri: string,
+  mimeType = 'image/jpeg'
+) {
+  const fd = new FormData();
+  const filename = fileUri.split('/').pop() || 'answer_file.jpg';
+  fd.append('file', { uri: fileUri, name: filename, type: mimeType } as any);
+  return fetchMultipart(`/submissions/${submissionId}/questions/${questionId}/upload`, 'POST', fd);
 }
 
 // ── 7. RESULTS & ANALYTICS ───────────────────────────────────
