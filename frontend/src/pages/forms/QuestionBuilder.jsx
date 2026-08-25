@@ -14,6 +14,7 @@ import { CSS } from '@dnd-kit/utilities'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
+import { stripTags } from '../../lib/sanitize'
 import { isAudioUrl } from '../../lib/media'
 import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText } from '../../components/ui'
 import SectionManager from '../../components/ui/SectionManager'
@@ -995,7 +996,7 @@ export default function QuestionBuilder() {
 
       <PageHeader
         eyebrow={form.type === 'quiz' ? 'Quiz builder' : 'Form builder'}
-        title={form.title}
+        title={stripTags(form.title)}
         description={`${questions.length} question${questions.length !== 1 ? 's' : ''}`}
         actions={
           <>

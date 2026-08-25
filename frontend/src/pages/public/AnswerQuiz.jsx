@@ -1553,7 +1553,7 @@ function ExamInfoDrawer({ show, onClose, form, data }) {
                 <img src={banner} alt="" className="w-full h-28 object-cover rounded-2xl mb-5 shadow-card" />
               )}
               <h4 className="font-display font-semibold text-ink dark:text-gray-100 text-lg leading-snug">
-                {form?.title || 'Form'}
+                <RichText html={form?.title} />
               </h4>
               {form?.description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 mb-4"><RichText html={form.description} className="rich-text" /></p>}
 
