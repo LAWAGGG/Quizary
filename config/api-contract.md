@@ -750,7 +750,9 @@ Auth: - (sesuai submission) atau Bearer Token (pemilik form)
 Auth: - (respondent via IP) atau Bearer Token (respondent/owner)
 > Saat status masih `in_progress`, field `score`, `max_score`, `is_correct`, dan
 > `points_earned` dikembalikan `null` (jawaban benar tidak boleh bocor ke responden
-> sebelum submission selesai — FR-34/7.3).
+> sebelum submission selesai — FR-34/7.3). `tab_exit_count` + `cheat_reason` berisi
+> detail pelanggaran anti-curang saat status `cheating`. Respons memuat `questions`
+> LENGKAP (semua soal form) — klien mencocokkan jawaban lewat `answers` yang sparse.
 ```json
 // Response 200
 {
@@ -761,6 +763,8 @@ Auth: - (respondent via IP) atau Bearer Token (respondent/owner)
   "score": 3,
   "max_score": 3,
   "submitted_at": "24-07-2026 17:08:00",
+  "tab_exit_count": 0,
+  "cheat_reason": null,
   "questions": [ ... ],
   "answers": [
     {
@@ -806,6 +810,22 @@ Query params: `?status=submitted&sort=score_desc&page=1&per_page=10`
 ```
 `answer_summary` diisi untuk **form type** (pratinjau jawaban responden, dipakai kolom "Answers" di UI); untuk quiz tetap kosong. `sort=score_desc/asc` hanya relevan untuk quiz.
 `rank` (posisi, 1-based) hanya terisi saat `sort=score_desc`. Status bisa `submitted` / `auto_submitted` / `cheating` (nilai 0 hasil anti-cheat, disorot di dashboard creator).
+
+### `DELETE /forms/{id}/results`
+Auth: Bearer Token (pemilik) — hapus banyak hasil sekaligus (pilih 1 pun lewat endpoint ini).
+```json
+// Request
+{ "submission_ids": [12, 14, 15] }
+```
+```json
+// Response 200
+{ "deleted": 3, "message": "3 hasil berhasil dihapus" }
+```
+Id yang bukan milik form ini atau sudah terhapus **diabaikan** — `deleted` berisi jumlah yang benar-benar terhapus. Semua jawaban ikut terhapus (cascade) beserta file upload di server. `cheat_reason` pada tiap item berisi alasan flag curang.
+```json
+// Response 422
+{ "message": "Invalid fields", "errors": [{ "submission_ids": "List should have at least 1 item" }] }
+```
 
 ### `GET /forms/{id}/analytics`
 Auth: Bearer Token (pemilik)

@@ -3,7 +3,7 @@ from io import BytesIO
 from datetime import datetime
 import re
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -20,8 +20,9 @@ from app.models.question_option import QuestionOption
 from app.models.user import User
 from app.services.grading import grade_answer
 from app.services.session_expiry import auto_submit_expired_for_form
-from app.utils import to_naive_utc, fmt_dt, now_wib
+from app.utils import to_naive_utc, fmt_dt, now_wib, _delete_file
 from app.schemas.results import (
+    ResultDeleteRequest,
     ResultItem,
     ResultListResponse,
     AnalyticsResponse,
@@ -124,6 +125,34 @@ def list_results(
         ) for i, s in enumerate(subs)],
         meta={"total": total, "page": page, "per_page": per_page},
     )
+
+
+# ── DELETE /forms/{form_id}/results ──────────────────────────────────────────
+
+@router.delete("/forms/{form_id}/results")
+def delete_results(
+    body: ResultDeleteRequest,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    """Bulk-delete hasil. Id yang bukan milik form ini / sudah terhapus
+    diabaikan — respons berisi jumlah yang benar-benar terhapus."""
+    subs = (
+        db.query(Submission)
+        .filter(Submission.form_id == form.id, Submission.id.in_(body.submission_ids))
+        .all()
+    )
+    for s in subs:
+        # File jawaban upload ikut dibersihkan dari disk (baris DB hilang via cascade).
+        for (path,) in (
+            db.query(Answer.answer_file)
+            .filter(Answer.submission_id == s.id, Answer.answer_file.isnot(None))
+            .all()
+        ):
+            _delete_file(path)
+        db.delete(s)
+    db.commit()
+    return {"deleted": len(subs), "message": f"{len(subs)} hasil berhasil dihapus"}
 
 
 @router.get("/forms/{form_id}/analytics", response_model=AnalyticsResponse)

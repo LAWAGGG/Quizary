@@ -185,6 +185,12 @@ Set `group_id=NULL` untuk semua anggota. 404 jika group_id tidak ada pada form i
 | `PATCH /api/sections/reorder` | inline check → 403 |
 | `POST /api/forms/{form_id}/questions/group` | `verify_form_owner` → 403 |
 | `DELETE /api/forms/{form_id}/questions/group/{group_id}` | `verify_form_owner` → 403 |
+| `DELETE /api/forms/{form_id}/results` | `verify_form_owner` → 403 |
+
+#### `DELETE /api/forms/{form_id}/results`
+Bulk hapus hasil (pilih 1 pun lewat sini). Body `{"submission_ids": [...]}`, min 1 item → 422.
+Id asing/sudah terhapus diabaikan; respons `{"deleted": n, "message": ...}`.
+Test: 200 success · 422 kosong · 401 tanpa token · 403 bukan pemilik · 404 form tak ada. 409 N/A (hapus tidak punya state konflik).
 
 ---
 

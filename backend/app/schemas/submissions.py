@@ -91,6 +91,9 @@ class SubmissionDetailResponse(BaseModel):
     submitted_at: Optional[str] = None
     respondent_name: Optional[str] = None
     respondent_email: Optional[str] = None
+    # Detail pelanggaran anti-curang (status cheating) untuk header modal hasil.
+    tab_exit_count: int = 0
+    cheat_reason: Optional[str] = None
     # For in-progress: questions in order (to allow UI rebuild after reload)
     questions: list[QuestionWithOptions] = []
     # Sections for grouping questions into pages (title map by id)

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BarChart3, Download, ClipboardList, X, Check } from 'lucide-react'
+import { BarChart3, Download, ClipboardList, X, Check, AlertTriangle } from 'lucide-react'
 import api from '../../api/client'
-import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichText, sanitizeHtml } from '../../components/ui'
+import { useToast } from '../../hooks/useToast'
+import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichText, ConfirmModal, sanitizeHtml } from '../../components/ui'
 import { isAudioUrl } from '../../lib/media'
 
 const statusOptions = [
@@ -21,6 +22,7 @@ const sortOptions = [
 
 export default function Results() {
   const { formId } = useParams()
+  const toast = useToast()
   const [data, setData] = useState([])
   const [meta, setMeta] = useState({ total: 0, page: 1, per_page: 20 })
   const [formTitle, setFormTitle] = useState('')
@@ -31,6 +33,38 @@ export default function Results() {
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
+  const [showDelete, setShowDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const toggleSelect = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const allSelected = data.length > 0 && data.every((row) => selected.has(row.submission_id))
+
+  const toggleSelectAll = () => {
+    setSelected(allSelected ? new Set() : new Set(data.map((row) => row.submission_id)))
+  }
+
+  const handleDeleteSelected = async () => {
+    setDeleting(true)
+    try {
+      const res = await api.delete(`/forms/${formId}/results`, { data: { submission_ids: [...selected] } })
+      toast.success(res.data.message || `${res.data.deleted} hasil dihapus`)
+      setShowDelete(false)
+      setSelected(new Set())
+      fetchResults()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Gagal menghapus hasil')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const fetchResults = useCallback(async () => {
     setLoading(true)
@@ -89,6 +123,21 @@ export default function Results() {
 
   const totalPages = Math.ceil(meta.total / meta.per_page)
 
+  // Semua soal dikelompokkan per section — soal yang tidak dijawab tetap tampil ("-").
+  let answerByQ = {}
+  let questionGroups = []
+  if (detail) {
+    for (const a of detail.answers) answerByQ[a.question_id] = a
+    const qs = detail.questions || []
+    const sectionIds = new Set((detail.sections || []).map((s) => s.id))
+    for (const s of detail.sections || []) {
+      questionGroups.push({ title: s.title, items: qs.filter((q) => q.section_id === s.id) })
+    }
+    const rest = qs.filter((q) => q.section_id == null || !sectionIds.has(q.section_id))
+    if (rest.length) questionGroups.push({ title: null, items: rest })
+  }
+  questionGroups = questionGroups.filter((g) => g.items.length > 0)
+
   const containerVariants = {
     hidden: { opacity: 0 },
     show: { opacity: 1, transition: { staggerChildren: 0.05 } },
@@ -129,6 +178,16 @@ export default function Results() {
         )}
       </div>
 
+      {selected.size > 0 && (
+        <div className="sticky top-2 z-30 mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-white dark:bg-ink-900 px-4 py-3 shadow-lift">
+          <span className="text-sm font-semibold text-ink dark:text-gray-100">{selected.size} hasil dipilih</span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Batal</Button>
+            <Button variant="danger" size="sm" icon={<X className="w-4 h-4" />} onClick={() => setShowDelete(true)}>Hapus</Button>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((i) => <CardSkeleton key={i} />)}
@@ -148,6 +207,9 @@ export default function Results() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/70 dark:border-gray-800 dark:bg-ink-800/50">
+                    <th className="px-5 py-3.5 w-10">
+                      <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="Pilih semua" className="accent-primary w-4 h-4 cursor-pointer" />
+                    </th>
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">ID</th>
                     {isQuiz && <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Rank</th>}
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Respondent</th>
@@ -166,6 +228,9 @@ export default function Results() {
                       }`}
                       onClick={() => openDetail(row.submission_id)}
                     >
+                      <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={selected.has(row.submission_id)} onChange={() => toggleSelect(row.submission_id)} aria-label={`Pilih #${row.submission_id}`} className="accent-primary w-4 h-4 cursor-pointer" />
+                      </td>
                       <td className="px-5 py-3.5 text-sm font-mono text-gray-400 dark:text-gray-500">#{row.submission_id}</td>
                       {isQuiz && <td className="px-5 py-3.5 text-sm font-semibold tabular-nums text-gray-500 dark:text-gray-400">{row.rank ?? '-'}</td>}
                       <td className="px-5 py-3.5 text-sm font-medium text-ink dark:text-gray-100">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">(you)</span>}</td>
@@ -202,17 +267,20 @@ export default function Results() {
             {data.map((row) => (
               <motion.div key={row.submission_id} variants={itemVariants}>
                 <Card className={`cursor-pointer ${row.status === 'cheating' ? 'ring-1 ring-incorrect/40 bg-incorrect-soft' : ''}`} onClick={() => openDetail(row.submission_id)}>
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="min-w-0">
-                      <span className="font-medium text-sm text-ink dark:text-gray-100 truncate block">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">(you)</span>}</span>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">#{row.submission_id}{isQuiz && row.rank != null ? ` · #${row.rank}` : ''}</p>
-                    </div>
-<StatusBadge status={row.status} />
-                    {row.cheat_reason && (
-                      <p className="text-[11px] text-incorrect/80 mt-1 truncate" title={row.cheat_reason}>{row.cheat_reason}</p>
-                    )}
-                  </div>
-                  <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400">
+                  <div className="flex items-start gap-3">
+                    <input type="checkbox" checked={selected.has(row.submission_id)} onClick={(e) => e.stopPropagation()} onChange={() => toggleSelect(row.submission_id)} aria-label={`Pilih #${row.submission_id}`} className="accent-primary w-4 h-4 cursor-pointer shrink-0 mt-1" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start mb-3 gap-2">
+                        <div className="min-w-0">
+                          <span className="font-medium text-sm text-ink dark:text-gray-100 truncate block">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">(you)</span>}</span>
+                          <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">#{row.submission_id}{isQuiz && row.rank != null ? ` · #${row.rank}` : ''}</p>
+                        </div>
+                        <StatusBadge status={row.status} />
+                      </div>
+                      {row.cheat_reason && (
+                        <p className="text-[11px] text-incorrect/80 mb-2 truncate" title={row.cheat_reason}>{row.cheat_reason}</p>
+                      )}
+                      <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400">
                     {isQuiz ? (
                       <span className="inline-flex items-center gap-1.5">
                         <span className={`inline-flex items-center justify-center h-6 px-2 rounded-lg text-xs font-semibold ${
@@ -230,6 +298,8 @@ export default function Results() {
                       <span className="truncate pr-2">{row.answer_summary || '-'}</span>
                     )}
                     <span className="text-xs shrink-0">{row.submitted_at || '-'}</span>
+                      </div>
+                    </div>
                   </div>
                 </Card>
               </motion.div>
@@ -264,90 +334,128 @@ export default function Results() {
               className="bg-white dark:bg-ink-900 rounded-2xl w-full max-w-2xl max-h-[88dvh] flex flex-col shadow-lift"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
-                <div className="min-w-0">
-                  <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 truncate">
-                    {detail.respondent_name || 'Anonymous'}
-                  </h3>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono">
-                    #{detail.id}
-                    {isQuiz && detail.score != null && (
-                      <span className="ml-2 font-semibold tabular-nums text-primary">{detail.score} / {detail.max_score}</span>
-                    )}
-                  </p>
+              <div className="px-6 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 truncate">
+                      {detail.respondent_name || 'Anonymous'}
+                    </h3>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 font-mono truncate">
+                      #{detail.id}{detail.respondent_email ? ` · ${detail.respondent_email}` : ''}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setDetail(null)}
+                    className="p-2 -mr-2 rounded-xl text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+                    aria-label="Close"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => setDetail(null)}
-                  className="p-2 -mr-2 rounded-xl text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-3 text-xs">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="text-gray-400 dark:text-gray-500">Status</span>
+                    <StatusBadge status={detail.status} />
+                  </span>
+                  {isQuiz && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="text-gray-400 dark:text-gray-500">Skor</span>
+                      <span className="font-semibold tabular-nums text-primary">{detail.score ?? '-'} / {detail.max_score ?? '-'}</span>
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="text-gray-400 dark:text-gray-500">Dikirim</span>
+                    <span className="font-medium text-ink dark:text-gray-100">{detail.submitted_at || '-'}</span>
+                  </span>
+                </div>
+
+                {detail.status === 'cheating' && (
+                  <div className="mt-3 rounded-xl bg-incorrect-soft border border-incorrect/30 px-4 py-3">
+                    <p className="text-xs font-semibold text-incorrect flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      Terdeteksi curang — keluar tab/fullscreen {detail.tab_exit_count || 0}x
+                    </p>
+                    {detail.cheat_reason && (
+                      <p className="text-[11px] text-incorrect/80 mt-1">Pencatatan terakhir: {detail.cheat_reason}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 overflow-y-auto px-6 py-5">
                 {detailLoading ? (
                   <div className="text-sm text-gray-400 text-center py-8">Loading...</div>
-                ) : detail.answers.length === 0 ? (
-                  <div className="text-sm text-gray-400 text-center py-8">Belum ada jawaban.</div>
+                ) : questionGroups.length === 0 ? (
+                  <div className="text-sm text-gray-400 text-center py-8">Belum ada soal.</div>
                 ) : (
                   <>
                     <div className="flex items-center gap-2 mb-4">
                       <span className="w-1 h-4 rounded-full bg-primary" />
                       <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                        Jawaban pengisi · {detail.answers.length} pertanyaan
+                        Jawaban pengisi · {detail.questions?.length ?? 0} pertanyaan
                       </span>
                     </div>
-                    <div className="space-y-3">
-                      {detail.answers.map((a, i) => (
-                        <div key={a.question_id} className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-ink-800/40 px-4 py-4">
-                          <div className="flex items-start gap-3">
-                            <span className="w-6 h-6 rounded-full bg-primary-50 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                              {i + 1}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm text-ink dark:text-gray-100 leading-snug">
-                                <RichText html={a.question_text} className="rich-text" />
-                              </div>
-                              {a.question_image && (isAudioUrl(a.question_image) ? (
-                                <audio controls src={a.question_image} preload="metadata" className="w-full max-w-sm mt-3" />
-                              ) : (
-                                <img src={a.question_image} alt="" className="max-h-32 w-auto rounded-lg object-cover mt-3" />
-                              ))}
-                              <div className="mt-3">
-                                <div className="flex items-center gap-2 mb-1.5">
-                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Jawaban</span>
-                                  <div className="flex-1 border-t border-dashed border-gray-200 dark:border-gray-700" />
-                                </div>
-                                <div className="flex items-center gap-3 bg-white dark:bg-ink-900 border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2.5">
-                                  <div className="flex-1 min-w-0 text-sm font-medium text-ink dark:text-gray-100">
-                                    {a.question_type === 'file_upload'
-                                      ? (a.answer_file
-                                        ? <a href={a.answer_file} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">Lihat file jawaban</a>
-                                        : <span className="text-gray-400 italic">(tidak dijawab)</span>)
-                                      : ['multiple_choice', 'checkbox', 'dropdown'].includes(a.question_type)
-                                        ? (a.selected_options?.length
-                                          ? a.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(' · ')
-                                          : <span className="text-gray-400 italic">(tidak dijawab)</span>)
-                                        : (a.answer_text || <span className="text-gray-400 italic">(tidak dijawab)</span>)}
+                    {questionGroups.map((group) => (
+                      <div key={group.title ?? '_default'} className="mb-5 last:mb-0">
+                        {group.title && (
+                          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500 mb-2">{group.title}</p>
+                        )}
+                        <div className="space-y-3">
+                          {group.items.map((q) => {
+                            const a = answerByQ[q.id]
+                            return (
+                              <div key={q.id} className="rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-ink-800/40 px-4 py-4">
+                                <div className="flex items-start gap-3">
+                                  <span className="w-6 h-6 rounded-full bg-primary-50 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                                    {q.order_index + 1}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm text-ink dark:text-gray-100 leading-snug">
+                                      <RichText html={q.question_text} className="rich-text" />
+                                    </div>
+                                    {q.image && (isAudioUrl(q.image.path) ? (
+                                      <audio controls src={q.image.path} preload="metadata" className="w-full max-w-sm mt-3" />
+                                    ) : (
+                                      <img src={q.image.path} alt="" className="max-h-32 w-auto rounded-lg object-cover mt-3" />
+                                    ))}
+                                    <div className="mt-3">
+                                      <div className="flex items-center gap-2 mb-1.5">
+                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Jawaban</span>
+                                        <div className="flex-1 border-t border-dashed border-gray-200 dark:border-gray-700" />
+                                      </div>
+                                      <div className="flex items-center gap-3 bg-white dark:bg-ink-900 border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2.5">
+                                        <div className="flex-1 min-w-0 text-sm font-medium text-ink dark:text-gray-100">
+                                          {!a || (!a.answer_text && !a.answer_file && !(a.selected_options || []).length) ? (
+                                            <span className="text-gray-400 dark:text-gray-500">-</span>
+                                          ) : a.question_type === 'file_upload' ? (
+                                            <a href={a.answer_file} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">Lihat file jawaban</a>
+                                          ) : ['multiple_choice', 'checkbox', 'dropdown'].includes(a.question_type) ? (
+                                            a.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(' · ')
+                                          ) : (
+                                            a.answer_text
+                                          )}
+                                        </div>
+                                        {a?.is_correct === true && (
+                                          <span className="w-6 h-6 rounded-full bg-correct-soft text-correct flex items-center justify-center shrink-0" title="Benar">
+                                            <Check className="w-3.5 h-3.5" />
+                                          </span>
+                                        )}
+                                        {a?.is_correct === false && (
+                                          <span className="w-6 h-6 rounded-full bg-incorrect-soft text-incorrect flex items-center justify-center shrink-0" title="Salah">
+                                            <X className="w-4 h-4" />
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                  {a.is_correct === true && (
-                                    <span className="w-6 h-6 rounded-full bg-correct-soft text-correct flex items-center justify-center shrink-0" title="Benar">
-                                      <Check className="w-3.5 h-3.5" />
-                                    </span>
-                                  )}
-                                  {a.is_correct === false && (
-                                    <span className="w-6 h-6 rounded-full bg-incorrect-soft text-incorrect flex items-center justify-center shrink-0" title="Salah">
-                                      <X className="w-4 h-4" />
-                                    </span>
-                                  )}
                                 </div>
                               </div>
-                            </div>
-                          </div>
+                            )
+                          })}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </>
                 )}
               </div>
@@ -355,6 +463,16 @@ export default function Results() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmModal
+        show={showDelete}
+        title="Hapus hasil?"
+        message={`${selected.size} hasil terpilih akan dihapus permanen beserta seluruh jawabannya.`}
+        confirmText="Hapus"
+        loading={deleting}
+        onConfirm={handleDeleteSelected}
+        onCancel={() => setShowDelete(false)}
+      />
     </div>
   )
 }

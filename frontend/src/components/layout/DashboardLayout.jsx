@@ -35,7 +35,7 @@ function Sidebar({ open, onClose, onLogout, user }) {
         <div className="flex items-center gap-3 px-5 h-16 shrink-0 border-b border-gray-100 dark:border-gray-600">
           <AppMark size="sm" />
           <div className="min-w-0">
-            <p className="font-display font-bold leading-none text-ink dark:text-gray-100">Quizary</p>
+            <p className="font-serif font-bold leading-none text-ink dark:text-gray-100">Quizary</p>
           </div>
           <button
             onClick={onClose}

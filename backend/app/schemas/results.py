@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ResultItem(BaseModel):
@@ -19,6 +19,10 @@ class ResultItem(BaseModel):
 class ResultListResponse(BaseModel):
     data: list[ResultItem]
     meta: dict
+
+
+class ResultDeleteRequest(BaseModel):
+    submission_ids: list[int] = Field(min_length=1, max_length=1000)
 
 
 class PerQuestionStat(BaseModel):

@@ -739,6 +739,8 @@ def get_submission(
         submitted_at=fmt_dt(sub.submitted_at),
         respondent_name=sub.respondent_name,
         respondent_email=sub.respondent_email,
+        tab_exit_count=sub.tab_exit_count or 0,
+        cheat_reason=sub.cheat_reason,
         questions=questions,
         sections=sections,
         answers=answers_data,

@@ -807,11 +807,11 @@ export default function AnswerQuiz() {
                   </button>
                 </div>
                 <h2 className="font-display text-xl font-bold text-ink dark:text-gray-100 text-center mb-3"><RichText html={current.question_text} className="rich-text" /></h2>
-                {current.section_id && sectionsById[current.section_id] && (
+                {/* {current.section_id && sectionsById[current.section_id] && (
                   <p className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500 mb-3">
                     {sectionsById[current.section_id]}
                   </p>
-                )}
+                )} */}
                 {current.image && (isAudioUrl(current.image.path) ? (
                   <audio controls src={current.image.path} preload="metadata" className="w-full max-w-sm mx-auto mb-4" />
                 ) : (
