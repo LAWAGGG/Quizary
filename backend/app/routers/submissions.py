@@ -387,24 +387,44 @@ def create_submission(
         .all()
     )
     if form.shuffle_questions:
-        # Grup soal ber-cerita = satu blok utuh (urutan internal tetap), soal
-        # lepas diacak bebas. ponytail: O(n²) scan; ribuan soal baru ganti dict-pass.
-        seen_groups: set[str] = set()
-        blocks: list[list[Question]] = []
-        for q in questions:  # sudah urut order_index
-            if q.group_id and q.group_id in seen_groups:
+        # Section = unit urutan: urutan section TETAP berurutan, yang diacak
+        # hanya soal DI DALAM tiap section. Grup soal ber-cerita tetap satu
+        # blok utuh (urutan internal dipertahankan). ponytail: O(n²) scan;
+        # ribuan soal baru ganti dict-pass.
+        def _blocks(items: list[Question]) -> list[list[Question]]:
+            seen_groups: set[str] = set()
+            blocks: list[list[Question]] = []
+            for q in items:  # sudah urut order_index
+                if q.group_id and q.group_id in seen_groups:
+                    continue
+                if q.group_id:
+                    seen_groups.add(q.group_id)
+                    blocks.append(sorted(
+                        (x for x in items if x.group_id == q.group_id),
+                        key=lambda x: x.order_index,
+                    ))
+                else:
+                    blocks.append([q])
+            return blocks
+
+        by_section: dict = {}
+        for q in questions:
+            by_section.setdefault(q.section_id, []).append(q)
+
+        ordered: list[Question] = []
+        section_ids = [row.id for row in db.query(Section.id).filter(Section.form_id == form.id).order_by(Section.order_index).all()]
+        for sid in section_ids:
+            bucket = by_section.pop(sid, None)
+            if not bucket:
                 continue
-            if q.group_id:
-                seen_groups.add(q.group_id)
-                members = sorted(
-                    (x for x in questions if x.group_id == q.group_id),
-                    key=lambda x: x.order_index,
-                )
-                blocks.append(members)
-            else:
-                blocks.append([q])
-        random.shuffle(blocks)
-        questions = [m for block in blocks for m in block]
+            blocks = _blocks(bucket)
+            random.shuffle(blocks)
+            ordered.extend(m for block in blocks for m in block)
+        for leftover in by_section.values():  # soal tanpa section / section terhapus
+            blocks = _blocks(leftover)
+            random.shuffle(blocks)
+            ordered.extend(m for block in blocks for m in block)
+        questions = ordered
 
     for idx, q in enumerate(questions):
         db.add(SubmissionQuestionOrder(submission_id=sub.id, question_id=q.id, order_index=idx))

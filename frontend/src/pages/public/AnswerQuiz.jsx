@@ -1052,16 +1052,7 @@ export default function AnswerQuiz() {
                 {formatTime(timeLeft)}
               </span>
             )}
-            {formType === 'quiz' && (
-              <button
-                onClick={() => setShowInfo(true)}
-                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
-                aria-label="Exam info"
-                title="Lihat informasi ujian"
-              >
-                <Info className="w-4 h-4" />
-              </button>
-            )}
+          
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">{totalQ} questions</span>
           </div>
         </div>

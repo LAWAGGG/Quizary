@@ -188,6 +188,9 @@ Auth: Bearer Token (pemilik) — kirim field yang berubah saja
   "shuffle_questions": true
 }
 ```
+> `shuffle_questions` mengacak soal **di dalam tiap section saja** — urutan antar-section
+> selalu dipertahankan (section 1 penuh dulu, lalu section 2, dst.). Grup soal ber-cerita
+> tetap satu blok utuh. Timer (`timer_seconds`) tidak di-reset saat ganti tipe quiz ↔ form.
 ```json
 // Response 200 — mengembalikan full form object (sama seperti GET)
 {

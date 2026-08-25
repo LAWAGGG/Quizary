@@ -121,7 +121,7 @@ export default function QuizResult() {
           style={{
             backgroundImage: `radial-gradient(${palette.soft} 1.5px, transparent 1.5px)`,
             backgroundSize: '28px 28px',
-            opacity: 0.7,
+            opacity: 0.25,
           }}
           aria-hidden="true"
         />
@@ -226,7 +226,7 @@ export default function QuizResult() {
         style={{
           backgroundImage: `radial-gradient(${palette.soft} 1.5px, transparent 1.5px)`,
           backgroundSize: '28px 28px',
-          opacity: 0.7,
+          opacity: 0.25,
         }}
         aria-hidden="true"
       />
