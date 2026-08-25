@@ -282,7 +282,7 @@ export default function FormLanding() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="text-base md:text-lg opacity-80 max-w-md text-white mt-4"
+            className="text-base md:text-lg opacity-80 max-w-lg text-white mt-4"
           >
             <RichText html={form.description} className="rich-text" />
           </motion.p>

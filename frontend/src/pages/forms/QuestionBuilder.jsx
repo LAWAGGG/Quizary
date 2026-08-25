@@ -13,6 +13,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
+import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { isAudioUrl } from '../../lib/media'
 import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText } from '../../components/ui'
 import SectionManager from '../../components/ui/SectionManager'
@@ -218,7 +219,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                 min={0}
                 max={999}
                 disabled={!form.is_scored}
-                helper={form.is_scored ? 'Other scored questions rebalance automatically.' : 'Turn on "Count points" to include this question.'}
+             
                 error={ferr('points')}
               />
             ) : (
@@ -389,7 +390,7 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
             type="checkbox"
             checked={selected}
             onChange={() => onToggleSelect(question.id)}
-            className="w-4 h-4 rounded accent-primary cursor-pointer"
+            className="hidden md:block w-4 h-4 rounded accent-primary cursor-pointer"
             aria-label={`Select question ${index + 1}`}
           />
         </div>
@@ -428,7 +429,7 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
   )
 }
 
-function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onToggleSelect, groupId, groupSize, onMove, isFirst, isLast }) {
+function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onToggleSelect, groupId, groupSize, onMove, isFirst, isLast, selectCount }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: question.id,
     data: { type: 'question', questionId: question.id },
@@ -438,6 +439,11 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
   // mengubah rect tiap frame → dnd-kit (useRects) mengukur ulang → dragOver
   // terpicu ulang → loop "Maximum update depth exceeded". Snap instan = stabil.
   const style = { transform: CSS.Transform.toString(transform), transition: active ? undefined : transition }
+  // Mobile: tahan kartu untuk memilih (haptic); saat mode seleksi aktif, tap = toggle.
+  const holdProps = useHoldSelect({
+    selectedCount: selectCount,
+    onToggle: () => onToggleSelect(question.id),
+  })
   // ponytail: TANPA framer `layout` di sini — layout animation mengubah rect
   // elemen tiap frame selama drag, dnd-kit (useRects) mengukur ulang → setState
   // berulang → "Maximum update depth exceeded". dnd-kit sudah menganimasikan
@@ -452,7 +458,8 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
         ref={setNodeRef}
         style={style}
         {...attributes}
-        className="relative"
+        {...holdProps}
+        className="relative select-none"
       >
         <span
           {...listeners}
@@ -499,7 +506,7 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
   )
 }
 
-function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupSize, onMove, totalCount }) {
+function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupSize, onMove, totalCount, selectCount }) {
   if (editOpen) {
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
@@ -559,6 +566,7 @@ function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, edit
       onMove={onMove}
       isFirst={index === 0}
       isLast={index === totalCount - 1}
+      selectCount={selectCount}
     />
   )
 }
@@ -1186,8 +1194,10 @@ export default function QuestionBuilder() {
                                     groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
                                     onMove={moveQuestion}
                                     totalCount={questions.length}
+                                 selectCount={selectedIds.length}
                                  onMove={moveQuestion}
                                  totalCount={questions.length}
+                                 selectCount={selectedIds.length}
                                   />
                               ))}
                             </div>
@@ -1266,6 +1276,7 @@ export default function QuestionBuilder() {
                                  groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
                                  onMove={moveQuestion}
                                  totalCount={questions.length}
+                                 selectCount={selectedIds.length}
                                />
                    ))
                  )}

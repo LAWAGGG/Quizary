@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { BarChart3, Download, ClipboardList, X, Check, AlertTriangle } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
+import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichText, ConfirmModal, sanitizeHtml } from '../../components/ui'
 import { isAudioUrl } from '../../lib/media'
 
@@ -27,6 +28,20 @@ const STATUS_LABELS = {
   auto_submitted: 'Auto Submitted',
   cheating: 'Cheating',
   locked: 'Locked',
+}
+
+// Kartu mobile dengan hold-to-select (haptic). Hook dipanggil di sini — satu
+// komponen per kartu, aman Rules of Hooks.
+function HoldSelectCard({ selectedCount, selected, onToggle, onTap, className = '', children }) {
+  const holdProps = useHoldSelect({ selectedCount, onToggle, onTap })
+  return (
+    <Card
+      {...holdProps}
+      className={`cursor-pointer select-none ${selected ? 'ring-2 ring-primary' : ''} ${className}`}
+    >
+      {children}
+    </Card>
+  )
 }
 
 const sortOptions = [
@@ -322,9 +337,14 @@ export default function Results() {
           <motion.div variants={containerVariants} initial="hidden" animate="show" className="md:hidden space-y-3">
             {data.map((row) => (
               <motion.div key={row.submission_id} variants={itemVariants}>
-                <Card className={`cursor-pointer ${row.status === 'cheating' ? 'ring-1 ring-incorrect/40 bg-incorrect-soft' : ''}`} onClick={() => openDetail(row.submission_id)}>
+                <HoldSelectCard
+                  selectedCount={selected.size}
+                  selected={selected.has(row.submission_id)}
+                  onToggle={() => toggleSelect(row.submission_id)}
+                  onTap={() => openDetail(row.submission_id)}
+                  className={row.status === 'cheating' ? 'bg-incorrect-soft' : ''}
+                >
                   <div className="flex items-start gap-3">
-                    <input type="checkbox" checked={selected.has(row.submission_id)} onClick={(e) => e.stopPropagation()} onChange={() => toggleSelect(row.submission_id)} aria-label={`Pilih #${row.submission_id}`} className="accent-primary w-4 h-4 cursor-pointer shrink-0 mt-1" />
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start mb-3 gap-2">
                         <div className="min-w-0">
@@ -353,14 +373,15 @@ export default function Results() {
                     ) : (
                       <span className="truncate pr-2">{row.answer_summary || '-'}</span>
                     )}
-                    <span className="text-xs shrink-0">{row.submitted_at || '-'}</span>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
-          </motion.div>
+                     <span className="text-xs shrink-0">{row.submitted_at || '-'}</span>
+                       </div>
+                     </div>
+                   </div>
+                 </HoldSelectCard>
+               </motion.div>
+             ))}
+           </motion.div>
+
 
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-6">
