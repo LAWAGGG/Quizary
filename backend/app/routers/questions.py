@@ -28,7 +28,7 @@ from app.schemas.question import (
 router = APIRouter(tags=["questions"])
 
 _OPTION_TYPES = ("multiple_choice", "checkbox", "dropdown")
-_TEXT_TYPES = ("short_answer", "essay", "date", "time", "file_upload")
+_TEXT_TYPES = ("short_answer", "essay", "password", "date", "time", "file_upload")
 # Types yang tidak pernah dinilai otomatis (tanpa options / tanpa isi teks dinilai)
 _NO_GRADE_TYPES = ("essay", "date", "time", "file_upload")
 
@@ -80,6 +80,8 @@ def _build_question(q: Question, request: Request) -> dict:
         "is_required": q.is_required,
         "section_id": q.section_id,
         "group_id": q.group_id,
+        # Keyword hanya untuk owner (endpoint ini); payload publik tidak memilikinya.
+        "password_keyword": q.password_keyword if q.type.value == "password" else None,
         "options": opts,
         "image": _image_obj(q_img[0], request) if q_img else None,
     }
@@ -267,6 +269,7 @@ def create_question(
         points=0 if form.type.value == "quiz" else body.points,
         is_required=body.is_required,
         section_id=body.section_id,
+        password_keyword=body.password_keyword if body.type == "password" else None,
         order_index=next_order,
         created_at=now_wib(),
     )
@@ -310,6 +313,16 @@ def update_question(
 
     # Determine the effective type after this update
     new_type_str = update_data.get("type") or question.type.value
+
+    # Switching to (or staying on) password type needs a keyword somewhere —
+    # body payload or already stored on the question.
+    if new_type_str == "password":
+        effective_kw = update_data.get("password_keyword") or question.password_keyword
+        if not (effective_kw or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Password questions require a password_keyword",
+            )
 
     # Fix #4 — non-empty options with a text type is invalid; an empty list is
     # allowed and simply means "clear options" (e.g. switching MC → short_answer).

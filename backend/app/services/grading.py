@@ -22,6 +22,7 @@ GRADABLE_TYPES = (
     QuestionType.checkbox,
     QuestionType.dropdown,
     QuestionType.short_answer,
+    QuestionType.password,
 )
 
 
@@ -58,6 +59,12 @@ def grade_answer(answer: Answer, question: Question):
 
     if question.type == QuestionType.short_answer:
         if answer.answer_text and answer.answer_text.strip():
+            return True, Decimal(str(question.points or 0))
+        return False, Decimal("0")
+
+    # password: exact match, case-sensitive (keputusan creator — tanpa trim).
+    if question.type == QuestionType.password:
+        if question.password_keyword is not None and answer.answer_text == question.password_keyword:
             return True, Decimal(str(question.points or 0))
         return False, Decimal("0")
 

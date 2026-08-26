@@ -274,7 +274,7 @@ export default function FormLanding() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="font-display text-4xl md:text-5xl font-bold leading-tight text-white max-w-2xl"
+            className="font-display text-4xl md:text-5xl font-bold leading-tight text-white max-w-4xl"
           >
             <RichText html={form.title} />
           </motion.h1>
@@ -283,7 +283,7 @@ export default function FormLanding() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="text-base md:text-lg opacity-80 max-w-lg text-white mt-4"
+            className="text-base md:text-lg opacity-80 max-w-2xl text-white mt-4"
           >
             <RichText html={form.description} className="rich-text" />
           </motion.p>

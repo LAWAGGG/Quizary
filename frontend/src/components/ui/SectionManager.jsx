@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { GripVertical, X, Plus, Check, ChevronDown, ChevronUp } from 'lucide-react'
 import {
@@ -187,6 +187,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
   const [newSectionTitle, setNewSectionTitle] = useState('')
   const [creatingSection, setCreatingSection] = useState(false)
   const [activeDrag, setActiveDrag] = useState(null)
+  const dragStartOrderRef = useRef(null)
   // Default tiap card collapse biar list pendek & drag ringan.
   const [collapsedIds, setCollapsedIds] = useState(() => new Set())
 
@@ -248,6 +249,23 @@ export default function SectionManager({ formId, show, onClose, sections: initia
 
   const handleDragStart = (event) => {
     setActiveDrag({ type: event.active.data.current?.type, id: event.active.id })
+    // Snapshot urutan section sebelum drag — acuan rollback & deteksi perubahan.
+    if (event.active.data.current?.type === 'section') {
+      dragStartOrderRef.current = sections.map((s) => s.id)
+    }
+  }
+
+  // Kembalikan urutan section ke kondisi pra-drag (dipakai saat drop di luar
+  // droppable / drag dibatalkan — dragOver sudah menukar state secara live).
+  const restoreSectionOrder = () => {
+    const snap = dragStartOrderRef.current
+    dragStartOrderRef.current = null
+    if (!snap) return
+    setSections((prev) => {
+      const byId = new Map(prev.map((s) => [s.id, s]))
+      const restored = snap.map((id) => byId.get(id)).filter(Boolean)
+      return restored.length === prev.length ? restored : prev
+    })
   }
 
   const handleDragOver = (event) => {
@@ -286,7 +304,11 @@ export default function SectionManager({ formId, show, onClose, sections: initia
   const handleDragEnd = async (event) => {
     const { active, over } = event
     setActiveDrag(null)
-    if (!over) return
+    if (!over) {
+      // Drop di luar semua droppable — batalkan swap hasil onDragOver.
+      restoreSectionOrder()
+      return
+    }
 
     const type = active.data.current?.type
 
@@ -315,16 +337,18 @@ export default function SectionManager({ formId, show, onClose, sections: initia
     }
 
     if (type === 'section') {
-      const target = resolveTarget()
-      if (typeof target !== 'number') return
-      const oldIndex = sections.findIndex((s) => s.id === active.id)
-      const newIndex = sections.findIndex((s) => s.id === target)
-      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return
-      const next = arrayMove(sections, oldIndex, newIndex)
-      setSections(next)
+      // Urutan final SUDAH diatur live oleh onDragOver. Jangan hitung
+      // oldIndex/newIndex lagi dari state yang sudah terswap — itu membuat
+      // guard `oldIndex === newIndex` selamat return dan API tidak pernah
+      // dipanggil (bug lama). Bandingkan saja dengan snapshot awal drag.
+      const before = dragStartOrderRef.current
+      dragStartOrderRef.current = null
+      const ids = sections.map((s) => s.id)
+      if (!before || JSON.stringify(ids) === JSON.stringify(before)) return
+
       setSectionReordering(true)
       try {
-        await api.patch('/sections/reorder', { form_id: parseInt(formId), orders: next.map((s) => s.id) })
+        await api.patch('/sections/reorder', { form_id: parseInt(formId), orders: ids })
         onSaved()
       } catch {
         toast.error('Gagal menyimpan urutan section')
@@ -427,7 +451,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
               onDragEnd={handleDragEnd}
-              onDragCancel={() => setActiveDrag(null)}
+              onDragCancel={() => { setActiveDrag(null); restoreSectionOrder() }}
             >
               <div className="flex-1 overflow-y-auto px-5 py-5 space-y-3">
                 {sectionReordering && (

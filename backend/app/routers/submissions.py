@@ -30,6 +30,7 @@ from app.schemas.submissions import (
     QuestionWithOptions,
     OptionPublic,
     AutosaveRequest,
+    PasswordCheckRequest,
     SubmitResponse,
     TabExitRequest,
     SubmissionDetailResponse,
@@ -211,7 +212,9 @@ def _build_questions_response(sub_id: int, request: Request, db: Session) -> lis
     )
 
     # Soal baru yang ditambahkan creator setelah sesi dimulai ikut tampil di
-    # preview responden (urutan snapshot lama dipertahankan, soal baru di akhir).
+    # preview responden. Di bawah, list final disortir per section (stable) —
+    # urutan snapshot dalam section tetap utuh, tapi soal baru/terpindah
+    # selalu mendarat di blok section-nya, bukan nempel di ekor array.
     sub = db.get(Submission, sub_id)
     seen_ids = {q.id for q in ordered_qs}
     new_qs = (
@@ -221,6 +224,15 @@ def _build_questions_response(sub_id: int, request: Request, db: Session) -> lis
         .all()
     )
     ordered_qs = ordered_qs + new_qs
+
+    section_rank = {
+        s.id: idx for idx, s in enumerate(
+            db.query(Section).filter(Section.form_id == sub.form_id).order_by(Section.order_index).all()
+        )
+    }
+    # None / section terhapus → paling belakang. Stable sort = urutan snapshot
+    # dalam section (termasuk hasil shuffle) tidak tersentuh.
+    ordered_qs.sort(key=lambda q: section_rank.get(q.section_id, len(section_rank)))
 
     result = []
     for idx, q in enumerate(ordered_qs):
@@ -388,45 +400,54 @@ def create_submission(
         .order_by(Question.order_index)
         .all()
     )
-    if form.shuffle_questions:
-        # Section = unit urutan: urutan section TETAP berurutan, yang diacak
-        # hanya soal DI DALAM tiap section. Grup soal ber-cerita tetap satu
-        # blok utuh (urutan internal dipertahankan). ponytail: O(n²) scan;
-        # ribuan soal baru ganti dict-pass.
-        def _blocks(items: list[Question]) -> list[list[Question]]:
-            seen_groups: set[str] = set()
-            blocks: list[list[Question]] = []
-            for q in items:  # sudah urut order_index
-                if q.group_id and q.group_id in seen_groups:
-                    continue
-                if q.group_id:
-                    seen_groups.add(q.group_id)
-                    blocks.append(sorted(
-                        (x for x in items if x.group_id == q.group_id),
-                        key=lambda x: x.order_index,
-                    ))
-                else:
-                    blocks.append([q])
-            return blocks
+    # Section = unit urutan untuk SEMUA form (bukan hanya shuffle): snapshot
+    # selalu section-berurutan supaya konsumen array (quiz mode, export) tidak
+    # melihat soal nyasar di ekor. Shuffle mengacak blok DI DALAM section saja.
+    # Grup soal ber-cerita tetap satu blok utuh. ponytail: O(n²) scan;
+    # ribuan soal baru ganti dict-pass.
+    def _blocks(items: list[Question]) -> list[list[Question]]:
+        seen_groups: set[str] = set()
+        blocks: list[list[Question]] = []
+        for q in items:  # sudah urut order_index
+            if q.group_id and q.group_id in seen_groups:
+                continue
+            if q.group_id:
+                seen_groups.add(q.group_id)
+                blocks.append(sorted(
+                    (x for x in items if x.group_id == q.group_id),
+                    key=lambda x: x.order_index,
+                ))
+            else:
+                blocks.append([q])
+        return blocks
 
+    section_ids = [row.id for row in db.query(Section.id).filter(Section.form_id == form.id).order_by(Section.order_index).all()]
+
+    def _ordered_by_section(items: list[Question], do_shuffle: bool) -> list[Question]:
         by_section: dict = {}
-        for q in questions:
+        for q in items:  # sudah urut order_index
             by_section.setdefault(q.section_id, []).append(q)
 
-        ordered: list[Question] = []
-        section_ids = [row.id for row in db.query(Section.id).filter(Section.form_id == form.id).order_by(Section.order_index).all()]
+        result: list[Question] = []
         for sid in section_ids:
             bucket = by_section.pop(sid, None)
             if not bucket:
                 continue
             blocks = _blocks(bucket)
-            random.shuffle(blocks)
-            ordered.extend(m for block in blocks for m in block)
+            if do_shuffle:
+                random.shuffle(blocks)
+            result.extend(m for block in blocks for m in block)
         for leftover in by_section.values():  # soal tanpa section / section terhapus
             blocks = _blocks(leftover)
-            random.shuffle(blocks)
-            ordered.extend(m for block in blocks for m in block)
-        questions = ordered
+            if do_shuffle:
+                random.shuffle(blocks)
+            result.extend(m for block in blocks for m in block)
+        return result
+
+    if form.shuffle_questions:
+        questions = _ordered_by_section(questions, do_shuffle=True)
+    else:
+        questions = _ordered_by_section(questions, do_shuffle=False)
 
     for idx, q in enumerate(questions):
         db.add(SubmissionQuestionOrder(submission_id=sub.id, question_id=q.id, order_index=idx))
@@ -537,6 +558,33 @@ def autosave(
     answer.updated_at = _now()
     db.commit()
     return {"message": "Answer saved", "question_id": body.question_id}
+
+
+# ── POST /submissions/{id}/questions/{question_id}/check-password ─────────────
+# Gerbang section: klien tidak punya keyword (tidak pernah dikirim ke publik),
+# jadi pencocokan terjadi di sini. Constant-time compare.
+
+@router.post("/submissions/{submission_id}/questions/{question_id}/check-password")
+def check_password(
+    submission_id: int,
+    question_id: int,
+    body: PasswordCheckRequest,
+    request: Request,
+    x_submission_token: str | None = Header(None, alias="X-Submission-Token"),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    sub = _get_sub_or_404(submission_id, db)
+    _verify_submission_access(sub, request, user, db, x_submission_token)
+    question = _get_question_for_submission(question_id, sub, db)
+    if question.type != QuestionType.password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Question is not a password type",
+        )
+    keyword = question.password_keyword or ""
+    valid = bool(keyword) and secrets.compare_digest(body.answer or "", keyword)
+    return {"valid": valid}
 
 
 # ── POST /submissions/{id}/tab-exit ──────────────────────────────────────────

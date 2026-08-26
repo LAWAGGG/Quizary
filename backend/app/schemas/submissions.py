@@ -53,6 +53,10 @@ class AutosaveRequest(BaseModel):
         return self
 
 
+class PasswordCheckRequest(BaseModel):
+    answer: str = Field(max_length=10_000)
+
+
 class SubmitResponse(BaseModel):
     message: str
     status: str

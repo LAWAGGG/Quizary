@@ -11,6 +11,7 @@ class QuestionType(str, enum.Enum):
     dropdown = "dropdown"
     short_answer = "short_answer"
     essay = "essay"
+    password = "password"
     date = "date"
     time = "time"
     file_upload = "file_upload"
@@ -47,6 +48,8 @@ class Question(Base):
     # Grup soal ber-cerita bersama (wacana). NULL = soal lepas. Anggota grup
     # di-shuffle sebagai satu blok; cerita ada di question_text anggota terawal.
     group_id = Column(String(36), nullable=True)
+    # Jawaban benar untuk tipe password — jangan pernah ikut payload publik.
+    password_keyword = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=True)
 

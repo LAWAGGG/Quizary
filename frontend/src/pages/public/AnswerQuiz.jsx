@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle, Info, ZoomIn, ZoomOut, X, Lock, FileUp } from 'lucide-react'
 import { Button, Input, Textarea, Card, FallbackPage, QuestionMap, ConfirmSubmitModal, RichText } from '../../components/ui'
-import { useAutosave } from '../../hooks/useAutosave'
+import { useAutosave, loadDraft, clearDraft } from '../../hooks/useAutosave'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import { isAudioUrl } from '../../lib/media'
@@ -72,6 +72,7 @@ export default function AnswerQuiz() {
   const [error, setError] = useState(null)
   const [submitError, setSubmitError] = useState(null)   // inline error, tidak redirect ke FallbackPage
   const [validationErrors, setValidationErrors] = useState({})  // { [qId]: true } soal required kosong
+  const [pwWrong, setPwWrong] = useState({})  // { [qId]: true } keyword password tidak cocok
   const [currentIdx, setCurrentIdx] = useState(0)
   const [answers, setAnswers] = useState({})
   const [fileAnswers, setFileAnswers] = useState({})   // { [qId]: { url, filename } }
@@ -93,6 +94,8 @@ export default function AnswerQuiz() {
   const questionRefs = useRef({})   // { [qId]: HTMLElement } untuk scroll ke soal bermasalah
 
   const goToResult = useCallback(() => {
+    // Sesi selesai (submit / timeout / cheating) — draft offline tak berguna lagi.
+    clearDraft(submissionId)
     // Keluar dari fullscreen saat selesai (semua jalur: submit, timeout, cheating).
     const ex = document.exitFullscreen || document.webkitExitFullscreen
     if (ex) Promise.resolve(ex.call(document)).catch(() => { })
@@ -125,6 +128,10 @@ export default function AnswerQuiz() {
   }, [submissionId, goToResult])
 
   const { statuses, save, flushAll, clearTimers } = useAutosave({ submissionId, onExpired })
+
+  // Mirror state answers untuk listener retry (online/focus) tanpa re-register.
+  const answersRef = useRef({})
+  answersRef.current = answers
 
   const fetchSubmission = useCallback(async () => {
     try {
@@ -165,6 +172,36 @@ export default function AnswerQuiz() {
   useEffect(() => {
     fetchSubmission()
   }, [fetchSubmission])
+
+  // Pulihkan draft offline (sekali, setelah data pertama dimuat): jawaban yang
+  // belum sempat sampai server dikembalikan ke form lalu didorong ulang.
+  // Draft menang atas nilai server — browser ini tempat user terakhir mengetik.
+  const draftRestoredRef = useRef(false)
+  useEffect(() => {
+    if (!data || !submissionId || draftRestoredRef.current) return
+    draftRestoredRef.current = true
+    const entries = Object.entries(loadDraft(submissionId)).filter(([, e]) => {
+      const v = e?.value
+      return Array.isArray(v) ? v.length > 0 : v !== undefined && v !== null && v !== ''
+    })
+    if (!entries.length) return
+    const restored = Object.fromEntries(entries.map(([qid, e]) => [Number(qid), e.value]))
+    setAnswers((prev) => ({ ...prev, ...restored }))
+    setTimeout(() => flushAll(restored).catch(() => {}), 800)
+  }, [data, submissionId, flushAll])
+
+  // Koneksi kembali / tab fokus → dorong semua jawaban sekali lagi;
+  // yang sudah tersimpan cuma kena autosave idempoten, yang gagal akhirnya jalan.
+  useEffect(() => {
+    if (!submissionId) return
+    const retry = () => flushAll(answersRef.current).catch(() => {})
+    window.addEventListener('online', retry)
+    window.addEventListener('focus', retry)
+    return () => {
+      window.removeEventListener('online', retry)
+      window.removeEventListener('focus', retry)
+    }
+  }, [submissionId, flushAll])
 
   // Poll soal terbaru — creator update form, preview responden ikut ter-update
   // tanpa perlu refresh manual. Jawaban lokal (answers/fileAnswers) dipertahankan.
@@ -507,6 +544,9 @@ export default function AnswerQuiz() {
     if (validationErrors[qId] && value.trim()) {
       setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
     }
+    if (pwWrong[qId]) {
+      setPwWrong((e) => { const n = { ...e }; delete n[qId]; return n })
+    }
   }
 
   const handleFileUpload = async (qId, file) => {
@@ -534,7 +574,28 @@ export default function AnswerQuiz() {
     setReviewed((r) => ({ ...r, [qId]: !r[qId] }))
   }
 
-  const handleNext = () => {
+  // Verifikasi password ke server — keyword tidak pernah dikirim ke klien,
+  // jadi pencocokan hanya bisa di backend. Gagal request = dianggap salah
+  // (fail-closed); ponytail: tambah retry/timeout kalau network sering flake.
+  const checkPasswords = async (qs) => {
+    const targets = qs.filter((q) => q.type === 'password' && String(answers[q.id] ?? '').length > 0)
+    if (!targets.length) return []
+    const wrong = await Promise.all(targets.map(async (q) => {
+      try {
+        const res = await api.post(
+          `/submissions/${submissionId}/questions/${q.id}/check-password`,
+          { answer: answers[q.id] },
+          { headers: sessionTokenHeaders(submissionId) },
+        )
+        return res.data.valid ? null : q.id
+      } catch {
+        return q.id
+      }
+    }))
+    return wrong.filter(Boolean)
+  }
+
+  const handleNext = async () => {
     if (!data) return
     // Mode form: satu section = satu halaman. Semua soal required di section
     // ini wajib dijawab dulu sebelum lanjut. Kalau belum, tandai merah semua
@@ -555,6 +616,18 @@ export default function AnswerQuiz() {
         }, 80)
         return
       }
+    }
+    // Gerbang password: jawaban terisi tapi ≠ keyword → blok pindah halaman.
+    const gateQuestions = isOneByOne ? [current].filter(Boolean) : (formPages[currentIdx]?.questions || [])
+    const wrongPw = await checkPasswords(gateQuestions)
+    if (wrongPw.length) {
+      const errs = Object.fromEntries(wrongPw.map((qid) => [qid, true]))
+      setPwWrong((w) => ({ ...w, ...errs }))
+      setValidationErrors((e) => ({ ...e, ...errs }))
+      setTimeout(() => {
+        questionRefs.current[wrongPw[0]]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 80)
+      return
     }
     const total = formPages.length
     if (currentIdx < total - 1) {
@@ -592,6 +665,16 @@ export default function AnswerQuiz() {
         if (firstErrorIdx === -1) firstErrorIdx = idx
       }
     })
+
+    // Gerbang password sebelum submit: keyword salah di soal mana pun → blok.
+    const pwQs = qs.filter((q) => q.type === 'password')
+    const wrongPw = await checkPasswords(pwQs)
+    if (wrongPw.length) {
+      wrongPw.forEach((qid) => { errors[qid] = true })
+      if (firstErrorIdx === -1) {
+        firstErrorIdx = qs.findIndex((q) => wrongPw.includes(q.id))
+      }
+    }
 
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors)
@@ -689,15 +772,27 @@ export default function AnswerQuiz() {
   }
 
   // Mode form: satu section = satu halaman. Quiz style: satu soal = satu halaman.
+  // KEDUA mode wajib group per section (urutan section selalu berurutan sesuai
+  // desain; shuffle hanya mengacak soal DI DALAM section). Array mentah
+  // data.questions bisa tidak sinkron dgn section — soal yang ditambahkan
+  // setelah sesi mulai selalu nempel di ekor snapshot.
   const formPages = (() => {
-    if (isOneByOne) return questions.map((q) => ({ title: null, questions: [q] }))
-    const pages = []
+    const ordered = []
       ; (data.sections || []).forEach((s) => {
-        const sq = questions.filter((q) => q.section_id === s.id)
-        if (sq.length) pages.push({ title: s.title, questions: sq })
+        questions.filter((q) => q.section_id === s.id).forEach((q) => ordered.push(q))
       })
-    const unassigned = questions.filter((q) => !q.section_id)
-    if (unassigned.length) pages.push({ title: null, questions: unassigned })
+    const sectionIds = new Set((data.sections || []).map((s) => s.id))
+    const seen = new Set()
+    questions.filter((q) => !q.section_id || !sectionIds.has(q.section_id)).forEach((q) => { ordered.push(q); seen.add(q.id) })
+    questions.forEach((q) => { if (!seen.has(q.id)) ordered.push(q) })
+
+    if (isOneByOne) return ordered.map((q) => ({ title: null, questions: [q] }))
+    const pages = []
+      ; ordered.forEach((q) => {
+        const last = pages[pages.length - 1]
+        if (last && last.key === (q.section_id ?? 'none')) last.questions.push(q)
+        else pages.push({ key: q.section_id ?? 'none', title: (data.sections || []).find((s) => s.id === q.section_id)?.title || null, questions: [q] })
+      })
     return pages.length ? pages : [{ title: null, questions }]
   })()
   const formPage = formPages[Math.min(currentIdx, formPages.length - 1)]
@@ -929,6 +1024,13 @@ export default function AnswerQuiz() {
                   </div>
                 )}
 
+                {pwWrong[current.id] && (
+                  <p className="mt-3 text-sm font-semibold text-red-500 flex items-center justify-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    Password salah
+                  </p>
+                )}
+
                 {current.type === 'essay' && (
                   <div className="mt-4">
                     <Textarea
@@ -937,6 +1039,17 @@ export default function AnswerQuiz() {
                       className="min-h-[180px] text-base leading-relaxed"
                       placeholder="Write your answer here..."
                       rows={6}
+                    />
+                  </div>
+                )}
+                {current.type === 'password' && (
+                  <div className="mt-4">
+                    <Input
+                      value={answers[current.id] || ''}
+                      onChange={(e) => handleTextChange(current.id, e.target.value)}
+                      className={`text-center text-lg h-14 font-mono ${validationErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                      placeholder="Masukkan password"
+                      error={pwWrong[current.id] ? 'Password salah' : undefined}
                     />
                   </div>
                 )}
@@ -1072,7 +1185,7 @@ export default function AnswerQuiz() {
         </motion.div>
       )}
       {isOwnerPreview && <PreviewNotice />}
-      <div className="max-w-lg mx-auto p-4 pb-28">
+      <div className="max-w-2xl mx-auto p-4 pb-28">
         {bannerPath && (
           <img src={bannerPath} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
@@ -1141,7 +1254,7 @@ export default function AnswerQuiz() {
                   {validationErrors[q.id] && (
                     <p className="text-xs font-semibold text-red-500 flex items-center gap-1 mb-3">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      This question is required
+                      {q.type === 'password' && pwWrong[q.id] ? 'Password salah, periksa kembali' : 'This question is required'}
                     </p>
                   )}
                   {q.image && (isAudioUrl(q.image.path) ? (
@@ -1238,6 +1351,15 @@ export default function AnswerQuiz() {
                       className="min-h-[120px]"
                       rows={4}
                       placeholder="Write your answer..."
+                    />
+                  )}
+
+                  {q.type === 'password' && (
+                    <Input
+                      value={answers[q.id] || ''}
+                      onChange={(e) => handleTextChange(q.id, e.target.value)}
+                      className={`font-mono ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                      placeholder="Masukkan password"
                     />
                   )}
 

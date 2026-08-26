@@ -24,12 +24,13 @@ const TYPE_LABELS = {
   dropdown: 'Dropdown',
   short_answer: 'Short Answer',
   essay: 'Essay',
+  password: 'Password',
   date: 'Date',
   time: 'Time',
   file_upload: 'File Upload',
 }
 
-const TYPE_OPTIONS = ['multiple_choice', 'checkbox', 'dropdown', 'short_answer', 'essay', 'date', 'time', 'file_upload']
+const TYPE_OPTIONS = ['multiple_choice', 'checkbox', 'dropdown', 'short_answer', 'essay', 'password', 'date', 'time', 'file_upload']
 const OPTION_TYPES = ['multiple_choice', 'checkbox', 'dropdown']
 const NO_GRADE_TYPES = ['essay', 'date', 'time', 'file_upload']
 
@@ -48,11 +49,12 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   const singleSectionId = sectionsAllowed && sections?.length === 1 ? sections[0].id : null
   const [form, setForm] = useState({
     question_text: '',
-    type: 'multiple_choice',
+    type: 'essay',
     points: 1,
     is_scored: true,
     is_required: true,
-    options: [{ option_text: '', is_correct: false }],
+    options: [],
+    password_keyword: '',
     ...(initial || {}),
     section_id: initial?.section_id || singleSectionId,
   })
@@ -139,7 +141,8 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   }
 
   const textOnly = (html) => (html || '').replace(/<[^>]*>/g, '').trim()
-  const canSave = !!textOnly(form.question_text)
+  const isPassword = form.type === 'password'
+  const canSave = !!textOnly(form.question_text) && (!isPassword || !!form.password_keyword?.trim())
   const needsOptions = OPTION_TYPES.includes(form.type)
   const noGrade = NO_GRADE_TYPES.includes(form.type)
   const hasCorrect = form.options.some((o) => o.is_correct)
@@ -151,6 +154,22 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
       </Select>
       {TYPE_HINTS[form.type] && (
         <p className="text-xs text-gray-400 dark:text-gray-500 -mt-3">{TYPE_HINTS[form.type]}</p>
+      )}
+
+         {isPassword && (
+        <div>
+          <label className="field-label">Keyword password *</label>
+          <input
+            value={form.password_keyword || ''}
+            onChange={(e) => setForm((p) => ({ ...p, password_keyword: e.target.value }))}
+            placeholder="e.g. Rahasia2026"
+            className={`input-field font-mono ${ferr('password_keyword') ? 'border-incorrect focus:border-incorrect' : ''}`}
+            maxLength={255}
+            spellCheck={false}
+          />
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Jawaban harus cocok persis untuk lanjut ke section berikutnya.</p>
+          {ferr('password_keyword') && <p className="field-error">{ferr('password_keyword')}</p>}
+        </div>
       )}
 
       {sectionsAllowed && sections?.length > 1 && (
@@ -538,6 +557,7 @@ function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, edit
               is_scored: q.is_scored !== false,
               is_required: q.is_required,
               section_id: q.section_id || null,
+              password_keyword: q.password_keyword || '',
               image: q.image,
               options: q.options?.length
                 ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct, image: o.image }))
@@ -717,6 +737,7 @@ export default function QuestionBuilder() {
       is_scored: data.is_scored !== false,
       is_required: data.is_required,
       section_id: data.section_id || null,
+      password_keyword: data.type === 'password' ? data.password_keyword : undefined,
       options: OPTION_TYPES.includes(data.type)
         ? data.options.filter((o) => o.option_text.trim()).map((o) => ({
           ...(o.id ? { id: o.id } : {}),

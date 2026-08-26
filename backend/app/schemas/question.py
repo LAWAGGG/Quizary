@@ -3,6 +3,10 @@ from typing import Optional
 from pydantic import BaseModel, Field, model_validator
 
 
+QUESTION_TYPE_PATTERN = r"^(multiple_choice|checkbox|dropdown|short_answer|essay|password|date|time|file_upload)$"
+NO_OPTION_TYPES = ("short_answer", "essay", "password", "date", "time", "file_upload")
+
+
 class OptionCreate(BaseModel):
     option_text: str = Field(min_length=1, max_length=2000)
     is_correct: bool = False
@@ -33,29 +37,33 @@ class ImageResponse(BaseModel):
 
 
 class QuestionCreate(BaseModel):
-    type: str = Field(pattern=r"^(multiple_choice|checkbox|dropdown|short_answer|essay|date|time|file_upload)$")
+    type: str = Field(pattern=QUESTION_TYPE_PATTERN)
     question_text: str = Field(min_length=1, max_length=5000)
     points: int = Field(default=1, ge=0, le=999)
     is_required: bool = True
     section_id: Optional[int] = None
+    password_keyword: Optional[str] = Field(None, min_length=1, max_length=255)
     options: list[OptionCreate] = []
 
     @model_validator(mode="after")
     def validate_options(self):
         if self.type in ("multiple_choice", "checkbox", "dropdown") and not self.options:
             raise ValueError("multiple_choice, checkbox and dropdown questions require at least 1 option")
-        if self.type in ("short_answer", "essay", "date", "time", "file_upload") and self.options:
+        if self.type in NO_OPTION_TYPES and self.options:
             raise ValueError("this question type must not have options")
+        if self.type == "password" and not (self.password_keyword or "").strip():
+            raise ValueError("password questions require a password_keyword")
         return self
 
 
 class QuestionUpdate(BaseModel):
-    type: Optional[str] = Field(None, pattern=r"^(multiple_choice|checkbox|dropdown|short_answer|essay|date|time|file_upload)$")
+    type: Optional[str] = Field(None, pattern=QUESTION_TYPE_PATTERN)
     question_text: Optional[str] = Field(None, min_length=1, max_length=5000)
     points: Optional[int] = Field(None, ge=0, le=999)
     is_scored: Optional[bool] = None
     is_required: Optional[bool] = None
     section_id: Optional[int] = None
+    password_keyword: Optional[str] = Field(None, min_length=1, max_length=255)
     options: Optional[list[OptionUpdate]] = None
 
     @model_validator(mode="after")
@@ -65,7 +73,7 @@ class QuestionUpdate(BaseModel):
         if q_type is not None and opts is not None:
             if q_type in ("multiple_choice", "checkbox", "dropdown") and len(opts) == 0:
                 raise ValueError("multiple_choice, checkbox and dropdown questions require at least 1 option")
-            if q_type in ("short_answer", "essay", "date", "time", "file_upload") and len(opts) > 0:
+            if q_type in NO_OPTION_TYPES and len(opts) > 0:
                 raise ValueError("this question type must not have options")
         return self
 
@@ -80,6 +88,7 @@ class QuestionResponse(BaseModel):
     is_required: bool
     section_id: Optional[int] = None
     group_id: Optional[str] = None
+    password_keyword: Optional[str] = None
     options: list[OptionResponse] = []
     images: list[dict] = []
 

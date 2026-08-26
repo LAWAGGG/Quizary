@@ -4,6 +4,29 @@ import { sessionTokenHeaders } from '../lib/sessionToken'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+const draftKey = (sid) => `quizary_draft_${sid}`
+
+/**
+ * Draft offline — jaring pengaman untuk jawaban yang belum sempat sampai ke
+ * server (internet mati, tab ditutup sebelum autosave berhasil). Disimpan per
+ * submission_id sehingga anonim maupun login dilayani jalur yang sama.
+ * Entri dihapus begitu tersimpan ke server; seluruh kunci dihapus saat sesi
+ * selesai (clearDraft). Tidak punya TTL — persisten sampai salah satu itu.
+ */
+export function loadDraft(submissionId) {
+  try {
+    return JSON.parse(localStorage.getItem(draftKey(submissionId))) || {}
+  } catch {
+    return {}
+  }
+}
+
+export function clearDraft(submissionId) {
+  try {
+    localStorage.removeItem(draftKey(submissionId))
+  } catch {}
+}
+
 /**
  * useAutosave — debounce 500ms + retry exponential backoff untuk autosave.
  * Status per pertanyaan: 'saving' | 'saved' | 'error' | null (idle).
@@ -16,6 +39,30 @@ export function useAutosave({ submissionId, onExpired }) {
     setStatuses((prev) => ({ ...prev, [qId]: status }))
   }, [])
 
+  const dropDraftEntry = useCallback((qId) => {
+    try {
+      const all = loadDraft(submissionId)
+      delete all[qId]
+      if (Object.keys(all).length) localStorage.setItem(draftKey(submissionId), JSON.stringify(all))
+      else localStorage.removeItem(draftKey(submissionId))
+    } catch {}
+  }, [submissionId])
+
+  const stashDraft = useCallback((qId, payload) => {
+    try {
+      const all = loadDraft(submissionId)
+      const value = Array.isArray(payload.option_ids) ? payload.option_ids : payload.answer_text
+      // Nilai kosong tidak distash — menghindari menghidupkan jawaban yang
+      // memang sengaja dikosongkan user saat offline.
+      const empty = Array.isArray(value) ? !value.length : !value
+      if (empty) dropDraftEntry(qId)
+      else {
+        all[qId] = { value, ts: Date.now() }
+        localStorage.setItem(draftKey(submissionId), JSON.stringify(all))
+      }
+    } catch {} // storage penuh/blocked — autosave server tetap jalan
+  }, [submissionId, dropDraftEntry])
+
   const flush = useCallback(async (qId, payload) => {
     const attempt = async (retriesLeft = 2) => {
       try {
@@ -25,6 +72,7 @@ export function useAutosave({ submissionId, onExpired }) {
           return
         }
         setStatus(qId, 'saved')
+        dropDraftEntry(qId)
       } catch (err) {
         if (err.response?.status === 410) {
           onExpired?.()
@@ -35,23 +83,24 @@ export function useAutosave({ submissionId, onExpired }) {
           await sleep(400 * (3 - retriesLeft))
           return attempt(retriesLeft - 1)
         }
-        setStatus(qId, 'error')
+        setStatus(qId, 'error') // draft lokal dipertahankan sebagai cadangan
         throw err
       }
     }
     await attempt()
-  }, [submissionId, onExpired, setStatus])
+  }, [submissionId, onExpired, setStatus, dropDraftEntry])
 
   const save = useCallback((qId, value) => {
     clearTimeout(timers.current[qId])
     setStatus(qId, 'saving')
+    const payload = Array.isArray(value)
+      ? { question_id: qId, option_ids: value }
+      : { question_id: qId, answer_text: value }
+    stashDraft(qId, payload)
     timers.current[qId] = setTimeout(() => {
-      const payload = Array.isArray(value)
-        ? { question_id: qId, option_ids: value }
-        : { question_id: qId, answer_text: value }
       flush(qId, payload)
     }, 500)
-  }, [flush, setStatus])
+  }, [flush, setStatus, stashDraft])
 
   const flushAll = useCallback(async (answers) => {
     const tasks = Object.entries(answers).map(([qId, value]) => {
