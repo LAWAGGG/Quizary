@@ -353,7 +353,7 @@ export default function FormEdit() {
 
       <PageHeader
         eyebrow="Form workspace"
-        title={stripTags(form.title) || 'Form Settings'}
+        title={form.title ? <RichText html={form.title} /> : 'Form Settings'}
         description={
           <span className="inline-flex items-center gap-2">
             <StatusBadge status={form.status} />
@@ -736,7 +736,7 @@ export default function FormEdit() {
                 <X className="w-5 h-5" />
               </button>
               <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 mb-1">Scan to open</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Pindai kode QR untuk membuka {stripTags(form.title)}.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Pindai kode QR untuk membuka <RichText html={form.title} className="rich-text" />.</p>
               <div className="flex justify-center p-4 border border-gray-100 dark:border-gray-800 rounded-2xl">
                 <QRCodeCanvas
                   ref={qrRef}

@@ -156,7 +156,7 @@ export default function Results() {
 
   useEffect(() => {
     api.get(`/forms/${formId}`).then((res) => {
-      setFormTitle(stripTags(res.data.title))
+      setFormTitle(res.data.title)
       setIsQuiz(res.data.type === 'quiz')
     }).catch(() => {})
   }, [formId])
@@ -169,7 +169,7 @@ export default function Results() {
     try {
       const res = await api.get(`/forms/${formId}/export/excel`, { responseType: 'blob' })
       const url = URL.createObjectURL(res.data)
-      const safeTitle = (formTitle || 'form').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '')
+      const safeTitle = (stripTags(formTitle) || 'form').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '')
       const today = new Date().toISOString().slice(0, 10)
       const a = document.createElement('a')
       a.href = url
@@ -223,7 +223,7 @@ export default function Results() {
     <div>
       <PageHeader
         eyebrow="Responses"
-        title={formTitle || 'Results'}
+        title={formTitle ? <RichText html={formTitle} /> : 'Results'}
         description={`${meta.total} submission${meta.total !== 1 ? 's' : ''}`}
         actions={
           <>
@@ -516,9 +516,9 @@ export default function Results() {
                                           ) : a.question_type === 'file_upload' ? (
                                             <a href={a.answer_file} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">Lihat file jawaban</a>
                                           ) : ['multiple_choice', 'checkbox', 'dropdown'].includes(a.question_type) ? (
-                                            a.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(' · ')
+                                            <RichText html={a.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(' · ')} className="rich-text" />
                                           ) : (
-                                            a.answer_text
+                                            <RichText html={a.answer_text} className="rich-text" />
                                           )}
                                         </div>
                                         {a?.is_correct === true && (

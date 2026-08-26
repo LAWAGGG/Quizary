@@ -163,7 +163,7 @@ export default function QuizResult() {
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
                 {formTitle ? (
-                  <>Your response to <span className="font-semibold text-ink dark:text-gray-100">"{formTitle}"</span> has been recorded.</>
+                  <>Your response to <span className="font-semibold text-ink dark:text-gray-100">"<RichText html={formTitle} className="rich-text" />"</span> has been recorded.</>
                 ) : (
                   'Your response has been recorded.'
                 )}
@@ -243,7 +243,7 @@ export default function QuizResult() {
           className="text-center mb-8"
         >
           {formTitle && (
-            <p className="eyebrow justify-center" style={{ color: palette.base }}>{formTitle}</p>
+            <p className="eyebrow justify-center" style={{ color: palette.base }}><RichText html={formTitle} className="rich-text" /></p>
           )}
 
           <h1 className="font-display text-2xl md:text-[26px] font-bold text-ink dark:text-gray-100 mt-3 leading-snug">

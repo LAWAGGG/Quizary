@@ -168,7 +168,7 @@ export default function FormLanding() {
           icon={<Lock className="w-6 h-6 text-white" />}
           title="Sign in required"
         >
-          <p className="text-white/70 text-sm mt-2 mb-6">You need to sign in to access {stripTags(form.title)}.</p>
+          <p className="text-white/70 text-sm mt-2 mb-6">You need to sign in to access <RichText html={form.title} className="rich-text" />.</p>
           <Button variant="secondary" size="xl" onClick={() => navigate('/login')}>
             Login
           </Button>
@@ -338,7 +338,7 @@ export default function FormLanding() {
       <DotCorner position="top-left" color={palette.base} />
       <DotCorner position="bottom-right" color={palette.base} />
       {isPreview && <PreviewNotice />}
-      <div className="flex-1 max-w-lg mx-auto w-full p-6 relative">
+      <div className="flex-1 max-w-2xl mx-auto w-full p-6 relative">
         {form.banner_path && (
           <img src={form.banner_path} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}

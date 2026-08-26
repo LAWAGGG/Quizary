@@ -758,7 +758,7 @@ export default function AnswerQuiz() {
               >
                 <Info className="w-4 h-4" />
               </button>
-              <span className="text-sm font-semibold text-white truncate">{formTitle}</span>
+              <span className="text-sm font-semibold text-white truncate"><RichText html={formTitle} className="rich-text" /></span>
             </div>
             <div className="flex items-center gap-2">
               {current && (
@@ -1077,7 +1077,7 @@ export default function AnswerQuiz() {
           <img src={bannerPath} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
         <div className="flex items-center justify-between gap-3 mb-6">
-          <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100">{formTitle}</h1>
+          <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={formTitle} className="rich-text" /></h1>
           <div className="flex items-center gap-2 shrink-0">
             {timeLeft !== null && (
               <span className={`inline-flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums px-2.5 h-8 rounded-lg transition-colors ${timeLeft < 30000

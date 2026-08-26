@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ExternalLink, ClipboardList } from 'lucide-react'
 import api from '../../api/client'
-import { Card, Button, StatusBadge, PageHeader, EmptyState, CardSkeleton } from '../../components/ui'
+import { Card, Button, StatusBadge, PageHeader, EmptyState, CardSkeleton, RichText } from '../../components/ui'
 
 export default function MySubmissions() {
   const navigate = useNavigate()
@@ -61,7 +61,7 @@ export default function MySubmissions() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-display font-semibold text-ink dark:text-gray-100 truncate">{sub.form_title}</h3>
+                      <h3 className="font-display font-semibold text-ink dark:text-gray-100 truncate"><RichText html={sub.form_title} /></h3>
                       <ExternalLink className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 shrink-0" />
                     </div>
                     {sub.score !== null && sub.score !== undefined && (

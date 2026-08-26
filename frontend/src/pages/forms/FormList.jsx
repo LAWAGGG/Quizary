@@ -187,7 +187,7 @@ export default function FormList() {
                     <FormVisual form={form} />
                     <h1 className="relative text-xl font-display font-semibold text-ink dark:text-gray-100 mb-1 truncate"><RichText html={form.title} /></h1>
                     {form.description && (
-                      <p className="relative text-sm text-gray-400 dark:text-gray-500 line-clamp-2 mb-3 flex-1 pr-16">{form.description}</p>
+                      <RichText html={form.description} className="rich-text relative block text-sm text-gray-400 dark:text-gray-500 line-clamp-2 mb-3 flex-1 pr-16" />
                     )}
                     {/* ruang untuk klaster pojok kanan-bawah */}
                     <div className="relative h-6" />

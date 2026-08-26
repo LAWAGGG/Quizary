@@ -69,7 +69,7 @@ function QuestionRow({ q, i, total, open, onToggle }) {
           {i + 1}
         </span>
         <span className="flex-1 min-w-0">
-          <span className="block text-sm font-medium text-ink dark:text-gray-100 truncate">{text}</span>
+          <span className="block text-sm font-medium text-ink dark:text-gray-100 truncate"><RichText html={text} className="rich-text block truncate" /></span>
           <span className="flex items-center gap-2 mt-1.5">
             <span className="flex-1 h-2 bg-gray-100 dark:bg-ink-800 rounded-full overflow-hidden">
               <motion.span
@@ -87,7 +87,7 @@ function QuestionRow({ q, i, total, open, onToggle }) {
         {q.most_selected ? (
           <span className="hidden md:inline-flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-ink-800 px-2.5 py-1 rounded-full truncate max-w-[220px] shrink-0">
             <CheckCircle2 className="w-3.5 h-3.5 text-correct shrink-0" />
-            <span className="truncate">{stripHtml(q.most_selected)}</span>
+            <span className="truncate"><RichText html={stripHtml(q.most_selected)} className="rich-text block truncate" /></span>
           </span>
         ) : null}
         <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
@@ -99,7 +99,7 @@ function QuestionRow({ q, i, total, open, onToggle }) {
             <div className="space-y-2.5">
               {q.option_breakdown.map((o) => (
                 <div key={o.option_id} className="flex items-center gap-3">
-                  <span className="text-sm text-gray-600 dark:text-gray-300 flex-1 min-w-0 truncate">{stripHtml(o.option_text)}</span>
+                  <span className="text-sm text-gray-600 dark:text-gray-300 flex-1 min-w-0 truncate"><RichText html={stripHtml(o.option_text)} className="rich-text block truncate" /></span>
                   <div className="flex-1 h-2.5 bg-gray-100 dark:bg-ink-800 rounded-full overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}

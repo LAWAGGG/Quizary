@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { Plus, Eye, ClipboardList, HelpCircle, Send, Users, TrendingUp } from 'lucide-react'
 import api from '../../api/client'
 import { useAuth } from '../../hooks/useAuth'
-import { Card, Button, StatusBadge, CardSkeleton, SpotlightCard, AuroraBg } from '../../components/ui'
+import { Card, Button, StatusBadge, CardSkeleton, SpotlightCard, AuroraBg, RichText } from '../../components/ui'
 
 const STATS = [
   { key: 'total_forms', label: 'Total Forms', icon: ClipboardList, tint: 'bg-primary-50 text-primary' },
@@ -136,7 +136,7 @@ export default function Dashboard() {
                       <tr key={f.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/70 dark:hover:bg-ink-800/70 transition-colors">
                         <td className="py-3.5 pr-3 text-sm font-medium text-ink dark:text-gray-100">
                           <Link to={`/forms/${f.id}/results`} className="hover:text-primary transition-colors">
-                            {f.title}
+                            <RichText html={f.title} />
                           </Link>
                         </td>
                         <td className="py-3.5 pr-3">
@@ -187,7 +187,7 @@ export default function Dashboard() {
                 <div className="flex gap-2 mt-2">
                   {data?.submission_trend?.map((t) => (
                     <span key={t.form_id} className="flex-1 min-w-0 text-center" title={`${t.title} — ${t.count} answer${t.count !== 1 ? 's' : ''}`}>
-                      <span className="block text-[10px] text-gray-400 dark:text-gray-500 truncate">{t.title}</span>
+                      <span className="block text-[10px] text-gray-400 dark:text-gray-500 truncate"><RichText html={t.title} /></span>
                     </span>
                   ))}
                 </div>
