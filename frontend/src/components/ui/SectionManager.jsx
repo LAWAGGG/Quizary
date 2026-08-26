@@ -141,12 +141,18 @@ function DraggableQuestion({ q, onUnassign }) {
   )
 }
 
-function UnassignedPool({ questions, isOver, dropProps }) {
+function UnassignedPool({ questions }) {
+  // useDroppable HARUS dijalankan di komponen yang berada DI DALAM <DndContext>.
+  // Dipanggil di body SectionManager = di luar provider, droppable tak terdaftar.
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'unassigned',
+    data: { type: 'unassigned' },
+  })
   const unassigned = questions.filter((q) => !q.section_id)
 
   return (
     <div
-      ref={dropProps.setNodeRef}
+      ref={setNodeRef}
       className={`space-y-2 rounded-xl p-2 transition-all ${isOver ? 'border border-primary bg-primary-50/50 dark:bg-primary-900/20' : ''}`}
     >
       <div className="flex items-center gap-2 px-1">
@@ -373,11 +379,6 @@ export default function SectionManager({ formId, show, onClose, sections: initia
     }
   }
 
-  const unassignedDrop = useDroppable({
-    id: 'unassigned',
-    data: { type: 'unassigned' },
-  })
-
   const activeQuestion = activeDrag?.type === 'question'
     ? questions.find((q) => q.id === Number(activeDrag.id?.toString().replace(QUESTION_PREFIX, '')))
     : null
@@ -488,11 +489,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
                   </button>
                 )}
 
-                <UnassignedPool
-                  questions={questions}
-                  isOver={unassignedDrop.isOver}
-                  dropProps={unassignedDrop}
-                />
+                <UnassignedPool questions={questions} />
               </div>
 
               <DragOverlay dropAnimation={null} className="origin-top-left">
