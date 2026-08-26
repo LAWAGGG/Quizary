@@ -37,7 +37,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
   const hideTimer = useRef(null)
   const [active, setActive] = useState(false)
   const [symbolsOpen, setSymbolsOpen] = useState(false)
-  // Dialog formula: { tex, display, index, length } — index/length = rentang
+  // Dialog formula: { tex, index, length } — index/length = rentang
   // teks editor yang diganti saat disisipkan (edit rumus existing).
   const [formula, setFormula] = useState(null)
   onChangeRef.current = onChange
@@ -49,7 +49,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     const toolbar = compact
       ? [['bold', 'italic', 'underline', 'link', 'symbol', 'fx', 'clean']]
       : [
-        [{ header: [2, 3, false] }, 'bold', 'italic', 'underline', 'strike', 'code-block', 'link', 'symbol', 'fx', 'clean'],
+        ['bold', 'italic', 'underline', 'strike', 'code-block', 'link', 'symbol', 'fx', 'clean'],
       ]
 
     const quill = new Quill(container, {
@@ -147,7 +147,6 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     if (!quill) return
     const sel = quill.getSelection()
     let tex = ''
-    let display = false
     const index = sel ? sel.index : Math.max(0, quill.getLength() - 1)
     let length = sel ? sel.length : 0
 
@@ -156,15 +155,19 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       const m = text.match(/^\$\$([\s\S]+)\$\$$/) || text.match(/^\$([\s\S]+)\$$/)
       if (m) {
         tex = m[1]
-        display = text.startsWith('$$')
         // Ganti utuh termasuk delimiternya saat save
       } else {
         // Seleksi biasa akan ditimpa oleh rumus baru
       }
     }
 
-    setFormula({ tex, display, index, length })
+    setFormula({ tex, index, length })
   }
+
+  // Mode render ditentukan otomatis dari isi rumus — user tidak perlu tahu
+  // soal delimiter $/$$. Rumus "berat" (pecahan, sigma, integral, matriks)
+  // tampil sebagai blok center; rumus ringkas menyatu dengan teks.
+  const isDisplayTex = (tex) => /\\(frac|dfrac|tfrac|sum|int|prod|lim|begin)(?![a-zA-Z])|\\\\/.test(tex)
 
   const saveFormula = () => {
     const quill = quillRef.current
@@ -172,7 +175,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     const tex = formula.tex.trim()
     setFormula(null)
     if (!tex) return
-    const wrap = formula.display ? '$$' : '$'
+    const wrap = isDisplayTex(tex) ? '$$' : '$'
     const text = `${wrap}${tex}${wrap}`
     quill.deleteText(formula.index, formula.length, 'silent')
     quill.insertText(formula.index, text, 'user')
@@ -189,7 +192,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     const tex = formula?.tex.trim()
     if (!tex) return null
     try {
-      return { html: katex.renderToString(tex, { throwOnError: true, displayMode: formula.display }) }
+      return { html: katex.renderToString(tex, { throwOnError: true, displayMode: isDisplayTex(tex) }) }
     } catch (err) {
       return { error: err.message?.replace(/^KaTeX parse error:\s*/, '') || 'Sintaks belum valid' }
     }
@@ -272,23 +275,6 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
             spellCheck={false}
           />
 
-          <div className="flex items-center gap-1 mt-2">
-            {[{ v: false, l: '$…$ Inline' }, { v: true, l: '$$…$$ Blok' }].map((opt) => (
-              <button
-                key={opt.l}
-                type="button"
-                onClick={() => setFormula((f) => ({ ...f, display: opt.v }))}
-                className={`h-6 px-2 rounded-md text-xs font-medium transition-colors ${
-                  formula.display === opt.v
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
-                }`}
-              >
-                {opt.l}
-              </button>
-            ))}
-          </div>
-
           <div
             className={`mt-2 min-h-[64px] max-h-32 overflow-x-auto overflow-y-hidden flex items-center justify-center rounded-lg border px-3 py-2 ${
               formulaPreview?.error
@@ -320,8 +306,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
             ))}
           </div>
 
-          <div className="flex items-center justify-between mt-3">
-            <span className="text-[10px] text-gray-400 dark:text-gray-500">Enter sisipkan · Esc batal</span>
+          <div className="flex items-center justify-end mt-3">
             <div className="flex gap-1.5">
               <Button size="sm" variant="ghost" onClick={() => setFormula(null)}>Batal</Button>
               <Button size="sm" onClick={saveFormula} disabled={!formula.tex.trim()}>Sisipkan</Button>

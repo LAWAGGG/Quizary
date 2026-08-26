@@ -56,14 +56,13 @@ function FormTypeCluster({ form }) {
 }
 
 // Area visual atas kartu: banner asli bila ada, fallback gradasi tema + ikon
-// type besar samar (bukan mock palsu — tetap jujur merepresentasikan form).
 function FormVisual({ form }) {
   if (form.banner_path) {
     return (
       <img
         src={form.banner_path}
         alt=""
-        className="relative w-full h-32 max-h-32 object-cover rounded-xl border-2 border-[var(--tbb)] dark:border-[var(--tbbd)] mb-3"
+        className="relative w-full h-44 max-h-44 object-cover rounded-xl border-2 border-[var(--tbb)] dark:border-[var(--tbbd)] mb-3"
         loading="lazy"
       />
     )

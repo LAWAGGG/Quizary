@@ -778,21 +778,19 @@ export default function AnswerQuiz() {
   // setelah sesi mulai selalu nempel di ekor snapshot.
   const formPages = (() => {
     const ordered = []
-      ; (data.sections || []).forEach((s) => {
-        questions.filter((q) => q.section_id === s.id).forEach((q) => ordered.push(q))
-      })
-    const sectionIds = new Set((data.sections || []).map((s) => s.id))
     const seen = new Set()
-    questions.filter((q) => !q.section_id || !sectionIds.has(q.section_id)).forEach((q) => { ordered.push(q); seen.add(q.id) })
-    questions.forEach((q) => { if (!seen.has(q.id)) ordered.push(q) })
+    ;(data.sections || []).forEach((s) => {
+      questions.filter((q) => q.section_id === s.id && !seen.has(q.id)).forEach((q) => { ordered.push(q); seen.add(q.id) })
+    })
+    questions.filter((q) => !seen.has(q.id)).forEach((q) => { ordered.push(q); seen.add(q.id) })
 
     if (isOneByOne) return ordered.map((q) => ({ title: null, questions: [q] }))
     const pages = []
-      ; ordered.forEach((q) => {
-        const last = pages[pages.length - 1]
-        if (last && last.key === (q.section_id ?? 'none')) last.questions.push(q)
-        else pages.push({ key: q.section_id ?? 'none', title: (data.sections || []).find((s) => s.id === q.section_id)?.title || null, questions: [q] })
-      })
+    ;ordered.forEach((q) => {
+      const last = pages[pages.length - 1]
+      if (last && last.key === (q.section_id ?? 'none')) last.questions.push(q)
+      else pages.push({ key: q.section_id ?? 'none', title: (data.sections || []).find((s) => s.id === q.section_id)?.title || null, questions: [q] })
+    })
     return pages.length ? pages : [{ title: null, questions }]
   })()
   const formPage = formPages[Math.min(currentIdx, formPages.length - 1)]
