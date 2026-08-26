@@ -377,6 +377,31 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   content: 'Ω';
 }
 
+/* Tombol formula LaTeX — ƒx serif italic, kontras dengan Ω simbol */
+.rich-editor .ql-toolbar button.ql-fx {
+  width: auto;
+  padding: 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  font-style: italic;
+  line-height: 24px;
+  color: #6b7280;
+}
+
+.dark .rich-editor .ql-toolbar button.ql-fx {
+  color: #9ca3af;
+}
+
+.rich-editor .ql-toolbar button.ql-fx:hover {
+  color: #6C5CE7;
+}
+
+.rich-editor .ql-toolbar button.ql-fx::after {
+  content: 'ƒx';
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: -1px;
+}
+
 /* Teks yang dirender dari editor (soal/opsi) — justify elemen inline */
 .rich-text p {
   margin: 0;
@@ -494,6 +519,21 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 .rich-text .ql-align-center { text-align: center; }
 .rich-text .ql-align-right { text-align: right; }
 .rich-text .ql-align-justify { text-align: justify; }
+
+/* KaTeX — rumus dari delimiter $...$ yang dirender RichText.
+   Blok panjang bisa melebihi lebar (matriks, integral panjang) →
+   scroll horizontal, jangan meluber keluar kartu. */
+.rich-text .katex-display {
+  margin: 0.5em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.15em 0;
+}
+
+/* Inline math di konteks sempit/truncate tetap boleh pecah baris natural */
+.rich-text .katex {
+  font-size: 1.1em;
+}
 
 /* Nested list indentation — mirror editor (.ql-indent-*) */
 .rich-text li.ql-indent-1 { padding-left: 4.5em; }
