@@ -63,7 +63,7 @@ function FormVisual({ form }) {
       <img
         src={form.banner_path}
         alt=""
-        className="relative h-30 w-full object-cover rounded-xl border-2 border-[var(--tbb)] dark:border-[var(--tbbd)] mb-3"
+        className="relative w-full h-32 max-h-32 object-cover rounded-xl border-2 border-[var(--tbb)] dark:border-[var(--tbbd)] mb-3"
         loading="lazy"
       />
     )

@@ -175,14 +175,13 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
       {sectionsAllowed && sections?.length > 1 && (
         <div>
           <label className="field-label">Section</label>
-          <select
+          <Select
             value={form.section_id || ''}
             onChange={(e) => setForm((p) => ({ ...p, section_id: e.target.value ? parseInt(e.target.value) : null }))}
-            className="input-field"
           >
             <option value="">— No section —</option>
             {sections.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
-          </select>
+          </Select>
         </div>
       )}
 
@@ -419,7 +418,12 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
         </div>
       </div>
 
-      <RichText html={question.question_text} className="rich-text block text-[15px] font-medium text-ink dark:text-gray-100 mb-3" />
+      <div className="mb-3 flex items-start gap-1">
+        <RichText html={question.question_text} className="rich-text block text-[15px] font-medium text-ink dark:text-gray-100" />
+        {question.is_required !== false && (
+          <span className="text-incorrect text-lg font-bold leading-none mt-0.5 shrink-0" title="Required">*</span>
+        )}
+      </div>
 {question.image && (isAudioUrl(question.image.path) ? (
         <audio controls src={question.image.path} preload="metadata" className="w-full max-w-sm mb-3" />
       ) : (
@@ -1411,14 +1415,13 @@ export default function QuestionBuilder() {
                 {importNeedsSection && (
                   <section>
                     <label className="field-label">Section tujuan *</label>
-                    <select
+                    <Select
                       value={importSectionId}
                       onChange={(e) => setImportSectionId(e.target.value)}
-                      className="input-field"
                     >
                       <option value="">— Pilih section —</option>
                       {sections.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
-                    </select>
+                    </Select>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
                       Semua soal hasil import akan masuk ke section ini.
                     </p>

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle, Info, ZoomIn, ZoomOut, X, Lock, FileUp } from 'lucide-react'
-import { Button, Input, Textarea, Card, FallbackPage, QuestionMap, ConfirmSubmitModal, RichText } from '../../components/ui'
+import { Button, Input, Textarea, Card, Select, FallbackPage, QuestionMap, ConfirmSubmitModal, RichText } from '../../components/ui'
 import { useAutosave, loadDraft, clearDraft } from '../../hooks/useAutosave'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
@@ -923,10 +923,8 @@ export default function AnswerQuiz() {
               <div className="max-w-lg mx-auto">
                 <div className="flex items-start justify-between gap-3 mb-1">
                   <div className="flex items-center gap-2">
-                    {current.is_required === false ? (
+                    {current.is_required === false && (
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-ink-800 px-2 py-0.5 rounded-full">Optional</span>
-                    ) : (
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--t)] bg-[var(--t-soft)] px-2 py-0.5 rounded-full">Required</span>
                     )}
                   </div>
                   <button
@@ -939,7 +937,12 @@ export default function AnswerQuiz() {
                     {reviewed[current.id] ? 'Marked' : 'Mark for review'}
                   </button>
                 </div>
-                <h2 className="font-display text-xl font-bold text-ink dark:text-gray-100 text-center mb-3"><RichText html={current.question_text} className="rich-text" /></h2>
+                <h2 className="font-display text-xl font-bold text-ink dark:text-gray-100 text-center mb-3 flex items-start justify-center gap-0.5">
+                  <span className="[&>p]:mb-0"><RichText html={current.question_text} className="rich-text" /></span>
+                  {current.is_required !== false && (
+                    <span className="text-incorrect font-bold shrink-0" title="Required">*</span>
+                  )}
+                </h2>
                 {/* {current.section_id && sectionsById[current.section_id] && (
                   <p className="text-center text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500 mb-3">
                     {sectionsById[current.section_id]}
@@ -1055,16 +1058,17 @@ export default function AnswerQuiz() {
                 )}
                 {current.type === 'dropdown' && (
                   <div className="mt-4">
-                    <select
+                    <Select
                       value={(answers[current.id] || [])[0] ?? ''}
                       onChange={(e) => handleSelect(current.id, e.target.value === '' ? null : Number(e.target.value))}
-                      className={`input-field text-base h-14 ${validationErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                      error={!!validationErrors[current.id]}
+                      className="text-base h-14"
                     >
                       <option value="">— Pilih jawaban —</option>
                       {current.options.map((opt, i) => (
                         <option key={opt.id} value={opt.id}>{LETTERS[i % LETTERS.length]}. {opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                 )}
 
@@ -1237,10 +1241,12 @@ export default function AnswerQuiz() {
                 >
                   <div className="mb-4">
                     <div className="flex items-start justify-between gap-4">
-                      <p className="font-semibold text-ink dark:text-gray-100 leading-snug flex-1"><RichText html={q.question_text} className="rich-text" /></p>
-                      {q.is_required !== false && (
-                        <span className="text-[10px] font-semibold text-gray-400 mt-1 shrink-0">Required</span>
-                      )}
+                      <div className="flex items-start gap-0.5 flex-1 min-w-0">
+                        <p className="font-semibold text-ink dark:text-gray-100 leading-snug flex-1 [&>p]:mb-0"><RichText html={q.question_text} className="rich-text" /></p>
+                        {q.is_required !== false && (
+                          <span className="text-incorrect font-bold leading-snug shrink-0" title="Required">*</span>
+                        )}
+                      </div>
                     </div>
                     <button
                       onClick={() => { setZoomTarget(q); setZoomScale(1) }}
@@ -1364,16 +1370,16 @@ export default function AnswerQuiz() {
                   )}
 
                   {q.type === 'dropdown' && (
-                    <select
+                    <Select
                       value={(answers[q.id] || [])[0] ?? ''}
                       onChange={(e) => handleSelect(q.id, e.target.value === '' ? null : Number(e.target.value))}
-                      className={`input-field ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                      error={!!validationErrors[q.id]}
                     >
                       <option value="">— Pilih jawaban —</option>
                       {q.options.map((opt, i) => (
                         <option key={opt.id} value={opt.id}>{LETTERS[i % LETTERS.length]}. {opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
                       ))}
-                    </select>
+                    </Select>
                   )}
 
                   {q.type === 'date' && (
