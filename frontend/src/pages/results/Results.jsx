@@ -38,7 +38,7 @@ function HoldSelectCard({ selectedCount, selected, onToggle, onTap, className = 
   return (
     <Card
       {...holdProps}
-      className={`cursor-pointer select-none ${selected ? 'ring-2 ring-primary' : ''} ${className}`}
+      className={`cursor-pointer select-none ${selected ? '!border-primary ring-2 ring-primary/30 bg-primary-50/40 dark:bg-primary-900/15' : ''} ${className}`}
     >
       {children}
     </Card>

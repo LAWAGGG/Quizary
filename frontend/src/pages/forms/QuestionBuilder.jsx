@@ -365,11 +365,15 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
 
 function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, onToggleSelect, groupId, groupSize }) {
   return (
-    <Card className={`transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? 'border-primary/50 shadow-card' : 'hover:border-gray-300 dark:hover:border-gray-700'} ${groupId ? 'border-l-4 !border-l-primary/50' : ''}`}>
+    <Card className={`transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? '!border-primary ring-2 ring-primary/30 bg-primary-50/40 dark:bg-primary-900/15' : 'hover:border-gray-300 dark:hover:border-gray-700'} ${groupId ? 'border-l-4 !border-l-primary/50' : ''}`}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="w-6 h-6 rounded-full bg-ink dark:dark:bg-ink-800 text-white text-xs font-bold flex items-center justify-center shrink-0">
-            {index + 1}
+          {/* Mobile: checkbox tersembunyi → bubble nomor jadi indikator seleksi */}
+          <span
+            className={`w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0 transition-colors ${selected ? 'bg-primary' : 'bg-ink dark:bg-ink-800'}`}
+            aria-hidden={selected}
+          >
+            {selected ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : index + 1}
           </span>
           <Badge scheme="gray">{TYPE_LABELS[question.type]}</Badge>
           {groupId && (
