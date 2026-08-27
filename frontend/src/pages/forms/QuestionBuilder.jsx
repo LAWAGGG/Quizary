@@ -755,9 +755,14 @@ export default function QuestionBuilder() {
   }
 
   const handleBatchUpdatePoints = async (points) => {
-    await api.patch(`/forms/${formId}/questions/points`, { points })
-    toast.success('Bobot soal diperbarui')
-    load(true)
+    try {
+      await api.patch(`/forms/${formId}/questions/points`, { points })
+      toast.success('Bobot soal diperbarui')
+      load(true)
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Gagal memperbarui bobot')
+      throw err
+    }
   }
 
   const handleSaveQuestion = async (data) => {
