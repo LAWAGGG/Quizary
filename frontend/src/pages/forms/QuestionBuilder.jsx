@@ -15,7 +15,7 @@ import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { isAudioUrl } from '../../lib/media'
-import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText } from '../../components/ui'
+import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText, ScoringSettings } from '../../components/ui'
 import SectionManager from '../../components/ui/SectionManager'
 
 const TYPE_LABELS = {
@@ -664,6 +664,8 @@ export default function QuestionBuilder() {
 
   const [form, setForm] = useState(null)
   const [questions, setQuestions] = useState([])
+  const [scoringMode, setScoringMode] = useState('auto')
+  const [scoringSaving, setScoringSaving] = useState(false)
   const [sections, setSections] = useState([])
   const [newSectionOpen, setNewSectionOpen] = useState(false)
   const [newSectionTitle, setNewSectionTitle] = useState('')
@@ -719,6 +721,7 @@ export default function QuestionBuilder() {
     ])
       .then(([fRes, qRes, sRes]) => {
         setForm(fRes.data)
+        setScoringMode(fRes.data.scoring_mode || 'auto')
         setQuestions(qRes.data.data)
         setSections(sRes.data.data)
         setSelectedIds([])
@@ -731,6 +734,31 @@ export default function QuestionBuilder() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId])
+
+  const handleScoringModeChange = async (mode) => {
+    if (!form || mode === scoringMode || scoringSaving) return
+    const previous = scoringMode
+    setScoringMode(mode)
+    setScoringSaving(true)
+    try {
+      const response = await api.put(`/forms/${formId}`, { scoring_mode: mode })
+      setForm((current) => ({ ...current, ...response.data }))
+      // Auto mode redistributes points server-side; refresh values immediately.
+      if (mode === 'auto') load(true)
+      toast.success(mode === 'auto' ? 'Bobot otomatis diaktifkan' : 'Bobot manual diaktifkan')
+    } catch (err) {
+      setScoringMode(previous)
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Gagal mengubah metode bobot')
+    } finally {
+      setScoringSaving(false)
+    }
+  }
+
+  const handleBatchUpdatePoints = async (points) => {
+    await api.patch(`/forms/${formId}/questions/points`, { points })
+    toast.success('Bobot soal diperbarui')
+    load(true)
+  }
 
   const handleSaveQuestion = async (data) => {
     setSaveLoading(true)
@@ -1029,6 +1057,15 @@ export default function QuestionBuilder() {
         description={`${questions.length} question${questions.length !== 1 ? 's' : ''}`}
         actions={
           <>
+            {form.type === 'quiz' && (
+              <ScoringSettings
+                mode={scoringMode}
+                onModeChange={handleScoringModeChange}
+                saving={scoringSaving}
+                questions={questions}
+                onBatchUpdate={handleBatchUpdatePoints}
+              />
+            )}
             <input ref={docxRef} type="file" accept=".docx" onChange={handleDocxImport} className="hidden" />
             <Button variant="secondary" onClick={() => { if (docxRef.current) docxRef.current.value = ''; setShowImportModal(true) }} icon={<Upload className="w-4 h-4" />}>
               Import DOCX
