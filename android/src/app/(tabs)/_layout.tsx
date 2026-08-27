@@ -5,7 +5,7 @@ import { useAppTheme } from '../../context/ThemeContext';
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 function tabIcon(name: IoniconName) {
-  return ({ color, size }: { color: string; size: number }) => (
+  return ({ color, size }: { color: any; size: number }) => (
     <Ionicons name={name} color={color} size={size} />
   );
 }

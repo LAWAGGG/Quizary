@@ -16,7 +16,7 @@ export function ThemeToggleBtn() {
       <Ionicons
         name={isDark ? 'sunny-outline' : 'moon-outline'}
         size={18}
-        color={isDark ? '#F59E0B' : '#6366F1'}
+        color={isDark ? '#F59E0B' : '#6C5CE7'}
       />
     </TouchableOpacity>
   );
@@ -33,8 +33,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   btnLight: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#C7D2FE',
+    backgroundColor: '#F0EFFF',
+    borderColor: '#D5D0FA',
   },
   btnDark: {
     backgroundColor: '#1E293B',

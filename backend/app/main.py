@@ -13,16 +13,23 @@ app = FastAPI(title="Quizary API")
 
 logger = logging.getLogger("quizary")
 
+from fastapi.middleware.cors import CORSMiddleware
+
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8081",
+]
 # allow_credentials=False: auth is Bearer-token based (no cookies), so a
 # wildcard origin is safe. Wildcard + credentials is rejected by browsers.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+        
 UPLOAD_DIR = "uploads"
 os.makedirs(os.path.join(UPLOAD_DIR, "banners"), exist_ok=True)
 os.makedirs(os.path.join(UPLOAD_DIR, "question-images"), exist_ok=True)
@@ -32,12 +39,14 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     return response
-
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

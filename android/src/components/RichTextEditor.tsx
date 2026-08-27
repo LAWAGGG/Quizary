@@ -200,11 +200,11 @@ export function RichTextEditor({
             left: 12px;
           }
           a {
-            color: #6366F1 !important;
+            color: #6C5CE7 !important;
             text-decoration: underline !important;
           }
           blockquote {
-            border-left: 4px solid #6366F1;
+            border-left: 4px solid #6C5CE7;
             padding-left: 10px;
             color: ${textColor};
             opacity: 0.9;
@@ -749,7 +749,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   saveBtn: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#6C5CE7',
   },
   saveBtnText: {
     color: '#FFFFFF',

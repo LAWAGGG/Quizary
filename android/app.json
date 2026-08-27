@@ -33,7 +33,6 @@
           "imageWidth": 76
         }
       ],
-      "expo-camera",
       "expo-secure-store"
     ],
     "experiments": {

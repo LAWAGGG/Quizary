@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { apiLogin, saveToken } from '../services/api_service';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
@@ -16,11 +18,11 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const data = await apiLogin({ email: email.trim(), password });
-      
+
       if (data.token || data.access_token) {
         await saveToken(data.token || data.access_token);
       }
-      
+
       router.replace('/(tabs)/home');
     } catch (e: any) {
       Alert.alert('Login gagal', e.message || 'Email atau password salah / server tidak dapat dijangkau.');
@@ -54,14 +56,27 @@ export default function LoginScreen() {
         />
 
         <Text style={styles.label}>Password</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="••••••••"
-          placeholderTextColor="#475569"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+        <View style={styles.passwordContainer}>
+          <TextInput
+            style={styles.passwordInput}
+            placeholder="••••••••"
+            placeholderTextColor="#475569"
+            secureTextEntry={!showPassword}
+            value={password}
+            onChangeText={setPassword}
+          />
+          <TouchableOpacity
+            style={styles.eyeBtn}
+            onPress={() => setShowPassword(!showPassword)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons
+              name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+              size={20}
+              color="#94A3B8"
+            />
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity
           style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
@@ -92,8 +107,8 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', marginBottom: 36 },
   logoBox: {
     width: 86, height: 86, borderRadius: 22,
-    backgroundColor: '#3B82F6', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-    shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12,
+    backgroundColor: '#6C5CE7', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+    shadowColor: '#6C5CE7', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12,
     elevation: 8,
   },
   logoText: { fontSize: 44, fontWeight: 'bold', color: '#FFF' },
@@ -105,8 +120,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E293B', color: '#FFF', padding: 14,
     borderRadius: 10, fontSize: 15, borderWidth: 1, borderColor: '#334155',
   },
+  passwordContainer: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#1E293B', borderRadius: 10,
+    borderWidth: 1, borderColor: '#334155',
+  },
+  passwordInput: {
+    flex: 1, color: '#FFF', padding: 14, fontSize: 15,
+  },
+  eyeBtn: {
+    paddingHorizontal: 14, paddingVertical: 14,
+    justifyContent: 'center', alignItems: 'center',
+  },
   loginBtn: {
-    backgroundColor: '#3B82F6', padding: 16, borderRadius: 12,
+    backgroundColor: '#6C5CE7', padding: 16, borderRadius: 12,
     alignItems: 'center', marginTop: 12,
   },
   loginBtnDisabled: { opacity: 0.6 },
@@ -115,11 +142,11 @@ const styles = StyleSheet.create({
   line: { flex: 1, height: 1, backgroundColor: '#1E293B' },
   orText: { color: '#64748B', fontSize: 13 },
   guestBtn: {
-    borderWidth: 2, borderColor: '#3B82F6', padding: 14,
+    borderWidth: 2, borderColor: '#6C5CE7', padding: 14,
     borderRadius: 12, alignItems: 'center',
   },
-  guestBtnText: { color: '#3B82F6', fontWeight: 'bold', fontSize: 15 },
+  guestBtnText: { color: '#6C5CE7', fontWeight: 'bold', fontSize: 15 },
   registerContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
   registerText: { color: '#64748B' },
-  registerLink: { color: '#10B981', fontWeight: 'bold' },
+  registerLink: { color: '#6C5CE7', fontWeight: 'bold' },
 });

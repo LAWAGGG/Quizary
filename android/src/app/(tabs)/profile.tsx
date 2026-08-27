@@ -9,10 +9,12 @@ import {
   ActivityIndicator,
   ScrollView,
   RefreshControl,
+  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getMe, updateProfile, apiLogout, removeToken } from '../../services/api_service';
+import * as ImagePicker from 'expo-image-picker';
+import { getMe, updateProfile, apiLogout, removeToken, getStoredUser, saveUser } from '../../services/api_service';
 import { ThemeToggleBtn } from '../../components/ThemeToggleBtn';
 import { useAppTheme } from '../../context/ThemeContext';
 
@@ -22,17 +24,42 @@ export default function ProfileScreen() {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  const extractUserData = (data: any) => {
+    if (!data) return null;
+    if (data.user) return data.user;
+    if (data.data) return data.data;
+    return data;
+  };
+
   const loadProfile = useCallback(async () => {
+    // 1. Load instantly from cache if available
     try {
-      const data = await getMe();
-      if (data) {
-        setUser(data);
-        setName(data.name || '');
+      const cached = await getStoredUser();
+      console.log('[DEBUG PROFILE] Cached user in SecureStore:', JSON.stringify(cached));
+      if (cached) {
+        setUser(cached);
+        setName(cached.name || '');
+      }
+    } catch (e) {
+      console.log('[DEBUG PROFILE] Failed to get stored user:', e);
+    }
+
+    // 2. Fetch fresh user data from server
+    try {
+      const response = await getMe();
+      console.log('[DEBUG PROFILE] getMe response:', JSON.stringify(response));
+      const userData = extractUserData(response);
+      console.log('[DEBUG PROFILE] extracted userData:', JSON.stringify(userData));
+      if (userData) {
+        setUser(userData);
+        setName(userData.name || '');
+        await saveUser(userData);
       }
     } catch (err: any) {
-      console.log('Failed to fetch user profile:', err);
+      console.log('[DEBUG PROFILE] Failed to fetch user profile via getMe():', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -48,26 +75,89 @@ export default function ProfileScreen() {
     loadProfile();
   };
 
+  const handlePickAvatar = async () => {
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      console.log('[DEBUG AVATAR] ImagePicker result:', JSON.stringify(res));
+
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        const pickedUri = res.assets[0].uri;
+        console.log('[DEBUG AVATAR] Picked image URI:', pickedUri);
+        setUploadingAvatar(true);
+        try {
+          console.log('[DEBUG AVATAR] Calling updateProfile with avatar...');
+          const response = await updateProfile({ avatar: pickedUri });
+          console.log('[DEBUG AVATAR] updateProfile response:', JSON.stringify(response));
+          const updatedUser = extractUserData(response);
+          if (updatedUser) {
+            setUser(updatedUser);
+            await saveUser(updatedUser);
+          } else {
+            const fresh = await getMe();
+            const freshData = extractUserData(fresh);
+            if (freshData) {
+              setUser(freshData);
+              await saveUser(freshData);
+            }
+          }
+          Alert.alert('Sukses 🎉', 'Avatar berhasil diperbarui');
+        } catch (e: any) {
+          console.log('[DEBUG AVATAR] updateProfile error:', e);
+          Alert.alert('Gagal Mengubah Avatar', e.message || 'Terjadi kesalahan saat mengunggah avatar.');
+        } finally {
+          setUploadingAvatar(false);
+        }
+      }
+    } catch (err: any) {
+      console.log('[DEBUG AVATAR] launchImageLibraryAsync error:', err);
+      Alert.alert('Error', err.message || 'Gagal memilih gambar.');
+    }
+  };
+
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert('Required Field', 'Name cannot be empty.');
+      Alert.alert('Field Wajib', 'Nama tidak boleh kosong.');
       return;
     }
     setSaving(true);
     try {
-      const updated = await updateProfile({ name: name.trim() });
-      setUser(updated);
-      Alert.alert('Profile Updated 🎉', 'Your profile has been updated successfully!');
+      console.log('[DEBUG PROFILE] Calling updateProfile with name:', name.trim());
+      const response = await updateProfile({ name: name.trim() });
+      console.log('[DEBUG PROFILE] updateProfile name response:', JSON.stringify(response));
+      const updatedUser = extractUserData(response);
+
+      if (updatedUser) {
+        setUser(updatedUser);
+        setName(updatedUser.name || name.trim());
+        await saveUser(updatedUser);
+      } else {
+        const freshUser = await getMe();
+        const freshData = extractUserData(freshUser);
+        if (freshData) {
+          setUser(freshData);
+          setName(freshData.name || name.trim());
+          await saveUser(freshData);
+        }
+      }
+
+      Alert.alert('Profil Diperbarui 🎉', 'Profil berhasil disimpan');
     } catch (err: any) {
-      Alert.alert('Update Failed', err.message || 'Failed to update profile.');
+      console.log('[DEBUG PROFILE] updateProfile name error:', err);
+      Alert.alert('Update Gagal', err.message || 'Gagal memperbarui profil.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleLogout = () => {
-    Alert.alert('Confirm Logout', 'Are you sure you want to log out of your account?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert('Konfirmasi Logout', 'Apakah Anda yakin ingin keluar dari akun?', [
+      { text: 'Batal', style: 'cancel' },
       {
         text: 'Logout',
         style: 'destructive',
@@ -87,12 +177,12 @@ export default function ProfileScreen() {
     return (
       <View style={[styles.center, { backgroundColor: colors.bg }]}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.textSub }]}>Loading profile...</Text>
+        <Text style={[styles.loadingText, { color: colors.textSub }]}>Memuat profil...</Text>
       </View>
     );
   }
 
-  const initial = user?.name ? user.name.charAt(0).toUpperCase() : 'C';
+  const initial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
 
   return (
     <ScrollView
@@ -103,31 +193,57 @@ export default function ProfileScreen() {
     >
       {/* Top Workspace Header */}
       <View style={styles.topWorkspaceRow}>
-        <Text style={[styles.workspaceText, { color: colors.textSub }]}>{user?.name || 'Respondent'}'s profile</Text>
+        <Text style={[styles.workspaceText, { color: colors.textSub }]}>Profil {user?.name || 'Responden'}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <ThemeToggleBtn />
           <View style={[styles.userAvatarBtn, { backgroundColor: colors.primarySoft, borderColor: isDark ? colors.cardBorder : '#C7D2FE' }]}>
-            <Text style={[styles.userAvatarText, { color: colors.primary }]}>{initial}</Text>
+            {user?.avatar ? (
+              <Image source={{ uri: user.avatar }} style={styles.userAvatarImg} />
+            ) : (
+              <Text style={[styles.userAvatarText, { color: colors.primary }]}>{initial}</Text>
+            )}
           </View>
         </View>
       </View>
 
       {/* Page Header */}
       <View style={styles.header}>
-        <Text style={[styles.eyebrow, { color: colors.primary }]}>ACCOUNT</Text>
-        <Text style={[styles.title, { color: colors.text }]}>My Profile</Text>
-        <Text style={[styles.subtitle, { color: colors.textSub }]}>Update your name and avatar.</Text>
+        <Text style={[styles.eyebrow, { color: colors.primary }]}>AKUN</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Profil Saya</Text>
+        <Text style={[styles.subtitle, { color: colors.textSub }]}>Perbarui nama dan avatar akun Anda.</Text>
       </View>
 
       {/* Avatar Card */}
       <View style={[styles.avatarCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-        <View style={[styles.avatarCircle, { backgroundColor: colors.primarySoft, borderColor: isDark ? colors.cardBorder : '#FFFFFF' }]}>
-          <Text style={[styles.avatarText, { color: colors.primary }]}>{initial}</Text>
+        <View style={styles.avatarWrapper}>
+          <TouchableOpacity
+            style={[styles.avatarCircle, { backgroundColor: colors.primarySoft, borderColor: isDark ? colors.cardBorder : '#FFFFFF' }]}
+            onPress={handlePickAvatar}
+            disabled={uploadingAvatar}
+            activeOpacity={0.8}
+          >
+            {uploadingAvatar ? (
+              <ActivityIndicator color={colors.primary} size="small" />
+            ) : user?.avatar ? (
+              <Image source={{ uri: user.avatar }} style={styles.avatarLargeImg} />
+            ) : (
+              <Text style={[styles.avatarText, { color: colors.primary }]}>{initial}</Text>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.cameraBadge, { backgroundColor: colors.primary }]}
+            onPress={handlePickAvatar}
+            disabled={uploadingAvatar}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="camera" size={14} color="#FFF" />
+          </TouchableOpacity>
         </View>
-        <Text style={[styles.userName, { color: colors.text }]}>{user?.name || 'User Creator'}</Text>
+
+        <Text style={[styles.userName, { color: colors.text }]}>{user?.name || 'Responden'}</Text>
         <Text style={[styles.userEmail, { color: colors.textSub }]}>{user?.email || 'email@quizary.id'}</Text>
-        <View style={[styles.roleBadge, { backgroundColor: isDark ? '#1E3A8A' : '#EFF6FF', borderColor: isDark ? '#3B82F6' : '#BFDBFE' }]}>
-          <Text style={[styles.roleBadgeText, { color: '#3B82F6' }]}>
+        <View style={[styles.roleBadge, { backgroundColor: isDark ? '#2F2690' : '#F0EFFF', borderColor: isDark ? '#6C5CE7' : '#D5D0FA' }]}>
+          <Text style={[styles.roleBadgeText, { color: '#6C5CE7' }]}>
             {user?.role ? user.role.toUpperCase() : 'USER'}
           </Text>
         </View>
@@ -188,8 +304,9 @@ const styles = StyleSheet.create({
   workspaceText: { fontSize: 13, fontWeight: '600' },
   userAvatarBtn: {
     width: 34, height: 34, borderRadius: 17,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1, overflow: 'hidden',
   },
+  userAvatarImg: { width: '100%', height: '100%', borderRadius: 17 },
   userAvatarText: { fontWeight: 'bold', fontSize: 14 },
   header: { marginBottom: 20 },
   eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
@@ -199,10 +316,22 @@ const styles = StyleSheet.create({
     borderRadius: 20, padding: 24, alignItems: 'center',
     marginBottom: 16, borderWidth: 1, elevation: 1,
   },
+  avatarWrapper: {
+    position: 'relative', marginBottom: 12,
+  },
   avatarCircle: {
-    width: 80, height: 80, borderRadius: 40,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 12,
-    borderWidth: 3, shadowColor: '#6366F1', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 6,
+    width: 84, height: 84, borderRadius: 42,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 3, shadowColor: '#6C5CE7', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 6,
+    overflow: 'hidden',
+  },
+  avatarLargeImg: { width: '100%', height: '100%', borderRadius: 42 },
+  cameraBadge: {
+    position: 'absolute', bottom: -2, right: -2,
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#FFFFFF',
+    elevation: 3,
   },
   avatarText: { fontSize: 32, fontWeight: 'bold' },
   userName: { fontSize: 20, fontWeight: 'bold', marginBottom: 2 },

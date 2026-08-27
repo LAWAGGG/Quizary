@@ -14,6 +14,7 @@ import {
   uploadAnswerFile,
 } from '../services/api_service';
 import { useAppTheme } from '../context/ThemeContext';
+import { stripHtmlTags } from '../components/RichTextRenderer';
 import { QuizLandingStep } from '../components/quiz/QuizLandingStep';
 import { QuizQuestionCard } from '../components/quiz/QuizQuestionCard';
 import { QuizSubmittedStep } from '../components/quiz/QuizSubmittedStep';
@@ -237,7 +238,7 @@ export default function StandaloneQuizScreen() {
           <Ionicons name="close-outline" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={{ flex: 1, marginHorizontal: 12 }}>
-          <Text style={[styles.topBarTitle, { color: colors.text }]} numberOfLines={1}>{publicForm?.title || 'Kuis'}</Text>
+          <Text style={[styles.topBarTitle, { color: colors.text }]} numberOfLines={1}>{stripHtmlTags(publicForm?.title) || 'Kuis'}</Text>
           <Text style={[styles.topBarSub, { color: colors.textSub }]}>{questions.length} SOAL</Text>
         </View>
       </View>
