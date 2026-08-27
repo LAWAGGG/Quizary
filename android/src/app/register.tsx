@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { apiRegister } from '../services/api_service';
 
 export default function RegisterScreen() {
@@ -8,6 +9,8 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
@@ -28,13 +31,13 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      await apiRegister({ 
-        name: name.trim(), 
-        email: email.trim(), 
+      await apiRegister({
+        name: name.trim(),
+        email: email.trim(),
         password,
         password_confirmation: passwordConfirmation
       });
-      
+
       Alert.alert('Sukses 🎉', 'Registrasi berhasil! Silakan login dengan akun baru Anda.', [
         { text: 'OK', onPress: () => router.replace('/') }
       ]);
@@ -50,7 +53,7 @@ export default function RegisterScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Daftar Akun</Text>
-          <Text style={styles.subtitle}>Bergabung sebagai Creator Quizary</Text>
+          <Text style={styles.subtitle}>Formulir dan kuis dengan penilaian otomatis.</Text>
         </View>
 
         <View style={styles.form}>
@@ -75,24 +78,50 @@ export default function RegisterScreen() {
           />
 
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="••••••••"
-            placeholderTextColor="#475569"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="••••••••"
+              placeholderTextColor="#475569"
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeBtn}
+              onPress={() => setShowPassword(!showPassword)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons
+                name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+                size={20}
+                color="#94A3B8"
+              />
+            </TouchableOpacity>
+          </View>
 
           <Text style={styles.label}>Konfirmasi Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="••••••••"
-            placeholderTextColor="#475569"
-            secureTextEntry
-            value={passwordConfirmation}
-            onChangeText={setPasswordConfirmation}
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="••••••••"
+              placeholderTextColor="#475569"
+              secureTextEntry={!showPasswordConfirmation}
+              value={passwordConfirmation}
+              onChangeText={setPasswordConfirmation}
+            />
+            <TouchableOpacity
+              style={styles.eyeBtn}
+              onPress={() => setShowPasswordConfirmation(!showPasswordConfirmation)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons
+                name={showPasswordConfirmation ? 'eye-off-outline' : 'eye-outline'}
+                size={20}
+                color="#94A3B8"
+              />
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[styles.registerBtn, loading && styles.registerBtnDisabled]}
@@ -131,13 +160,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E293B', color: '#FFF', padding: 14,
     borderRadius: 10, fontSize: 15, borderWidth: 1, borderColor: '#334155',
   },
+  passwordContainer: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#1E293B', borderRadius: 10,
+    borderWidth: 1, borderColor: '#334155',
+  },
+  passwordInput: {
+    flex: 1, color: '#FFF', padding: 14, fontSize: 15,
+  },
+  eyeBtn: {
+    paddingHorizontal: 14, paddingVertical: 14,
+    justifyContent: 'center', alignItems: 'center',
+  },
   registerBtn: {
-    backgroundColor: '#10B981', padding: 16, borderRadius: 12,
+    backgroundColor: '#6C5CE7', padding: 16, borderRadius: 12,
     alignItems: 'center', marginTop: 16,
   },
   registerBtnDisabled: { opacity: 0.6 },
   registerBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
   loginContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
   loginText: { color: '#64748B' },
-  loginLink: { color: '#3B82F6', fontWeight: 'bold' },
+  loginLink: { color: '#6C5CE7', fontWeight: 'bold' },
 });

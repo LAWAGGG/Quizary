@@ -12,8 +12,8 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
   const { colors, isDark } = useAppTheme();
   const isQuiz = item.type === 'quiz';
   const statusLabel = item.status === 'submitted' ? 'Selesai' : item.status === 'auto_submitted' ? 'Waktu Habis' : 'Dalam Proses';
-  const statusBg = item.status === 'submitted' ? (isDark ? '#064E3B' : '#ECFDF5') : item.status === 'auto_submitted' ? (isDark ? '#1E3A8A' : '#EFF6FF') : (isDark ? '#78350F' : '#FEF3C7');
-  const statusColor = item.status === 'submitted' ? '#10B981' : item.status === 'auto_submitted' ? '#3B82F6' : '#F59E0B';
+  const statusBg = item.status === 'submitted' ? (isDark ? '#064E3B' : '#ECFDF5') : item.status === 'auto_submitted' ? (isDark ? '#2F2690' : '#F0EFFF') : (isDark ? '#78350F' : '#FEF3C7');
+  const statusColor = item.status === 'submitted' ? '#10B981' : item.status === 'auto_submitted' ? '#6C5CE7' : '#F59E0B';
 
   return (
     <TouchableOpacity
@@ -34,8 +34,8 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
       </View>
 
       <View style={styles.historyBadgesRow}>
-        <View style={[styles.typeChip, { backgroundColor: isQuiz ? (isDark ? '#1E1B4B' : '#EEF2FF') : (isDark ? '#311B92' : '#F3E8FF') }]}>
-          <Text style={[styles.typeChipText, { color: isQuiz ? '#6366F1' : '#9333EA' }]}>
+        <View style={[styles.typeChip, { backgroundColor: isQuiz ? (isDark ? '#2F2690' : '#F0EFFF') : (isDark ? '#311B92' : '#F3E8FF') }]}>
+          <Text style={[styles.typeChipText, { color: isQuiz ? '#6C5CE7' : '#9333EA' }]}>
             {isQuiz ? 'Quiz' : 'Form'}
           </Text>
         </View>

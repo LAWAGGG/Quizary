@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
+import { stripHtmlTags } from '../RichTextRenderer';
 
 interface QuizSubmittedStepProps {
   resultData: any;
@@ -20,15 +21,20 @@ export function QuizSubmittedStep({ resultData }: QuizSubmittedStepProps) {
         <Ionicons name="checkmark-circle-outline" size={64} color="#10B981" />
       </View>
 
-      <Text style={[styles.successTitle, { color: colors.text }]}>Jawaban Terkirim! 🎉</Text>
+      <Text style={[styles.successTitle, { color: colors.text }]}>
+        {stripHtmlTags(resultData?.form_title) ? `${stripHtmlTags(resultData.form_title)} Selesai!` : 'Jawaban Terkirim! 🎉'}
+      </Text>
       <Text style={[styles.successDesc, { color: colors.textSub }]}>
-        Terima kasih telah mengisi kuis/form ini. Jawaban Anda telah berhasil tersimpan.
+        {stripHtmlTags(resultData?.message) || 'Terima kasih telah mengisi kuis/form ini. Jawaban Anda telah berhasil tersimpan.'}
       </Text>
 
       {resultData?.score !== undefined && resultData?.score !== null && (
         <View style={[styles.resultScoreCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
           <Text style={[styles.resultScoreLabel, { color: colors.textSub }]}>Nilai Anda</Text>
-          <Text style={[styles.resultScoreVal, { color: colors.primary }]}>{resultData.score}</Text>
+          <Text style={[styles.resultScoreVal, { color: colors.primary }]}>
+            {resultData.score}
+            {resultData?.max_score ? ` / ${resultData.max_score}` : ''}
+          </Text>
         </View>
       )}
 
