@@ -63,8 +63,8 @@ export default {
         'text-inverse': '#FFFFFF',
       },
       fontFamily: {
-        sans: ['"Instrument Sans"', 'system-ui', 'sans-serif'],
-        display: ['Sora', 'system-ui', 'sans-serif'],
+        sans: ['Google Sans Flex', 'system-ui', 'sans-serif'],
+        display: ['Google Sans Flex', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
       borderRadius: {

@@ -25,6 +25,7 @@ from app.services.grading import grade_submission
 from app.schemas.results import (
     ResultDeleteRequest,
     ResultStatusRequest,
+    ResultBulkStatusRequest,
     ResultItem,
     ResultListResponse,
     AnalyticsResponse,
@@ -200,6 +201,43 @@ def set_result_status(
         "score": float(sub.score) if sub.score is not None else None,
         "message": message,
     }
+
+
+@router.patch("/forms/{form_id}/results/status")
+def set_bulk_result_status(
+    body: ResultBulkStatusRequest,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    """Bulk update status submission."""
+    subs = (
+        db.query(Submission)
+        .filter(Submission.form_id == form.id, Submission.id.in_(body.submission_ids))
+        .all()
+    )
+    if not subs:
+        return {"updated": 0, "message": "Tidak ada hasil yang diubah"}
+
+    now = now_wib()
+    for sub in subs:
+        if body.status == "in_progress":
+            sub.status = SubmissionStatus.in_progress
+            sub.submitted_at = None
+            sub.score = None
+        elif body.status == "submitted":
+            sub.status = SubmissionStatus.submitted
+            sub.submitted_at = sub.submitted_at or now
+            grade_submission(db, sub, form)
+        else:  # cheating
+            sub.status = SubmissionStatus.cheating
+            sub.submitted_at = sub.submitted_at or now
+            grade_submission(db, sub, form)
+            sub.score = 0
+        
+        sub.updated_at = now
+
+    db.commit()
+    return {"updated": len(subs), "message": f"{len(subs)} hasil berhasil diperbarui ke {body.status}"}
 
 
 @router.get("/forms/{form_id}/analytics", response_model=AnalyticsResponse)

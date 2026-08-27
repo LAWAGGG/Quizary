@@ -31,6 +31,11 @@ class ResultStatusRequest(BaseModel):
     status: str = Field(pattern="^(in_progress|submitted|cheating)$")
 
 
+class ResultBulkStatusRequest(BaseModel):
+    submission_ids: list[int] = Field(min_length=1, max_length=1000)
+    status: str = Field(pattern="^(in_progress|submitted|cheating)$")
+
+
 class PerQuestionStat(BaseModel):
     question_id: int
     question_text: str = ""

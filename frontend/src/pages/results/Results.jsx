@@ -123,6 +123,33 @@ export default function Results() {
     else applyStatus({ id, status })
   }
 
+  const [bulkStatusTarget, setBulkStatusTarget] = useState(null) // { status }
+  const [bulkStatusSaving, setBulkStatusSaving] = useState(false)
+
+  const applyBulkStatus = async ({ status }) => {
+    setBulkStatusSaving(true)
+    try {
+      const res = await api.patch(`/forms/${formId}/results/status`, { 
+        submission_ids: [...selected], 
+        status 
+      })
+      toast.success(res.data.message || 'Status diperbarui')
+      setBulkStatusTarget(null)
+      setSelected(new Set())
+      fetchResults()
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Gagal mengubah status')
+    } finally {
+      setBulkStatusSaving(false)
+    }
+  }
+
+  const requestBulkStatus = (status) => {
+    if (!status) return
+    if (status === 'cheating') setBulkStatusTarget({ status })
+    else applyBulkStatus({ status })
+  }
+
   const StatusSelect = ({ row }) => (
     <Select
       value={row.status}
@@ -252,10 +279,24 @@ export default function Results() {
 
       {selected.size > 0 && (
         <div className="sticky top-2 z-30 mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-white dark:bg-ink-900 px-4 py-3 shadow-lift">
-          <span className="text-sm font-semibold text-ink dark:text-gray-100">{selected.size} hasil dipilih</span>
+          <span className="text-sm font-semibold text-ink dark:text-gray-100 shrink-0">{selected.size} <span className="hidden sm:inline">hasil</span> dipilih</span>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>Batal</Button>
-            <Button variant="danger" size="sm" icon={<X className="w-4 h-4" />} onClick={() => setShowDelete(true)}>Hapus</Button>
+                        <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())} className="hidden sm:inline-flex">Batal</Button>
+
+            <Select 
+              value="" 
+              onChange={(e) => requestBulkStatus(e.target.value)} 
+              className="!h-8 !text-xs w-[115px] sm:w-[140px]"
+              aria-label="Ubah status massal"
+            >
+              <option value="" disabled>Ubah status</option>
+              {statusTargets.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </Select>
+            <Button variant="danger" size="sm" icon={<X className="w-4 h-4" />} onClick={() => setShowDelete(true)}>
+              <span className="hidden sm:inline">Hapus</span>
+            </Button>
           </div>
         </div>
       )}
@@ -282,7 +323,6 @@ export default function Results() {
                     <th className="px-5 py-3.5 w-10">
                       <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="Pilih semua" className="accent-primary w-4 h-4 cursor-pointer" />
                     </th>
-                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">ID</th>
                     {isQuiz && <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Rank</th>}
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Respondent</th>
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{isQuiz ? 'Score / Max' : 'Answers'}</th>
@@ -303,7 +343,6 @@ export default function Results() {
                       <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" checked={selected.has(row.submission_id)} onChange={() => toggleSelect(row.submission_id)} aria-label={`Pilih #${row.submission_id}`} className="accent-primary w-4 h-4 cursor-pointer" />
                       </td>
-                      <td className="px-5 py-3.5 text-sm font-mono text-gray-400 dark:text-gray-500">#{row.submission_id}</td>
                       {isQuiz && <td className="px-5 py-3.5 text-sm font-semibold tabular-nums text-gray-500 dark:text-gray-400">{row.rank ?? '-'}</td>}
                       <td className="px-5 py-3.5 text-sm font-medium text-ink dark:text-gray-100">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">(you)</span>}</td>
                       <td className="px-5 py-3.5 text-sm tabular-nums">
@@ -567,6 +606,16 @@ export default function Results() {
         loading={statusSaving}
         onConfirm={() => applyStatus(statusTarget)}
         onCancel={() => setStatusTarget(null)}
+      />
+
+      <ConfirmModal
+        show={!!bulkStatusTarget}
+        title="Ubah Status ke Cheating?"
+        message={`${selected.size} hasil terpilih akan diberi status Cheating dengan nilai 0.`}
+        confirmText="Ya, nilai 0"
+        loading={bulkStatusSaving}
+        onConfirm={() => applyBulkStatus(bulkStatusTarget)}
+        onCancel={() => setBulkStatusTarget(null)}
       />
     </div>
   )
