@@ -356,7 +356,7 @@ def batch_update_points(
 
     updated = (
         db.query(Question)
-        .filter(Question.form_id == form.id, Question.is_scored == True)
+        .filter(Question.form_id == form.id, Question.is_scored.is_(True))
         .update({"points": body.points}, synchronize_session=False)
     )
     db.commit()
