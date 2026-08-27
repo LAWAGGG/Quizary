@@ -44,7 +44,7 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
           <Text style={[styles.statusChipText, { color: statusColor }]}>{statusLabel}</Text>
         </View>
 
-        {isQuiz && item.score !== null && item.score !== undefined && (
+        {!isQuiz && item.reveal_score && item.score !== null && item.score !== undefined && (
           <View style={styles.scoreChip}>
             <Ionicons name="trophy-outline" size={12} color="#10B981" />
             <Text style={styles.scoreChipText}>Nilai: {item.score}</Text>

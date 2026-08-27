@@ -850,12 +850,8 @@ def my_submissions(user: User = Depends(get_current_user), db: Session = Depends
             form_title=re.sub(r"<[^>]*>", "", s.form.title) if s.form else "(deleted)",
             status=s.status.value,
             type=s.form.type.value if s.form else "form",
-            # Sembunyikan skor pada daftar riwayat responden bila creator mematikan reveal_score (khusus quiz).
-            score=(
-                float(s.score) if s.score is not None and s.form and (
-                    s.form.type.value != "quiz" or s.form.reveal_score
-                ) else None
-            ),
+            score=float(s.score) if s.score is not None else None,
+            reveal_score=s.form.reveal_score if s.form else True,
             submitted_at=fmt_dt(s.submitted_at),
         )
         for s in subs

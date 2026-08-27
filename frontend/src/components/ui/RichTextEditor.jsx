@@ -47,9 +47,9 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     if (!container || quillRef.current) return
 
     const toolbar = compact
-      ? [['bold', 'italic', 'underline', 'link', 'symbol', 'fx', 'clean']]
+      ? [['bold', 'italic', 'underline', 'link', 'fx', 'clean']]
       : [
-        ['bold', 'italic', 'underline', 'strike', 'code-block', 'link', 'symbol', 'fx', 'clean'],
+        ['bold', 'italic', 'underline', 'strike', 'code-block', 'link', 'fx', 'clean'],
       ]
 
     const quill = new Quill(container, {

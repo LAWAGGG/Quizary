@@ -64,7 +64,7 @@ export default function MySubmissions() {
                       <h3 className="font-display font-semibold text-ink dark:text-gray-100 truncate"><RichText html={sub.form_title} /></h3>
                       <ExternalLink className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 shrink-0" />
                     </div>
-                    {sub.score !== null && sub.score !== undefined && (
+                    {sub.type !== 'quiz' && sub.reveal_score && sub.score !== null && sub.score !== undefined && (
                       <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
                         Score: <span className="font-semibold text-ink dark:text-gray-100 tabular-nums">{sub.score}</span>
                       </p>

@@ -112,6 +112,7 @@ class SubmissionListItem(BaseModel):
     status: str
     type: str = "form"
     score: Optional[float] = None
+    reveal_score: bool = True
     submitted_at: Optional[str] = None
 
 

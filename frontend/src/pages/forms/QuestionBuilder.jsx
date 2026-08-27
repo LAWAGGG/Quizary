@@ -158,7 +158,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
 
          {isPassword && (
         <div>
-          <label className="field-label">Keyword password *</label>
+          <label className="field-label">Password Key</label>
           <input
             value={form.password_keyword || ''}
             onChange={(e) => setForm((p) => ({ ...p, password_keyword: e.target.value }))}
