@@ -172,9 +172,3 @@ class FormListResponse(BaseModel):
 
 class BatchPointsUpdate(BaseModel):
     points: int = Field(ge=0, le=999)
-
-    @model_validator(mode="after")
-    def validate_points(self):
-        if self.points < 0 or self.points > 999:
-            raise ValueError("Points harus antara 0 dan 999")
-        return self
