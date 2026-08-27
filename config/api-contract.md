@@ -114,6 +114,7 @@ Auth: Bearer Token
   "submission_limit": "once",
   "show_leaderboard": true,
   "is_restricted": true,
+  "scoring_mode": "auto",
   "timer_seconds": 600
 }
 ```
@@ -138,6 +139,7 @@ Auth: Bearer Token
   "submission_limit": "once",
   "show_leaderboard": false,
   "is_restricted": false,
+  "scoring_mode": "auto",
   "created_at": "30-07-2026 18:00:00",
   "updated_at": "30-07-2026 18:00:00"
 }
@@ -228,6 +230,8 @@ Auth: Bearer Token (pemilik) — kirim field yang berubah saja
 - `is_restricted=true` ⇒ `submission_limit` dipaksa `"once"`.
 - `submission_limit="once"` ⇒ `require_login` dipaksa `true` (identitas akun, bukan IP).
 - Nilai yang ter-coerce langsung tersimpan di DB dan terlihat di respons. Creator tidak perlu mengaturnya manual.
+
+**Penilaian quiz:** `scoring_mode` bernilai `auto` (default, pool 100 dibagi rata) atau `manual` (poin tiap soal mengikuti input creator). Mode manual menyimpan total bobot mentah, tetapi hasil akhir selalu dinormalisasi: `poin_diperoleh / total_bobot × 100`.
 
 ### `DELETE /forms/{id}`
 Auth: Bearer Token (pemilik)
@@ -433,6 +437,33 @@ Auth: Bearer Token (pemilik)
 { "message": "Grup soal dihapus" }   // semua anggota kembali group_id = null
 ```
 Error: `404` grup tidak ada pada form ini
+
+### `PATCH /forms/{id}/questions/points`
+Auth: Bearer Token (pemilik) — atur ulang poin seluruh soal dinilai sekaligus (hanya quiz)
+```json
+// Request
+{ "points": 5 }
+```
+```json
+// Response 200
+{ "message": "Semua soal dinilai diatur ke 5 poin", "updated_count": 10 }
+```
+```json
+// Response 403
+{ "message": "Anda bukan pemilik form ini" }
+```
+```json
+// Response 404
+{ "message": "Form tidak ditemukan" }
+```
+```json
+// Response 422 (bukan quiz)
+{ "message": "Fitur ini hanya tersedia untuk tipe quiz" }
+```
+```json
+// Response 422 (validasi field)
+{ "message": "Invalid fields", "errors": [{ "points": "Input should be greater than or equal to 0" }] }
+```
 
 ---
 
@@ -1005,6 +1036,7 @@ Auth: Bearer Token
 | PATCH | `/api/questions/reorder` | Bearer | Urutkan ulang soal |
 | POST | `/api/forms/{id}/questions/group` | Bearer | Kelompokkan soal ber-cerita bersama |
 | DELETE | `/api/forms/{id}/questions/group/{group_id}` | Bearer | Bubarkan grup soal |
+| PATCH | `/api/forms/{id}/questions/points` | Bearer | Atur ulang poin seluruh soal dinilai (quiz only) |
 | POST | `/api/questions/{id}/images` | Bearer | Upload gambar soal (multipart/form-data) |
 | POST | `/api/options/{id}/images` | Bearer | Upload gambar opsi (multipart/form-data) |
 | DELETE | `/api/images/{id}` | Bearer | Hapus gambar |
