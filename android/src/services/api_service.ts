@@ -1,8 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import 'expo-blob';
 
-// Dynamic host setup: auto-detect LAN IP from Expo dev server
 const getHost = () => {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
   const hostUri =
@@ -21,7 +21,6 @@ export const BASE_URL = getHost();
 const TOKEN_KEY = 'quizary_auth_token';
 const USER_KEY = 'quizary_auth_user';
 
-// ── TOKEN & USER STORAGE ──────────────────────────────────────
 export async function saveToken(token: string) {
   try {
     if (Platform.OS === 'web') localStorage.setItem(TOKEN_KEY, token);
@@ -115,7 +114,9 @@ async function fetchMultipart(endpoint: string, method: string, formData: FormDa
   const token = await getToken();
   const headers: Record<string, string> = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
+
   const response = await fetch(`${BASE_URL}${endpoint}`, { method, headers, body: formData });
+
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(extractErrorMessage(err, `Request failed (${response.status})`));
@@ -123,7 +124,6 @@ async function fetchMultipart(endpoint: string, method: string, formData: FormDa
   return response.json();
 }
 
-// ── 1. AUTHENTICATION ────────────────────────────────────────
 export async function apiLogin(body: { email: string; password: string }) {
   try {
     console.log('[DEBUG AUTH] Sending POST /login for email:', body.email);
@@ -219,13 +219,13 @@ export async function updateProfile(body: { name?: string; avatar?: string }) {
     else if (ext === 'webp') type = 'image/webp';
     else if (ext === 'gif') type = 'image/gif';
 
-    console.log('[DEBUG AVATAR] Prepared avatar for multipart upload:', { uri: body.avatar, name: filename, type });
-    formData.append('avatar', {
-      uri: body.avatar,
-      name: filename,
-      type,
-    } as any);
+    console.log('[DEBUG AVATAR] Prepared avatar for multipart upload...');
+    const response = await fetch(body.avatar);
+    const blob = await response.blob();
+
+    formData.append('avatar', blob, filename);
   }
+
   console.log('[DEBUG PROFILE] Sending PUT /me with formData...');
   const res = await fetchMultipart('/me', 'PUT', formData);
   console.log('[DEBUG PROFILE] PUT /me response data:', JSON.stringify(res));
@@ -233,12 +233,10 @@ export async function updateProfile(body: { name?: string; avatar?: string }) {
   return res;
 }
 
-// ── 2. DASHBOARD ─────────────────────────────────────────────
 export async function getDashboardSummary() {
   return fetchWithAuth('/dashboard/summary');
 }
 
-// ── 3. FORMS ─────────────────────────────────────────────────
 export async function fetchMyForms(params?: {
   status?: string;
   type?: string;
@@ -298,7 +296,7 @@ export async function deleteBanner(formId: string | number) {
   return fetchWithAuth(`/forms/${formId}/banner`, { method: 'DELETE' });
 }
 
-// ── 4. QUESTIONS ─────────────────────────────────────────────
+// QUESTIONS
 export async function getQuestions(formId: string | number) {
   return fetchWithAuth(`/forms/${formId}/questions`);
 }
@@ -354,7 +352,7 @@ export async function importDocx(formId: string | number, fileUri: string) {
   return fetchMultipart(`/forms/${formId}/import/docx`, 'POST', fd);
 }
 
-// ── 5. PUBLIC ACCESS (RESPONDENT / GUEST) ────────────────────
+// PUBLIC ACCESS (RESPONDENT / GUEST) 
 export async function getPublicForm(shortCode: string) {
   let cleanCode = (shortCode || '').trim();
   if (cleanCode.includes('/q/')) {
@@ -373,7 +371,7 @@ export async function checkCanStart(shortCode: string) {
   return fetchWithAuth(`/q/${shortCode}/start`);
 }
 
-// ── 6. SUBMISSION ─────────────────────────────────────────────
+// SUBMISSION 
 export async function createSubmission(
   formId: string | number,
   name?: string,
@@ -419,7 +417,7 @@ export async function uploadAnswerFile(
   return fetchMultipart(`/submissions/${submissionId}/questions/${questionId}/upload`, 'POST', fd);
 }
 
-// ── 7. RESULTS & ANALYTICS ───────────────────────────────────
+// RESULTS & ANALYTICS 
 export async function getFormResults(
   formId: string | number,
   params?: { status?: string; page?: number; per_page?: number; sort?: string }

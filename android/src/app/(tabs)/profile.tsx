@@ -17,6 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { getMe, updateProfile, apiLogout, removeToken, getStoredUser, saveUser } from '../../services/api_service';
 import { ThemeToggleBtn } from '../../components/ThemeToggleBtn';
 import { useAppTheme } from '../../context/ThemeContext';
+import { BASE_URL } from '@/services/api_service';
 
 export default function ProfileScreen() {
   const { colors, isDark } = useAppTheme();
@@ -198,7 +199,14 @@ export default function ProfileScreen() {
           <ThemeToggleBtn />
           <View style={[styles.userAvatarBtn, { backgroundColor: colors.primarySoft, borderColor: isDark ? colors.cardBorder : '#C7D2FE' }]}>
             {user?.avatar ? (
-              <Image source={{ uri: user.avatar }} style={styles.userAvatarImg} />
+              <Image 
+                source={{ 
+                  uri: user.avatar.startsWith('http') 
+                     ? `${user.avatar}?t=${Date.now()}` 
+                     : `${BASE_URL.replace('/api', '')}${user.avatar}?t=${Date.now()}` 
+                  }} 
+                  style={styles.userAvatarImg} 
+                />
             ) : (
               <Text style={[styles.userAvatarText, { color: colors.primary }]}>{initial}</Text>
             )}
@@ -225,8 +233,15 @@ export default function ProfileScreen() {
             {uploadingAvatar ? (
               <ActivityIndicator color={colors.primary} size="small" />
             ) : user?.avatar ? (
-              <Image source={{ uri: user.avatar }} style={styles.avatarLargeImg} />
-            ) : (
+            <Image 
+            source={{ 
+              uri: user.avatar.startsWith('http') 
+                ? `${user.avatar}?t=${Date.now()}` 
+                : `${BASE_URL.replace('/api', '')}${user.avatar}?t=${Date.now()}` 
+            }} 
+          style={styles.avatarLargeImg} 
+  />
+) : (
               <Text style={[styles.avatarText, { color: colors.primary }]}>{initial}</Text>
             )}
           </TouchableOpacity>
