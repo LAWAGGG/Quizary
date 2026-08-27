@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, verify_form_owner
-from app.models.form import Form, FormStatus, FormType, SubmissionLimit
+from app.models.form import Form, FormStatus, FormType, SubmissionLimit, ScoringMode
 from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
 from app.models.image import Image
@@ -16,6 +16,7 @@ from app.models.user import User
 from app.services.points import distribute_quiz_points
 from app.utils import file_url, fmt_dt, now_wib, _delete_file
 from app.schemas.form import (
+    BatchPointsUpdate,
     FormCreate,
     FormListItem,
     FormListResponse,
@@ -99,6 +100,7 @@ def _form_dict(form: Form, request: Request) -> dict:
         "show_in_history": form.show_in_history,
         "reveal_score": form.reveal_score,
         "reveal_answers": form.reveal_answers,
+        "scoring_mode": form.scoring_mode.value if form.scoring_mode else "auto",
         "created_at": fmt_dt(form.created_at),
         "updated_at": fmt_dt(form.updated_at),
     }
@@ -178,6 +180,7 @@ def create_form(
         show_in_history=body.show_in_history,
         reveal_score=body.reveal_score,
         reveal_answers=body.reveal_answers,
+        scoring_mode=_parse_enum(body.scoring_mode, ScoringMode, "scoring_mode"),
         timer_seconds=body.timer_seconds,
         short_code=_generate_short_code(db),
         created_at=now,
@@ -220,6 +223,9 @@ def update_form(
         if new_type != form.type:
             form.type = new_type  # set first so helpers/distribute see the new type
             if new_type == FormType.quiz:
+                # A form converted into quiz starts with the canonical 100-point
+                # pool; creator can switch to manual after conversion.
+                form.scoring_mode = ScoringMode.auto
                 _prepare_quiz_after_form_conversion(form.id, db)
             else:
                 _clear_correct_after_quiz_conversion(form.id, db)
@@ -238,7 +244,17 @@ def update_form(
             value = _parse_enum(value, FormStatus, "status")
         elif field == "submission_limit":
             value = _parse_enum(value, SubmissionLimit, "submission_limit")
+        elif field == "scoring_mode":
+            value = _parse_enum(value, ScoringMode, "scoring_mode")
         setattr(form, field, value)
+
+    # Switching back to automatic allocation immediately restores the 100
+    # point pool. Manual mode intentionally preserves creator-entered points.
+    if (
+        form.type == FormType.quiz
+        and update_data.get("scoring_mode") == ScoringMode.auto
+    ):
+        distribute_quiz_points(form.id, db)
 
     if will_publish:
         _ensure_publishable(form, db)
@@ -322,3 +338,26 @@ def publish_form(
         message="Form published" if form.status == FormStatus.published else "Form moved to draft",
         short_code=form.short_code,
     )
+
+
+# ── PATCH /forms/{form_id}/questions/points ─────────────────────────────────
+
+@router.patch("/forms/{form_id}/questions/points")
+def batch_update_points(
+    body: BatchPointsUpdate,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    if form.type != FormType.quiz:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Fitur ini hanya tersedia untuk tipe quiz",
+        )
+
+    updated = (
+        db.query(Question)
+        .filter(Question.form_id == form.id, Question.is_scored == True)
+        .update({"points": body.points}, synchronize_session=False)
+    )
+    db.commit()
+    return {"message": f"Semua soal dinilai diatur ke {body.points} poin", "updated_count": updated}
