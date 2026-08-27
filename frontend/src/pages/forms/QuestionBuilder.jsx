@@ -412,6 +412,7 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
             type="checkbox"
             checked={selected}
             onChange={() => onToggleSelect(question.id)}
+            onClick={(e) => e.stopPropagation()}
             className="hidden md:block w-4 h-4 rounded accent-primary cursor-pointer"
             aria-label={`Select question ${index + 1}`}
           />
