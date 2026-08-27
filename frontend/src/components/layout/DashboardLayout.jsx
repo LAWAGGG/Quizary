@@ -153,8 +153,12 @@ export default function DashboardLayout() {
                 aria-label="User menu"
                 aria-expanded={dropdownOpen}
               >
-                <span className="w-8 h-8 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary dark:text-primary-300 flex items-center justify-center text-sm font-bold">
-                  {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                <span className="w-8 h-8 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary dark:text-primary-300 flex items-center justify-center text-sm font-bold overflow-hidden">
+                  {user?.avatar ? (
+                    <img src={user.avatar} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    user?.name?.charAt(0)?.toUpperCase() || 'U'
+                  )}
                 </span>
                
                 {/* <ChevronDown className={`w-4 h-4 text-gray-300 dark:text-gray-600 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} /> */}
