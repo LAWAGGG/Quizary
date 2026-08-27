@@ -43,7 +43,7 @@ const TYPE_HINTS = {
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
-function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, questionId, sections, sectionsAllowed }) {
+function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, questionId, sections, sectionsAllowed, scoringMode }) {
   const toast = useToast()
   // Satu-satunya section = default tujuan soal baru; select section tak perlu tampil.
   const singleSectionId = sectionsAllowed && sections?.length === 1 ? sections[0].id : null
@@ -236,15 +236,14 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                 onChange={(e) => setForm((p) => ({ ...p, points: parseInt(e.target.value) || 0 }))}
                 min={0}
                 max={999}
-                disabled={!form.is_scored}
-             
+                disabled={!form.is_scored || scoringMode === 'auto'}
                 error={ferr('points')}
               />
             ) : (
               <div>
                 <label className="field-label">Points</label>
                 <p className="text-sm text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-ink-800/50 border border-gray-200 dark:border-gray-700 rounded-xl px-4 h-11 flex items-center">
-                  Auto-assigned by system
+                  {scoringMode === 'auto' ? `${form.points} pts (otomatis)` : 'Auto-assigned by system'}
                 </p>
               </div>
             )}
@@ -534,7 +533,7 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
   )
 }
 
-function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupSize, onMove, totalCount, selectCount }) {
+function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupSize, onMove, totalCount, selectCount, scoringMode }) {
   if (editOpen) {
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
@@ -576,6 +575,7 @@ function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, edit
             questionId={q.id}
             sections={sections}
             sectionsAllowed={sectionsAllowed}
+            scoringMode={scoringMode}
           />
         </Card>
       </motion.div>
@@ -1144,6 +1144,7 @@ export default function QuestionBuilder() {
                 questionId={editing?.id}
                 sections={sections}
                 sectionsAllowed={sectionsAllowed}
+                scoringMode={scoringMode}
               />
             </Card>
           </motion.div>
@@ -1270,6 +1271,7 @@ export default function QuestionBuilder() {
                                  onMove={moveQuestion}
                                  totalCount={questions.length}
                                  selectCount={selectedIds.length}
+                                 scoringMode={scoringMode}
                                   />
                               ))}
                             </div>
@@ -1319,6 +1321,7 @@ export default function QuestionBuilder() {
                                   errors={fieldErrors}
                                   sections={sections}
                                   sectionsAllowed={sectionsAllowed}
+                                  scoringMode={scoringMode}
                                 />
                               ))}
                             </div>
@@ -1349,6 +1352,7 @@ export default function QuestionBuilder() {
                                  onMove={moveQuestion}
                                  totalCount={questions.length}
                                  selectCount={selectedIds.length}
+                                 scoringMode={scoringMode}
                                />
                    ))
                  )}
