@@ -61,6 +61,7 @@ class FormCreate(BaseModel):
     show_in_history: bool = True
     reveal_score: bool = True
     reveal_answers: bool = True
+    scoring_mode: str = "auto"
     timer_seconds: Optional[int] = Field(None, ge=30, le=86400)
 
     @model_validator(mode="after")
@@ -76,6 +77,8 @@ class FormCreate(BaseModel):
             raise ValueError("display_style must be 'card' or 'quiz'")
         if self.submission_limit not in ("unlimited", "once"):
             raise ValueError("submission_limit must be 'unlimited' or 'once'")
+        if self.scoring_mode not in ("auto", "manual"):
+            raise ValueError("scoring_mode harus 'auto' atau 'manual'")
         return self
 
 
@@ -98,6 +101,7 @@ class FormUpdate(BaseModel):
     show_in_history: Optional[bool] = None
     reveal_score: Optional[bool] = None
     reveal_answers: Optional[bool] = None
+    scoring_mode: Optional[str] = None
     status: Optional[str] = None
 
     @model_validator(mode="after")
@@ -114,6 +118,8 @@ class FormUpdate(BaseModel):
             raise ValueError("display_style must be 'card' or 'quiz'")
         if "submission_limit" in self.model_fields_set and self.submission_limit not in ("unlimited", "once"):
             raise ValueError("submission_limit must be 'unlimited' or 'once'")
+        if "scoring_mode" in self.model_fields_set and self.scoring_mode not in ("auto", "manual"):
+            raise ValueError("scoring_mode harus 'auto' atau 'manual'")
         if "status" in self.model_fields_set and self.status not in ("draft", "published", "closed"):
             raise ValueError("status must be 'draft', 'published', or 'closed'")
         return self
@@ -162,3 +168,13 @@ class FormListItem(BaseModel):
 class FormListResponse(BaseModel):
     data: list[FormListItem]
     meta: dict
+
+
+class BatchPointsUpdate(BaseModel):
+    points: int = Field(ge=0, le=999)
+
+    @model_validator(mode="after")
+    def validate_points(self):
+        if self.points < 0 or self.points > 999:
+            raise ValueError("Points harus antara 0 dan 999")
+        return self
