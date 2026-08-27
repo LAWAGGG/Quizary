@@ -178,6 +178,7 @@ def set_result_status(
     now = now_wib()
     if body.status == "in_progress":
         sub.status = SubmissionStatus.in_progress
+        sub.started_at = now
         sub.submitted_at = None
         sub.score = None
         message = "Submission dibuka kembali — responden dapat melanjutkan"
@@ -222,6 +223,7 @@ def set_bulk_result_status(
     for sub in subs:
         if body.status == "in_progress":
             sub.status = SubmissionStatus.in_progress
+            sub.started_at = now
             sub.submitted_at = None
             sub.score = None
         elif body.status == "submitted":
