@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Modal, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
+import { stripHtmlTags } from './RichTextRenderer';
 
 interface SubmissionDetailModalProps {
   visible: boolean;
@@ -43,7 +44,7 @@ export function SubmissionDetailModal({
               {/* Result summary */}
               <View style={[styles.detailSummaryBox, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.inputBorder }]}>
                 <Text style={[styles.detailFormTitle, { color: colors.text }]}>
-                  {selectedSubItem?.form_title || subDetail?.form_title || 'Hasil Form'}
+                  {stripHtmlTags(selectedSubItem?.form_title || subDetail?.form_title) || 'Hasil Form'}
                 </Text>
                 <Text style={[styles.detailMetaText, { color: colors.textSub }]}>
                   Nama Responden: {subDetail?.respondent_name || user?.name || 'Responden'}
@@ -90,19 +91,19 @@ export function SubmissionDetailModal({
                   const ans = ansMap.get(qId) || (qOrAns.answer_text || qOrAns.selected_options ? qOrAns : null);
 
                   const rawQText = qOrAns.question_text || qOrAns.title || ans?.question_text || `Soal ${i + 1}`;
-                  const cleanQText = rawQText.replace(/<[^>]*>/g, '').trim();
+                  const cleanQText = stripHtmlTags(rawQText);
 
                   let userAnsText = '';
                   if (ans) {
                     if (ans.answer_text) {
-                      userAnsText = ans.answer_text;
+                      userAnsText = stripHtmlTags(ans.answer_text);
                     } else if (ans.selected_options && ans.selected_options.length > 0) {
                       userAnsText = ans.selected_options
-                        .map((opt: any) => (typeof opt === 'string' ? opt : opt.option_text || String(opt)))
+                        .map((opt: any) => (typeof opt === 'string' ? stripHtmlTags(opt) : stripHtmlTags(opt.option_text) || String(opt)))
                         .join(', ');
                     } else if (ans.selected_option_ids && ans.selected_option_ids.length > 0) {
                       const opts = qOrAns.options?.filter((o: any) => ans.selected_option_ids.includes(o.id));
-                      userAnsText = opts && opts.length > 0 ? opts.map((o: any) => o.option_text).join(', ') : `Opsi dipilih (${ans.selected_option_ids.length})`;
+                      userAnsText = opts && opts.length > 0 ? opts.map((o: any) => stripHtmlTags(o.option_text)).join(', ') : `Opsi dipilih (${ans.selected_option_ids.length})`;
                     } else if (ans.answer_file) {
                       userAnsText = '[File Terlampir]';
                     }

@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getMySubmissions, getSubmissionDetail, getMe } from '../../services/api_service';
+import { getMySubmissions, getSubmissionDetail, getMe, getStoredUser } from '../../services/api_service';
 import { ThemeToggleBtn } from '../../components/ThemeToggleBtn';
 import { useAppTheme } from '../../context/ThemeContext';
 import { QuickJoinBanner } from '../../components/QuickJoinBanner';
@@ -24,6 +24,8 @@ export default function HomeScreen() {
 
   const loadData = useCallback(async () => {
     try {
+      const stored = await getStoredUser();
+      if (stored) setUser(stored);
       const [subRes, userRes] = await Promise.all([
         getMySubmissions().catch(() => null),
         getMe().catch(() => null),

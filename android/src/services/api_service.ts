@@ -19,8 +19,9 @@ const getHost = () => {
 
 export const BASE_URL = getHost();
 const TOKEN_KEY = 'quizary_auth_token';
+const USER_KEY = 'quizary_auth_user';
 
-// ── TOKEN STORAGE ────────────────────────────────────────────
+// ── TOKEN & USER STORAGE ──────────────────────────────────────
 export async function saveToken(token: string) {
   try {
     if (Platform.OS === 'web') localStorage.setItem(TOKEN_KEY, token);
@@ -35,10 +36,37 @@ export async function getToken(): Promise<string | null> {
   } catch { return null; }
 }
 
+export async function saveUser(user: any) {
+  try {
+    const serialized = JSON.stringify(user);
+    if (Platform.OS === 'web') localStorage.setItem(USER_KEY, serialized);
+    else await SecureStore.setItemAsync(USER_KEY, serialized);
+  } catch (err) { console.error('saveUser error', err); }
+}
+
+export async function getStoredUser(): Promise<any | null> {
+  try {
+    const raw = Platform.OS === 'web' ? localStorage.getItem(USER_KEY) : await SecureStore.getItemAsync(USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+export async function removeStoredUser() {
+  try {
+    if (Platform.OS === 'web') localStorage.removeItem(USER_KEY);
+    else await SecureStore.deleteItemAsync(USER_KEY);
+  } catch (err) { console.error('removeStoredUser error', err); }
+}
+
 export async function removeToken() {
   try {
-    if (Platform.OS === 'web') localStorage.removeItem(TOKEN_KEY);
-    else await SecureStore.deleteItemAsync(TOKEN_KEY);
+    if (Platform.OS === 'web') {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+    } else {
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
+      await SecureStore.deleteItemAsync(USER_KEY);
+    }
   } catch (err) { console.error('removeToken error', err); }
 }
 
@@ -98,6 +126,7 @@ async function fetchMultipart(endpoint: string, method: string, formData: FormDa
 // ── 1. AUTHENTICATION ────────────────────────────────────────
 export async function apiLogin(body: { email: string; password: string }) {
   try {
+    console.log('[DEBUG AUTH] Sending POST /login for email:', body.email);
     const res = await fetch(`${BASE_URL}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -105,10 +134,13 @@ export async function apiLogin(body: { email: string; password: string }) {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      console.log('[DEBUG AUTH] POST /login failed:', res.status, err);
       throw new Error(extractErrorMessage(err, 'Email atau password salah.'));
     }
     const data = await res.json();
+    console.log('[DEBUG AUTH] POST /login response data:', JSON.stringify(data));
     if (data.token) await saveToken(data.token);
+    if (data.user) await saveUser(data.user);
     return data;
   } catch (err: any) {
     if (
@@ -130,6 +162,7 @@ export async function apiRegister(body: {
   password_confirmation: string;
 }) {
   try {
+    console.log('[DEBUG AUTH] Sending POST /register for:', body.name, body.email);
     const res = await fetch(`${BASE_URL}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -137,10 +170,13 @@ export async function apiRegister(body: {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      console.log('[DEBUG AUTH] POST /register failed:', res.status, err);
       throw new Error(extractErrorMessage(err, 'Registrasi gagal. Email mungkin sudah terdaftar.'));
     }
     const data = await res.json();
+    console.log('[DEBUG AUTH] POST /register response data:', JSON.stringify(data));
     if (data.token) await saveToken(data.token);
+    if (data.user) await saveUser(data.user);
     return data;
   } catch (err: any) {
     if (
@@ -161,11 +197,40 @@ export async function apiLogout() {
 }
 
 export async function getMe() {
-  return fetchWithAuth('/me');
+  const data = await fetchWithAuth('/me');
+  console.log('[DEBUG AUTH] GET /me response data:', JSON.stringify(data));
+  if (data) await saveUser(data);
+  return data;
 }
 
-export async function updateProfile(body: { name?: string }) {
-  return fetchWithAuth('/me', { method: 'PUT', body: JSON.stringify(body) });
+export async function updateProfile(body: { name?: string; avatar?: string }) {
+  const formData = new FormData();
+  if (body.name !== undefined) {
+    formData.append('name', body.name);
+  }
+  if (body.avatar) {
+    const rawName = body.avatar.split('/').pop() || 'avatar.jpg';
+    const match = /\.(\w+)$/.exec(rawName);
+    const ext = match ? match[1].toLowerCase() : 'jpg';
+    const filename = rawName.includes('.') ? rawName : `${rawName}.${ext}`;
+
+    let type = 'image/jpeg';
+    if (ext === 'png') type = 'image/png';
+    else if (ext === 'webp') type = 'image/webp';
+    else if (ext === 'gif') type = 'image/gif';
+
+    console.log('[DEBUG AVATAR] Prepared avatar for multipart upload:', { uri: body.avatar, name: filename, type });
+    formData.append('avatar', {
+      uri: body.avatar,
+      name: filename,
+      type,
+    } as any);
+  }
+  console.log('[DEBUG PROFILE] Sending PUT /me with formData...');
+  const res = await fetchMultipart('/me', 'PUT', formData);
+  console.log('[DEBUG PROFILE] PUT /me response data:', JSON.stringify(res));
+  if (res) await saveUser(res);
+  return res;
 }
 
 // ── 2. DASHBOARD ─────────────────────────────────────────────

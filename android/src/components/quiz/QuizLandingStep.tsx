@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
-import { RichTextRenderer } from '../RichTextRenderer';
+import { RichTextRenderer, stripHtmlTags } from '../RichTextRenderer';
 
 interface QuizLandingStepProps {
   publicForm: any;
@@ -39,7 +39,7 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
             <Image source={{ uri: publicForm.banner_path }} style={styles.landingBanner} />
           )}
 
-          <Text style={[styles.quizTitle, { color: colors.text }]}>{publicForm?.title || 'Kuis'}</Text>
+          <Text style={[styles.quizTitle, { color: colors.text }]}>{stripHtmlTags(publicForm?.title) || 'Kuis'}</Text>
 
           {publicForm?.description ? (
             <View style={{ marginBottom: 16 }}>
