@@ -28,7 +28,7 @@ export function extractQuizToken(input: string): string {
 }
 
 export default function JoinScreen() {
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, language, fontSizeScale } = useAppTheme();
   const [linkOrCode, setLinkOrCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -47,7 +47,10 @@ export default function JoinScreen() {
   const handleJoin = async (inputStr: string) => {
     const token = extractQuizToken(inputStr);
     if (!token) {
-      Alert.alert('Link / Kode Kosong', 'Silakan tempelkan link kuis atau masukkan kode terlebih dahulu.');
+      Alert.alert(
+        language === 'ID' ? 'Link / Kode Kosong' : 'Empty Link / Code',
+        language === 'ID' ? 'Silakan tempelkan link kuis atau masukkan kode terlebih dahulu.' : 'Please paste a quiz link or enter a code first.'
+      );
       return;
     }
     setLoading(true);
@@ -57,7 +60,10 @@ export default function JoinScreen() {
       setLinkOrCode('');
       router.push({ pathname: '/quiz', params: { shortCode: token, formId: String(quiz.id) } });
     } catch (e: any) {
-      Alert.alert('Gagal Gabung', e.message || 'Link atau kode kuis tidak valid atau kuis belum dipublikasikan.');
+      Alert.alert(
+        language === 'ID' ? 'Gagal Gabung' : 'Failed to Join',
+        e.message || (language === 'ID' ? 'Link atau kode kuis tidak valid atau kuis belum dipublikasikan.' : 'Invalid quiz link/code or the quiz has not been published.')
+      );
       setIsScanning(true);
     } finally {
       setLoading(false);
@@ -77,7 +83,9 @@ export default function JoinScreen() {
         <TouchableOpacity style={[styles.backBtn, { backgroundColor: colors.cardBg, borderColor: colors.inputBorder }]} onPress={() => router.push('/(tabs)/home')}>
           <Ionicons name="arrow-back" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Pindai QR / Masukkan Link</Text>
+        <Text style={[styles.headerTitle, { color: colors.text, fontSize: 16 * fontSizeScale }]}>
+          {language === 'ID' ? 'Pindai QR / Masukkan Link' : 'Scan QR / Enter Link'}
+        </Text>
       </View>
 
       {/* Main Content Area */}
@@ -87,14 +95,16 @@ export default function JoinScreen() {
           <View style={[styles.cameraContainer, { borderColor: colors.primary }]}>
             {isScanning ? (
               <CameraView
-                style={StyleSheet.absoluteFillObject}
+                style={StyleSheet.absoluteFill}
                 barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
                 onBarcodeScanned={({ data }) => onBarCodeScanned(data)}
               />
             ) : (
               <View style={[styles.cameraPlaceholder, { backgroundColor: colors.cardBg }]}>
                 <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={{ color: colors.textSub, marginTop: 10, fontSize: 13 }}>Memproses Link Kuis...</Text>
+                <Text style={{ color: colors.textSub, marginTop: 10, fontSize: 13 * fontSizeScale }}>
+                  {language === 'ID' ? 'Memproses Link Kuis...' : 'Processing Quiz Link...'}
+                </Text>
               </View>
             )}
 
@@ -102,32 +112,44 @@ export default function JoinScreen() {
             {isScanning && (
               <View style={styles.scannerOverlay}>
                 <View style={styles.scanTargetBox} />
-                <Text style={styles.scannerHintText}>Arahkan kamera ke QR Code Kuis</Text>
+                <Text style={[styles.scannerHintText, { fontSize: 13 * fontSizeScale }]}>
+                  {language === 'ID' ? 'Arahkan kamera ke QR Code Kuis' : 'Point camera at Quiz QR Code'}
+                </Text>
               </View>
             )}
           </View>
         ) : (
           <TouchableOpacity style={[styles.permCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]} onPress={requestPermission}>
             <Ionicons name="camera-outline" size={40} color={colors.primary} />
-            <Text style={[styles.permTitle, { color: colors.text }]}>Aktifkan Izin Kamera</Text>
-            <Text style={[styles.permSub, { color: colors.textSub }]}>Klik di sini untuk mengizinkan kamera memindai QR Code kuis secara otomatis.</Text>
+            <Text style={[styles.permTitle, { color: colors.text, fontSize: 16 * fontSizeScale }]}>
+              {language === 'ID' ? 'Aktifkan Izin Kamera' : 'Enable Camera Permission'}
+            </Text>
+            <Text style={[styles.permSub, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
+              {language === 'ID'
+                ? 'Klik di sini untuk mengizinkan kamera memindai QR Code kuis secara otomatis.'
+                : 'Tap here to allow camera access for automatically scanning quiz QR Codes.'}
+            </Text>
           </TouchableOpacity>
         )}
 
         {/* Divider */}
         <View style={styles.divider}>
           <View style={[styles.line, { backgroundColor: colors.inputBorder }]} />
-          <Text style={[styles.orText, { color: colors.textMuted }]}>atau tempel link kuis</Text>
+          <Text style={[styles.orText, { color: colors.textMuted, fontSize: 12 * fontSizeScale }]}>
+            {language === 'ID' ? 'atau tempel link kuis' : 'or paste quiz link'}
+          </Text>
           <View style={[styles.line, { backgroundColor: colors.inputBorder }]} />
         </View>
 
         {/* Manual Link/Token Input */}
         <View style={styles.inputGroup}>
-          <Text style={[styles.label, { color: colors.text }]}>Link / Short Code Kuis</Text>
+          <Text style={[styles.label, { color: colors.text, fontSize: 13 * fontSizeScale }]}>
+            {language === 'ID' ? 'Link / Short Code Kuis' : 'Quiz Link / Short Code'}
+          </Text>
           <View style={styles.inputRow}>
             <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
-              placeholder="Tempel link kuis (mis. http://.../q/ABC123)"
+              style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder, fontSize: 13 * fontSizeScale }]}
+              placeholder={language === 'ID' ? 'Tempel link kuis (mis. http://.../q/ABC123)' : 'Paste quiz link (e.g. http://.../q/ABC123)'}
               placeholderTextColor={colors.textMuted}
               value={linkOrCode}
               onChangeText={setLinkOrCode}
@@ -160,27 +182,27 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   backBtn: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '600' },
+  headerTitle: { fontWeight: '600' },
 
   content: { flex: 1, padding: 20, justifyContent: 'center' },
 
   cameraContainer: { height: 260, borderRadius: 20, overflow: 'hidden', borderWidth: 2, marginBottom: 20 },
   cameraPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scannerOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
+  scannerOverlay: { ...StyleSheet.absoluteFill, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
   scanTargetBox: { width: 180, height: 180, borderRadius: 16, borderWidth: 2, borderColor: '#10B981', backgroundColor: 'transparent' },
-  scannerHintText: { color: '#FFF', fontWeight: 'bold', fontSize: 13, marginTop: 14, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
+  scannerHintText: { color: '#FFF', fontWeight: 'bold', marginTop: 14, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
 
   permCard: { borderRadius: 20, padding: 24, alignItems: 'center', borderWidth: 1, marginBottom: 20, gap: 8 },
-  permTitle: { fontSize: 16, fontWeight: 'bold' },
-  permSub: { fontSize: 13, textAlign: 'center' },
+  permTitle: { fontWeight: 'bold' },
+  permSub: { textAlign: 'center' },
 
   divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 14, gap: 10 },
   line: { flex: 1, height: 1 },
-  orText: { fontSize: 12, fontWeight: '600' },
+  orText: { fontWeight: '600' },
 
   inputGroup: { gap: 8 },
-  label: { fontSize: 13, fontWeight: 'bold' },
+  label: { fontWeight: 'bold' },
   inputRow: { flexDirection: 'row', gap: 8 },
-  input: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, fontSize: 13 },
+  input: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, paddingHorizontal: 14 },
   joinBtn: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
 });

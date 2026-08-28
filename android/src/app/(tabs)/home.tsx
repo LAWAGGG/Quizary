@@ -10,7 +10,7 @@ import { SubmissionHistoryCard } from '../../components/SubmissionHistoryCard';
 import { SubmissionDetailModal } from '../../components/SubmissionDetailModal';
 
 export default function HomeScreen() {
-  const { colors } = useAppTheme();
+  const { colors, language, fontSizeScale } = useAppTheme();
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -76,7 +76,7 @@ export default function HomeScreen() {
     setSubDetail(null);
   };
 
-  const firstName = user?.name ? user.name.split(' ')[0] : 'Responden';
+  const firstName = user?.name ? user.name.split(' ')[0] : (language === 'ID' ? 'Responden' : 'Respondent');
   const initial = firstName.charAt(0).toUpperCase();
 
   return (
@@ -88,8 +88,12 @@ export default function HomeScreen() {
         {/* User Header */}
         <View style={styles.userHeader}>
           <View>
-            <Text style={[styles.greetingEyebrow, { color: colors.primary }]}>DASHBOARD RESPONDEN</Text>
-            <Text style={[styles.greetingTitle, { color: colors.text }]}>Halo, {firstName}! 👋</Text>
+            <Text style={[styles.greetingEyebrow, { color: colors.primary, fontSize: 11 * fontSizeScale }]}>
+              {language === 'ID' ? 'DASHBOARD RESPONDEN' : 'RESPONDENT DASHBOARD'}
+            </Text>
+            <Text style={[styles.greetingTitle, { color: colors.text, fontSize: 22 * fontSizeScale }]}>
+              {language === 'ID' ? `Halo, ${firstName}! 👋` : `Hello, ${firstName}! 👋`}
+            </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <ThemeToggleBtn />
@@ -97,7 +101,7 @@ export default function HomeScreen() {
               style={[styles.avatarBtn, { backgroundColor: colors.primarySoft, borderColor: colors.inputBorder }]}
               onPress={() => router.push('/(tabs)/profile')}
             >
-              <Text style={[styles.avatarText, { color: colors.primary }]}>{initial}</Text>
+              <Text style={[styles.avatarText, { color: colors.primary, fontSize: 16 * fontSizeScale }]}>{initial}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -107,22 +111,32 @@ export default function HomeScreen() {
 
         {/* Section Title */}
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Riwayat Pengisian Form</Text>
-          <Text style={[styles.sectionCount, { color: colors.textMuted }]}>{submissions.length} Kuis/Form</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text, fontSize: 16 * fontSizeScale }]}>
+            {language === 'ID' ? 'Riwayat Pengisian Form' : 'Form Submission History'}
+          </Text>
+          <Text style={[styles.sectionCount, { color: colors.textMuted, fontSize: 13 * fontSizeScale }]}>
+            {submissions.length} {language === 'ID' ? 'Kuis/Form' : 'Quiz/Form'}
+          </Text>
         </View>
 
         {/* Submissions List */}
         {loading ? (
           <View style={styles.centerLoading}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={{ color: colors.textSub, marginTop: 12 }}>Memuat riwayat...</Text>
+            <Text style={{ color: colors.textSub, marginTop: 12, fontSize: 14 * fontSizeScale }}>
+              {language === 'ID' ? 'Memuat riwayat...' : 'Loading history...'}
+            </Text>
           </View>
         ) : submissions.length === 0 ? (
           <View style={[styles.emptyCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
             <Ionicons name="document-text-outline" size={48} color={colors.textMuted} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>Belum Ada Riwayat</Text>
-            <Text style={[styles.emptySub, { color: colors.textSub }]}>
-              Pindai QR Code atau masukkan link kuis dari guru/pengawas untuk mulai mengerjakan.
+            <Text style={[styles.emptyTitle, { color: colors.text, fontSize: 16 * fontSizeScale }]}>
+              {language === 'ID' ? 'Belum Ada Riwayat' : 'No History Yet'}
+            </Text>
+            <Text style={[styles.emptySub, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
+              {language === 'ID'
+                ? 'Pindai QR Code atau masukkan link kuis dari guru/pengawas untuk mulai mengerjakan.'
+                : 'Scan QR Code or enter quiz link from teacher/supervisor to get started.'}
             </Text>
           </View>
         ) : (
@@ -149,15 +163,15 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { padding: 20, paddingTop: 54, paddingBottom: 40 },
   userHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  greetingEyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 2 },
-  greetingTitle: { fontSize: 22, fontWeight: 'bold' },
+  greetingEyebrow: { fontWeight: '800', letterSpacing: 1, marginBottom: 2 },
+  greetingTitle: { fontWeight: 'bold' },
   avatarBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 16, fontWeight: 'bold' },
+  avatarText: { fontWeight: 'bold' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold' },
-  sectionCount: { fontSize: 13, fontWeight: '600' },
+  sectionTitle: { fontWeight: 'bold' },
+  sectionCount: { fontWeight: '600' },
   centerLoading: { paddingVertical: 40, alignItems: 'center' },
   emptyCard: { borderRadius: 16, padding: 32, borderWidth: 1, alignItems: 'center', gap: 8, marginTop: 10 },
-  emptyTitle: { fontSize: 16, fontWeight: 'bold' },
-  emptySub: { fontSize: 13, textAlign: 'center', lineHeight: 18 },
+  emptyTitle: { fontWeight: 'bold' },
+  emptySub: { textAlign: 'center', lineHeight: 18 },
 });
