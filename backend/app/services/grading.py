@@ -83,7 +83,7 @@ def grade_submission(db: Session, sub: Submission, form: Form):
     submission totals but does NOT touch `status` or `submitted_at` — the caller
     owns the lifecycle transition (submit vs auto-submit).
     """
-    questions = db.query(Question).filter(Question.form_id == form.id).all()
+    questions = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).all()
     q_map = {q.id: q for q in questions}
     scoring_mode = form.scoring_mode.value if form.scoring_mode else "auto"
     raw_max_score = max_score_for(questions, scoring_mode=None)

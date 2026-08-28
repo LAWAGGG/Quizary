@@ -116,6 +116,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     setForm((prev) => ({
       ...prev,
       type,
+      points: NO_GRADE_TYPES.includes(type) ? 0 : prev.points,
       options: OPTION_TYPES.includes(type)
         ? (prev.options.length ? prev.options : [{ option_text: '', is_correct: false }])
         : [],
@@ -398,7 +399,7 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
               Story group · {groupSize} question(s)
             </Badge>
           )}
-          {isQuiz && question.is_scored && question.points > 0 && (
+          {isQuiz && question.is_scored && question.points > 0 && !NO_GRADE_TYPES.includes(question.type) && (
             <span className="text-xs text-gray-400 dark:text-gray-500">{question.points} pts</span>
           )}
           {isQuiz && !question.is_scored && (
@@ -862,9 +863,7 @@ export default function QuestionBuilder() {
     if (!selectedIds.length) return
     setBulkDeleting(true)
     try {
-      for (const id of selectedIds) {
-        await api.delete(`/questions/${id}`)
-      }
+      await api.post(`/forms/${formId}/questions/bulk-delete`, { question_ids: selectedIds })
       toast.success(`${selectedIds.length} question(s) deleted`)
       setSelectedIds([])
       load()

@@ -63,7 +63,7 @@ def _apply_setting_chain(update_data: dict, form: Form) -> dict:
 def _ensure_publishable(form: Form, db: Session) -> None:
     """A form can only be published if it has at least 1 question.
     Quiz forms wajib punya timer (per menit) sebelum bisa dipublikasikan."""
-    if db.query(Question).filter(Question.form_id == form.id).count() == 0:
+    if db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).count() == 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Form must have at least 1 question before publishing",
@@ -136,7 +136,7 @@ def list_forms(
     if forms:
         rows = (
             db.query(Question.form_id, func.count(Question.id))
-            .filter(Question.form_id.in_([f.id for f in forms]))
+            .filter(Question.form_id.in_([f.id for f in forms]), Question.is_deleted.is_(False))
             .group_by(Question.form_id)
             .all()
         )
@@ -270,7 +270,7 @@ def _prepare_quiz_after_form_conversion(form_id: int, db: Session) -> None:
     reset all points, then auto-distribute quiz points across questions."""
     questions = (
         db.query(Question)
-        .filter(Question.form_id == form_id)
+        .filter(Question.form_id == form_id, Question.is_deleted.is_(False))
         .order_by(Question.order_index)
         .all()
     )
@@ -287,7 +287,7 @@ def _clear_correct_after_quiz_conversion(form_id: int, db: Session) -> None:
     """quiz → form: no correct answers are needed anymore."""
     db.query(QuestionOption).filter(
         QuestionOption.question_id.in_(
-            db.query(Question.id).filter(Question.form_id == form_id)
+            db.query(Question.id).filter(Question.form_id == form_id, Question.is_deleted.is_(False))
         )
     ).update({"is_correct": False}, synchronize_session=False)
 
@@ -297,7 +297,7 @@ def _clear_correct_after_quiz_conversion(form_id: int, db: Session) -> None:
 @router.delete("/forms/{form_id}")
 def delete_form(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
     _delete_file(form.banner_path)
-    questions = db.query(Question).filter(Question.form_id == form.id).all()
+    questions = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).all()
     for q in questions:
         for img in db.query(Image).filter(Image.question_id == q.id).all():
             _delete_file(img.path)
@@ -359,9 +359,16 @@ def batch_update_points(
             detail="Ubah poin per soal secara manual hanya bisa di mode Manual",
         )
 
+    from app.models.question import QuestionType
+    _NO_GRADE = (QuestionType.essay, QuestionType.date, QuestionType.time, QuestionType.file_upload)
     updated = (
         db.query(Question)
-        .filter(Question.form_id == form.id, Question.is_scored.is_(True))
+        .filter(
+            Question.form_id == form.id,
+            Question.is_scored.is_(True),
+            Question.is_deleted.is_(False),
+            Question.type.notin_(_NO_GRADE),
+        )
         .update({"points": body.points}, synchronize_session=False)
     )
     db.commit()

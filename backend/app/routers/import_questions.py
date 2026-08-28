@@ -313,7 +313,7 @@ def import_docx(
 
     max_order = (
         db.query(Question.order_index)
-        .filter(Question.form_id == form.id)
+        .filter(Question.form_id == form.id, Question.is_deleted.is_(False))
         .order_by(Question.order_index.desc())
         .first()
     )
@@ -332,11 +332,13 @@ def import_docx(
         else:
             q_type = QuestionType.essay
 
+        _no_grade = q_type in (QuestionType.essay, QuestionType.date, QuestionType.time, QuestionType.file_upload)
         q = Question(
             form_id=form.id,
             type=q_type,
             question_text=q_data["question_text"],
-            points=0 if form.type.value == "quiz" else 1,
+            points=0 if form.type.value == "quiz" or _no_grade else 1,
+            is_scored=not _no_grade,
             section_id=target_section_id,
             order_index=next_order,
             created_at=now,

@@ -42,7 +42,7 @@ def get_public_form(
     # (is_owner) gets a preview notice; everyone else sees status-based messaging.
     form = _get_form_by_code(short_code, db)
     is_owner = bool(user and form.user_id == user.id)
-    question_count = db.query(Question).filter(Question.form_id == form.id).count()
+    question_count = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).count()
     return {
         "id": form.id,
         "title": form.title,

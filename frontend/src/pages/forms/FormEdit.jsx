@@ -340,6 +340,18 @@ export default function FormEdit() {
     }
   }
 
+  const handleBatchUpdatePoints = async (points) => {
+    try {
+      await api.patch(`/forms/${id}/questions/points`, { points })
+      const qRes = await api.get(`/forms/${id}/questions`)
+      setQuestions(qRes.data.data)
+      toast.success(`Semua soal dinilai diatur ke ${points} poin`)
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to update points')
+      throw err
+    }
+  }
+
   const handleScoringModeChange = async (mode) => {
     if (!form || mode === scoringMode || scoringSaving) return
     const previous = scoringMode
@@ -606,6 +618,7 @@ export default function FormEdit() {
                         onModeChange={handleScoringModeChange}
                         saving={scoringSaving}
                         questions={questions}
+                        onBatchUpdate={handleBatchUpdatePoints}
                       />
                     </div>
                   </div>

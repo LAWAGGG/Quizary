@@ -3,7 +3,8 @@ import { Loader2, Check } from 'lucide-react'
 import { Select } from './Select'
 
 export function ScoringSettings({ mode = 'auto', onModeChange, questions = [], saving = false, onBatchUpdate }) {
-  const scored = questions.filter((q) => q.is_scored !== false)
+  const NO_GRADE = ['essay', 'date', 'time', 'file_upload']
+  const scored = questions.filter((q) => q.is_scored !== false && !NO_GRADE.includes(q.type))
   const count = scored.length || 1
   const autoPoints = Math.round((100 / count) * 10) / 10
 

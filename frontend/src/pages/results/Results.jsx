@@ -316,7 +316,7 @@ export default function Results() {
       ) : (
         <>
           <motion.div variants={containerVariants} initial="hidden" animate="show" className="hidden md:block">
-            <Card className="overflow-hidden" padding={false}>
+            <Card padding={false}>
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/70 dark:border-gray-800 dark:bg-ink-800/50">

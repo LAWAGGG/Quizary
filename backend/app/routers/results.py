@@ -87,7 +87,7 @@ def list_results(
 
     answer_summary: dict[int, str] = {}
     if form.type.value != "quiz" and subs:
-        q_ids = [row[0] for row in db.query(Question.id).filter(Question.form_id == form.id).all()]
+        q_ids = [row[0] for row in db.query(Question.id).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).all()]
         opt_text = {o.id: _strip_html(o.option_text) for o in db.query(QuestionOption).filter(QuestionOption.question_id.in_(q_ids)).all()}
         answers = db.query(Answer).filter(
             Answer.submission_id.in_([s.id for s in subs]),
@@ -251,7 +251,7 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
     ).all()
 
     total = len(subs)
-    questions = db.query(Question).filter(Question.form_id == form.id).order_by(Question.order_index).all()
+    questions = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).order_by(Question.order_index).all()
     sub_ids = [s.id for s in subs]
 
     if total == 0:
@@ -457,7 +457,7 @@ def _safe_cell(value):
 
 def _export_columns(form: Form, subs: list[Submission], db: Session):
     """Build dynamic export: one column per question + Dikirim/Skor/Status."""
-    questions = db.query(Question).filter(Question.form_id == form.id).order_by(Question.order_index).all()
+    questions = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).order_by(Question.order_index).all()
     q_ids = [q.id for q in questions]
     headers = [_safe_cell(_strip_html(q.question_text) or f"Soal {i+1}") for i, q in enumerate(questions)] + ["Dikirim", "Skor", "Status"]
 

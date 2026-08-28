@@ -159,6 +159,7 @@ def _missing_required(sub: Submission, form: Form, db: Session) -> list[str]:
     questions = db.query(Question).filter(
         Question.form_id == form.id,
         Question.is_required == True,  # noqa: E712
+        Question.is_deleted.is_(False),
     ).all()
     if not questions:
         return []
@@ -198,15 +199,18 @@ def _image_obj(img, request: Request) -> dict | None:
     return {"id": img.id, "path": file_url(request, img.path)}
 
 
-def _build_questions_response(sub_id: int, request: Request, db: Session) -> list[QuestionWithOptions]:
+def _build_questions_response(sub_id: int, request: Request, db: Session, include_deleted: bool = False) -> list[QuestionWithOptions]:
     """
     Ordered questions for a submission — respects per-submission shuffle.
     Does NOT expose is_correct (security boundary for respondents).
     """
+    qs_filter = [SubmissionQuestionOrder.submission_id == sub_id]
+    if not include_deleted:
+        qs_filter.append(Question.is_deleted.is_(False))
     ordered_qs = (
         db.query(Question)
         .join(SubmissionQuestionOrder, SubmissionQuestionOrder.question_id == Question.id)
-        .filter(SubmissionQuestionOrder.submission_id == sub_id)
+        .filter(*qs_filter)
         .order_by(SubmissionQuestionOrder.order_index)
         .all()
     )
@@ -217,9 +221,12 @@ def _build_questions_response(sub_id: int, request: Request, db: Session) -> lis
     # selalu mendarat di blok section-nya, bukan nempel di ekor array.
     sub = db.get(Submission, sub_id)
     seen_ids = {q.id for q in ordered_qs}
+    new_filter = [Question.form_id == sub.form_id, ~Question.id.in_(seen_ids)]
+    if not include_deleted:
+        new_filter.append(Question.is_deleted.is_(False))
     new_qs = (
         db.query(Question)
-        .filter(Question.form_id == sub.form_id, ~Question.id.in_(seen_ids))
+        .filter(*new_filter)
         .order_by(Question.order_index)
         .all()
     )
@@ -396,7 +403,7 @@ def create_submission(
 
     questions = (
         db.query(Question)
-        .filter(Question.form_id == form.id)
+        .filter(Question.form_id == form.id, Question.is_deleted.is_(False))
         .order_by(Question.order_index)
         .all()
     )
@@ -734,7 +741,7 @@ def get_submission(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     # Ordered questions (respects per-submission shuffle stored in DB)
-    questions = _build_questions_response(sub.id, request, db)
+    questions = _build_questions_response(sub.id, request, db, include_deleted=True)
 
     # Build a map of option_id → option_text for the whole form (used in answers)
     all_options = db.query(QuestionOption).join(
@@ -809,7 +816,7 @@ def get_submission(
     # lama yang tersimpan dengan max salah (mis. ikut poin soal non-grade)
     # langsung tampil benar tanpa menunggu regrade.
     live_max = max_score_for(
-        db.query(Question).filter(Question.form_id == form.id).all(),
+        db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).all(),
         scoring_mode=form.scoring_mode.value if form.scoring_mode else "auto",
     )
 

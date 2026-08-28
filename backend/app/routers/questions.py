@@ -34,7 +34,7 @@ _NO_GRADE_TYPES = ("essay", "date", "time", "file_upload")
 
 
 def _get_question_or_404(q_id: int, db: Session) -> Question:
-    q = db.get(Question, q_id)
+    q = db.query(Question).filter(Question.id == q_id, Question.is_deleted.is_(False)).first()
     if not q:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
     return q
@@ -97,7 +97,7 @@ def list_questions(
 ):
     questions = (
         db.query(Question)
-        .filter(Question.form_id == form.id)
+        .filter(Question.form_id == form.id, Question.is_deleted.is_(False))
         .order_by(Question.order_index)
         .all()
     )
@@ -241,7 +241,7 @@ def create_question(
 ):
     max_order = (
         db.query(Question.order_index)
-        .filter(Question.form_id == form.id)
+        .filter(Question.form_id == form.id, Question.is_deleted.is_(False))
         .order_by(Question.order_index.desc())
         .first()
     )
@@ -267,8 +267,8 @@ def create_question(
         type=QuestionType(body.type),
         question_text=body.question_text,
         # Auto mode allocates from the 100-point pool after insert; manual mode
-        # preserves the creator's per-question value.
-        points=(0 if form.type.value == "quiz" and (form.scoring_mode is None or form.scoring_mode.value == "auto") else body.points),
+        # preserves the creator's per-question value. Non-graded types always 0.
+        points=(0 if (form.type.value == "quiz" and (form.scoring_mode is None or form.scoring_mode.value == "auto")) or body.type in _NO_GRADE_TYPES else body.points),
         is_required=body.is_required,
         section_id=body.section_id,
         password_keyword=body.password_keyword if body.type == "password" else None,
@@ -462,21 +462,31 @@ def delete_question(
 ):
     question = _get_question_or_404(question_id, db)
     _ensure_owner(question, user, db)
-    if db.query(Answer).filter(Answer.question_id == question.id).count() > 0:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Soal tidak dapat dihapus karena sudah memiliki jawaban",
-        )
-    for img in question.images:
-        _delete_file(img.path)
-    for opt in question.options:
-        for img in opt.images:
-            _delete_file(img.path)
-    form_id = question.form_id
-    db.delete(question)
-    distribute_quiz_points(form_id, db)
+    question.is_deleted = True
     db.commit()
     return {"message": "Question deleted"}
+
+
+# ── POST /forms/{form_id}/questions/bulk-delete ───────────────────────────────
+
+@router.post("/forms/{form_id}/questions/bulk-delete")
+def bulk_delete_questions(
+    form_id: int,
+    body: dict,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    form = db.get(Form, form_id)
+    if not form or form.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    ids = body.get("question_ids", [])
+    if not ids:
+        raise HTTPException(status_code=422, detail="question_ids is required")
+    db.query(Question).filter(
+        Question.id.in_(ids), Question.form_id == form_id, Question.is_deleted.is_(False)
+    ).update({Question.is_deleted: True}, synchronize_session=False)
+    db.commit()
+    return {"message": f"{len(ids)} question(s) deleted"}
 
 
 # ── PATCH /questions/reorder ──────────────────────────────────────────────────
@@ -493,7 +503,7 @@ def reorder_questions(
     if form.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not the owner of this form")
 
-    form_ids = {row[0] for row in db.query(Question.id).filter(Question.form_id == form.id).all()}
+    form_ids = {row[0] for row in db.query(Question.id).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).all()}
     if set(body.orders) != form_ids:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -526,7 +536,7 @@ def group_questions(
 ):
     questions = (
         db.query(Question)
-        .filter(Question.id.in_(body.question_ids), Question.form_id == form.id)
+        .filter(Question.id.in_(body.question_ids), Question.form_id == form.id, Question.is_deleted.is_(False))
         .all()
     )
     if len(questions) != len(body.question_ids):
@@ -561,7 +571,7 @@ def ungroup_questions(
 ):
     members = (
         db.query(Question)
-        .filter(Question.form_id == form.id, Question.group_id == group_id)
+        .filter(Question.form_id == form.id, Question.group_id == group_id, Question.is_deleted.is_(False))
         .all()
     )
     if not members:
@@ -585,7 +595,7 @@ def remove_question_from_group(
 ):
     q = (
         db.query(Question)
-        .filter(Question.id == question_id, Question.form_id == form.id)
+        .filter(Question.id == question_id, Question.form_id == form.id, Question.is_deleted.is_(False))
         .first()
     )
     if not q or q.group_id != group_id:
