@@ -3,7 +3,7 @@ import { Loader2, Check } from 'lucide-react'
 import { Select } from './Select'
 
 export function ScoringSettings({ mode = 'auto', onModeChange, questions = [], saving = false, onBatchUpdate }) {
-  const scored = questions.filter((q) => q.is_scored !== false && Number(q.points) > 0)
+  const scored = questions.filter((q) => q.is_scored !== false)
   const count = scored.length || 1
   const autoPoints = Math.round((100 / count) * 10) / 10
 
@@ -37,11 +37,11 @@ export function ScoringSettings({ mode = 'auto', onModeChange, questions = [], s
 
       {mode === 'auto' ? (
         <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
-          100 ÷ {count} = {autoPoints} pts/soal
+          100 ÷ {count} = {autoPoints} pts each
         </span>
       ) : (
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-gray-500 dark:text-gray-400">Bobot:</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">Weight:</span>
           <input
             type="number"
             value={points}

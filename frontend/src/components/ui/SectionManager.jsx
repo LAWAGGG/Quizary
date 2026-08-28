@@ -36,7 +36,7 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
           {...listeners}
           ref={setActivatorNodeRef}
           className="hidden md:block text-gray-300 dark:text-gray-600 cursor-grab active:cursor-grabbing"
-          title="Seret untuk mengubah urutan section"
+          title="Drag to reorder sections"
         >
           <GripVertical className="w-5 h-5" />
         </span>
@@ -46,7 +46,7 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
               type="button"
               onClick={() => onMove(-1)}
               disabled={isFirst}
-              aria-label="Naikkan section"
+              aria-label="Move section up"
               className="w-6 h-6 rounded-md bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all"
             >
               <ChevronUp className="w-3.5 h-3.5" />
@@ -55,7 +55,7 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
               type="button"
               onClick={() => onMove(1)}
               disabled={isLast}
-              aria-label="Turunkan section"
+              aria-label="Move section down"
               className="w-6 h-6 rounded-md bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all"
             >
               <ChevronDown className="w-3.5 h-3.5" />
@@ -66,7 +66,7 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
           type="button"
           onClick={onToggleCollapse}
           aria-expanded={!collapsed}
-          title={collapsed ? 'Tampilkan soal' : 'Sembunyikan soal'}
+          title={collapsed ? 'Show questions' : 'Hide questions'}
           className="p-1 rounded-md text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors shrink-0"
         >
           <ChevronDown className={`w-4 h-4 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
@@ -80,13 +80,13 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
               className="input-field h-8 text-sm flex-1"
               autoFocus
             />
-            <Button size="sm" onClick={onEditSave} icon={<Check className="w-3.5 h-3.5" />}>Simpan</Button>
-            <Button size="sm" variant="ghost" onClick={onEditCancel}>Batal</Button>
+            <Button size="sm" onClick={onEditSave} icon={<Check className="w-3.5 h-3.5" />}>Save</Button>
+            <Button size="sm" variant="ghost" onClick={onEditCancel}>Cancel</Button>
           </>
         ) : (
           <>
             <span className="font-display font-semibold text-ink dark:text-gray-100 flex-1 truncate">{section.title}</span>
-            <Badge scheme="gray">{secQs.length} soal</Badge>
+            <Badge scheme="gray">{secQs.length} question(s)</Badge>
             <button onClick={onEditStart} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary px-2 py-1 transition-colors">Rename</button>
             <button onClick={onDelete} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-incorrect px-2 py-1 transition-colors">Delete</button>
           </>
@@ -96,7 +96,7 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
       {/* Collapsed: header saja — drop ke card tetap berfungsi */}
       {!collapsed && (isDragging ? (
         <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-3 text-xs text-gray-400 dark:text-gray-500 text-center italic">
-          Melepas soal… seret untuk memindahkan
+          Releasing question… drag to move
         </div>
       ) : secQs.length > 0 ? (
         <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-2 space-y-1.5">
@@ -131,8 +131,8 @@ function DraggableQuestion({ q, onUnassign }) {
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onUnassign(q.id) }}
-        title="Keluarkan dari section"
-        aria-label={`Keluarkan soal ${q.id} dari section`}
+        title="Remove from section"
+        aria-label={`Remove question ${q.id} from section`}
         className="shrink-0 p-1 rounded-md text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 hover:text-incorrect hover:bg-incorrect-soft transition-all"
       >
         <X className="w-3.5 h-3.5" />
@@ -242,7 +242,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
       toast.success('Question moved')
       onSaved()
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Gagal move question')
+      toast.error(err.response?.data?.detail || 'Failed to move question')
       load()
     }
   }
@@ -294,7 +294,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
       await api.patch('/sections/reorder', { form_id: parseInt(formId), orders: next.map((s) => s.id) })
       onSaved()
     } catch {
-      toast.error('Gagal menyimpan urutan section')
+      toast.error('Failed to save section order')
       load()
     } finally {
       setSectionReordering(false)
@@ -351,7 +351,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
         await api.patch('/sections/reorder', { form_id: parseInt(formId), orders: ids })
         onSaved()
       } catch {
-        toast.error('Gagal menyimpan urutan section')
+        toast.error('Failed to save section order')
         load()
       } finally {
         setSectionReordering(false)
@@ -368,7 +368,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
       load()
       onSaved()
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Gagal rename section')
+      toast.error(err.response?.data?.detail || 'Failed to rename section')
     }
   }
 
@@ -381,7 +381,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
       load()
       onSaved()
     } catch {
-      toast.error('Gagal hapus section')
+      toast.error('Failed to delete section')
       setDeleteTarget(null)
     }
   }
@@ -393,11 +393,11 @@ export default function SectionManager({ formId, show, onClose, sections: initia
       await api.post(`/forms/${formId}/sections`, { title: newSectionTitle.trim() })
       setNewSectionTitle('')
       setNewSectionOpen(false)
-      toast.success('Section ditambahkan')
+      toast.success('Section added')
       load()
       onSaved()
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Gagal menambah section')
+      toast.error(err.response?.data?.detail || 'Failed to add section')
     } finally {
       setCreatingSection(false)
     }
@@ -431,7 +431,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
             <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-700 shrink-0">
               <div>
                 <h2 className="font-display text-lg font-bold text-ink dark:text-gray-100">Manage Sections</h2>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Seret section untuk urutkan · Seret soal untuk pindahkan</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Drag sections to reorder · Drag questions to move</p>
               </div>
               <button
                 onClick={onClose}
@@ -497,11 +497,11 @@ export default function SectionManager({ formId, show, onClose, sections: initia
                       onChange={(e) => setNewSectionTitle(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') createSection() }}
                       className="input-field h-9 text-sm flex-1"
-                      placeholder="Nama section"
+                      placeholder="Section name"
                       autoFocus
                     />
-                    <Button size="sm" onClick={createSection} loading={creatingSection} disabled={!newSectionTitle.trim()}>Tambah</Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setNewSectionOpen(false); setNewSectionTitle('') }}>Batal</Button>
+                    <Button size="sm" onClick={createSection} loading={creatingSection} disabled={!newSectionTitle.trim()}>Add</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setNewSectionOpen(false); setNewSectionTitle('') }}>Cancel</Button>
                   </div>
                 ) : (
                   <button
@@ -533,8 +533,8 @@ export default function SectionManager({ formId, show, onClose, sections: initia
 
             <ConfirmModal
               show={!!deleteTarget}
-              title="Hapus Section?"
-              message={`Section "${deleteTarget?.title || ''}" akan dihapus. Soal di dalamnya tetap ada, hanya lepas dari section.`}
+              title="Delete Section?"
+              message={`Section "${deleteTarget?.title || ''}" will be deleted. Questions inside remain, just removed from section.`}
               onConfirm={deleteSection}
               onCancel={() => setDeleteTarget(null)}
               confirmText="Delete"

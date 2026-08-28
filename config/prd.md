@@ -83,8 +83,10 @@ Aturan kunci yang **tidak boleh dilanggar** oleh implementasi apapun:
 - Waktu berakhir efektif = `MIN(started_at + timer_seconds, ends_at)`
 
 **Sistem poin quiz (hanya berlaku untuk tipe `quiz`):**
-- Total pool = **100**, dibagi merata ke semua soal `is_scored=true` setiap ada **penambahan soal, import soal, penghapusan soal, atau soal diaktifkan kembali** (sisa 100 yang tak habis dibagi jatuh ke soal terurut awal).
-- Saat user **mengedit poin** salah satu soal, poin soal tersebut dipertahankan dan sisa pool (100 − poinnya) dibagi merata ke soal scored lainnya.
+- `scoring_mode=auto` (default): total pool **100**, dibagi merata ke semua soal `is_scored=true`.
+- `scoring_mode=manual`: creator mengisi bobot tiap soal; skor hasil tetap skala **/100** dengan rumus `poin_diperoleh / total_bobot × 100`.
+- Pada mode `auto`, pool **100** dibagi merata ke semua soal `is_scored=true` setiap ada **penambahan soal, import soal, penghapusan soal, atau soal diaktifkan kembali** (sisa 100 yang tak habis dibagi jatuh ke soal terurut awal).
+- Pada mode `auto`, saat user **mengedit poin** salah satu soal, poin soal tersebut dipertahankan dan sisa pool (100 − poinnya) dibagi merata ke soal scored lainnya.
 - `is_scored=false` → soal "detail-only": tidak ikut pool, poin direset 0, tidak dinilai (`is_correct=null`, `points_earned=0`), tampil sebagai "Not graded" di hasil.
 - Konversi tipe form→quiz: opsi pertama tiap soal pilihan ganda otomatis benar + semua poin direset & dibagi. Konversi quiz→form: semua `is_correct` direset `false`.
 

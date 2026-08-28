@@ -353,6 +353,11 @@ def batch_update_points(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Fitur ini hanya tersedia untuk tipe quiz",
         )
+    if form.scoring_mode == ScoringMode.auto:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Ubah poin per soal secara manual hanya bisa di mode Manual",
+        )
 
     updated = (
         db.query(Question)

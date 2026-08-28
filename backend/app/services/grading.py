@@ -26,17 +26,22 @@ GRADABLE_TYPES = (
 )
 
 
-def max_score_for(questions) -> float:
+def max_score_for(questions, scoring_mode: str | None = None) -> float:
     """Total poin maksimal yang benar-benar bisa diraih.
 
     Hanya soal `is_scored` dengan tipe yang dinilai otomatis. Essay/date/time/
     file_upload selalu 0 poin — kalau data lama membawa poin, tidak ikut
     menambah max_score (mencegah persen ≠ nilai mentah, mis. 67/102).
     """
-    return float(sum(
+    raw_max = float(sum(
         q.points or 0 for q in questions
         if q.is_scored and q.type in GRADABLE_TYPES
     ))
+    # Manual points may sum to any positive value. Public quiz score remains
+    # percentage-based, matching auto mode's 100-point pool.
+    if scoring_mode == "manual":
+        return 100.0 if raw_max else 0.0
+    return raw_max
 
 
 def grade_answer(answer: Answer, question: Question):
@@ -80,7 +85,9 @@ def grade_submission(db: Session, sub: Submission, form: Form):
     """
     questions = db.query(Question).filter(Question.form_id == form.id).all()
     q_map = {q.id: q for q in questions}
-    max_score = max_score_for(questions)
+    scoring_mode = form.scoring_mode.value if form.scoring_mode else "auto"
+    raw_max_score = max_score_for(questions, scoring_mode=None)
+    max_score = max_score_for(questions, scoring_mode=scoring_mode)
     total = 0.0
 
     for answer in db.query(Answer).filter(Answer.submission_id == sub.id).all():
@@ -92,6 +99,8 @@ def grade_submission(db: Session, sub: Submission, form: Form):
         answer.points_earned = points
         total += float(points)
 
+    if scoring_mode == "manual" and raw_max_score:
+        total = round(total / raw_max_score * 100, 2)
     sub.score = Decimal(str(total))
     sub.max_score = Decimal(str(max_score))
     return total, max_score

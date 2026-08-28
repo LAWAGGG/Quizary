@@ -75,7 +75,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     if (symbolBtn) symbolBtn.title = 'Insert symbol'
 
     const fxBtn = container.parentNode?.querySelector('.ql-fx')
-    if (fxBtn) fxBtn.title = 'Sisipkan formula LaTeX (Ctrl+Alt+M)'
+    if (fxBtn) fxBtn.title = 'Insert LaTeX formula (Ctrl+Alt+M)'
 
     // Shortcut buka dialog formula
     quill.keyboard.addBinding({ key: 'm', shortKey: true, altKey: true }, () => {
@@ -194,7 +194,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     try {
       return { html: katex.renderToString(tex, { throwOnError: true, displayMode: isDisplayTex(tex) }) }
     } catch (err) {
-      return { error: err.message?.replace(/^KaTeX parse error:\s*/, '') || 'Sintaks belum valid' }
+      return { error: err.message?.replace(/^KaTeX parse error:\s*/, '') || 'Invalid syntax' }
     }
   }, [formula])
 
@@ -253,11 +253,11 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
           className="absolute z-50 bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3 w-[360px] max-w-[calc(100vw-2rem)]"
           style={{ top: compact ? 38 : 52, left: 8 }}
           role="dialog"
-          aria-label="Sisipkan formula LaTeX"
+          aria-label="Insert LaTeX formula"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Formula LaTeX</span>
-            <button type="button" onClick={() => setFormula(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" aria-label="Tutup formula">
+            <button type="button" onClick={() => setFormula(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" aria-label="Close formula">
               ✕
             </button>
           </div>
@@ -288,7 +288,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
             ) : formulaPreview ? (
               <span dangerouslySetInnerHTML={{ __html: formulaPreview.html }} />
             ) : (
-              <span className="text-xs italic text-gray-400 dark:text-gray-500">Pratinjau rumus tampil di sini</span>
+              <span className="text-xs italic text-gray-400 dark:text-gray-500">Formula preview appears here</span>
             )}
           </div>
 
@@ -308,8 +308,8 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
 
           <div className="flex items-center justify-end mt-3">
             <div className="flex gap-1.5">
-              <Button size="sm" variant="ghost" onClick={() => setFormula(null)}>Batal</Button>
-              <Button size="sm" onClick={saveFormula} disabled={!formula.tex.trim()}>Sisipkan</Button>
+              <Button size="sm" variant="ghost" onClick={() => setFormula(null)}>Cancel</Button>
+              <Button size="sm" onClick={saveFormula} disabled={!formula.tex.trim()}>Insert</Button>
             </div>
           </div>
         </div>

@@ -15,7 +15,7 @@ import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { isAudioUrl } from '../../lib/media'
-import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText, ScoringSettings } from '../../components/ui'
+import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText } from '../../components/ui'
 import SectionManager from '../../components/ui/SectionManager'
 
 const TYPE_LABELS = {
@@ -35,10 +35,10 @@ const OPTION_TYPES = ['multiple_choice', 'checkbox', 'dropdown']
 const NO_GRADE_TYPES = ['essay', 'date', 'time', 'file_upload']
 
 const TYPE_HINTS = {
-  dropdown: 'Responden memilih satu jawaban dari daftar dropdown.',
-  date: 'Responden memilih tanggal (YYYY-MM-DD).',
-  time: 'Responden memilih waktu (HH:MM).',
-  file_upload: 'Responden mengunggah file (pdf, doc, xls, ppt, txt, csv, gambar, zip).',
+  dropdown: 'Respondent selects one answer from a dropdown list.',
+  date: 'Respondent selects a date (YYYY-MM-DD).',
+  time: 'Respondent selects a time (HH:MM).',
+  file_upload: 'Respondent uploads a file (pdf, doc, xls, ppt, txt, csv, image, zip).',
 }
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -167,7 +167,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
             maxLength={255}
             spellCheck={false}
           />
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Jawaban harus cocok persis untuk lanjut ke section berikutnya.</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Answer must match exactly to proceed to the next section.</p>
           {ferr('password_keyword') && <p className="field-error">{ferr('password_keyword')}</p>}
         </div>
       )}
@@ -208,7 +208,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
           type="button"
           onClick={(e) => { e.preventDefault(); questionFileRef.current?.click() }}
           disabled={!questionId || qImgLoading}
-          title={questionId ? 'Unggah gambar atau audio (mp3)' : 'Save question first to add media'}
+          title={questionId ? 'Upload image or audio (mp3)' : 'Save question first to add media'}
           className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-primary hover:border-primary transition-colors"
         >
           {qImgLoading ? (
@@ -243,7 +243,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
               <div>
                 <label className="field-label">Points</label>
                 <p className="text-sm text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-ink-800/50 border border-gray-200 dark:border-gray-700 rounded-xl px-4 h-11 flex items-center">
-                  {scoringMode === 'auto' ? `${form.points} pts (otomatis)` : 'Auto-assigned by system'}
+                  {scoringMode === 'auto' ? `${form.points} pts (auto)` : 'Auto-assigned by system'}
                 </p>
               </div>
             )}
@@ -288,8 +288,8 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                   <button
                     type="button"
                     onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
-                    aria-label={opt.is_correct ? 'Hapus tanda jawaban benar' : 'Tandai sebagai jawaban benar'}
-                    title={opt.is_correct ? 'Hapus tanda jawaban benar' : 'Tandai sebagai jawaban benar'}
+                    aria-label={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
+                    title={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
                     className="shrink-0 rounded-lg transition-transform hover:scale-105 active:scale-95"
                   >
                     <span className={`flex items-center justify-center w-7 h-7 rounded-lg border-2 transition-colors ${opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 bg-white dark:bg-ink-900 text-transparent hover:border-primary/60'
@@ -301,8 +301,8 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                   <button
                     type="button"
                     onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
-                    aria-label={opt.is_correct ? 'Hapus tanda jawaban benar' : 'Tandai sebagai jawaban benar'}
-                    title={opt.is_correct ? 'Hapus tanda jawaban benar' : 'Tandai sebagai jawaban benar'}
+                    aria-label={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
+                    title={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
                     className="shrink-0 transition-transform hover:scale-105 active:scale-95"
                   >
                     <span className={`bubble ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
@@ -393,9 +393,9 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
           </span>
           <Badge scheme="gray">{TYPE_LABELS[question.type]}</Badge>
           {groupId && (
-            <Badge scheme="primary" title="Soal grup cerita selalu tampil berurutan meski shuffle aktif. Select soal lalu klik Ungroup untuk mengeluarkan.">
+            <Badge scheme="primary" title="Story group questions always appear in sequence even with shuffle active. Select question(s) then click Ungroup to remove.">
               <BookOpen className="w-3 h-3" />
-              Grup cerita · {groupSize} soal
+              Story group · {groupSize} question(s)
             </Badge>
           )}
           {isQuiz && question.is_scored && question.points > 0 && (
@@ -500,7 +500,7 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
             <button
               onClick={() => onMove(index, -1)}
               disabled={isFirst}
-              aria-label="Naikkan soal"
+              aria-label="Move question up"
               className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all"
             >
               <ChevronUp className="w-4 h-4" />
@@ -508,7 +508,7 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
             <button
               onClick={() => onMove(index, 1)}
               disabled={isLast}
-              aria-label="Turunkan soal"
+              aria-label="Move question down"
               className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all"
             >
               <ChevronDown className="w-4 h-4" />
@@ -611,10 +611,10 @@ function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSav
             onKeyDown={(e) => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel() }}
             className="input-field h-9 text-sm flex-1"
             autoFocus
-            placeholder="Nama section"
+            placeholder="Section name"
           />
-          <Button size="sm" onClick={onSave} icon={<Check className="w-3.5 h-3.5" />}>Simpan</Button>
-          <Button size="sm" variant="ghost" onClick={onCancel}>Batal</Button>
+          <Button size="sm" onClick={onSave} icon={<Check className="w-3.5 h-3.5" />}>Save</Button>
+          <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
         </>
       ) : (
         <>
@@ -623,7 +623,7 @@ function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSav
               type="button"
               onClick={onToggle}
               aria-expanded={!collapsed}
-              title={collapsed ? 'Tampilkan soal' : 'Sembunyikan soal'}
+              title={collapsed ? 'Show questions' : 'Hide questions'}
               className="p-1 -ml-1 rounded-md text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors shrink-0"
             >
               <ChevronDown className={`w-4 h-4 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
@@ -633,7 +633,7 @@ function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSav
           <h3 className="font-display font-semibold text-ink dark:text-gray-100 flex-1 truncate">
             {section ? section.title : 'General'}
           </h3>
-          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">{count} soal</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">{count} question(s)</span>
           {section && (
             <>
               <button onClick={onEdit} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary px-2 py-1 transition-colors">Rename</button>
@@ -664,8 +664,6 @@ export default function QuestionBuilder() {
 
   const [form, setForm] = useState(null)
   const [questions, setQuestions] = useState([])
-  const [scoringMode, setScoringMode] = useState('auto')
-  const [scoringSaving, setScoringSaving] = useState(false)
   const [sections, setSections] = useState([])
   const [newSectionOpen, setNewSectionOpen] = useState(false)
   const [newSectionTitle, setNewSectionTitle] = useState('')
@@ -705,6 +703,7 @@ export default function QuestionBuilder() {
   )
   // Import DOCX wajib pilih section tujuan hanya bila section >1.
   const importNeedsSection = sectionsAllowed && sections.length > 1
+  const scoringMode = form?.scoring_mode || 'auto'
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
@@ -721,7 +720,6 @@ export default function QuestionBuilder() {
     ])
       .then(([fRes, qRes, sRes]) => {
         setForm(fRes.data)
-        setScoringMode(fRes.data.scoring_mode || 'auto')
         setQuestions(qRes.data.data)
         setSections(sRes.data.data)
         setSelectedIds([])
@@ -734,36 +732,6 @@ export default function QuestionBuilder() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formId])
-
-  const handleScoringModeChange = async (mode) => {
-    if (!form || mode === scoringMode || scoringSaving) return
-    const previous = scoringMode
-    setScoringMode(mode)
-    setScoringSaving(true)
-    try {
-      const response = await api.put(`/forms/${formId}`, { scoring_mode: mode })
-      setForm((current) => ({ ...current, ...response.data }))
-      // Auto mode redistributes points server-side; refresh values immediately.
-      if (mode === 'auto') load(true)
-      toast.success(mode === 'auto' ? 'Bobot otomatis diaktifkan' : 'Bobot manual diaktifkan')
-    } catch (err) {
-      setScoringMode(previous)
-      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Gagal mengubah metode bobot')
-    } finally {
-      setScoringSaving(false)
-    }
-  }
-
-  const handleBatchUpdatePoints = async (points) => {
-    try {
-      await api.patch(`/forms/${formId}/questions/points`, { points })
-      toast.success('Bobot soal diperbarui')
-      load(true)
-    } catch (err) {
-      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Gagal memperbarui bobot')
-      throw err
-    }
-  }
 
   const handleSaveQuestion = async (data) => {
     setSaveLoading(true)
@@ -855,11 +823,11 @@ export default function QuestionBuilder() {
     setGrouping(true)
     try {
       await api.post(`/forms/${formId}/questions/group`, { question_ids: selectedIds })
-      toast.success(`${selectedIds.length} soal dikelompokkan sebagai satu grup cerita`)
+      toast.success(`${selectedIds.length} question(s) grouped into one story group`)
       setSelectedIds([])
       load()
     } catch (err) {
-      toast.error(err.response?.data?.detail || err.response?.data?.message || 'Gagal mengelompokkan soal')
+      toast.error(err.response?.data?.detail || err.response?.data?.message || 'Failed to group questions')
     } finally {
       setGrouping(false)
     }
@@ -873,11 +841,11 @@ export default function QuestionBuilder() {
       for (const q of groupedQs) {
         await api.delete(`/forms/${formId}/questions/group/${q.group_id}/questions/${q.id}`)
       }
-      toast.success(`${groupedQs.length} soal dikeluarkan dari grup`)
+      toast.success(`${groupedQs.length} question(s) removed from group`)
       setSelectedIds([])
       load()
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Gagal mengeluarkan soal dari grup')
+      toast.error(err.response?.data?.detail || 'Failed to remove question(s) from group')
     } finally {
       setUngrouping(false)
     }
@@ -964,7 +932,7 @@ export default function QuestionBuilder() {
     e.target.value = ''
     // Section >1: tujuan import wajib dipilih (divalidasi juga di backend).
     if (importNeedsSection && !importSectionId) {
-      toast.error('Pilih section tujuan terlebih dahulu')
+      toast.error('Select target section first')
       return
     }
     setImporting(true)
@@ -999,10 +967,10 @@ export default function QuestionBuilder() {
       await api.post(`/forms/${formId}/sections`, { title: newSectionTitle.trim() })
       setNewSectionTitle('')
       setNewSectionOpen(false)
-      toast.success('Section ditambahkan')
+      toast.success('Section added')
       load()
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Gagal menambah section')
+      toast.error(err.response?.data?.detail || 'Failed to add section')
     } finally {
       setSectionSaving(false)
     }
@@ -1013,10 +981,10 @@ export default function QuestionBuilder() {
     try {
       await api.patch(`/sections/${section.id}`, { title: sectionTitleDraft.trim() })
       setEditingSectionId(null)
-      toast.success('Section diperbarui')
+      toast.success('Section updated')
       load()
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Gagal memperbarui section')
+      toast.error(err.response?.data?.detail || 'Failed to update section')
     }
   }
 
@@ -1026,10 +994,10 @@ export default function QuestionBuilder() {
     try {
       await api.delete(`/sections/${sectionDeleteTarget.id}`)
       setSectionDeleteTarget(null)
-      toast.success('Section dihapus')
+      toast.success('Section deleted')
       load()
     } catch {
-      toast.error('Gagal menghapus section')
+      toast.error('Failed to delete section')
       setSectionDeleteTarget(null)
     } finally {
       setConfirmLoading(false)
@@ -1062,15 +1030,6 @@ export default function QuestionBuilder() {
         description={`${questions.length} question${questions.length !== 1 ? 's' : ''}`}
         actions={
           <>
-            {form.type === 'quiz' && (
-              <ScoringSettings
-                mode={scoringMode}
-                onModeChange={handleScoringModeChange}
-                saving={scoringSaving}
-                questions={questions}
-                onBatchUpdate={handleBatchUpdatePoints}
-              />
-            )}
             <input ref={docxRef} type="file" accept=".docx" onChange={handleDocxImport} className="hidden" />
             <Button variant="secondary" onClick={() => { if (docxRef.current) docxRef.current.value = ''; setShowImportModal(true) }} icon={<Upload className="w-4 h-4" />}>
               Import DOCX
@@ -1105,11 +1064,11 @@ export default function QuestionBuilder() {
             onChange={(e) => setNewSectionTitle(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') createSection() }}
             className="input-field flex-1"
-            placeholder="Nama section, contoh: Bagian A"
+            placeholder="Section name, e.g. Section A"
             autoFocus
           />
-          <Button onClick={createSection} loading={sectionSaving} disabled={!newSectionTitle.trim()}>Tambah</Button>
-          <Button variant="ghost" onClick={() => setNewSectionOpen(false)}>Batal</Button>
+          <Button onClick={createSection} loading={sectionSaving} disabled={!newSectionTitle.trim()}>Add</Button>
+          <Button variant="ghost" onClick={() => setNewSectionOpen(false)}>Cancel</Button>
         </div>
       )}
 
@@ -1193,7 +1152,7 @@ export default function QuestionBuilder() {
                     icon={<Unlink className="w-4 h-4" />}
                     loading={ungrouping}
                     onClick={handleUngroupSelected}
-                    title="Keluarkan soal terpilih dari grup ceritanya"
+                    title="Remove selected question(s) from story group"
                   >
                     Ungroup
                   </Button>
@@ -1205,7 +1164,7 @@ export default function QuestionBuilder() {
                     loading={grouping}
                     disabled={!canGroup}
                     onClick={handleGroup}
-                    title={canGroup ? 'Kelompokkan soal terpilih (cerita/wacana bersama)' : 'Pilih minimal 2 soal dalam section yang sama'}
+                    title={canGroup ? 'Group selected question(s) (shared story/passage)' : 'Select at least 2 question(s) in the same section'}
                   >
                     Group
                   </Button>
@@ -1277,7 +1236,7 @@ export default function QuestionBuilder() {
                             </div>
                           ) : (
                             <p className="mt-3 text-xs text-gray-400 dark:text-gray-500 italic">
-                              Belum ada soal di section ini.
+                              No questions yet in this section.
                             </p>
                           ))}
                         </SectionDropZone>
@@ -1380,8 +1339,8 @@ export default function QuestionBuilder() {
 
       <ConfirmModal
         show={!!sectionDeleteTarget}
-        title="Hapus Section?"
-        message={`Section "${sectionDeleteTarget?.title || ''}" akan dihapus. Soal di dalamnya tetap ada, hanya lepas dari section mana pun.`}
+        title="Delete Section?"
+        message={`Section "${sectionDeleteTarget?.title || ''}" will be deleted. Questions inside will remain, just unlinked from any section.`}
         onConfirm={deleteSection}
         onCancel={() => setSectionDeleteTarget(null)}
         loading={confirmLoading}
@@ -1461,16 +1420,16 @@ export default function QuestionBuilder() {
               <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
                 {importNeedsSection && (
                   <section>
-                    <label className="field-label">Section tujuan *</label>
+                    <label className="field-label">Target section *</label>
                     <Select
                       value={importSectionId}
                       onChange={(e) => setImportSectionId(e.target.value)}
                     >
-                      <option value="">— Pilih section —</option>
+                      <option value="">— Select section —</option>
                       {sections.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
                     </Select>
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-                      Semua soal hasil import akan masuk ke section ini.
+                      All imported questions will be added to this section.
                     </p>
                   </section>
                 )}
@@ -1479,7 +1438,7 @@ export default function QuestionBuilder() {
                   <ul className="space-y-1.5 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
                     <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Each question starts with a number followed by a period or closing bracket — e.g. <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">1.</code> or <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">1)</code>.</li>
                     <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Answer choices are listed with letters — e.g. <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">A.</code>, <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">B.</code>, etc.</li>
-                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Mark the correct answer with a line like <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">Answer: B</code> or <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">Kunci Jawaban: B</code>.</li>
+                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Mark the correct answer with a line like <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">Answer: B</code>.</li>
                     <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Multiple correct choices become a checkbox question automatically.</li>
                     <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Questions without any choices become essay questions.</li>
                     <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Both manually typed numbers and Word's native auto-numbered lists are supported.</li>
@@ -1535,7 +1494,7 @@ export default function QuestionBuilder() {
                   <Button variant="secondary" onClick={() => setShowImportModal(false)} disabled={importing}>Cancel</Button>
                   <Button
                     onClick={() => {
-                      if (importNeedsSection && !importSectionId) { toast.error('Pilih section tujuan terlebih dahulu'); return }
+                      if (importNeedsSection && !importSectionId) { toast.error('Select target section first'); return }
                       docxRef.current?.click()
                     }}
                     loading={importing}

@@ -86,12 +86,12 @@ export default function Results() {
     setDeleting(true)
     try {
       const res = await api.delete(`/forms/${formId}/results`, { data: { submission_ids: [...selected] } })
-      toast.success(res.data.message || `${res.data.deleted} hasil dihapus`)
+      toast.success(res.data.message || `${res.data.deleted} result(s) deleted`)
       setShowDelete(false)
       setSelected(new Set())
       fetchResults()
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Gagal menghapus hasil')
+      toast.error(err.response?.data?.message || 'Failed to delete results')
     } finally {
       setDeleting(false)
     }
@@ -106,12 +106,12 @@ export default function Results() {
     setStatusSaving(true)
     try {
       const res = await api.patch(`/forms/${formId}/results/${id}/status`, { status })
-      toast.success(res.data.message || 'Status diperbarui')
+      toast.success(res.data.message || 'Status updated')
       setStatusTarget(null)
       setDetail((prev) => (prev && prev.id === id ? { ...prev, status: res.data.status, score: res.data.score } : prev))
       fetchResults()
     } catch (err) {
-      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Gagal mengubah status')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to change status')
     } finally {
       setStatusSaving(false)
     }
@@ -133,12 +133,12 @@ export default function Results() {
         submission_ids: [...selected], 
         status 
       })
-      toast.success(res.data.message || 'Status diperbarui')
+      toast.success(res.data.message || 'Status updated')
       setBulkStatusTarget(null)
       setSelected(new Set())
       fetchResults()
     } catch (err) {
-      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Gagal mengubah status')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to change status')
     } finally {
       setBulkStatusSaving(false)
     }
@@ -155,7 +155,7 @@ export default function Results() {
       value={row.status}
       onClick={(e)=>e.stopPropagation()}
       onChange={(e) => requestStatus({ id: row.submission_id, status: e.target.value, current: row.status })}
-      aria-label={`Ubah status #${row.submission_id}`}
+      aria-label={`Change status #${row.submission_id}`}
       className="!h-8 !text-xs w-36"
     >
       <option value={row.status} disabled>{STATUS_LABELS[row.status] || row.status}</option>
@@ -279,23 +279,23 @@ export default function Results() {
 
       {selected.size > 0 && (
         <div className="sticky top-2 z-30 mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-white dark:bg-ink-900 px-4 py-3 shadow-lift">
-          <span className="text-sm font-semibold text-ink dark:text-gray-100 shrink-0">{selected.size} <span className="hidden sm:inline">hasil</span> dipilih</span>
+          <span className="text-sm font-semibold text-ink dark:text-gray-100 shrink-0">{selected.size} <span className="hidden sm:inline">result(s)</span> selected</span>
           <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())} className="hidden sm:inline-flex">Batal</Button>
+                        <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())} className="hidden sm:inline-flex">Cancel</Button>
 
             <Select 
               value="" 
               onChange={(e) => requestBulkStatus(e.target.value)} 
               className="!h-8 !text-xs w-[115px] sm:w-[140px]"
-              aria-label="Ubah status massal"
+              aria-label="Change status in bulk"
             >
-              <option value="" disabled>Ubah status</option>
+              <option value="" disabled>Change status</option>
               {statusTargets.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </Select>
             <Button variant="danger" size="sm" icon={<X className="w-4 h-4" />} onClick={() => setShowDelete(true)}>
-              <span className="hidden sm:inline">Hapus</span>
+              <span className="hidden sm:inline">Delete</span>
             </Button>
           </div>
         </div>
@@ -321,7 +321,7 @@ export default function Results() {
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/70 dark:border-gray-800 dark:bg-ink-800/50">
                     <th className="px-5 py-3.5 w-10">
-                      <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="Pilih semua" className="accent-primary w-4 h-4 cursor-pointer" />
+                      <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all" className="accent-primary w-4 h-4 cursor-pointer" />
                     </th>
                     {isQuiz && <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Rank</th>}
                     <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Respondent</th>
@@ -341,7 +341,7 @@ export default function Results() {
                       onClick={() => openDetail(row.submission_id)}
                     >
                       <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" checked={selected.has(row.submission_id)} onChange={() => toggleSelect(row.submission_id)} aria-label={`Pilih #${row.submission_id}`} className="accent-primary w-4 h-4 cursor-pointer" />
+                        <input type="checkbox" checked={selected.has(row.submission_id)} onChange={() => toggleSelect(row.submission_id)} aria-label={`Select #${row.submission_id}`} className="accent-primary w-4 h-4 cursor-pointer" />
                       </td>
                       {isQuiz && <td className="px-5 py-3.5 text-sm font-semibold tabular-nums text-gray-500 dark:text-gray-400">{row.rank ?? '-'}</td>}
                       <td className="px-5 py-3.5 text-sm font-medium text-ink dark:text-gray-100">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">(you)</span>}</td>
@@ -477,12 +477,12 @@ export default function Results() {
                   </span>
                   {isQuiz && (
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="text-gray-400 dark:text-gray-500">Skor</span>
+                      <span className="text-gray-400 dark:text-gray-500">Score</span>
                       <span className="font-semibold tabular-nums text-primary">{detail.score ?? '-'} / {detail.max_score ?? '-'}</span>
                     </span>
                   )}
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="text-gray-400 dark:text-gray-500">Dikirim</span>
+                    <span className="text-gray-400 dark:text-gray-500">Submitted</span>
                     <span className="font-medium text-ink dark:text-gray-100">{detail.submitted_at || '-'}</span>
                   </span>
                 </div>
@@ -494,13 +494,13 @@ export default function Results() {
                     <p className={`text-xs font-semibold flex items-center gap-1.5 ${detail.status === 'cheating' ? 'text-incorrect' : 'text-warn'}`}>
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                       {detail.status === 'cheating'
-                        ? 'Terdeteksi curang — keluar tab/fullscreen'
-                        : 'Ada catatan pelanggaran (keluar tab/fullscreen)'}
+                        ? 'Detected cheating — tab exit/fullscreen'
+                        : 'Violation recorded (tab exit/fullscreen)'}
                       {' '}{detail.tab_exit_count || 0}x
                     </p>
                     {detail.cheat_reason && (
                       <p className={`text-[11px] mt-1 ${detail.status === 'cheating' ? 'text-incorrect/80' : 'text-warn/80'}`}>
-                        Pencatatan terakhir: {detail.cheat_reason}
+                        Last recorded: {detail.cheat_reason}
                       </p>
                     )}
                   </div>
@@ -511,13 +511,13 @@ export default function Results() {
                 {detailLoading ? (
                   <div className="text-sm text-gray-400 text-center py-8">Loading...</div>
                 ) : questionGroups.length === 0 ? (
-                  <div className="text-sm text-gray-400 text-center py-8">Belum ada soal.</div>
+                  <div className="text-sm text-gray-400 text-center py-8">No questions yet.</div>
                 ) : (
                   <>
                     <div className="flex items-center gap-2 mb-4">
                       <span className="w-1 h-4 rounded-full bg-primary" />
                       <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                        Jawaban pengisi · {detail.questions?.length ?? 0} pertanyaan
+                        Respondent answers · {detail.questions?.length ?? 0} question(s)
                       </span>
                     </div>
                     {questionGroups.map((group) => (
@@ -545,7 +545,7 @@ export default function Results() {
                                     ))}
                                     <div className="mt-3">
                                       <div className="flex items-center gap-2 mb-1.5">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Jawaban</span>
+                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Answers</span>
                                         <div className="flex-1 border-t border-dashed border-gray-200 dark:border-gray-700" />
                                       </div>
                                       <div className="flex items-center gap-3 bg-white dark:bg-ink-900 border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2.5">
@@ -553,7 +553,7 @@ export default function Results() {
                                           {!a || (!a.answer_text && !a.answer_file && !(a.selected_options || []).length) ? (
                                             <span className="text-gray-400 dark:text-gray-500">-</span>
                                           ) : a.question_type === 'file_upload' ? (
-                                            <a href={a.answer_file} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">Lihat file jawaban</a>
+                                            <a href={a.answer_file} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">View answer file</a>
                                           ) : ['multiple_choice', 'checkbox', 'dropdown'].includes(a.question_type) ? (
                                             <RichText html={a.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(' · ')} className="rich-text" />
                                           ) : (
@@ -561,12 +561,12 @@ export default function Results() {
                                           )}
                                         </div>
                                         {a?.is_correct === true && (
-                                          <span className="w-6 h-6 rounded-full bg-correct-soft text-correct flex items-center justify-center shrink-0" title="Benar">
+                                          <span className="w-6 h-6 rounded-full bg-correct-soft text-correct flex items-center justify-center shrink-0" title="Correct">
                                             <Check className="w-3.5 h-3.5" />
                                           </span>
                                         )}
                                         {a?.is_correct === false && (
-                                          <span className="w-6 h-6 rounded-full bg-incorrect-soft text-incorrect flex items-center justify-center shrink-0" title="Salah">
+                                          <span className="w-6 h-6 rounded-full bg-incorrect-soft text-incorrect flex items-center justify-center shrink-0" title="Wrong">
                                             <X className="w-4 h-4" />
                                           </span>
                                         )}
@@ -590,9 +590,9 @@ export default function Results() {
 
       <ConfirmModal
         show={showDelete}
-        title="Hapus hasil?"
-        message={`${selected.size} hasil terpilih akan dihapus permanen beserta seluruh jawabannya.`}
-        confirmText="Hapus"
+        title="Delete results?"
+        message={`${selected.size} selected result(s) will be permanently deleted along with all their answers.`}
+        confirmText="Delete"
         loading={deleting}
         onConfirm={handleDeleteSelected}
         onCancel={() => setShowDelete(false)}
@@ -600,9 +600,9 @@ export default function Results() {
 
       <ConfirmModal
         show={!!statusTarget}
-        title="Status curang?"
-        message={`Submission #${statusTarget?.id} akan diberi status Cheating dengan nilai 0.`}
-        confirmText="Ya, nilai 0"
+        title="Cheating status?"
+        message={`Submission #${statusTarget?.id} will be marked as Cheating with score 0.`}
+        confirmText="Yes, score 0"
         loading={statusSaving}
         onConfirm={() => applyStatus(statusTarget)}
         onCancel={() => setStatusTarget(null)}
@@ -610,9 +610,9 @@ export default function Results() {
 
       <ConfirmModal
         show={!!bulkStatusTarget}
-        title="Ubah Status ke Cheating?"
-        message={`${selected.size} hasil terpilih akan diberi status Cheating dengan nilai 0.`}
-        confirmText="Ya, nilai 0"
+        title="Change Status to Cheating?"
+        message={`${selected.size} selected result(s) will be marked as Cheating with score 0.`}
+        confirmText="Yes, score 0"
         loading={bulkStatusSaving}
         onConfirm={() => applyBulkStatus(bulkStatusTarget)}
         onCancel={() => setBulkStatusTarget(null)}

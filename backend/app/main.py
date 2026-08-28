@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -12,6 +13,13 @@ from app.routers import auth, forms, questions, profile, public_access, submissi
 app = FastAPI(title="Quizary API")
 
 logger = logging.getLogger("quizary")
+
+_CORS_ORIGIN_RE = re.compile(r"^https://[a-z0-9-]+\.trycloudflare\.com$")
+_CORS_STATIC_ORIGINS = {
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8081",
+}
 
 origins = [
     "http://localhost:5173",
@@ -26,6 +34,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _cors_headers(request: Request) -> dict[str, str]:
+    """Keep CORS on errors too.
+
+    Starlette's exception middleware can turn an unhandled exception into a
+    response outside CORSMiddleware. Without this header, browsers report a
+    misleading CORS failure and hide the actual HTTP 500 payload.
+    """
+    origin = request.headers.get("origin", "")
+    if origin in _CORS_STATIC_ORIGINS or _CORS_ORIGIN_RE.fullmatch(origin):
+        return {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
+    return {}
         
 UPLOAD_DIR = "uploads"
 os.makedirs(os.path.join(UPLOAD_DIR, "banners"), exist_ok=True)
@@ -76,6 +97,7 @@ async def catch_all_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"message": "Internal server error"},
+        headers=_cors_headers(request),
     )
 
 

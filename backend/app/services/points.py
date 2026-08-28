@@ -15,7 +15,7 @@ def distribute_quiz_points(form_id: int, db, fixed_ids: set[int] | None = None) 
       respondent can reach.
     """
     form = db.get(Form, form_id)
-    if not form or form.type.value != "quiz":
+    if not form or form.type.value != "quiz" or (form.scoring_mode and form.scoring_mode.value == "manual"):
         return
     # Session runs with autoflush=False — flush pending points/is_scored/deletes
     # first so the query below sees the current state.

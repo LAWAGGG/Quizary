@@ -253,7 +253,7 @@ export default function QuizResult() {
           {data.status === 'cheating' && (
             <div className="inline-flex items-center gap-2 text-sm font-semibold text-incorrect bg-incorrect-soft px-4 py-2.5 rounded-xl mt-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
-              Quiz dikumpulkan otomatis karena keluar halaman terlalu sering (nilai 0).
+              Quiz auto-submitted due to leaving too often (score 0).
             </div>
           )}
 
@@ -348,7 +348,7 @@ export default function QuizResult() {
                       </span>
                       <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink dark:text-gray-100">
                         {row.respondent_name}
-                        {isMe && <span className="text-primary text-xs font-semibold ml-1.5">(Kamu)</span>}
+                        {isMe && <span className="text-primary text-xs font-semibold ml-1.5">(You)</span>}
                       </span>
                       <span className="text-sm font-semibold tabular-nums text-ink dark:text-gray-100">{row.score}</span>
                     </div>
@@ -361,7 +361,7 @@ export default function QuizResult() {
                     {leaderboard.own.rank}
                   </span>
                   <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink dark:text-gray-100">
-                    {leaderboard.own.respondent_name} <span className="text-primary text-xs font-semibold">(Kamu)</span>
+                    {leaderboard.own.respondent_name} <span className="text-primary text-xs font-semibold">(You)</span>
                   </span>
                   <span className="text-sm font-semibold tabular-nums text-ink dark:text-gray-100">{leaderboard.own.score}</span>
                 </div>
@@ -418,7 +418,7 @@ export default function QuizResult() {
                                   : <span className="text-gray-400 italic">(not answered)</span>)
                                 : answer.question_type === 'file_upload'
                                   ? (answer.answer_file
-                                    ? <a href={answer.answer_file} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-primary dark:text-primary-300 underline">Lihat file jawaban</a>
+                                    ? <a href={answer.answer_file} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-primary dark:text-primary-300 underline">View answer file</a>
                                     : <span className="text-gray-400 italic">(not answered)</span>)
                                   : (answer.answer_text || <span className="text-gray-400 italic">(not answered)</span>)}
                             </div>

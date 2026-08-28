@@ -266,7 +266,9 @@ def create_question(
         form_id=form.id,
         type=QuestionType(body.type),
         question_text=body.question_text,
-        points=0 if form.type.value == "quiz" else body.points,
+        # Auto mode allocates from the 100-point pool after insert; manual mode
+        # preserves the creator's per-question value.
+        points=(0 if form.type.value == "quiz" and (form.scoring_mode is None or form.scoring_mode.value == "auto") else body.points),
         is_required=body.is_required,
         section_id=body.section_id,
         password_keyword=body.password_keyword if body.type == "password" else None,

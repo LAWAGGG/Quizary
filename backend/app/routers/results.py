@@ -33,6 +33,7 @@ from app.schemas.results import (
     ScoreDistribution,
     OptionChoice,
     QuestionStat,
+    QuestionHighlight,
     DashboardResponse,
     RecentForm,
     SubmissionTrend,
@@ -373,6 +374,44 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
             key = "6+"
         dist[key] = dist.get(key, 0) + 1
 
+    # ── Pace (Duration) calculation ─────────────────────────────────────────
+    durations = []
+    for s in subs:
+        if s.started_at and s.submitted_at:
+            diff = (s.submitted_at - s.started_at).total_seconds()
+            if diff >= 0:
+                durations.append(diff)
+
+    avg_duration = int(sum(durations) / len(durations)) if durations else None
+    fastest_duration = int(min(durations)) if durations else None
+
+    # ── Item Difficulty Diagnostics (Easiest & Hardest) ───────────────────────
+    evaluated_questions = []
+    for idx, q_stat in enumerate(per_q):
+        attempt_total = q_stat.correct_count + q_stat.wrong_count
+        if attempt_total > 0:
+            acc = q_stat.correct_count / attempt_total
+            evaluated_questions.append({
+                "order_index": idx + 1,
+                "question_text": q_stat.question_text,
+                "accuracy": round(acc * 100, 1),
+            })
+
+    easiest_q = None
+    hardest_q = None
+    if evaluated_questions:
+        sorted_by_acc = sorted(evaluated_questions, key=lambda x: x["accuracy"])
+        hardest_q = QuestionHighlight(
+            order_index=sorted_by_acc[0]["order_index"],
+            question_text=sorted_by_acc[0]["question_text"],
+            accuracy=sorted_by_acc[0]["accuracy"],
+        )
+        easiest_q = QuestionHighlight(
+            order_index=sorted_by_acc[-1]["order_index"],
+            question_text=sorted_by_acc[-1]["question_text"],
+            accuracy=sorted_by_acc[-1]["accuracy"],
+        )
+
     return AnalyticsResponse(
         type="quiz",
         total_participants=total,
@@ -383,6 +422,10 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
         above_average_pct=round(above_avg, 2),
         correct_rate=round(rate, 2),
         wrong_rate=round(1 - rate, 2),
+        avg_duration_seconds=avg_duration,
+        fastest_duration_seconds=fastest_duration,
+        easiest_question=easiest_q,
+        hardest_question=hardest_q,
         score_distribution=[ScoreDistribution(range=k, count=v) for k, v in sorted(dist.items())],
         per_question_stats=per_q,
     )

@@ -809,7 +809,8 @@ def get_submission(
     # lama yang tersimpan dengan max salah (mis. ikut poin soal non-grade)
     # langsung tampil benar tanpa menunggu regrade.
     live_max = max_score_for(
-        db.query(Question).filter(Question.form_id == form.id).all()
+        db.query(Question).filter(Question.form_id == form.id).all(),
+        scoring_mode=form.scoring_mode.value if form.scoring_mode else "auto",
     )
 
     return SubmissionDetailResponse(
