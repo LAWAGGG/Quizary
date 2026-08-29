@@ -225,6 +225,9 @@ def delete_section(
     form = db.get(Form, section.form_id)
     if not form or form.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Anda bukan pemilik form ini")
+    remaining = db.query(Section).filter(Section.form_id == section.form_id).count()
+    if remaining <= 1:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Tidak bisa menghapus section terakhir")
     db.delete(section)
     db.commit()
     return {"message": "Section dihapus"}
@@ -247,10 +250,18 @@ def create_question(
     )
     next_order = (max_order[0] + 1) if max_order else 0
 
+    # Ensure at least one section exists — auto-create "Default" if needed.
+    sections = db.query(Section).filter(Section.form_id == form.id).all()
+    if not sections:
+        auto = Section(form_id=form.id, title="Default", order_index=0, created_at=now_wib())
+        db.add(auto)
+        db.flush()
+        sections = [auto]
     if body.section_id is not None:
-        section = db.get(Section, body.section_id)
-        if not section or section.form_id != form.id:
+        if not any(s.id == body.section_id for s in sections):
             raise HTTPException(status_code=422, detail="Section tidak ditemukan pada form ini")
+    else:
+        body.section_id = sections[0].id
 
     # multiple_choice hanya wajib punya tepat 1 jawaban benar untuk quiz yang
     # dinilai (count points). Form biasa / kuesioner & soal tidak dinilai bebas.

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { GripVertical, X, Plus, Check, ChevronDown, ChevronUp } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
-  useSensor, useSensors, useDraggable, useDroppable, pointerWithin,
+  useSensor, useSensors, useDraggable, pointerWithin,
 } from '@dnd-kit/core'
 import {
   SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable,
@@ -16,7 +16,7 @@ import { Button, Badge, ConfirmModal } from '../../components/ui'
 
 const QUESTION_PREFIX = 'q-'
 
-function SortableSectionCard({ section, questions, onDelete, editing, editDraft, setEditDraft, onEditStart, onEditSave, onEditCancel, onUnassign, collapsed, onToggleCollapse, onMove, isFirst, isLast }) {
+function SortableSectionCard({ section, questions, onDelete, editing, editDraft, setEditDraft, onEditStart, onEditSave, onEditCancel, collapsed, onToggleCollapse, onMove, isFirst, isLast }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: section.id,
     data: { type: 'section' },
@@ -101,7 +101,7 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
       ) : secQs.length > 0 ? (
         <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-2 space-y-1.5">
           {secQs.map((q) => (
-            <DraggableQuestion key={q.id} q={q} onUnassign={onUnassign} />
+            <DraggableQuestion key={q.id} q={q} />
           ))}
         </div>
       ) : (
@@ -113,7 +113,7 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
   )
 }
 
-function DraggableQuestion({ q, onUnassign }) {
+function DraggableQuestion({ q }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `${QUESTION_PREFIX}${q.id}`,
     data: { type: 'question', questionId: q.id },
@@ -128,49 +128,6 @@ function DraggableQuestion({ q, onUnassign }) {
       </span>
       <span className="truncate flex-1">{(q.question_text || '').replace(/<[^>]*>/g, '').slice(0, 60)}</span>
       <Badge scheme="gray" className="text-[10px] shrink-0">{q.type.replace('_', ' ')}</Badge>
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); onUnassign(q.id) }}
-        title="Remove from section"
-        aria-label={`Remove question ${q.id} from section`}
-        className="shrink-0 p-1 rounded-md text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 hover:text-incorrect hover:bg-incorrect-soft transition-all"
-      >
-        <X className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  )
-}
-
-function UnassignedPool({ questions }) {
-  // useDroppable HARUS dijalankan di komponen yang berada DI DALAM <DndContext>.
-  // Dipanggil di body SectionManager = di luar provider, droppable tak terdaftar.
-  const { setNodeRef, isOver } = useDroppable({
-    id: 'unassigned',
-    data: { type: 'unassigned' },
-  })
-  const unassigned = questions.filter((q) => !q.section_id)
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`space-y-2 rounded-xl p-2 transition-all ${isOver ? 'border border-primary bg-primary-50/50 dark:bg-primary-900/20' : ''}`}
-    >
-      <div className="flex items-center gap-2 px-1">
-        <span className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
-        <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">Unassigned</span>
-        <Badge scheme="gray">{unassigned.length}</Badge>
-      </div>
-      {unassigned.length > 0 ? (
-        <div className="space-y-1.5">
-          {unassigned.map((q) => (
-            <DraggableQuestion key={q.id} q={q} onUnassign={() => {}} />
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 px-3 py-3 text-xs text-gray-400 dark:text-gray-500 text-center italic">
-          Drop questions here to remove from section
-        </div>
-      )}
     </div>
   )
 }
@@ -229,16 +186,15 @@ export default function SectionManager({ formId, show, onClose, sections: initia
     const q = questions.find((qq) => qq.id === qId)
     if (!q) return
 
-    const newSectionId = targetSectionId === 'unassigned' ? null : targetSectionId
-    if (newSectionId !== null && !sections.some((s) => s.id === newSectionId)) return
-    if (q.section_id === newSectionId) return
+    if (!sections.some((s) => s.id === targetSectionId)) return
+    if (q.section_id === targetSectionId) return
 
     setQuestions((prev) =>
-      prev.map((qq) => qq.id === qId ? { ...qq, section_id: newSectionId } : qq)
+      prev.map((qq) => qq.id === qId ? { ...qq, section_id: targetSectionId } : qq)
     )
 
     try {
-      await api.put(`/questions/${qId}`, { section_id: newSectionId })
+      await api.put(`/questions/${qId}`, { section_id: targetSectionId })
       toast.success('Question moved')
       onSaved()
     } catch (err) {
@@ -320,7 +276,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
       if (typeof over.id === 'string' && over.id.startsWith(QUESTION_PREFIX)) {
         const overQ = questions.find((qq) => qq.id === Number(over.id.slice(QUESTION_PREFIX.length)))
         if (!overQ) return null
-        return overQ.section_id === null ? 'unassigned' : overQ.section_id
+        return overQ.section_id
       }
       return over.id
     }
@@ -328,9 +284,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
     if (type === 'question') {
       const qId = Number(active.data.current.questionId)
       const target = resolveTarget()
-      if (target === 'unassigned') {
-        await moveQuestionToSection(qId, 'unassigned')
-      } else if (typeof target === 'number') {
+      if (typeof target === 'number') {
         await moveQuestionToSection(qId, target)
       }
       return
@@ -480,7 +434,6 @@ export default function SectionManager({ formId, show, onClose, sections: initia
                        onEditSave={() => renameSection(section)}
                        onEditCancel={() => setEditingId(null)}
                         onDelete={() => setDeleteTarget(section)}
-                        onUnassign={(qId) => moveQuestionToSection(qId, 'unassigned')}
                         collapsed={collapsedIds.has(section.id)}
                         onToggleCollapse={() => toggleCollapse(section.id)}
                         onMove={(dir) => moveSection(secIdx, dir)}
@@ -512,8 +465,6 @@ export default function SectionManager({ formId, show, onClose, sections: initia
                     Add Section
                   </button>
                 )}
-
-                <UnassignedPool questions={questions} />
               </div>
 
               <DragOverlay dropAnimation={null} className="origin-top-left">

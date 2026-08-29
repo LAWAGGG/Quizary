@@ -1241,52 +1241,6 @@ export default function QuestionBuilder() {
                         </SectionDropZone>
                       )
                     })}
-                    {(() => {
-                      const unassigned = questions.filter((q) => !q.section_id)
-                      if (!unassigned.length) return null
-                      const collapsed = collapsedSections.has('unassigned')
-                      return (
-                        <SectionDropZone key="unassigned" sectionId={null}>
-                          <SectionHeader
-                            section={null}
-                            count={unassigned.length}
-                            editing={false}
-                            draft=""
-                            setDraft={() => { }}
-                            onEdit={() => { }}
-                            onSave={() => { }}
-                            onCancel={() => { }}
-                            onDelete={() => { }}
-                            collapsible
-                            collapsed={collapsed}
-                            onToggle={() => toggleSectionCollapse('unassigned')}
-                          />
-                          {!collapsed && (
-                            <div className="space-y-3 mt-3">
-                              {unassigned.map((q) => (
-                                <QuestionItem
-                                  key={q.id}
-                                  q={q}
-                                  index={questions.indexOf(q)}
-                                  onEdit={editQuestion}
-                                  isQuiz={form.type === 'quiz'}
-                                  selected={selectedIds.includes(q.id)}
-                                  onToggleSelect={toggleSelect}
-                                  editOpen={showForm && editing?.id === q.id}
-                                  onSave={(data) => handleSaveQuestion(data)}
-                                  onCancel={() => { setShowForm(false); setEditing(null) }}
-                                  saveLoading={saveLoading}
-                                  errors={fieldErrors}
-                                  sections={sections}
-                                  sectionsAllowed={sectionsAllowed}
-                                  scoringMode={scoringMode}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </SectionDropZone>
-                      )
-                    })()}
                   </>
                 ) : (
                   questions.map((q) => (
