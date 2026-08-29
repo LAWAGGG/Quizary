@@ -40,6 +40,7 @@ class QuestionCreate(BaseModel):
     type: str = Field(pattern=QUESTION_TYPE_PATTERN)
     question_text: str = Field(min_length=1, max_length=5000)
     points: int = Field(default=1, ge=0, le=999)
+    is_scored: bool = True
     is_required: bool = True
     section_id: Optional[int] = None
     password_keyword: Optional[str] = Field(None, min_length=1, max_length=255)

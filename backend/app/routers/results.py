@@ -362,16 +362,18 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
     median = (sorted_scores[n // 2] + sorted_scores[(n - 1) // 2]) / 2 if n else 0
     above_avg = sum(1 for s in scores if s > avg) / total if total else 0
 
+    # Quiz pool = 100 (auto) atau dinormalisasi ke 100 (manual).
+    # Bucket berbasis persentase agar relevan untuk kedua mode.
     dist: dict[str, int] = {}
     for s in scores:
-        if s <= 1:
-            key = "0-1"
-        elif s <= 3:
-            key = "2-3"
-        elif s <= 5:
-            key = "4-5"
+        if s <= 25:
+            key = "0-25"
+        elif s <= 50:
+            key = "26-50"
+        elif s <= 75:
+            key = "51-75"
         else:
-            key = "6+"
+            key = "76-100"
         dist[key] = dist.get(key, 0) + 1
 
     # ── Pace (Duration) calculation ─────────────────────────────────────────

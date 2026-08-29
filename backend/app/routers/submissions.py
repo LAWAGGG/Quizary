@@ -23,7 +23,7 @@ from app.models.user import User
 from app.ratelimit import limit_submission_create
 from app.services.grading import grade_submission, max_score_for
 from app.services.session_expiry import display_deadline, is_expired, auto_submit_expired_for_form, finalize_locked
-from app.utils import now_wib, fmt_dt, file_url, UPLOAD_DIR, MAX_ANSWER_FILE_BYTES, write_limited
+from app.utils import now_wib, fmt_dt, file_url, _delete_file, UPLOAD_DIR, MAX_ANSWER_FILE_BYTES, write_limited
 from app.schemas.submissions import (
     SubmissionCreateRequest,
     SubmissionCreateResponse,
@@ -57,7 +57,7 @@ def _get_sub_or_404(sub_id: int, db: Session) -> Submission:
 
 def _get_question_for_submission(question_id: int, sub: Submission, db: Session) -> Question:
     q = db.get(Question, question_id)
-    if not q or q.form_id != sub.form_id:
+    if not q or q.form_id != sub.form_id or q.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Question not found in this submission",
@@ -355,9 +355,17 @@ def create_submission(
         if is_expired(existing, form):
             existing.status = SubmissionStatus.auto_submitted
             existing.submitted_at = now
-            grade_submission(db, existing, form)
+            total_score, max_score = grade_submission(db, existing, form)
             db.commit()
-            raise HTTPException(status_code=status.HTTP_410_GONE, detail="Your previous session has expired")
+            # Return data, bukan exception — client bisa langsung tampilkan
+            # skor tanpa perlu fetch ulang.
+            return {
+                "submission_id": existing.id,
+                "status": "expired",
+                "message": "Sesi sebelumnya telah kedaluwarsa dan otomatis dinilai",
+                "score": total_score,
+                "max_score": max_score,
+            }
 
         # Return the existing session with the same question order — idempotent resume.
         return SubmissionCreateResponse(
@@ -741,12 +749,18 @@ def get_submission(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     # Ordered questions (respects per-submission shuffle stored in DB)
-    questions = _build_questions_response(sub.id, request, db, include_deleted=True)
+    # in_progress: sembunyikan soal yang dihapus creator (responden sedang mengerjakan).
+    # completed: tampilkan semua termasuk yang dihapus (responden sudah menjawabnya).
+    completed = sub.status in (SubmissionStatus.submitted, SubmissionStatus.auto_submitted, SubmissionStatus.cheating)
+    questions = _build_questions_response(sub.id, request, db, include_deleted=completed)
 
     # Build a map of option_id → option_text for the whole form (used in answers)
+    q_filter = [Question.form_id == form.id]
+    if not completed:
+        q_filter.append(Question.is_deleted.is_(False))
     all_options = db.query(QuestionOption).join(
         Question, Question.id == QuestionOption.question_id
-    ).filter(Question.form_id == form.id).all()
+    ).filter(*q_filter).all()
     opt_text_map = {o.id: o.option_text for o in all_options}
 
     # Label opsi = huruf sesuai urutan yang dilihat responden (bisa ter-shuffle
@@ -767,10 +781,9 @@ def get_submission(
             if i < 8:  # sama dengan LETTERS di frontend
                 opt_label_map[o.id] = f"{'ABCDEFGH'[i]}. "
 
-    q_map = {q.id: q for q in db.query(Question).filter(Question.form_id == form.id).all()}
+    q_map = {q.id: q for q in db.query(Question).filter(*q_filter).all()}
 
     # Keamanan (FR-34/7.3): jangan bocorkan is_correct/score sebelum submission selesai.
-    completed = sub.status in (SubmissionStatus.submitted, SubmissionStatus.auto_submitted, SubmissionStatus.cheating)
     # Toggle creator (khusus quiz): reveal_score mengontrol angka nilai final,
     # reveal_answers mengontrol review jawaban (is_correct / points per soal).
     # Creator selalu boleh melihat keduanya.

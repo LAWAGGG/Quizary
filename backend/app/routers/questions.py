@@ -12,6 +12,7 @@ from app.models.form import Form
 from app.models.image import Image
 from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
+from app.models.submission import Submission, SubmissionStatus
 from app.models.user import User
 from app.services.points import distribute_quiz_points
 from app.utils import file_url, now_wib, write_limited, MAX_IMAGE_BYTES, _delete_file, UPLOAD_DIR
@@ -280,6 +281,7 @@ def create_question(
         # Auto mode allocates from the 100-point pool after insert; manual mode
         # preserves the creator's per-question value. Non-graded types always 0.
         points=(0 if (form.type.value == "quiz" and (form.scoring_mode is None or form.scoring_mode.value == "auto")) or body.type in _NO_GRADE_TYPES else body.points),
+        is_scored=body.is_scored,
         is_required=body.is_required,
         section_id=body.section_id,
         password_keyword=body.password_keyword if body.type == "password" else None,
@@ -389,6 +391,8 @@ def update_question(
         update_data["points"] = 0
 
     for field, value in update_data.items():
+        if value is None:
+            continue  # jangan tulis NULL ke kolom NOT NULL (mis. points)
         setattr(question, field, value)
 
     question.updated_at = now_wib()
@@ -463,6 +467,25 @@ def update_question(
     return _build_question(question, request)
 
 
+# ── GET /questions/{question_id}/active-count ──────────────────────────────────
+# Pre-flight check: berapa submission in_progress yang mungkin terpengaruh
+# oleh penghapusan soal ini. Frontend pakai sebelum delete untuk modal warning.
+
+@router.get("/questions/{question_id}/active-count")
+def get_active_count(
+    question_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    question = _get_question_or_404(question_id, db)
+    _ensure_owner(question, user, db)
+    count = db.query(Submission).filter(
+        Submission.form_id == question.form_id,
+        Submission.status == SubmissionStatus.in_progress,
+    ).count()
+    return {"active_count": count}
+
+
 # ── DELETE /questions/{question_id} ───────────────────────────────────────────
 
 @router.delete("/questions/{question_id}")
@@ -476,6 +499,26 @@ def delete_question(
     question.is_deleted = True
     db.commit()
     return {"message": "Question deleted"}
+
+
+# ── POST /forms/{form_id}/questions/bulk-active-count ─────────────────────────
+# Pre-flight: beri tahu frontend berapa submission aktif sebelum bulk delete.
+
+@router.post("/forms/{form_id}/questions/bulk-active-count")
+def bulk_active_count(
+    form_id: int,
+    body: dict,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    form = db.get(Form, form_id)
+    if not form or form.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    count = db.query(Submission).filter(
+        Submission.form_id == form_id,
+        Submission.status == SubmissionStatus.in_progress,
+    ).count()
+    return {"active_count": count}
 
 
 # ── POST /forms/{form_id}/questions/bulk-delete ───────────────────────────────
@@ -493,6 +536,7 @@ def bulk_delete_questions(
     ids = body.get("question_ids", [])
     if not ids:
         raise HTTPException(status_code=422, detail="question_ids is required")
+
     db.query(Question).filter(
         Question.id.in_(ids), Question.form_id == form_id, Question.is_deleted.is_(False)
     ).update({Question.is_deleted: True}, synchronize_session=False)

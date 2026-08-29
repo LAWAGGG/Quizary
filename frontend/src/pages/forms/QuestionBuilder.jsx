@@ -380,7 +380,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   )
 }
 
-function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, onToggleSelect, groupId, groupSize }) {
+function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected, onToggleSelect, groupId, groupSize, moveButtons }) {
   return (
     <Card className={`transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? '!border-primary ring-2 ring-primary/30 bg-primary-50/40 dark:bg-primary-900/15' : 'hover:border-gray-300 dark:hover:border-gray-700'} ${groupId ? 'border-l-4 !border-l-primary/50' : ''}`}>
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -407,7 +407,14 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
           )}
         </div>
         <div className="flex gap-1 shrink-0 items-center">
-          <button onClick={() => onEdit(question)} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary px-2 py-1 transition-colors">Edit</button>
+          {moveButtons}
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(question) }}
+            className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-incorrect px-2 py-1 transition-colors"
+            title="Delete question"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
           <input
             type="checkbox"
             checked={selected}
@@ -457,7 +464,7 @@ function QuestionCard({ question, index, onEdit, isDragging, isQuiz, selected, o
   )
 }
 
-function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onToggleSelect, groupId, groupSize, onMove, isFirst, isLast, selectCount }) {
+function SortableQuestionCard({ question, index, onEdit, onDelete, isQuiz, selected, onToggleSelect, groupId, groupSize, onMove, isFirst, isLast, selectCount }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: question.id,
     data: { type: 'question', questionId: question.id },
@@ -487,7 +494,15 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
         style={style}
         {...attributes}
         {...holdProps}
-        className="relative select-none"
+        className="relative select-none cursor-pointer"
+        onClick={(e) => {
+          if (isDragging) return
+          if (selectCount > 0) {
+            holdProps.onClick()
+            return
+          }
+          onEdit(question)
+        }}
       >
         <span
           {...listeners}
@@ -496,37 +511,37 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
         >
           <GripVertical className="w-5 h-5" />
         </span>
-        {onMove && (
-          <div className="absolute right-0 top-2 flex md:hidden flex-col gap-1">
-            <button
-              onClick={() => onMove(index, -1)}
-              disabled={isFirst}
-              aria-label="Move question up"
-              className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all"
-            >
-              <ChevronUp className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => onMove(index, 1)}
-              disabled={isLast}
-              aria-label="Move question down"
-              className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all"
-            >
-              <ChevronDown className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-        <div className={`pl-7 md:pl-7 pr-9 md:pr-0`}>
+        <div className="md:pl-7">
           <QuestionCard
             question={question}
             index={index}
-            onEdit={onEdit}
+            onDelete={onDelete}
             isDragging={isDragging}
             isQuiz={isQuiz}
             selected={selected}
             onToggleSelect={onToggleSelect}
             groupId={groupId}
             groupSize={groupSize}
+            moveButtons={onMove ? (
+              <>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onMove(index, -1) }}
+                  disabled={isFirst}
+                  aria-label="Move question up"
+                  className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all md:hidden"
+                >
+                  <ChevronUp className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onMove(index, 1) }}
+                  disabled={isLast}
+                  aria-label="Move question down"
+                  className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all md:hidden"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+              </>
+            ) : null}
           />
         </div>
       </div>
@@ -534,10 +549,10 @@ function SortableQuestionCard({ question, index, onEdit, isQuiz, selected, onTog
   )
 }
 
-function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupSize, onMove, totalCount, selectCount, scoringMode }) {
+function QuestionItem({ q, index, onEdit, onDelete, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupSize, onMove, totalCount, selectCount, scoringMode }) {
   if (editOpen) {
     return (
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:pl-7">
         <Card className="border-primary/50 shadow-card">
           <div className="flex items-center justify-between gap-3 mb-5">
             <div className="flex items-center gap-3 min-w-0">
@@ -583,22 +598,23 @@ function QuestionItem({ q, index, onEdit, isQuiz, selected, onToggleSelect, edit
     )
   }
 
-  return (
-    <SortableQuestionCard
-      question={q}
-      index={index}
-      onEdit={onEdit}
-      isQuiz={isQuiz}
-      selected={selected}
-      onToggleSelect={onToggleSelect}
-      groupId={groupId}
-      groupSize={groupSize}
-      onMove={onMove}
-      isFirst={index === 0}
-      isLast={index === totalCount - 1}
-      selectCount={selectCount}
-    />
-  )
+    return (
+      <SortableQuestionCard
+        question={q}
+        index={index}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        isQuiz={isQuiz}
+        selected={selected}
+        onToggleSelect={onToggleSelect}
+        groupId={groupId}
+        groupSize={groupSize}
+        onMove={onMove}
+        isFirst={index === 0}
+        isLast={index === totalCount - 1}
+        selectCount={selectCount}
+      />
+    )
 }
 
 function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSave, onCancel, onDelete, collapsible, collapsed, onToggle }) {
@@ -678,6 +694,7 @@ export default function QuestionBuilder() {
   const [reorderSaving, setReorderSaving] = useState(false)
   const [saveLoading, setSaveLoading] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteWarning, setDeleteWarning] = useState(null) // { activeCount, questionIds, isBulk, questionName, questionObj }
   const [fieldErrors, setFieldErrors] = useState({})
   const [selectedIds, setSelectedIds] = useState([])
   const [bulkDeleting, setBulkDeleting] = useState(false)
@@ -802,6 +819,19 @@ export default function QuestionBuilder() {
     }
   }
 
+  const confirmDeleteSingle = async (question) => {
+    try {
+      const { data } = await api.get(`/questions/${question.id}/active-count`)
+      if (data.active_count > 0) {
+        setDeleteWarning({ activeCount: data.active_count, questionIds: [question.id], isBulk: false, questionName: (question.question_text || '').replace(/<[^>]*>/g, '').slice(0, 50), questionObj: question })
+      } else {
+        setDeleteTarget(question)
+      }
+    } catch {
+      setDeleteTarget(question)
+    }
+  }
+
   const toggleSelect = (id) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
@@ -872,6 +902,20 @@ export default function QuestionBuilder() {
       setSelectedIds([])
     } finally {
       setBulkDeleting(false)
+    }
+  }
+
+  const confirmBulkDelete = async () => {
+    if (!selectedIds.length) return
+    try {
+      const { data } = await api.post(`/forms/${formId}/questions/bulk-active-count`, { question_ids: selectedIds })
+      if (data.active_count > 0) {
+        setDeleteWarning({ activeCount: data.active_count, questionIds: selectedIds, isBulk: true, questionName: null })
+      } else {
+        setShowBulkDelete(true)
+      }
+    } catch {
+      setShowBulkDelete(true)
     }
   }
 
@@ -1168,7 +1212,7 @@ export default function QuestionBuilder() {
                     Group
                   </Button>
                 )}
-                <Button variant="danger" size="sm" onClick={() => setShowBulkDelete(true)} icon={<Trash2 className="w-4 h-4" />}>
+                <Button variant="danger" size="sm" onClick={confirmBulkDelete} icon={<Trash2 className="w-4 h-4" />}>
                   Delete ({selectedIds.length})
                 </Button>
               </div>
@@ -1212,6 +1256,7 @@ export default function QuestionBuilder() {
                                   q={q}
                                   index={questions.indexOf(q)}
                                   onEdit={editQuestion}
+                                  onDelete={confirmDeleteSingle}
                                   isQuiz={form.type === 'quiz'}
                                   selected={selectedIds.includes(q.id)}
                                   onToggleSelect={toggleSelect}
@@ -1221,16 +1266,13 @@ export default function QuestionBuilder() {
                                   saveLoading={saveLoading}
                                   errors={fieldErrors}
                                   sections={sections}
-                                    groupId={q.group_id || null}
-                                    groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
-                                    onMove={moveQuestion}
-                                    totalCount={questions.length}
-                                 selectCount={selectedIds.length}
-                                 onMove={moveQuestion}
-                                 totalCount={questions.length}
-                                 selectCount={selectedIds.length}
-                                 scoringMode={scoringMode}
-                                  />
+                                  groupId={q.group_id || null}
+                                  groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
+                                  onMove={moveQuestion}
+                                  totalCount={questions.length}
+                                  selectCount={selectedIds.length}
+                                  scoringMode={scoringMode}
+                                />
                               ))}
                             </div>
                           ) : (
@@ -1244,11 +1286,12 @@ export default function QuestionBuilder() {
                   </>
                 ) : (
                   questions.map((q) => (
-                              <QuestionItem
+                               <QuestionItem
                                 key={q.id}
                                 q={q}
                                 index={questions.indexOf(q)}
                                 onEdit={editQuestion}
+                                onDelete={confirmDeleteSingle}
                                 isQuiz={form.type === 'quiz'}
                                 selected={selectedIds.includes(q.id)}
                                 onToggleSelect={toggleSelect}
@@ -1321,6 +1364,33 @@ export default function QuestionBuilder() {
         onCancel={() => setShowBulkDelete(false)}
         loading={bulkDeleting}
         confirmText="Delete"
+        variant="danger"
+      />
+
+      <ConfirmModal
+        show={!!deleteWarning}
+        title="Ada submission aktif"
+        message={
+          <div>
+            <p>
+              {deleteWarning?.isBulk
+                ? `${deleteWarning?.questionIds.length} soal ini masih punya ${deleteWarning?.activeCount} submission aktif.`
+                : `Soal "${deleteWarning?.questionName}..." masih punya ${deleteWarning?.activeCount} submission aktif.`
+              }
+            </p>
+            <p className="mt-2 text-sm">Menghapus soal ini akan membuat submission yang sedang berjalan kehilangan data ini. Tetap hapus?</p>
+          </div>
+        }
+        onConfirm={() => {
+          if (deleteWarning?.isBulk) {
+            setShowBulkDelete(true)
+          } else {
+            setDeleteTarget(deleteWarning?.questionObj)
+          }
+          setDeleteWarning(null)
+        }}
+        onCancel={() => setDeleteWarning(null)}
+        confirmText="Tetap Hapus"
         variant="danger"
       />
 
