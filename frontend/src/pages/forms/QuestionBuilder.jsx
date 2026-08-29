@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, BookOpen, Unlink, ChevronDown, ChevronUp } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
-  useDndContext, useSensor, useSensors, closestCorners,
+  useSensor, useSensors, closestCorners,
 } from '@dnd-kit/core'
 import {
   SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable,
@@ -465,29 +465,31 @@ function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected,
 }
 
 function SortableQuestionCard({ question, index, onEdit, onDelete, isQuiz, selected, onToggleSelect, groupId, groupSize, onMove, isFirst, isLast, selectCount }) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useSortable({
     id: question.id,
     data: { type: 'question', questionId: question.id },
   })
-  const { active } = useDndContext()
-  // Selama drag aktif: tanpa transisi displacement. Animasi perpindahan kartu
-  // mengubah rect tiap frame → dnd-kit (useRects) mengukur ulang → dragOver
-  // terpicu ulang → loop "Maximum update depth exceeded". Snap instan = stabil.
-  const style = { transform: CSS.Transform.toString(transform), transition: active ? undefined : transition }
+  // ponytail: dnd-kit transform hanya aktif saat drag. Untuk mobile reorder
+  // (tombol ↑↓), kita bypass dnd-kit transform → framer-motion `layout` yang
+  // handle animasi position change. Tidak ada measurement loop karena tidak ada
+  // drag aktif.
+  const style = isDragging
+    ? { transform: CSS.Transform.toString(transform), transition: 'none' }
+    : undefined // framer layout handles non-drag reorder
   // Mobile: tahan kartu untuk memilih (haptic); saat mode seleksi aktif, tap = toggle.
   const holdProps = useHoldSelect({
     selectedCount: selectCount,
     onToggle: () => onToggleSelect(question.id),
   })
-  // ponytail: TANPA framer `layout` di sini — layout animation mengubah rect
-  // elemen tiap frame selama drag, dnd-kit (useRects) mengukur ulang → setState
-  // berulang → "Maximum update depth exceeded". dnd-kit sudah menganimasikan
-  // reorder via transform+transition sendiri.
+  // ponytail: `layout` hanya aktif saat TIDAK drag → framer animasi position
+  // change untuk mobile reorder. Saat drag, style dari dnd-kit yang handle.
   return (
     <motion.div
+      layout={!isDragging}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -20 }}
+      transition={{ layout: { duration: 0.2, ease: 'easeOut' } }}
     >
       <div
         ref={setNodeRef}
@@ -1313,19 +1315,25 @@ export default function QuestionBuilder() {
                  )}
               </div>
             </SortableContext>
-            <DragOverlay dropAnimation={null}>
+            <DragOverlay dropAnimation={{ duration: 200, easing: 'ease-out' }}>
               {activeDrag?.type === 'question' && (() => {
                 const q = questions.find((qq) => qq.id === activeDrag.id)
                 return q ? (
-                  <Card className="shadow-lift border-primary/40">
-                    <div className="flex items-center gap-3">
-                      <span className="text-primary"><GripVertical className="w-5 h-5" /></span>
-                      <Badge scheme="gray">{TYPE_LABELS[q.type]}</Badge>
-                      <span className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[240px]">
-                        {(q.question_text || '').replace(/<[^>]*>/g, '').trim()}
-                      </span>
-                    </div>
-                  </Card>
+                  <motion.div
+                    initial={{ scale: 1.02, opacity: 0.9 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <Card className="shadow-lift border-primary/40">
+                      <div className="flex items-center gap-3">
+                        <span className="text-primary"><GripVertical className="w-5 h-5" /></span>
+                        <Badge scheme="gray">{TYPE_LABELS[q.type]}</Badge>
+                        <span className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[240px]">
+                          {(q.question_text || '').replace(/<[^>]*>/g, '').trim()}
+                        </span>
+                      </div>
+                    </Card>
+                  </motion.div>
                 ) : null
               })()}
             </DragOverlay>
