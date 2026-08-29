@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, BookOpen, Unlink, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
+import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, TextQuote, Unlink, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
   useSensor, useSensors, closestCorners,
@@ -217,7 +217,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
           ) : (
             <ImageIcon className="w-4 h-4" />
           )}
-          {qImgLoading ? 'Uploading...' : form.image ? 'Replace image / audio' : 'Add image or audio'}
+          {qImgLoading ? 'Uploading...' : form.image ? 'Replace' : 'Add media'}
         </button>
         {form.image?.path && (isAudioUrl(form.image.path) ? (
           <audio controls src={form.image.path} preload="metadata" className="h-10 max-w-[240px] flex-1 min-w-0" />
@@ -395,8 +395,7 @@ function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected,
           <Badge scheme="gray">{TYPE_LABELS[question.type]}</Badge>
           {groupId && (
             <Badge scheme="primary" title="Story group questions always appear in sequence even with shuffle active. Select question(s) then click Ungroup to remove.">
-              <BookOpen className="w-3 h-3" />
-              Story group · {groupSize} question(s)
+              group
             </Badge>
           )}
           {isQuiz && question.is_scored && question.points > 0 && !NO_GRADE_TYPES.includes(question.type) && (
@@ -632,8 +631,12 @@ function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSav
             autoFocus
             placeholder="Section name"
           />
-          <Button size="sm" onClick={onSave} icon={<Check className="w-3.5 h-3.5" />}>Save</Button>
-          <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+          <Button size="sm" onClick={onSave} icon={<Check className="w-3.5 h-3.5" />}>
+            <span className="hidden sm:inline">Save</span>
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onCancel} icon={<X className="w-3.5 h-3.5" />}>
+            <span className="hidden sm:inline">Cancel</span>
+          </Button>
         </>
       ) : (
         <>
@@ -1082,15 +1085,15 @@ export default function QuestionBuilder() {
           <>
             <input ref={docxRef} type="file" accept=".docx" onChange={handleDocxImport} className="hidden" />
             <Button variant="secondary" onClick={() => { if (docxRef.current) docxRef.current.value = ''; setShowImportModal(true) }} icon={<Upload className="w-4 h-4" />}>
-              Import DOCX
+              <span className="hidden sm:inline">Import DOCX</span>
             </Button>
             {sectionsAllowed && (
               <Button variant="secondary" onClick={() => setShowSectionManager(true)} icon={<Layers className="w-4 h-4" />}>
-                Manage Sections
+                <span className="hidden sm:inline">Manage Sections</span>
               </Button>
             )}
             <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />}>
-              Add Question
+              <span className="hidden sm:inline">Add Question</span>
             </Button>
           </>
         }
@@ -1182,46 +1185,53 @@ export default function QuestionBuilder() {
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
-              className="sticky top-0 z-20 mt-6 bg-white dark:bg-ink-900 border border-gray-200 dark:border-gray-700 shadow-lift rounded-2xl px-4 py-3 flex items-center gap-3"
+              className="sticky top-0 z-20 mt-6 bg-white dark:bg-ink-900 border border-gray-200 dark:border-gray-700 shadow-lift rounded-2xl px-3 py-2.5 sm:px-4 sm:py-3 flex items-center gap-2 sm:gap-3"
             >
-              <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer select-none">
+              <label className="flex items-center gap-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400 cursor-pointer select-none shrink-0">
                 <input
                   type="checkbox"
                   checked={allSelected}
                   onChange={toggleSelectAll}
                   className="w-4 h-4 rounded accent-primary"
                 />
-                Select all ({selectedIds.length}/{questions.length})
+                <span className="hidden sm:inline">Select all ({selectedIds.length}/{questions.length})</span>
+                <span className="sm:hidden">{selectedIds.length}/{questions.length}</span>
               </label>
-              <div className="ml-auto flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setSelectedIds([])}>Cancel</Button>
+              <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+                <button
+                  onClick={() => setSelectedIds([])}
+                  className="p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+                  title="Cancel selection"
+                >
+                  <X className="w-4 h-4" />
+                </button>
                 {selectionGrouped ? (
-                  <Button
-                    variant="soft"
-                    size="sm"
-                    icon={<Unlink className="w-4 h-4" />}
-                    loading={ungrouping}
+                  <button
                     onClick={handleUngroupSelected}
-                    title="Remove selected question(s) from story group"
+                    disabled={ungrouping}
+                    title="Remove from story group"
+                    className="p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary-soft transition-colors disabled:opacity-40"
                   >
-                    Ungroup
-                  </Button>
+                    {ungrouping ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Unlink className="w-4 h-4" />}
+                  </button>
                 ) : (
-                  <Button
-                    variant="soft"
-                    size="sm"
-                    icon={<BookOpen className="w-4 h-4" />}
-                    loading={grouping}
-                    disabled={!canGroup}
+                  <button
                     onClick={handleGroup}
-                    title={canGroup ? 'Group selected question(s) (shared story/passage)' : 'Select at least 2 question(s) in the same section'}
+                    disabled={!canGroup || grouping}
+                    title={canGroup ? 'Group selected' : 'Select 2+ questions in same section'}
+                    className="p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary-soft transition-colors disabled:opacity-40"
                   >
-                    Group
-                  </Button>
+                    {grouping ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <TextQuote className="w-4 h-4" />}
+                  </button>
                 )}
-                <Button variant="danger" size="sm" onClick={confirmBulkDelete} icon={<Trash2 className="w-4 h-4" />}>
-                  Delete ({selectedIds.length})
-                </Button>
+                <button
+                  onClick={confirmBulkDelete}
+                  title={`Delete ${selectedIds.length} question(s)`}
+                  className="p-2 rounded-lg text-incorrect hover:bg-incorrect-soft transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">{selectedIds.length}</span>
               </div>
             </motion.div>
           )}

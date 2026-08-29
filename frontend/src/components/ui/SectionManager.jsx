@@ -91,8 +91,12 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
               className="input-field h-8 text-sm flex-1"
               autoFocus
             />
-            <Button size="sm" onClick={onEditSave} icon={<Check className="w-3.5 h-3.5" />}>Save</Button>
-            <Button size="sm" variant="ghost" onClick={onEditCancel}>Cancel</Button>
+            <Button size="sm" onClick={onEditSave} icon={<Check className="w-3.5 h-3.5" />}>
+              <span className="hidden sm:inline">Save</span>
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onEditCancel} icon={<X className="w-3.5 h-3.5" />}>
+              <span className="hidden sm:inline">Cancel</span>
+            </Button>
           </>
         ) : (
           <>
@@ -139,6 +143,7 @@ function DraggableQuestion({ q }) {
     <div
       ref={setNodeRef}
       className={`group flex items-center gap-2 text-sm px-2 py-1.5 rounded-lg bg-gray-50 dark:bg-ink-800/50 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors ${isDragging ? 'opacity-40' : ''}`}
+      style={{userSelect:'none'}}
     >
       <span {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing inline-flex shrink-0">
         <GripVertical className="w-3.5 h-3.5 opacity-50" />
@@ -470,8 +475,12 @@ export default function SectionManager({ formId, show, onClose, sections: initia
                       placeholder="Section name"
                       autoFocus
                     />
-                    <Button size="sm" onClick={createSection} loading={creatingSection} disabled={!newSectionTitle.trim()}>Add</Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setNewSectionOpen(false); setNewSectionTitle('') }}>Cancel</Button>
+                    <Button size="sm" onClick={createSection} loading={creatingSection} disabled={!newSectionTitle.trim()} icon={<Check className="w-3.5 h-3.5" />}>
+                      <span className="hidden sm:inline">Add</span>
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setNewSectionOpen(false); setNewSectionTitle('') }} icon={<X className="w-3.5 h-3.5" />}>
+                      <span className="hidden sm:inline">Cancel</span>
+                    </Button>
                   </div>
                 ) : (
                   <button

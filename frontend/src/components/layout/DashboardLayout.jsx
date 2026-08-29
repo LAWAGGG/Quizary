@@ -153,22 +153,35 @@ export default function DashboardLayout() {
   useEffect(() => {
     const el = mainRef.current
     if (!el) return
-    let ticking = false
+    let hideTimer = null
+    let showTimer = null
     function onScroll() {
-      if (!ticking) {
-        requestAnimationFrame(() => {
-          const y = el.scrollTop
-          if (y < 10) setNavHidden(false)
-          else if (y > lastScrollY.current + 4) setNavHidden(true)
-          else if (y < lastScrollY.current - 4) setNavHidden(false)
-          lastScrollY.current = y
-          ticking = false
-        })
-        ticking = true
+      const y = el.scrollTop
+      const scrollable = el.scrollHeight - el.clientHeight
+      // Don't toggle if content isn't meaningfully scrollable
+      if (scrollable < 60) {
+        setNavHidden(false)
+        return
       }
+      clearTimeout(hideTimer)
+      clearTimeout(showTimer)
+      if (y < 10) {
+        setNavHidden(false)
+      } else if (y > lastScrollY.current + 30) {
+        // Debounce: wait 150ms after last scroll event before hiding
+        hideTimer = setTimeout(() => setNavHidden(true), 150)
+      } else if (y < lastScrollY.current - 30) {
+        // Debounce: wait 150ms after last scroll event before showing
+        showTimer = setTimeout(() => setNavHidden(false), 150)
+      }
+      lastScrollY.current = y
     }
     el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      clearTimeout(hideTimer)
+      clearTimeout(showTimer)
+    }
   }, [])
 
   const handleLogout = async () => {
