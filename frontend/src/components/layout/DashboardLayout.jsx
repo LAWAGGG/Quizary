@@ -137,7 +137,6 @@ export default function DashboardLayout() {
   const dropdownRef = useRef(null)
   const mainRef = useRef(null)
   const [navHidden, setNavHidden] = useState(false)
-  const lastScrollY = useRef(0)
 
   useEffect(() => {
     function handleClick(e) {
@@ -149,39 +148,33 @@ export default function DashboardLayout() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  // Scroll-to-hide navbar (mobile only)
+  // Scroll-to-hide navbar (mobile only) — immediate, no debounce
   useEffect(() => {
     const el = mainRef.current
     if (!el) return
-    let hideTimer = null
-    let showTimer = null
+    let lastY = 0
+    let ticking = false
     function onScroll() {
-      const y = el.scrollTop
-      const scrollable = el.scrollHeight - el.clientHeight
-      // Don't toggle if content isn't meaningfully scrollable
-      if (scrollable < 60) {
-        setNavHidden(false)
-        return
-      }
-      clearTimeout(hideTimer)
-      clearTimeout(showTimer)
-      if (y < 10) {
-        setNavHidden(false)
-      } else if (y > lastScrollY.current + 30) {
-        // Debounce: wait 150ms after last scroll event before hiding
-        hideTimer = setTimeout(() => setNavHidden(true), 150)
-      } else if (y < lastScrollY.current - 30) {
-        // Debounce: wait 150ms after last scroll event before showing
-        showTimer = setTimeout(() => setNavHidden(false), 150)
-      }
-      lastScrollY.current = y
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(() => {
+        const y = el.scrollTop
+        const delta = y - lastY
+        const scrollable = el.scrollHeight - el.clientHeight
+        // At top → always show
+        if (y <= 5) {
+          setNavHidden(false)
+        } else if (scrollable > 80 && delta > 8) {
+          setNavHidden(true)
+        } else if (delta < -8) {
+          setNavHidden(false)
+        }
+        lastY = y
+        ticking = false
+      })
     }
     el.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      el.removeEventListener('scroll', onScroll)
-      clearTimeout(hideTimer)
-      clearTimeout(showTimer)
-    }
+    return () => el.removeEventListener('scroll', onScroll)
   }, [])
 
   const handleLogout = async () => {
@@ -202,7 +195,7 @@ export default function DashboardLayout() {
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={handleLogout} user={user} />
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* ── NAVBAR ── */}
         {/* Desktop: static, no collapse. Mobile: max-h collapse on scroll. */}
         <div className={`shrink-0 overflow-hidden transition-[max-height] duration-200 ease-in-out lg:max-h-none ${navHidden ? 'max-h-0' : 'max-h-16'}`}>

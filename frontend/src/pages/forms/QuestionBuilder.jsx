@@ -380,7 +380,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   )
 }
 
-function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected, onToggleSelect, groupId, groupSize, moveButtons }) {
+function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected, onToggleSelect, groupId, groupIndex, groupSize, moveButtons }) {
   return (
     <Card className={`transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? '!border-primary ring-2 ring-primary/30 bg-primary-50/40 dark:bg-primary-900/15' : 'hover:border-gray-300 dark:hover:border-gray-700'} ${groupId ? 'border-l-4 !border-l-primary/50' : ''}`}>
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -395,14 +395,9 @@ function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected,
           <Badge scheme="gray">{TYPE_LABELS[question.type]}</Badge>
           {groupId && (
             <Badge scheme="primary" title="Story group questions always appear in sequence even with shuffle active. Select question(s) then click Ungroup to remove.">
-              group
+              <span className="hidden sm:inline">Group {groupIndex}</span>
+              <span className="sm:hidden">G{groupIndex}</span>
             </Badge>
-          )}
-          {isQuiz && question.is_scored && question.points > 0 && !NO_GRADE_TYPES.includes(question.type) && (
-            <span className="text-xs text-gray-400 dark:text-gray-500">{question.points} pts</span>
-          )}
-          {isQuiz && !question.is_scored && (
-            <span className="text-xs text-gray-400 dark:text-gray-500">Not scored</span>
           )}
         </div>
         <div className="flex gap-1 shrink-0 items-center">
@@ -459,11 +454,18 @@ function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected,
           ))}
         </div>
       )}
+      {isQuiz && !NO_GRADE_TYPES.includes(question.type) && (question.is_scored ? question.points > 0 : true) && (
+        <div className="flex justify-end mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <span className="text-xs text-gray-400 dark:text-gray-500">
+            {question.is_scored ? `${question.points} pts` : 'Not scored'}
+          </span>
+        </div>
+      )}
     </Card>
   )
 }
 
-function SortableQuestionCard({ question, index, onEdit, onDelete, isQuiz, selected, onToggleSelect, groupId, groupSize, onMove, isFirst, isLast, selectCount }) {
+function SortableQuestionCard({ question, index, onEdit, onDelete, isQuiz, selected, onToggleSelect, groupId, groupIndex, groupSize, onMove, isFirst, isLast, selectCount }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useSortable({
     id: question.id,
     data: { type: 'question', questionId: question.id },
@@ -522,6 +524,7 @@ function SortableQuestionCard({ question, index, onEdit, onDelete, isQuiz, selec
             selected={selected}
             onToggleSelect={onToggleSelect}
             groupId={groupId}
+            groupIndex={groupIndex}
             groupSize={groupSize}
             moveButtons={onMove ? (
               <>
@@ -550,7 +553,7 @@ function SortableQuestionCard({ question, index, onEdit, onDelete, isQuiz, selec
   )
 }
 
-function QuestionItem({ q, index, onEdit, onDelete, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupSize, onMove, totalCount, selectCount, scoringMode }) {
+function QuestionItem({ q, index, onEdit, onDelete, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupIndex, groupSize, onMove, totalCount, selectCount, scoringMode }) {
   if (editOpen) {
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:pl-7">
@@ -609,6 +612,7 @@ function QuestionItem({ q, index, onEdit, onDelete, isQuiz, selected, onToggleSe
         selected={selected}
         onToggleSelect={onToggleSelect}
         groupId={groupId}
+        groupIndex={groupIndex}
         groupSize={groupSize}
         onMove={onMove}
         isFirst={index === 0}
@@ -850,6 +854,13 @@ export default function QuestionBuilder() {
   const groupCounts = {}
   questions.forEach((q) => {
     if (q.group_id) groupCounts[q.group_id] = (groupCounts[q.group_id] || 0) + 1
+  })
+  // Stable group index: order by first appearance in the question list
+  const groupIndexMap = {}
+  questions.forEach((q) => {
+    if (q.group_id && !(q.group_id in groupIndexMap)) {
+      groupIndexMap[q.group_id] = Object.keys(groupIndexMap).length + 1
+    }
   })
 
   const selectedQs = questions.filter((q) => selectedIds.includes(q.id))
@@ -1200,38 +1211,41 @@ export default function QuestionBuilder() {
               <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
                 <button
                   onClick={() => setSelectedIds([])}
-                  className="p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+                  className="flex items-center gap-1.5 p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
                   title="Cancel selection"
                 >
                   <X className="w-4 h-4" />
+                  <span className="hidden sm:inline text-sm font-medium">Cancel</span>
                 </button>
                 {selectionGrouped ? (
                   <button
                     onClick={handleUngroupSelected}
                     disabled={ungrouping}
                     title="Remove from story group"
-                    className="p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary-soft transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1.5 p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary-soft transition-colors disabled:opacity-40"
                   >
                     {ungrouping ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Unlink className="w-4 h-4" />}
+                    <span className="hidden sm:inline text-sm font-medium">Ungroup</span>
                   </button>
                 ) : (
                   <button
                     onClick={handleGroup}
                     disabled={!canGroup || grouping}
                     title={canGroup ? 'Group selected' : 'Select 2+ questions in same section'}
-                    className="p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary-soft transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1.5 p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary-soft transition-colors disabled:opacity-40"
                   >
                     {grouping ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <TextQuote className="w-4 h-4" />}
+                    <span className="hidden sm:inline text-sm font-medium">Group</span>
                   </button>
                 )}
                 <button
                   onClick={confirmBulkDelete}
                   title={`Delete ${selectedIds.length} question(s)`}
-                  className="p-2 rounded-lg text-incorrect hover:bg-incorrect-soft transition-colors"
+                  className="flex items-center gap-1.5 p-2 rounded-lg text-incorrect hover:bg-incorrect-soft transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
+                  <span className="hidden sm:inline text-sm font-medium">Delete ({selectedIds.length})</span>
                 </button>
-                <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">{selectedIds.length}</span>
               </div>
             </motion.div>
           )}
@@ -1284,6 +1298,7 @@ export default function QuestionBuilder() {
                                   errors={fieldErrors}
                                   sections={sections}
                                   groupId={q.group_id || null}
+                                  groupIndex={q.group_id ? (groupIndexMap[q.group_id] || 0) : 0}
                                   groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
                                   onMove={moveQuestion}
                                   totalCount={questions.length}
@@ -1318,9 +1333,10 @@ export default function QuestionBuilder() {
                                 saveLoading={saveLoading}
                                  errors={fieldErrors}
                                  sections={sections}
-                                 sectionsAllowed={sectionsAllowed}
-                                 groupId={q.group_id || null}
-                                 groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
+                                  sectionsAllowed={sectionsAllowed}
+                                  groupId={q.group_id || null}
+                                  groupIndex={q.group_id ? (groupIndexMap[q.group_id] || 0) : 0}
+                                  groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
                                  onMove={moveQuestion}
                                  totalCount={questions.length}
                                  selectCount={selectedIds.length}
@@ -1441,17 +1457,18 @@ export default function QuestionBuilder() {
               initial={{ scale: 0.96, opacity: 0, y: 8 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.96, opacity: 0, y: 8 }}
-              className="bg-white dark:bg-ink-900 rounded-2xl w-full max-w-2xl max-h-[88dvh] flex flex-col shadow-lift"
+              className="bg-white dark:bg-ink-900 rounded-2xl w-full max-w-2xl max-h-[85dvh] flex flex-col shadow-lift"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 sm:px-6 pt-4 sm:pt-6 pb-3 sm:pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
                 <div className="flex items-center gap-3">
-                  <span className="w-10 h-10 rounded-xl bg-primary-50 text-primary flex items-center justify-center">
-                    <Upload className="w-5 h-5" />
+                  <span className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-primary-50 text-primary flex items-center justify-center shrink-0">
+                    <Upload className="w-4 h-4 sm:w-5 sm:h-5" />
                   </span>
                   <div>
-                    <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100">Import Questions from Word</h3>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">Follow the format below so every question imports correctly</p>
+                    <h3 className="font-display text-base sm:text-lg font-bold text-ink dark:text-gray-100">Import from Word</h3>
+                    <p className="text-[11px] sm:text-xs text-gray-400 dark:text-gray-500">Follow the format below</p>
                   </div>
                 </div>
                 <button
@@ -1463,7 +1480,8 @@ export default function QuestionBuilder() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5">
                 {importNeedsSection && (
                   <section>
                     <label className="field-label">Target section *</label>
@@ -1474,27 +1492,24 @@ export default function QuestionBuilder() {
                       <option value="">— Select section —</option>
                       {sections.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
                     </Select>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-                      All imported questions will be added to this section.
-                    </p>
                   </section>
                 )}
+
+                {/* Format rules */}
                 <section>
-                  <h4 className="text-sm font-semibold text-ink dark:text-gray-100 mb-2">How it works</h4>
-                  <ul className="space-y-1.5 text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Each question starts with a number followed by a period or closing bracket — e.g. <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">1.</code> or <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">1)</code>.</li>
-                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Answer choices are listed with letters — e.g. <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">A.</code>, <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">B.</code>, etc.</li>
-                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Mark the correct answer with a line like <code className="px-1.5 py-0.5 bg-gray-100 dark:bg-ink-800 rounded text-xs font-mono">Answer: B</code>.</li>
-                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Multiple correct choices become a checkbox question automatically.</li>
-                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Questions without any choices become essay questions.</li>
-                    <li className="flex gap-2"><Check className="w-4 h-4 text-correct shrink-0 mt-0.5" />Both manually typed numbers and Word's native auto-numbered lists are supported.</li>
+                  <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">Format rules</h4>
+                  <ul className="space-y-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>Start each question with a number, e.g. <strong>1.</strong> or <strong>1)</strong></span></li>
+                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>List choices with letters: <strong>A.</strong>, <strong>B.</strong>, etc.</span></li>
+                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>Mark correct answer with <strong>Answer: B</strong></span></li>
+                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>Multiple correct = checkbox. No choices = essay.</span></li>
                   </ul>
                 </section>
 
+                {/* Example */}
                 <section>
-                  <h4 className="text-sm font-semibold text-ink dark:text-gray-100 mb-2">Example format</h4>
-                  <div className="rounded-xl bg-gray-50 dark:bg-ink-800/60 border border-gray-200 dark:border-gray-700 p-4 font-mono text-[13px] leading-relaxed text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre">
-                    {`1. What is the capital of France?
+                  <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">Example</h4>
+                  <div className="rounded-xl bg-gray-50 dark:bg-ink-800/60 border border-gray-200 dark:border-gray-700 p-3 sm:p-4 font-mono text-[11px] sm:text-[13px] leading-relaxed text-gray-700 dark:text-gray-300 overflow-auto max-h-48 whitespace-pre">{`1. What is the capital of France?
    A. London
    B. Paris
    C. Berlin
@@ -1508,36 +1523,33 @@ export default function QuestionBuilder() {
    D. 9
    Answer: A, C
 
-3. Explain how photosynthesis works.
-`}
-                  </div>
-                  <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                    Question 1 → multiple choice · Question 2 → checkbox (two correct answers) · Question 3 → essay
-                  </p>
+3. Explain how photosynthesis works.`}</div>
                 </section>
 
+                {/* Notes */}
                 <section>
-                  <h4 className="text-sm font-semibold text-ink dark:text-gray-100 mb-2">Notes</h4>
-                  <ul className="space-y-1 text-xs text-gray-500 dark:text-gray-400 leading-relaxed list-disc pl-4">
-                    <li>Only <span className="font-mono">.docx</span> files are accepted.</li>
-                    <li>Imported questions are appended at the end of the current list.</li>
-                    <li>For quizzes, points are redistributed automatically across all scored questions.</li>
-                    <li>If nothing can be parsed, the import is cancelled and you will be notified.</li>
+                  <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">Notes</h4>
+                  <ul className="space-y-1 text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 list-disc pl-4">
+                    <li>Only .docx files are accepted.</li>
+                    <li>Imported questions are appended at the end.</li>
+                    <li>For quizzes, points are redistributed automatically.</li>
                   </ul>
                 </section>
               </div>
 
-              <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0">
+              {/* Footer */}
+              <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0 gap-2">
                 <a
                   href="/template-soal.docx"
                   download
-                  className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
+                  className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-primary hover:text-primary-700 dark:hover:text-primary-300 transition-colors shrink-0"
                 >
-                  <Download className="w-4 h-4" />
-                  Download Template
+                  <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">Download Template</span>
+                  <span className="sm:hidden">Template</span>
                 </a>
                 <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => setShowImportModal(false)} disabled={importing}>Cancel</Button>
+                  <Button variant="secondary" onClick={() => setShowImportModal(false)} disabled={importing} size="sm">Cancel</Button>
                   <Button
                     onClick={() => {
                       if (importNeedsSection && !importSectionId) { toast.error('Select target section first'); return }
@@ -1545,8 +1557,9 @@ export default function QuestionBuilder() {
                     }}
                     loading={importing}
                     icon={!importing && <Upload className="w-4 h-4" />}
+                    size="sm"
                   >
-                    {importing ? 'Importing...' : 'Choose .docx file'}
+                    {importing ? 'Importing...' : 'Choose file'}
                   </Button>
                 </div>
               </div>
