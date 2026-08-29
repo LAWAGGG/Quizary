@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, BookOpen, Unlink, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, BookOpen, Unlink, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
   useSensor, useSensors, closestCorners,
@@ -621,7 +621,7 @@ function QuestionItem({ q, index, onEdit, onDelete, isQuiz, selected, onToggleSe
 
 function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSave, onCancel, onDelete, collapsible, collapsed, onToggle }) {
   return (
-    <div className="flex items-center gap-3 border-b border-gray-200 dark:border-gray-800 pb-2.5">
+    <div className="flex items-center gap-2 sm:gap-3 border-b border-gray-200 dark:border-gray-800 pb-2.5">
       {editing ? (
         <>
           <input
@@ -649,14 +649,19 @@ function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSav
             </button>
           )}
           <span className="w-1.5 h-6 rounded-full bg-primary shrink-0" />
-          <h3 className="font-display font-semibold text-ink dark:text-gray-100 flex-1 truncate">
+          <h3 className="font-display font-semibold text-ink dark:text-gray-100 flex-1 truncate text-sm sm:text-base">
             {section ? section.title : 'General'}
           </h3>
-          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">{count} question(s)</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0 hidden sm:inline">{count} question(s)</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0 sm:hidden">{count}Q</span>
           {section && (
             <>
-              <button onClick={onEdit} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary px-2 py-1 transition-colors">Rename</button>
-              <button onClick={onDelete} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-incorrect px-2 py-1 transition-colors">Delete</button>
+              <button onClick={onEdit} title="Rename section" className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary p-1.5 transition-colors shrink-0">
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={onDelete} title="Delete section" className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-incorrect p-1.5 transition-colors shrink-0">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             </>
           )}
         </>

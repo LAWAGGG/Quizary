@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { GripVertical, X, Plus, Check, ChevronDown, ChevronUp } from 'lucide-react'
+import { GripVertical, X, Plus, Check, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
   useSensor, useSensors, useDraggable, pointerWithin,
@@ -17,19 +17,30 @@ import { Button, Badge, ConfirmModal } from '../../components/ui'
 const QUESTION_PREFIX = 'q-'
 
 function SortableSectionCard({ section, questions, onDelete, editing, editDraft, setEditDraft, onEditStart, onEditSave, onEditCancel, collapsed, onToggleCollapse, onMove, isFirst, isLast }) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useSortable({
     id: section.id,
     data: { type: 'section' },
   })
-  const style = { transform: CSS.Transform.toString(transform), transition }
+  // ponytail: dnd-kit transform hanya aktif saat drag. Untuk mobile reorder
+  // (tombol ↑↓), framer-motion `layout` handle animasi position change.
+  const style = isDragging
+    ? { transform: CSS.Transform.toString(transform), transition: 'none' }
+    : undefined // framer layout handles non-drag reorder
   const secQs = questions.filter((q) => q.section_id === section.id)
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`rounded-xl border transition-all ${isDragging ? 'opacity-40 border-primary' : 'border-gray-200 dark:border-gray-700'}`}
+    <motion.div
+      layout={!isDragging}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: -16 }}
+      transition={{ layout: { duration: 0.2, ease: 'easeOut' } }}
     >
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={`rounded-xl border transition-all ${isDragging ? 'opacity-40 border-primary' : 'border-gray-200 dark:border-gray-700'}`}
+      >
       <div className="flex items-center gap-3 px-4 py-3 cursor-default">
         <span
           {...attributes}
@@ -85,10 +96,15 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
           </>
         ) : (
           <>
-            <span className="font-display font-semibold text-ink dark:text-gray-100 flex-1 truncate">{section.title}</span>
-            <Badge scheme="gray">{secQs.length} question(s)</Badge>
-            <button onClick={onEditStart} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary px-2 py-1 transition-colors">Rename</button>
-            <button onClick={onDelete} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-incorrect px-2 py-1 transition-colors">Delete</button>
+            <span className="font-display font-semibold text-ink dark:text-gray-100 flex-1 truncate text-sm">{section.title}</span>
+            <Badge scheme="gray" className="hidden sm:inline-flex">{secQs.length} question(s)</Badge>
+            <Badge scheme="gray" className="sm:hidden">{secQs.length}Q</Badge>
+            <button onClick={onEditStart} title="Rename section" className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary p-1.5 transition-colors shrink-0">
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={onDelete} title="Delete section" className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-incorrect p-1.5 transition-colors shrink-0">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           </>
         )}
       </div>
@@ -110,6 +126,7 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
         </div>
       ))}
     </div>
+    </motion.div>
   )
 }
 
