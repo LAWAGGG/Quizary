@@ -21,48 +21,61 @@ export function SubmissionDetailModal({
   user,
   onClose,
 }: SubmissionDetailModalProps) {
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, language, fontSizeScale } = useAppTheme();
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={[styles.modalContent, { backgroundColor: colors.cardBg }]}>
           <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Rincian Jawaban</Text>
+            <Text style={[styles.modalTitle, { color: colors.text, fontSize: 18 * fontSizeScale }]}>
+              {language === 'ID' ? 'Rincian Jawaban' : 'Answer Details'}
+            </Text>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="close" size={24} color={colors.textMuted} />
+              <Ionicons name="close" size={24 * fontSizeScale} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
           {loadingDetail ? (
             <View style={styles.modalLoading}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={{ color: colors.textSub, marginTop: 12, fontWeight: '600' }}>Memuat rincian jawaban...</Text>
+              <Text style={{ color: colors.textSub, marginTop: 12, fontWeight: '600', fontSize: 14 * fontSizeScale }}>
+                {language === 'ID' ? 'Memuat rincian jawaban...' : 'Loading answer details...'}
+              </Text>
             </View>
           ) : (
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={true}>
               {/* Result summary */}
               <View style={[styles.detailSummaryBox, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.inputBorder }]}>
-                <Text style={[styles.detailFormTitle, { color: colors.text }]}>
-                  {stripHtmlTags(selectedSubItem?.form_title || subDetail?.form_title) || 'Hasil Form'}
+                <Text style={[styles.detailFormTitle, { color: colors.text, fontSize: 16 * fontSizeScale }]}>
+                  {stripHtmlTags(selectedSubItem?.form_title || subDetail?.form_title) || (language === 'ID' ? 'Hasil Form' : 'Form Result')}
                 </Text>
-                <Text style={[styles.detailMetaText, { color: colors.textSub }]}>
-                  Nama Responden: {subDetail?.respondent_name || user?.name || 'Responden'}
+                <Text style={[styles.detailMetaText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
+                  {language === 'ID' ? 'Nama Responden: ' : 'Respondent Name: '}
+                  {subDetail?.respondent_name || user?.name || (language === 'ID' ? 'Responden' : 'Respondent')}
                 </Text>
-                <Text style={[styles.detailMetaText, { color: colors.textSub }]}>
-                  Status: {selectedSubItem?.status === 'submitted' ? 'Selesai' : selectedSubItem?.status === 'auto_submitted' ? 'Waktu Habis' : 'Dalam Proses'}
+                <Text style={[styles.detailMetaText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
+                  Status: {
+                    selectedSubItem?.status === 'submitted'
+                      ? (language === 'ID' ? 'Selesai' : 'Completed')
+                      : selectedSubItem?.status === 'auto_submitted'
+                      ? (language === 'ID' ? 'Waktu Habis' : 'Time Up')
+                      : (language === 'ID' ? 'Dalam Proses' : 'In Progress')
+                  }
                 </Text>
                 {((subDetail?.score !== null && subDetail?.score !== undefined) || (selectedSubItem?.score !== null && selectedSubItem?.score !== undefined)) && (
                   <View style={styles.detailScoreBox}>
-                    <Text style={styles.detailScoreVal}>
-                      Skor: {subDetail?.score ?? selectedSubItem?.score} {subDetail?.max_score ? `/ ${subDetail.max_score}` : ''}
+                    <Text style={[styles.detailScoreVal, { fontSize: 14 * fontSizeScale }]}>
+                      {language === 'ID' ? 'Skor: ' : 'Score: '}{subDetail?.score ?? selectedSubItem?.score} {subDetail?.max_score ? `/ ${subDetail.max_score}` : ''}
                     </Text>
                   </View>
                 )}
               </View>
 
               {/* Questions & Answers review */}
-              <Text style={[styles.reviewHeading, { color: colors.text }]}>Daftar Soal & Jawaban Anda</Text>
+              <Text style={[styles.reviewHeading, { color: colors.text, fontSize: 14 * fontSizeScale }]}>
+                {language === 'ID' ? 'Daftar Soal & Jawaban Anda' : 'Your Questions & Answers'}
+              </Text>
 
               {(() => {
                 const questionsList = subDetail?.questions || [];
@@ -79,8 +92,10 @@ export function SubmissionDetailModal({
                 if (listToRender.length === 0) {
                   return (
                     <View style={{ padding: 16, alignItems: 'center' }}>
-                      <Text style={{ fontStyle: 'italic', color: colors.textMuted }}>
-                        Belum ada rincian jawaban yang dapat ditampilkan.
+                      <Text style={{ fontStyle: 'italic', color: colors.textMuted, fontSize: 13 * fontSizeScale }}>
+                        {language === 'ID'
+                          ? 'Belum ada rincian jawaban yang dapat ditampilkan.'
+                          : 'No answer details available to display.'}
                       </Text>
                     </View>
                   );
@@ -90,7 +105,8 @@ export function SubmissionDetailModal({
                   const qId = qOrAns.id || qOrAns.question_id;
                   const ans = ansMap.get(qId) || (qOrAns.answer_text || qOrAns.selected_options ? qOrAns : null);
 
-                  const rawQText = qOrAns.question_text || qOrAns.title || ans?.question_text || `Soal ${i + 1}`;
+                  const defaultQTitle = language === 'ID' ? `Soal ${i + 1}` : `Question ${i + 1}`;
+                  const rawQText = qOrAns.question_text || qOrAns.title || ans?.question_text || defaultQTitle;
                   const cleanQText = stripHtmlTags(rawQText);
 
                   let userAnsText = '';
@@ -103,9 +119,13 @@ export function SubmissionDetailModal({
                         .join(', ');
                     } else if (ans.selected_option_ids && ans.selected_option_ids.length > 0) {
                       const opts = qOrAns.options?.filter((o: any) => ans.selected_option_ids.includes(o.id));
-                      userAnsText = opts && opts.length > 0 ? opts.map((o: any) => stripHtmlTags(o.option_text)).join(', ') : `Opsi dipilih (${ans.selected_option_ids.length})`;
+                      userAnsText = opts && opts.length > 0
+                        ? opts.map((o: any) => stripHtmlTags(o.option_text)).join(', ')
+                        : (language === 'ID'
+                            ? `Opsi dipilih (${ans.selected_option_ids.length})`
+                            : `Selected options (${ans.selected_option_ids.length})`);
                     } else if (ans.answer_file) {
-                      userAnsText = '[File Terlampir]';
+                      userAnsText = language === 'ID' ? '[File Terlampir]' : '[Attached File]';
                     }
                   }
 
@@ -114,23 +134,29 @@ export function SubmissionDetailModal({
 
                   return (
                     <View key={qId || i} style={[styles.reviewItem, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.inputBorder }]}>
-                      <Text style={[styles.reviewQText, { color: colors.text }]}>
+                      <Text style={[styles.reviewQText, { color: colors.text, fontSize: 14 * fontSizeScale }]}>
                         {i + 1}. {cleanQText}
                       </Text>
 
                       {userAnsText ? (
                         <View style={{ marginTop: 8 }}>
-                          <Text style={[styles.ansLabel, { color: colors.textSub }]}>Jawaban Anda:</Text>
-                          <Text style={[styles.ansVal, { color: colors.primary }]}>{userAnsText}</Text>
+                          <Text style={[styles.ansLabel, { color: colors.textSub, fontSize: 12 * fontSizeScale }]}>
+                            {language === 'ID' ? 'Jawaban Anda:' : 'Your Answer:'}
+                          </Text>
+                          <Text style={[styles.ansVal, { color: colors.primary, fontSize: 13 * fontSizeScale }]}>{userAnsText}</Text>
                           {isCorrect !== null && isCorrect !== undefined && (
-                            <Text style={{ fontSize: 12, fontWeight: 'bold', marginTop: 4, color: isCorrect ? '#10B981' : '#EF4444' }}>
-                              {isCorrect ? `✓ Benar ${points != null ? `(+${points} poin)` : ''}` : '✗ Salah'}
+                            <Text style={{ fontSize: 12 * fontSizeScale, fontWeight: 'bold', marginTop: 4, color: isCorrect ? '#10B981' : '#EF4444' }}>
+                              {isCorrect
+                                ? (language === 'ID'
+                                    ? `✓ Benar ${points != null ? `(+${points} poin)` : ''}`
+                                    : `✓ Correct ${points != null ? `(+${points} pts)` : ''}`)
+                                : (language === 'ID' ? '✗ Salah' : '✗ Incorrect')}
                             </Text>
                           )}
                         </View>
                       ) : (
-                        <Text style={{ fontSize: 12, fontStyle: 'italic', color: colors.textMuted, marginTop: 6 }}>
-                          Tidak dijawab / Kosong
+                        <Text style={{ fontSize: 12 * fontSizeScale, fontStyle: 'italic', color: colors.textMuted, marginTop: 6 }}>
+                          {language === 'ID' ? 'Tidak dijawab / Kosong' : 'Unanswered / Empty'}
                         </Text>
                       )}
                     </View>
@@ -149,18 +175,18 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, height: '82%', width: '100%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold' },
+  modalTitle: { fontWeight: 'bold' },
   modalLoading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   detailSummaryBox: { borderRadius: 12, padding: 14, borderWidth: 1, marginBottom: 16, gap: 4 },
-  detailFormTitle: { fontSize: 16, fontWeight: 'bold' },
-  detailMetaText: { fontSize: 13 },
+  detailFormTitle: { fontWeight: 'bold' },
+  detailMetaText: {},
   detailScoreBox: { backgroundColor: '#10B981', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, alignSelf: 'flex-start', marginTop: 6 },
-  detailScoreVal: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+  detailScoreVal: { color: '#FFF', fontWeight: 'bold' },
 
-  reviewHeading: { fontSize: 14, fontWeight: 'bold', marginBottom: 10 },
+  reviewHeading: { fontWeight: 'bold', marginBottom: 10 },
   reviewItem: { borderRadius: 12, padding: 14, borderWidth: 1, marginBottom: 10 },
-  reviewQText: { fontSize: 14, fontWeight: '600', lineHeight: 20 },
-  ansLabel: { fontSize: 12, marginTop: 2 },
-  ansVal: { fontSize: 13, fontWeight: 'bold', marginTop: 2 },
+  reviewQText: { fontWeight: '600', lineHeight: 20 },
+  ansLabel: { marginTop: 2 },
+  ansVal: { fontWeight: 'bold', marginTop: 2 },
 });

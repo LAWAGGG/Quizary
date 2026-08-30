@@ -11,7 +11,7 @@ function tabIcon(name: IoniconName) {
 }
 
 export default function TabsLayout() {
-  const { colors } = useAppTheme();
+  const { colors, language, fontSizeScale } = useAppTheme();
 
   return (
     <Tabs
@@ -30,6 +30,9 @@ export default function TabsLayout() {
           shadowOpacity: 0.05,
           shadowRadius: 4,
         },
+        tabBarLabelStyle: {
+          fontSize: 12 * fontSizeScale,
+        },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
       }}
@@ -37,7 +40,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Dashboard',
+          title: language === 'ID' ? 'Dashboard' : 'Dashboard',
           tabBarIcon: tabIcon('time-outline'),
         }}
       />
@@ -45,7 +48,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="join"
         options={{
-          title: 'Scan QR',
+          title: language === 'ID' ? 'Scan QR' : 'Scan QR',
           tabBarIcon: tabIcon('qr-code-outline'),
         }}
       />
@@ -53,8 +56,18 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profil',
+          title: language === 'ID' ? 'Profil' : 'Profile',
           tabBarIcon: tabIcon('person-outline'),
+        }}
+      />
+
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: language === 'ID' ? 'Pengaturan' : 'Settings',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size || 22} color={color} />
+          ),
         }}
       />
     </Tabs>

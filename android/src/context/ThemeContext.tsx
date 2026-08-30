@@ -46,6 +46,8 @@ export const palette = {
 };
 
 type ThemeMode = 'light' | 'dark';
+type LanguageType = 'ID' | 'EN';
+type FontSizeType = 'Kecil' | 'Sedang' | 'Besar';
 
 interface ThemeContextType {
   theme: ThemeMode;
@@ -53,6 +55,11 @@ interface ThemeContextType {
   colors: typeof palette.light;
   toggleTheme: () => void;
   setThemeMode: (mode: ThemeMode) => void;
+  language: LanguageType;
+  setLanguage: (lang: LanguageType) => void;
+  fontSize: FontSizeType;
+  setFontSize: (size: FontSizeType) => void;
+  fontSizeScale: number;
 }
 
 const ThemeContext = createContext<ThemeContextType>({
@@ -61,19 +68,45 @@ const ThemeContext = createContext<ThemeContextType>({
   colors: palette.light,
   toggleTheme: () => {},
   setThemeMode: () => {},
+  language: 'ID',
+  setLanguage: () => {},
+  fontSize: 'Sedang',
+  setFontSize: () => {},
+  fontSizeScale: 1,
 });
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const systemScheme = useSystemColorScheme();
   const [theme, setThemeState] = useState<ThemeMode>('light');
+  const [language, setLanguageState] = useState<LanguageType>('ID');
+  const [fontSize, setFontSizeState] = useState<FontSizeType>('Sedang');
 
   useEffect(() => {
+    // Load Saved Theme
     SecureStore.getItemAsync('app_theme')
       .then((saved) => {
         if (saved === 'dark' || saved === 'light') {
           setThemeState(saved);
         } else if (systemScheme === 'dark') {
           setThemeState('dark');
+        }
+      })
+      .catch(() => {});
+
+    // Load Saved Language
+    SecureStore.getItemAsync('app_language')
+      .then((savedLang) => {
+        if (savedLang === 'ID' || savedLang === 'EN') {
+          setLanguageState(savedLang);
+        }
+      })
+      .catch(() => {});
+
+    // Load Saved Font Size
+    SecureStore.getItemAsync('app_font_size')
+      .then((savedSize) => {
+        if (savedSize === 'Kecil' || savedSize === 'Sedang' || savedSize === 'Besar') {
+          setFontSizeState(savedSize as FontSizeType);
         }
       })
       .catch(() => {});
@@ -89,6 +122,17 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setThemeMode(next);
   };
 
+  const setLanguage = (lang: LanguageType) => {
+    setLanguageState(lang);
+    SecureStore.setItemAsync('app_language', lang).catch(() => {});
+  };
+
+  const setFontSize = (size: FontSizeType) => {
+    setFontSizeState(size);
+    SecureStore.setItemAsync('app_font_size', size).catch(() => {});
+  };
+
+  const fontSizeScale = fontSize === 'Kecil' ? 0.85 : fontSize === 'Besar' ? 1.15 : 1;
   const colors = palette[theme];
 
   return (
@@ -99,6 +143,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         colors,
         toggleTheme,
         setThemeMode,
+        language,
+        setLanguage,
+        fontSize,
+        setFontSize,
+        fontSizeScale,
       }}
     >
       {children}

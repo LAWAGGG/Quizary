@@ -20,7 +20,7 @@ import { useAppTheme } from '../../context/ThemeContext';
 import { BASE_URL } from '@/services/api_service';
 
 export default function ProfileScreen() {
-  const { colors, isDark } = useAppTheme();
+  const { colors, isDark, language, fontSizeScale } = useAppTheme();
   const [user, setUser] = useState<any>(null);
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -107,23 +107,35 @@ export default function ProfileScreen() {
               await saveUser(freshData);
             }
           }
-          Alert.alert('Sukses 🎉', 'Avatar berhasil diperbarui');
+          Alert.alert(
+            language === 'ID' ? 'Sukses 🎉' : 'Success 🎉',
+            language === 'ID' ? 'Avatar berhasil diperbarui' : 'Avatar updated successfully'
+          );
         } catch (e: any) {
           console.log('[DEBUG AVATAR] updateProfile error:', e);
-          Alert.alert('Gagal Mengubah Avatar', e.message || 'Terjadi kesalahan saat mengunggah avatar.');
+          Alert.alert(
+            language === 'ID' ? 'Gagal Mengubah Avatar' : 'Failed to Update Avatar',
+            e.message || (language === 'ID' ? 'Terjadi kesalahan saat mengunggah avatar.' : 'An error occurred while uploading avatar.')
+          );
         } finally {
           setUploadingAvatar(false);
         }
       }
     } catch (err: any) {
       console.log('[DEBUG AVATAR] launchImageLibraryAsync error:', err);
-      Alert.alert('Error', err.message || 'Gagal memilih gambar.');
+      Alert.alert(
+        language === 'ID' ? 'Error' : 'Error',
+        err.message || (language === 'ID' ? 'Gagal memilih gambar.' : 'Failed to pick image.')
+      );
     }
   };
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert('Field Wajib', 'Nama tidak boleh kosong.');
+      Alert.alert(
+        language === 'ID' ? 'Field Wajib' : 'Required Field',
+        language === 'ID' ? 'Nama tidak boleh kosong.' : 'Name cannot be empty.'
+      );
       return;
     }
     setSaving(true);
@@ -147,38 +159,50 @@ export default function ProfileScreen() {
         }
       }
 
-      Alert.alert('Profil Diperbarui 🎉', 'Profil berhasil disimpan');
+      Alert.alert(
+        language === 'ID' ? 'Profil Diperbarui 🎉' : 'Profile Updated 🎉',
+        language === 'ID' ? 'Profil berhasil disimpan' : 'Profile saved successfully'
+      );
     } catch (err: any) {
       console.log('[DEBUG PROFILE] updateProfile name error:', err);
-      Alert.alert('Update Gagal', err.message || 'Gagal memperbarui profil.');
+      Alert.alert(
+        language === 'ID' ? 'Update Gagal' : 'Update Failed',
+        err.message || (language === 'ID' ? 'Gagal memperbarui profil.' : 'Failed to update profile.')
+      );
     } finally {
       setSaving(false);
     }
   };
 
   const handleLogout = () => {
-    Alert.alert('Konfirmasi Logout', 'Apakah Anda yakin ingin keluar dari akun?', [
-      { text: 'Batal', style: 'cancel' },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await apiLogout().catch(() => null);
-          } finally {
-            await removeToken();
-            router.replace('/');
-          }
+    Alert.alert(
+      language === 'ID' ? 'Konfirmasi Logout' : 'Logout Confirmation',
+      language === 'ID' ? 'Apakah Anda yakin ingin keluar dari akun?' : 'Are you sure you want to log out?',
+      [
+        { text: language === 'ID' ? 'Batal' : 'Cancel', style: 'cancel' },
+        {
+          text: language === 'ID' ? 'Logout' : 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiLogout().catch(() => null);
+            } finally {
+              await removeToken();
+              router.replace('/');
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: colors.bg }]}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.textSub }]}>Memuat profil...</Text>
+        <Text style={[styles.loadingText, { color: colors.textSub, fontSize: 14 * fontSizeScale }]}>
+          {language === 'ID' ? 'Memuat profil...' : 'Loading profile...'}
+        </Text>
       </View>
     );
   }
@@ -194,7 +218,9 @@ export default function ProfileScreen() {
     >
       {/* Top Workspace Header */}
       <View style={styles.topWorkspaceRow}>
-        <Text style={[styles.workspaceText, { color: colors.textSub }]}>Profil {user?.name || 'Responden'}</Text>
+        <Text style={[styles.workspaceText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
+          {language === 'ID' ? `Profil ${user?.name || 'Responden'}` : `${user?.name || 'Respondent'}'s Profile`}
+        </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <ThemeToggleBtn />
           <View style={[styles.userAvatarBtn, { backgroundColor: colors.primarySoft, borderColor: isDark ? colors.cardBorder : '#C7D2FE' }]}>
@@ -208,7 +234,7 @@ export default function ProfileScreen() {
                   style={styles.userAvatarImg} 
                 />
             ) : (
-              <Text style={[styles.userAvatarText, { color: colors.primary }]}>{initial}</Text>
+              <Text style={[styles.userAvatarText, { color: colors.primary, fontSize: 14 * fontSizeScale }]}>{initial}</Text>
             )}
           </View>
         </View>
@@ -216,9 +242,15 @@ export default function ProfileScreen() {
 
       {/* Page Header */}
       <View style={styles.header}>
-        <Text style={[styles.eyebrow, { color: colors.primary }]}>AKUN</Text>
-        <Text style={[styles.title, { color: colors.text }]}>Profil Saya</Text>
-        <Text style={[styles.subtitle, { color: colors.textSub }]}>Perbarui nama dan avatar akun Anda.</Text>
+        <Text style={[styles.eyebrow, { color: colors.primary, fontSize: 11 * fontSizeScale }]}>
+          {language === 'ID' ? 'AKUN' : 'ACCOUNT'}
+        </Text>
+        <Text style={[styles.title, { color: colors.text, fontSize: 26 * fontSizeScale }]}>
+          {language === 'ID' ? 'Profil Saya' : 'My Profile'}
+        </Text>
+        <Text style={[styles.subtitle, { color: colors.textSub, fontSize: 14 * fontSizeScale }]}>
+          {language === 'ID' ? 'Perbarui nama dan avatar akun Anda.' : 'Update your account name and avatar.'}
+        </Text>
       </View>
 
       {/* Avatar Card */}
@@ -240,9 +272,11 @@ export default function ProfileScreen() {
                 : `${BASE_URL.replace('/api', '')}${user.avatar}?t=${Date.now()}` 
             }} 
           style={styles.avatarLargeImg} 
-  />
-) : (
-              <Text style={[styles.avatarText, { color: colors.primary }]}>{initial}</Text>
+            />
+            ) : (
+              <Text style={[styles.avatarText, { color: colors.primary, fontSize: 32 * fontSizeScale }]}>
+                {initial}
+              </Text>
             )}
           </TouchableOpacity>
           <TouchableOpacity
@@ -255,10 +289,12 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.userName, { color: colors.text }]}>{user?.name || 'Responden'}</Text>
-        <Text style={[styles.userEmail, { color: colors.textSub }]}>{user?.email || 'email@quizary.id'}</Text>
+        <Text style={[styles.userName, { color: colors.text, fontSize: 20 * fontSizeScale }]}>
+          {user?.name || (language === 'ID' ? 'Responden' : 'Respondent')}
+        </Text>
+        <Text style={[styles.userEmail, { color: colors.textSub, fontSize: 14 * fontSizeScale }]}>{user?.email || 'email@quizary.id'}</Text>
         <View style={[styles.roleBadge, { backgroundColor: isDark ? '#2F2690' : '#F0EFFF', borderColor: isDark ? '#6C5CE7' : '#D5D0FA' }]}>
-          <Text style={[styles.roleBadgeText, { color: '#6C5CE7' }]}>
+          <Text style={[styles.roleBadgeText, { color: '#6C5CE7', fontSize: 11 * fontSizeScale }]}>
             {user?.role ? user.role.toUpperCase() : 'USER'}
           </Text>
         </View>
@@ -266,22 +302,26 @@ export default function ProfileScreen() {
 
       {/* Profile Form Card */}
       <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-        <Text style={[styles.label, { color: colors.text }]}>Name</Text>
+        <Text style={[styles.label, { color: colors.text, fontSize: 13 * fontSizeScale }]}>
+          {language === 'ID' ? 'Nama' : 'Name'}
+        </Text>
         <TextInput
-          style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
-          placeholder="Your name"
+          style={[styles.input, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder, fontSize: 15 * fontSizeScale }]}
+          placeholder={language === 'ID' ? 'Nama Anda' : 'Your name'}
           placeholderTextColor={colors.textMuted}
           value={name}
           onChangeText={setName}
         />
 
-        <Text style={[styles.label, { color: colors.text, marginTop: 14 }]}>Email</Text>
+        <Text style={[styles.label, { color: colors.text, fontSize: 13 * fontSizeScale, marginTop: 14 }]}>Email</Text>
         <TextInput
-          style={[styles.input, styles.disabledInput, { backgroundColor: colors.itemBg, color: colors.textSub, borderColor: colors.inputBorder }]}
+          style={[styles.input, styles.disabledInput, { backgroundColor: colors.itemBg, color: colors.textSub, borderColor: colors.inputBorder, fontSize: 15 * fontSizeScale }]}
           value={user?.email || ''}
           editable={false}
         />
-        <Text style={[styles.fieldHint, { color: colors.textMuted }]}>Email cannot be changed.</Text>
+        <Text style={[styles.fieldHint, { color: colors.textMuted, fontSize: 12 * fontSizeScale }]}>
+          {language === 'ID' ? 'Email tidak dapat diubah.' : 'Email cannot be changed.'}
+        </Text>
 
         <TouchableOpacity
           style={[styles.btnSave, { backgroundColor: colors.primary }, saving && styles.btnDisabled]}
@@ -292,7 +332,9 @@ export default function ProfileScreen() {
           {saving ? (
             <ActivityIndicator color="#FFF" />
           ) : (
-            <Text style={styles.btnSaveText}>Save Changes</Text>
+            <Text style={[styles.btnSaveText, { fontSize: 15 * fontSizeScale }]}>
+              {language === 'ID' ? 'Simpan Perubahan' : 'Save Changes'}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
@@ -304,7 +346,9 @@ export default function ProfileScreen() {
         activeOpacity={0.85}
       >
         <Ionicons name="log-out-outline" size={18} color={isDark ? '#FCA5A5' : '#EF4444'} />
-        <Text style={[styles.btnLogoutText, { color: isDark ? '#FCA5A5' : '#EF4444' }]}>Logout</Text>
+        <Text style={[styles.btnLogoutText, { color: isDark ? '#FCA5A5' : '#EF4444', fontSize: 15 * fontSizeScale }]}>
+          {language === 'ID' ? 'Keluar' : 'Logout'}
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -316,17 +360,17 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
   loadingText: {},
   topWorkspaceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  workspaceText: { fontSize: 13, fontWeight: '600' },
+  workspaceText: { fontWeight: '600' },
   userAvatarBtn: {
     width: 34, height: 34, borderRadius: 17,
     alignItems: 'center', justifyContent: 'center', borderWidth: 1, overflow: 'hidden',
   },
   userAvatarImg: { width: '100%', height: '100%', borderRadius: 17 },
-  userAvatarText: { fontWeight: 'bold', fontSize: 14 },
+  userAvatarText: { fontWeight: 'bold' },
   header: { marginBottom: 20 },
-  eyebrow: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
-  title: { fontSize: 26, fontWeight: 'bold', marginTop: 2, marginBottom: 2 },
-  subtitle: { fontSize: 14 },
+  eyebrow: { fontWeight: '800', letterSpacing: 1.2 },
+  title: { fontWeight: 'bold', marginTop: 2, marginBottom: 2 },
+  subtitle: {},
   avatarCard: {
     borderRadius: 20, padding: 24, alignItems: 'center',
     marginBottom: 16, borderWidth: 1, elevation: 1,
@@ -348,32 +392,32 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#FFFFFF',
     elevation: 3,
   },
-  avatarText: { fontSize: 32, fontWeight: 'bold' },
-  userName: { fontSize: 20, fontWeight: 'bold', marginBottom: 2 },
-  userEmail: { fontSize: 14, marginBottom: 10 },
+  avatarText: { fontWeight: 'bold' },
+  userName: { fontWeight: 'bold', marginBottom: 2 },
+  userEmail: { marginBottom: 10 },
   roleBadge: {
     paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, borderWidth: 1,
   },
-  roleBadgeText: { fontSize: 11, fontWeight: 'bold' },
+  roleBadgeText: { fontWeight: 'bold' },
   card: {
     borderRadius: 20, padding: 20,
     marginBottom: 16, borderWidth: 1, elevation: 1,
   },
-  label: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
+  label: { fontWeight: '600', marginBottom: 6 },
   input: {
-    padding: 14, borderRadius: 10, borderWidth: 1, fontSize: 15,
+    padding: 14, borderRadius: 10, borderWidth: 1,
   },
   disabledInput: {},
-  fieldHint: { fontSize: 12, marginTop: 4, marginBottom: 16 },
+  fieldHint: { marginTop: 4, marginBottom: 16 },
   btnSave: {
     paddingVertical: 14, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center', elevation: 1,
   },
   btnDisabled: { opacity: 0.6 },
-  btnSaveText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 },
+  btnSaveText: { color: '#FFFFFF', fontWeight: 'bold' },
   btnLogout: {
     borderWidth: 1, paddingVertical: 14, borderRadius: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
-  btnLogoutText: { fontWeight: '600', fontSize: 15 },
+  btnLogoutText: { fontWeight: '600' },
 });
