@@ -106,6 +106,16 @@ class QuestionGroupRequest(BaseModel):
         return self
 
 
+class GroupAddRequest(BaseModel):
+    question_ids: list[int] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_question_ids(self):
+        if len(set(self.question_ids)) != len(self.question_ids):
+            raise ValueError("question_ids must not contain duplicates")
+        return self
+
+
 class SectionCreate(BaseModel):
     title: str = Field(min_length=1, max_length=150)
 

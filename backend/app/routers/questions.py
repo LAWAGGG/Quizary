@@ -17,6 +17,7 @@ from app.models.user import User
 from app.services.points import distribute_quiz_points
 from app.utils import file_url, now_wib, write_limited, MAX_IMAGE_BYTES, _delete_file, UPLOAD_DIR
 from app.schemas.question import (
+    GroupAddRequest,
     QuestionCreate,
     QuestionGroupRequest,
     QuestionUpdate,
@@ -615,6 +616,40 @@ def group_questions(
         "message": "Soal berhasil dikelompokkan",
         "data": [_build_question(q, request) for q in questions],
     }
+
+
+@router.post("/forms/{form_id}/questions/group/{group_id}/questions")
+def add_questions_to_group(
+    form_id: int,
+    group_id: str,
+    body: GroupAddRequest,
+    request: Request,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    # ponytail: 1 query untuk cek grup, 1 query untuk soal baru — tanpa N+1
+    members = db.query(Question).filter(
+        Question.form_id == form.id, Question.group_id == group_id, Question.is_deleted.is_(False)
+    ).all()
+    if not members:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup tidak ditemukan")
+    group_section = members[0].section_id
+    to_add = db.query(Question).filter(
+        Question.id.in_(body.question_ids), Question.form_id == form.id, Question.is_deleted.is_(False)
+    ).all()
+    if len(to_add) != len(body.question_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Soal tidak ditemukan pada form ini")
+    for q in to_add:
+        if q.group_id == group_id:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Soal {q.id} sudah ada di grup ini")
+        if q.group_id is not None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Soal sudah tergabung di grup lain — keluarkan dulu")
+        if q.section_id != group_section:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Semua soal harus berada dalam section yang sama dengan grup")
+    for q in to_add:
+        q.group_id = group_id
+    db.commit()
+    return {"message": f"{len(to_add)} soal ditambahkan ke grup", "data": [_build_question(q, request) for q in to_add]}
 
 
 @router.delete("/forms/{form_id}/questions/group/{group_id}")

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, TextQuote, Unlink, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
-  useSensor, useSensors, closestCenter,
+  useSensor, useSensors, closestCenter, useDroppable,
 } from '@dnd-kit/core'
 import {
   SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable,
@@ -506,7 +506,7 @@ function SortableQuestionCard({ question, index, onEdit, onDelete, isQuiz, selec
           e.stopPropagation()
           listeners?.onPointerDown?.(e)
         }}
-        className="absolute left-0 top-4 w-6 h-8 hidden md:flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 dark:text-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+        className="absolute left-0 top-4 w-6 h-8 hidden md:flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-500 dark:text-gray-400 rounded-md hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
       >
         <GripVertical className="w-5 h-5" />
       </span>
@@ -581,7 +581,7 @@ function GroupInnerRow({ q, globalIndex, isQuiz, selected, onToggleSelect, onEdi
   )
 }
 
-function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, onToggle, isQuiz, selectedIds, onToggleSelect, onToggleGroupSelect, onEdit, onDelete, onUngroup, onMove, isFirst, isLast, selectCount, idToIndex, editing, showForm, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, scoringMode }) {
+function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, onToggle, isQuiz, selectedIds, onToggleSelect, onToggleGroupSelect, onEdit, onDelete, onUngroup, onMove, isFirst, isLast, selectCount, idToIndex, editing, showForm, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, scoringMode, allQuestions, onAddToGroup }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: `g-${groupId}`,
     data: { type: 'group', groupId },
@@ -595,14 +595,34 @@ function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, 
     selectedCount: selectCount,
     onToggle: () => onToggleGroupSelect(groupId),
   })
+  const [showPicker, setShowPicker] = useState(false)
+  const [pickIds, setPickIds] = useState([])
+  const [adding, setAdding] = useState(false)
+  const [filter, setFilter] = useState('')
+  const eligible = useMemo(() => {
+    const sid = members[0]?.section_id
+    return (allQuestions || []).filter((q) => !q.group_id && q.section_id === sid && !members.some((m) => m.id === q.id) && (filter ? (q.question_text || '').toLowerCase().includes(filter.toLowerCase()) : true))
+  }, [allQuestions, members, filter])
+  const { setNodeRef: setAddRef, isOver: isAddOver } = useDroppable({ id: `add-${groupId}`, data: { type: 'group-add', groupId } })
+  const handleAdd = async () => {
+    if (!pickIds.length) return
+    setAdding(true)
+    try {
+      await onAddToGroup(groupId, pickIds)
+      setPickIds([])
+      setShowPicker(false)
+    } finally {
+      setAdding(false)
+    }
+  }
   return (
     <motion.div ref={setNodeRef} style={style} {...attributes} {...holdProps} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.12 }} className="relative select-none" onClick={(e) => { if (isDragging) return; holdProps.onClick(e) }}>
-      <span ref={setActivatorNodeRef} {...listeners} onPointerDown={(e) => { e.stopPropagation(); listeners?.onPointerDown?.(e) }} className="absolute left-0 top-4 w-6 h-8 hidden md:flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 dark:text-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"><GripVertical className="w-5 h-5" /></span>
+      <span ref={setActivatorNodeRef} {...listeners} onPointerDown={(e) => { e.stopPropagation(); listeners?.onPointerDown?.(e) }} className="absolute left-0 top-4 w-6 h-8 hidden md:flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-500 dark:text-gray-400 rounded-md hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"><GripVertical className="w-5 h-5" /></span>
       <div className="md:pl-7">
         <div className={`rounded-2xl border bg-white dark:bg-ink-900 shadow-sm overflow-hidden ${isDragging ? 'opacity-60 border-primary/40 shadow-lift' : allSel ? '!border-primary ring-2 ring-primary/20 bg-primary-50/30 dark:bg-primary-900/10' : expanded ? 'border-primary/30' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'}`}>
           {/* header */}
           <div className="flex items-center gap-2 px-3 sm:px-4 py-3 bg-primary-50/60 dark:bg-primary-900/15">
-            <button onClick={(e) => { e.stopPropagation(); onToggle() }} className="w-8 h-8 rounded-xl bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-primary flex items-center justify-center shrink-0 transition-colors" title={expanded ? 'Collapse' : 'Expand'}>
+            <button onClick={(e) => { e.stopPropagation(); onToggle() }} className="w-8 h-8 rounded-xl bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-dark hover:text-primary flex items-center justify-center shrink-0 transition-colors" title={expanded ? 'Collapse' : 'Expand'}>
               <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
             </button>
             <div className="flex-1 min-w-0">
@@ -646,6 +666,38 @@ function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, 
                     }
                     return <GroupInnerRow key={q.id} q={q} globalIndex={gIdx} isQuiz={isQuiz} selected={selectedIds.includes(q.id)} onToggleSelect={onToggleSelect} onEdit={onEdit} onDelete={onDelete} selectCount={selectCount} />
                   })}
+                  {/* add picker / drop zone */}
+                  <div ref={setAddRef} className={`rounded-xl border-2 border-dashed p-3 transition-colors ${isAddOver ? 'border-primary bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-700 bg-white/60 dark:bg-ink-900/40'}`}>
+                    {!showPicker ? (
+                      <button onClick={() => setShowPicker(true)} className="w-full flex items-center justify-center gap-2 text-sm font-medium text-gray-500 hover:text-primary transition-colors">
+                        <Plus className="w-4 h-4" /> Add questions
+                        {isAddOver && <span className="text-xs text-primary ml-2">Drop here to add</span>}
+                      </button>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search questions..." className="input-field h-8 text-sm flex-1" autoFocus />
+                          <button onClick={() => { setShowPicker(false); setPickIds([]); setFilter('') }} className="p-1.5 rounded-lg text-gray-400 hover:text-ink"><X className="w-4 h-4" /></button>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                          {eligible.length ? eligible.map((q) => {
+                            const checked = pickIds.includes(q.id)
+                            return (
+                              <label key={q.id} className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${checked ? 'border-primary bg-primary-50 dark:bg-primary-900/20' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300'}`}>
+                                <input type="checkbox" checked={checked} onChange={(e) => setPickIds((prev) => e.target.checked ? [...prev, q.id] : prev.filter((x) => x !== q.id))} className="mt-0.5 w-4 h-4 rounded accent-primary" />
+                                <span className="flex-1 min-w-0 text-xs text-gray-700 dark:text-gray-300 line-clamp-2">{(q.question_text || '').replace(/<[^>]*>/g, '').trim() || '(no text)'}</span>
+                                <Badge scheme="gray" className="text-[10px] shrink-0">{q.type.replace('_',' ')}</Badge>
+                              </label>
+                            )
+                          }) : <p className="text-xs text-gray-400 text-center py-2">No eligible questions in this section</p>}
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button size="sm" variant="ghost" onClick={() => { setShowPicker(false); setPickIds([]) }}>Cancel</Button>
+                          <Button size="sm" onClick={handleAdd} disabled={!pickIds.length || adding} loading={adding}>Add {pickIds.length ? `(${pickIds.length})` : ''}</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -976,6 +1028,7 @@ export default function QuestionBuilder() {
   // Loading bersama untuk ConfirmModal (delete soal / section) — hanya satu
   // modal konfirmasi yang bisa terbuka pada satu waktu.
   const [confirmLoading, setConfirmLoading] = useState(false)
+  const [ungroupConfirm, setUngroupConfirm] = useState(null)
 
   const handleDelete = async () => {
     if (!deleteTarget) return
@@ -1030,6 +1083,9 @@ export default function QuestionBuilder() {
     selectedQs.length >= 2 &&
     selectedQs.every((q) => q.section_id) &&
     new Set(selectedQs.map((q) => q.section_id)).size === 1
+  const mixedGroupIds = [...new Set(selectedQs.filter((q) => q.group_id).map((q) => q.group_id))]
+  const singleIdsForMixed = selectedQs.filter((q) => !q.group_id).map((q) => q.id)
+  const canAddMixed = singleIdsForMixed.length > 0 && mixedGroupIds.length === 1 && new Set(selectedQs.map((q) => q.section_id)).size === 1 && selectedQs.every((q) => q.section_id)
 
   const handleGroup = async () => {
     setGrouping(true)
@@ -1081,6 +1137,20 @@ export default function QuestionBuilder() {
       toast.error(err.response?.data?.detail || 'Failed to ungroup')
     } finally {
       setUngrouping(false)
+    }
+  }
+
+  const handleAddToGroup = async (groupId, questionIds) => {
+    if (!questionIds?.length) return
+    try {
+      await api.post(`/forms/${formId}/questions/group/${groupId}/questions`, { question_ids: questionIds })
+      toast.success(`${questionIds.length} questions ditambahkan ke Group`)
+      setExpandedGroups((prev) => { const n = new Set(prev); n.add(groupId); return n })
+      setSelectedIds([])
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || err.response?.data?.message || 'Failed to add to group')
+      throw err
     }
   }
 
@@ -1225,8 +1295,18 @@ export default function QuestionBuilder() {
   }
 
   const handleDragEnd = async (event) => {
-    const { over } = event
+    const { active, over } = event
     setActiveDrag(null)
+    // A: drop single question onto group add zone → add to group
+    if (over && active && active.data.current?.type === 'question' && over.data.current?.type === 'group-add') {
+      const gid = over.data.current.groupId
+      const qid = active.data.current.questionId || active.id
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+      pendingRef.current = null
+      dragStartOrderRef.current = null
+      await handleAddToGroup(gid, [qid])
+      return
+    }
     // flush pending hover biar drop di posisi terakhir tetap ke-apply
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
     if (pendingRef.current) {
@@ -1513,9 +1593,23 @@ export default function QuestionBuilder() {
                   <X className="w-4 h-4" />
                   <span className="hidden sm:inline text-sm font-medium">Cancel</span>
                 </button>
-                {selectionGrouped ? (
+                {canAddMixed ? (
                   <button
-                    onClick={handleUngroupSelected}
+                    onClick={() => handleAddToGroup(mixedGroupIds[0], singleIdsForMixed)}
+                    disabled={grouping}
+                    title={`Add ${singleIdsForMixed.length} question(s) to Group ${groupIndexMap[mixedGroupIds[0]] || ''}`}
+                    className="flex items-center gap-1.5 p-2 rounded-lg text-primary hover:bg-primary-50 transition-colors"
+                  >
+                    {grouping ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <TextQuote className="w-4 h-4" />}
+                    <span className="hidden sm:inline text-sm font-medium">Group</span>
+                  </button>
+                ) : selectionGrouped ? (
+                  <button
+                    onClick={() => {
+                      const grouped = selectedQs.filter((q) => q.group_id)
+                      const distinct = [...new Set(grouped.map((q) => q.group_id))]
+                      setUngroupConfirm({ mode: 'selected', count: grouped.length, distinctCount: distinct.length, groupIds: distinct })
+                    }}
                     disabled={ungrouping}
                     title="Remove from story group"
                     className="flex items-center gap-1.5 p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary-soft transition-colors disabled:opacity-40"
@@ -1597,7 +1691,7 @@ export default function QuestionBuilder() {
                                       onToggleGroupSelect={toggleGroupSelect}
                                       onEdit={editQuestion}
                                       onDelete={confirmDeleteSingle}
-                                      onUngroup={handleUngroupGroup}
+                                      onUngroup={(gid) => setUngroupConfirm({ mode: 'group', groupId: gid, count: blk.questions.length, groupIndex: groupIndexMap[gid] || 0 })}
                                       onMove={(dir) => moveBlock(blk.id, dir)}
                                       isFirst={isFirst}
                                       isLast={isLast}
@@ -1612,6 +1706,8 @@ export default function QuestionBuilder() {
                                       sections={sections}
                                       sectionsAllowed={sectionsAllowed}
                                       scoringMode={scoringMode}
+                                      allQuestions={questions}
+                                      onAddToGroup={handleAddToGroup}
                                     />
                                   )
                                 }
@@ -1673,7 +1769,7 @@ export default function QuestionBuilder() {
                             onToggleGroupSelect={toggleGroupSelect}
                             onEdit={editQuestion}
                             onDelete={confirmDeleteSingle}
-                            onUngroup={handleUngroupGroup}
+                            onUngroup={(gid) => setUngroupConfirm({ mode: 'group', groupId: gid, count: blk.questions.length, groupIndex: groupIndexMap[gid] || 0 })}
                             onMove={(dir) => moveBlock(blk.id, dir)}
                             isFirst={isFirst}
                             isLast={isLast}
@@ -1688,6 +1784,8 @@ export default function QuestionBuilder() {
                             sections={sections}
                             sectionsAllowed={sectionsAllowed}
                             scoringMode={scoringMode}
+                            allQuestions={questions}
+                            onAddToGroup={handleAddToGroup}
                           />
                         )
                       }
@@ -1827,6 +1925,30 @@ export default function QuestionBuilder() {
         loading={confirmLoading}
         confirmText="Delete"
         variant="danger"
+      />
+
+      <ConfirmModal
+        show={!!ungroupConfirm}
+        title={ungroupConfirm?.mode === 'group' ? `Ungroup Group ${ungroupConfirm.groupIndex}?` : `Ungroup ${ungroupConfirm?.count || ''} question(s)?`}
+        message={
+          ungroupConfirm?.mode === 'group'
+            ? `Group ${ungroupConfirm.groupIndex} with ${ungroupConfirm.count} questions will be dissolved. The questions will remain as separate items in the same section.`
+            : `Remove ${ungroupConfirm?.count || ''} question(s) from ${ungroupConfirm?.distinctCount || 1} group(s)? The questions will remain as separate items.`
+        }
+        onConfirm={async () => {
+          const c = ungroupConfirm
+          setUngroupConfirm(null)
+          if (!c) return
+          if (c.mode === 'group') {
+            await handleUngroupGroup(c.groupId)
+          } else {
+            await handleUngroupSelected()
+          }
+        }}
+        onCancel={() => setUngroupConfirm(null)}
+        loading={ungrouping}
+        confirmText="Ungroup"
+        variant="secondary"
       />
 
       <AnimatePresence>
