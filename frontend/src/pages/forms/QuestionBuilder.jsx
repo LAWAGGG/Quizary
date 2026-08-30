@@ -558,7 +558,11 @@ function GroupInnerRow({ q, globalIndex, isQuiz, selected, onToggleSelect, onEdi
         e.stopPropagation()
         holdProps.onPointerDown?.(e)
       }}
-      onClick={() => { if (selectCount > 0) { holdProps.onClick(); return } onEdit(q) }}
+      onClick={(e) => {
+        e.stopPropagation()
+        if (selectCount > 0) { holdProps.onClick(e); return }
+        onEdit(q)
+      }}
       className="cursor-pointer"
     >
       <QuestionCard
@@ -586,20 +590,19 @@ function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, 
   const allSel = members.every((q) => selectedIds.includes(q.id))
   const someSel = !allSel && members.some((q) => selectedIds.includes(q.id))
   const totalPts = members.reduce((s, q) => s + (q.points || 0), 0)
-  // ponytail: hold di mobile untuk select grup (mirip single card)
+  // ponytail: hold di mobile untuk select grup — tap tidak toggle expand, hanya hold select
   const holdProps = useHoldSelect({
     selectedCount: selectCount,
     onToggle: () => onToggleGroupSelect(groupId),
-    onTap: onToggle,
   })
   return (
-    <motion.div ref={setNodeRef} style={style} {...attributes} {...holdProps} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.12 }} className="relative select-none cursor-pointer" onClick={(e) => { if (isDragging) return; holdProps.onClick(e) }}>
+    <motion.div ref={setNodeRef} style={style} {...attributes} {...holdProps} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.12 }} className="relative select-none" onClick={(e) => { if (isDragging) return; holdProps.onClick(e) }}>
       <span ref={setActivatorNodeRef} {...listeners} onPointerDown={(e) => { e.stopPropagation(); listeners?.onPointerDown?.(e) }} className="absolute left-0 top-4 w-6 h-8 hidden md:flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 dark:text-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"><GripVertical className="w-5 h-5" /></span>
       <div className="md:pl-7">
         <div className={`rounded-2xl border bg-white dark:bg-ink-900 shadow-sm overflow-hidden ${isDragging ? 'opacity-60 border-primary/40 shadow-lift' : allSel ? '!border-primary ring-2 ring-primary/20 bg-primary-50/30 dark:bg-primary-900/10' : expanded ? 'border-primary/30' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'}`}>
           {/* header */}
           <div className="flex items-center gap-2 px-3 sm:px-4 py-3 bg-primary-50/60 dark:bg-primary-900/15">
-            <button onClick={(e) => { e.stopPropagation; onToggle }} className="w-8 h-8 rounded-xl bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-primary flex items-center justify-center shrink-0 transition-colors" title={expanded ? 'Collapse' : 'Expand'}>
+            <button onClick={(e) => { e.stopPropagation(); onToggle() }} className="w-8 h-8 rounded-xl bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-primary flex items-center justify-center shrink-0 transition-colors" title={expanded ? 'Collapse' : 'Expand'}>
               <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
             </button>
             <div className="flex-1 min-w-0">
