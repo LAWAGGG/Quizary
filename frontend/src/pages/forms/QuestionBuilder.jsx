@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, TextQuote, Unlink, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
-  useSensor, useSensors, closestCorners,
+  useSensor, useSensors, closestCenter,
 } from '@dnd-kit/core'
 import {
   SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable,
@@ -157,7 +157,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         <p className="text-xs text-gray-400 dark:text-gray-500 -mt-3">{TYPE_HINTS[form.type]}</p>
       )}
 
-         {isPassword && (
+      {isPassword && (
         <div>
           <label className="field-label">Password Key</label>
           <input
@@ -380,7 +380,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   )
 }
 
-function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected, onToggleSelect, groupId, groupIndex, groupSize, moveButtons }) {
+function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected, onToggleSelect, groupId, groupIndex, _groupSize, moveButtons }) {
   return (
     <Card className={`transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? '!border-primary ring-2 ring-primary/30 bg-primary-50/40 dark:bg-primary-900/15' : 'hover:border-gray-300 dark:hover:border-gray-700'} ${groupId ? 'border-l-4 !border-l-primary/50' : ''}`}>
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -426,7 +426,7 @@ function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected,
           <span className="text-incorrect text-lg font-bold leading-none mt-0.5 shrink-0" title="Required">*</span>
         )}
       </div>
-{question.image && (isAudioUrl(question.image.path) ? (
+      {question.image && (isAudioUrl(question.image.path) ? (
         <audio controls src={question.image.path} preload="metadata" className="w-full max-w-sm mb-3" />
       ) : (
         <img src={question.image.path} alt="" className="mb-3 max-h-32 rounded-xl object-cover" />
@@ -455,8 +455,8 @@ function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected,
         </div>
       )}
       {isQuiz && !NO_GRADE_TYPES.includes(question.type) && (question.is_scored ? question.points > 0 : true) && (
-        <div className="flex justify-end mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-          <span className="text-xs text-gray-400 dark:text-gray-500">
+        <div className="flex justify-end mt-2 pt-2 border-t border-gray-300 dark:border-gray-800">
+          <span className="text-xs text-gray-500 dark:text-gray-500">
             {question.is_scored ? `${question.points} pts` : 'Not scored'}
           </span>
         </div>
@@ -466,87 +466,196 @@ function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected,
 }
 
 function SortableQuestionCard({ question, index, onEdit, onDelete, isQuiz, selected, onToggleSelect, groupId, groupIndex, groupSize, onMove, isFirst, isLast, selectCount }) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: question.id,
     data: { type: 'question', questionId: question.id },
   })
-  // ponytail: dnd-kit transform hanya aktif saat drag. Untuk mobile reorder
-  // (tombol ↑↓), kita bypass dnd-kit transform → framer-motion `layout` yang
-  // handle animasi position change. Tidak ada measurement loop karena tidak ada
-  // drag aktif.
-  const style = isDragging
-    ? { transform: CSS.Transform.toString(transform), transition: 'none' }
-    : undefined // framer layout handles non-drag reorder
-  // Mobile: tahan kartu untuk memilih (haptic); saat mode seleksi aktif, tap = toggle.
+  // ponytail: dnd-kit Translate + transition = GPU, tanpa framer layout thrash
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+  }
   const holdProps = useHoldSelect({
     selectedCount: selectCount,
     onToggle: () => onToggleSelect(question.id),
   })
-  // ponytail: `layout` hanya aktif saat TIDAK drag → framer animasi position
-  // change untuk mobile reorder. Saat drag, style dari dnd-kit yang handle.
   return (
     <motion.div
-      layout={!isDragging}
-      initial={{ opacity: 0, y: 10 }}
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...holdProps}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      transition={{ layout: { duration: 0.2, ease: 'easeOut' } }}
+      exit={{ opacity: 0, x: -12 }}
+      transition={{ duration: 0.12 }}
+      className="relative select-none cursor-pointer"
+      onClick={() => {
+        if (isDragging) return
+        if (selectCount > 0) {
+          holdProps.onClick()
+          return
+        }
+        onEdit(question)
+      }}
     >
-      <div
-        ref={setNodeRef}
-        style={style}
-        {...attributes}
-        {...holdProps}
-        className="relative select-none cursor-pointer"
-        onClick={(e) => {
-          if (isDragging) return
-          if (selectCount > 0) {
-            holdProps.onClick()
-            return
-          }
-          onEdit(question)
+      <span
+        ref={setActivatorNodeRef}
+        {...listeners}
+        onPointerDown={(e) => {
+          e.stopPropagation()
+          listeners?.onPointerDown?.(e)
         }}
+        className="absolute left-0 top-4 w-6 h-8 hidden md:flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 dark:text-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
       >
-        <span
-          {...listeners}
-          ref={setActivatorNodeRef}
-          className="absolute left-0 top-3 bottom-3 w-6 hidden md:flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 dark:text-gray-600"
-        >
-          <GripVertical className="w-5 h-5" />
-        </span>
-        <div className="md:pl-7">
-          <QuestionCard
-            question={question}
-            index={index}
-            onDelete={onDelete}
-            isDragging={isDragging}
-            isQuiz={isQuiz}
-            selected={selected}
-            onToggleSelect={onToggleSelect}
-            groupId={groupId}
-            groupIndex={groupIndex}
-            groupSize={groupSize}
-            moveButtons={onMove ? (
-              <>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onMove(index, -1) }}
-                  disabled={isFirst}
-                  aria-label="Move question up"
-                  className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all md:hidden"
-                >
-                  <ChevronUp className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onMove(index, 1) }}
-                  disabled={isLast}
-                  aria-label="Move question down"
-                  className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all md:hidden"
-                >
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-              </>
-            ) : null}
-          />
+        <GripVertical className="w-5 h-5" />
+      </span>
+      <div className="md:pl-7">
+        <QuestionCard
+          question={question}
+          index={index}
+          onDelete={onDelete}
+          isDragging={isDragging}
+          isQuiz={isQuiz}
+          selected={selected}
+          onToggleSelect={onToggleSelect}
+          groupId={groupId}
+          groupIndex={groupIndex}
+          groupSize={groupSize}
+          moveButtons={onMove ? (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); onMove(-1) }}
+                disabled={isFirst}
+                aria-label="Move question up"
+                className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all md:hidden"
+              >
+                <ChevronUp className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onMove(1) }}
+                disabled={isLast}
+                aria-label="Move question down"
+                className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center disabled:opacity-30 active:scale-95 transition-all md:hidden"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </>
+          ) : null}
+        />
+      </div>
+    </motion.div>
+  )
+}
+
+// inner card — samakan dengan QuestionCard biasa (ponytail: reuse, bukan varian baru)
+function GroupInnerRow({ q, globalIndex, isQuiz, selected, onToggleSelect, onEdit, onDelete, selectCount }) {
+  const holdProps = useHoldSelect({ selectedCount: selectCount, onToggle: () => onToggleSelect(q.id) })
+  return (
+    <div
+      {...holdProps}
+      onPointerDown={(e) => {
+        e.stopPropagation()
+        holdProps.onPointerDown?.(e)
+      }}
+      onClick={() => { if (selectCount > 0) { holdProps.onClick(); return } onEdit(q) }}
+      className="cursor-pointer"
+    >
+      <QuestionCard
+        question={q}
+        index={globalIndex}
+        onDelete={onDelete}
+        isDragging={false}
+        isQuiz={isQuiz}
+        selected={selected}
+        onToggleSelect={onToggleSelect}
+        groupId={null}
+        groupIndex={0}
+        moveButtons={null}
+      />
+    </div>
+  )
+}
+
+function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, onToggle, isQuiz, selectedIds, onToggleSelect, onToggleGroupSelect, onEdit, onDelete, onUngroup, onMove, isFirst, isLast, selectCount, idToIndex, editing, showForm, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, scoringMode }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+    id: `g-${groupId}`,
+    data: { type: 'group', groupId },
+  })
+  const style = { transform: CSS.Translate.toString(transform), transition }
+  const allSel = members.every((q) => selectedIds.includes(q.id))
+  const someSel = !allSel && members.some((q) => selectedIds.includes(q.id))
+  const totalPts = members.reduce((s, q) => s + (q.points || 0), 0)
+  // ponytail: hold di mobile untuk select grup (mirip single card)
+  const holdProps = useHoldSelect({
+    selectedCount: selectCount,
+    onToggle: () => onToggleGroupSelect(groupId),
+    onTap: onToggle,
+  })
+  return (
+    <motion.div ref={setNodeRef} style={style} {...attributes} {...holdProps} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.12 }} className="relative select-none cursor-pointer" onClick={(e) => { if (isDragging) return; holdProps.onClick(e) }}>
+      <span ref={setActivatorNodeRef} {...listeners} onPointerDown={(e) => { e.stopPropagation(); listeners?.onPointerDown?.(e) }} className="absolute left-0 top-4 w-6 h-8 hidden md:flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 dark:text-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"><GripVertical className="w-5 h-5" /></span>
+      <div className="md:pl-7">
+        <div className={`rounded-2xl border bg-white dark:bg-ink-900 shadow-sm overflow-hidden ${isDragging ? 'opacity-60 border-primary/40 shadow-lift' : allSel ? '!border-primary ring-2 ring-primary/20 bg-primary-50/30 dark:bg-primary-900/10' : expanded ? 'border-primary/30' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'}`}>
+          {/* header */}
+          <div className="flex items-center gap-2 px-3 sm:px-4 py-3 bg-primary-50/60 dark:bg-primary-900/15">
+            <button onClick={(e) => { e.stopPropagation; onToggle }} className="w-8 h-8 rounded-xl bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 hover:text-primary flex items-center justify-center shrink-0 transition-colors" title={expanded ? 'Collapse' : 'Expand'}>
+              <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+            </button>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-display font-bold text-sm text-ink dark:text-gray-100">Group {groupIndex}</span>
+                <Badge scheme="primary" className="text-[11px]">{members.length} questions</Badge>
+                {isQuiz && <span className="text-xs text-gray-500 hidden sm:inline">{totalPts} pts</span>}
+              </div>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              {onMove && (
+                <>
+                  <button onClick={(e) => { e.stopPropagation(); onMove(-1) }} disabled={isFirst} aria-label="Move group up" className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 flex items-center justify-center disabled:opacity-30 md:hidden"><ChevronUp className="w-4 h-4" /></button>
+                  <button onClick={(e) => { e.stopPropagation(); onMove(1) }} disabled={isLast} aria-label="Move group down" className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 flex items-center justify-center disabled:opacity-30 md:hidden"><ChevronDown className="w-4 h-4" /></button>
+                </>
+              )}
+              <button onClick={(e) => { e.stopPropagation(); onUngroup(groupId) }} title="Ungroup" className="w-6 h-6 rounded-xl text-gray-500 hover:text-primary hover:bg-primary-50 flex items-center justify-center transition-colors"><Unlink className="w-3.5 h-3.5" /></button>
+              <input type="checkbox" checked={allSel} ref={(el) => { if (el) el.indeterminate = someSel }} onChange={() => onToggleGroupSelect(groupId)} onClick={(e) => e.stopPropagation()} className="w-4 h-4 rounded accent-primary hidden md:block" title={allSel ? 'Deselect all' : 'Select all in group'} />
+            </div>
+          </div>
+          {/* body */}
+          <AnimatePresence initial={false}>
+            {expanded && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="overflow-hidden">
+                <div className="p-3 sm:p-4 space-y-2.5 bg-gray-50/50 dark:bg-ink-800/20 border-t border-gray-100 dark:border-gray-700">
+                  {members.map((q) => {
+                    const gIdx = idToIndex.get(q.id) ?? 0
+                    const isEdit = showForm && editing?.id === q.id
+                    if (isEdit) {
+                      return (
+                        <motion.div key={q.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="md:pl-0">
+                          <Card className="border-primary/50 shadow-card">
+                            <div className="flex items-center justify-between gap-3 mb-4">
+                              <span className="font-display font-semibold text-ink dark:text-gray-100 text-sm">Edit Soal {gIdx + 1}</span>
+                              <button onClick={onCancel} className="p-1.5 rounded-lg text-gray-400 hover:text-ink hover:bg-gray-100 dark:hover:bg-ink-800"><X className="w-4 h-4" /></button>
+                            </div>
+                            <QuestionForm initial={{ question_text: q.question_text, type: q.type, points: q.points, is_scored: q.is_scored !== false, is_required: q.is_required, section_id: q.section_id || null, password_keyword: q.password_keyword || '', image: q.image, options: q.options?.length ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct, image: o.image })) : [{ option_text: '', is_correct: false }] }} onSave={onSave} onCancel={onCancel} loading={saveLoading} isQuiz={isQuiz} errors={errors} questionId={q.id} sections={sections} sectionsAllowed={sectionsAllowed} scoringMode={scoringMode} />
+                          </Card>
+                        </motion.div>
+                      )
+                    }
+                    return <GroupInnerRow key={q.id} q={q} globalIndex={gIdx} isQuiz={isQuiz} selected={selectedIds.includes(q.id)} onToggleSelect={onToggleSelect} onEdit={onEdit} onDelete={onDelete} selectCount={selectCount} />
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          {/* collapsed preview dots */}
+          {!expanded && (
+            <div className="px-3 pt-3 sm:px-4 pb-3 flex items-center gap-1.5">
+              {members.slice(0, 6).map((q, i) => (
+                <span key={q.id} className="w-7 h-7 rounded-full bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-xs font-bold flex items-center justify-center text-ink dark:text-gray-300">{(idToIndex.get(q.id) ?? i) + 1}</span>
+              ))}
+              {members.length > 6 && <span className="text-xs text-gray-400">+{members.length - 6}</span>}
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
@@ -602,31 +711,31 @@ function QuestionItem({ q, index, onEdit, onDelete, isQuiz, selected, onToggleSe
     )
   }
 
-    return (
-      <SortableQuestionCard
-        question={q}
-        index={index}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        isQuiz={isQuiz}
-        selected={selected}
-        onToggleSelect={onToggleSelect}
-        groupId={groupId}
-        groupIndex={groupIndex}
-        groupSize={groupSize}
-        onMove={onMove}
-        isFirst={index === 0}
-        isLast={index === totalCount - 1}
-        selectCount={selectCount}
-      />
-    )
+  return (
+    <SortableQuestionCard
+      question={q}
+      index={index}
+      onEdit={onEdit}
+      onDelete={onDelete}
+      isQuiz={isQuiz}
+      selected={selected}
+      onToggleSelect={onToggleSelect}
+      groupId={groupId}
+      groupIndex={groupIndex}
+      groupSize={groupSize}
+      onMove={onMove}
+      isFirst={index === 0}
+      isLast={index === totalCount - 1}
+      selectCount={selectCount}
+    />
+  )
 }
 
 function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSave, onCancel, onDelete, collapsible, collapsed, onToggle }) {
   return (
-    <div className="flex items-center gap-2 sm:gap-3 border-b border-gray-200 dark:border-gray-800 pb-2.5">
+    <div className="rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800/50 border-l-4 border-primary -mx-3 px-3 sm:px-4 py-3 mb-3">
       {editing ? (
-        <>
+        <div className="flex items-center gap-2 sm:gap-3">
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -641,43 +750,42 @@ function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSav
           <Button size="sm" variant="ghost" onClick={onCancel} icon={<X className="w-3.5 h-3.5" />}>
             <span className="hidden sm:inline">Cancel</span>
           </Button>
-        </>
+        </div>
       ) : (
-        <>
+        <div className="flex items-center gap-2 sm:gap-3">
           {collapsible && (
             <button
               type="button"
               onClick={onToggle}
               aria-expanded={!collapsed}
               title={collapsed ? 'Show questions' : 'Hide questions'}
-              className="p-1 -ml-1 rounded-md text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors shrink-0"
+              className="p-1.5 -ml-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors shrink-0"
             >
               <ChevronDown className={`w-4 h-4 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
             </button>
           )}
-          <span className="w-1.5 h-6 rounded-full bg-primary shrink-0" />
           <h3 className="font-display font-semibold text-ink dark:text-gray-100 flex-1 truncate text-sm sm:text-base">
             {section ? section.title : 'General'}
           </h3>
-          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0 hidden sm:inline">{count} question(s)</span>
-          <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0 sm:hidden">{count}Q</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0 hidden sm:inline">{count} question{count !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0 sm:hidden">{count}Q</span>
           {section && (
-            <>
-              <button onClick={onEdit} title="Rename section" className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary p-1.5 transition-colors shrink-0">
-                <Pencil className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-1">
+              <button onClick={onEdit} title="Rename section" className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors shrink-0">
+                <Pencil className="w-4 h-4" />
               </button>
-              <button onClick={onDelete} title="Delete section" className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-incorrect p-1.5 transition-colors shrink-0">
-                <Trash2 className="w-3.5 h-3.5" />
+              <button onClick={onDelete} title="Delete section" className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-incorrect hover:bg-incorrect-soft transition-colors shrink-0">
+                <Trash2 className="w-4 h-4" />
               </button>
-            </>
+            </div>
           )}
-        </>
+        </div>
       )}
     </div>
   )
 }
 
-function SectionDropZone({ sectionId, children }) {
+function SectionDropZone({ _sectionId, children }) {
   // ponytail: tidak lagi droppable — pindah section lewat dropdown di edit soal.
   // Drag kini murni untuk reorder; drop target section menghilangkan sumber
   // loop pengukuran dnd-kit (setState di tengah drag).
@@ -725,8 +833,29 @@ export default function QuestionBuilder() {
     })
   }
   const [activeDrag, setActiveDrag] = useState(null)
+  const dragStartOrderRef = useRef(null)
+  const questionsRef = useRef(questions)
+  useEffect(() => { questionsRef.current = questions }, [questions])
+  // ponytail: rAF batch — hover switch tiap frame, tidak perlu leave-reenter
+  const pendingRef = useRef(null)
+  const rafRef = useRef(null)
+  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }, [])
   const [grouping, setGrouping] = useState(false)
   const [ungrouping, setUngrouping] = useState(false)
+  // Group expand/collapse — default compact (collapsed)
+  const [expandedGroups, setExpandedGroups] = useState(() => new Set())
+  const toggleGroup = (gid) => setExpandedGroups((prev) => {
+    const n = new Set(prev); if (n.has(gid)) n.delete(gid); else n.add(gid); return n
+  })
+  // auto-expand group saat edit anggotanya
+  useEffect(() => {
+    if (editing?.group_id) {
+      setExpandedGroups((prev) => {
+        if (prev.has(editing.group_id)) return prev
+        const n = new Set(prev); n.add(editing.group_id); return n
+      })
+    }
+  }, [editing])
 
   // Sections hanya untuk: semua quiz (style apapun), atau form + card
   const sectionsAllowed = form && (
@@ -742,6 +871,34 @@ export default function QuestionBuilder() {
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
+
+  // ponytail: map id->index O(1), ganti indexOf O(n²) tiap render saat drag
+  const idToIndex = useMemo(() => new Map(questions.map((q, i) => [q.id, i])), [questions])
+  // ponytail: block = single atau group (compact). Group jadi satu card, reorder pindah slice utuh
+  const allBlocks = useMemo(() => {
+    if (!questions.length) return []
+    const byGroup = new Map()
+    questions.forEach((q) => {
+      if (q.group_id) {
+        if (!byGroup.has(q.group_id)) byGroup.set(q.group_id, [])
+        byGroup.get(q.group_id).push(q)
+      }
+    })
+    const seen = new Set()
+    const blks = []
+    for (const q of questions) {
+      if (q.group_id) {
+        if (seen.has(q.group_id)) continue
+        seen.add(q.group_id)
+        const members = byGroup.get(q.group_id).slice().sort((a, b) => (idToIndex.get(a.id) ?? 0) - (idToIndex.get(b.id) ?? 0))
+        blks.push({ type: 'group', id: `g-${q.group_id}`, groupId: q.group_id, questions: members, sectionId: q.section_id })
+      } else {
+        blks.push({ type: 'single', id: q.id, question: q, sectionId: q.section_id })
+      }
+    }
+    return blks
+  }, [questions, idToIndex])
+  const blockIds = useMemo(() => allBlocks.map((b) => b.id), [allBlocks])
 
   const load = (silent = false) => {
     if (!silent) setLoading(true)
@@ -903,6 +1060,56 @@ export default function QuestionBuilder() {
     }
   }
 
+  const toggleGroupSelect = (groupId) => {
+    const members = questions.filter((q) => q.group_id === groupId).map((q) => q.id)
+    const all = members.every((id) => selectedIds.includes(id))
+    if (all) setSelectedIds((prev) => prev.filter((id) => !members.includes(id)))
+    else setSelectedIds((prev) => [...new Set([...prev, ...members])])
+  }
+
+  const handleUngroupGroup = async (groupId) => {
+    setUngrouping(true)
+    try {
+      await api.delete(`/forms/${formId}/questions/group/${groupId}`)
+      toast.success('Group dihapus — questions kembali terpisah')
+      setExpandedGroups((prev) => { const n = new Set(prev); n.delete(groupId); return n })
+      load()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to ungroup')
+    } finally {
+      setUngrouping(false)
+    }
+  }
+
+  const moveBlock = async (blockId, dir) => {
+    const idx = allBlocks.findIndex((b) => String(b.id) === String(blockId))
+    if (idx === -1) return
+    let to
+    if (sectionsAllowed) {
+      const secId = allBlocks[idx].sectionId
+      const secBlocks = allBlocks.filter((b) => b.sectionId === secId)
+      const pos = secBlocks.findIndex((b) => String(b.id) === String(blockId))
+      const targetPos = pos + dir
+      if (targetPos < 0 || targetPos >= secBlocks.length) return
+      const targetId = secBlocks[targetPos].id
+      to = allBlocks.findIndex((b) => String(b.id) === String(targetId))
+    } else {
+      to = idx + dir
+      if (to < 0 || to >= allBlocks.length) return
+    }
+    const nextBlocks = arrayMove(allBlocks, idx, to)
+    const nextQuestions = nextBlocks.flatMap((b) => b.type === 'group' ? b.questions : [b.question])
+    setQuestions(nextQuestions)
+    setReorderSaving(true)
+    try {
+      await api.patch('/questions/reorder', { form_id: parseInt(formId), orders: nextQuestions.map((q) => q.id) })
+    } catch {
+      load(true)
+    } finally {
+      setReorderSaving(false)
+    }
+  }
+
   const allSelected = questions.length > 0 && selectedIds.length === questions.length
 
   const toggleSelectAll = () => {
@@ -940,31 +1147,120 @@ export default function QuestionBuilder() {
     }
   }
 
+  // helper build blocks dari flat questions (dipakai di drag handlers)
+  const buildBlocks = (qs, idxMap) => {
+    if (!qs.length) return []
+    const byGroup = new Map()
+    qs.forEach((q) => {
+      if (q.group_id) {
+        if (!byGroup.has(q.group_id)) byGroup.set(q.group_id, [])
+        byGroup.get(q.group_id).push(q)
+      }
+    })
+    const seen = new Set()
+    const blks = []
+    for (const q of qs) {
+      if (q.group_id) {
+        if (seen.has(q.group_id)) continue
+        seen.add(q.group_id)
+        const members = byGroup.get(q.group_id).slice().sort((a, b) => (idxMap.get(a.id) ?? 0) - (idxMap.get(b.id) ?? 0))
+        blks.push({ type: 'group', id: `g-${q.group_id}`, groupId: q.group_id, questions: members, sectionId: q.section_id })
+      } else {
+        blks.push({ type: 'single', id: q.id, question: q, sectionId: q.section_id })
+      }
+    }
+    return blks
+  }
+
   const handleDragStart = (event) => {
     const data = event.active.data.current || {}
-    setActiveDrag({
-      type: data.type,
-      questionId: data.questionId,
-      id: event.active.id,
+    setActiveDrag({ type: data.type, groupId: data.groupId, questionId: data.questionId, id: event.active.id })
+    dragStartOrderRef.current = questions.map((q) => q.id)
+    pendingRef.current = null
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+  }
+
+  // ponytail: block-aware rAF — tiap frame 1 swap, hover di tempat yang sama tetap ke-trigger tanpa leave
+  const handleDragOver = (event) => {
+    const { active, over } = event
+    if (!over || String(active.id) === String(over.id)) return
+    const aType = active.data.current?.type
+    const oType = over.data.current?.type
+    if (!['question', 'group'].includes(aType) || !['question', 'group'].includes(oType)) return
+    pendingRef.current = { activeId: String(active.id), overId: String(over.id), aType, oType }
+    if (rafRef.current) return
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null
+      const p = pendingRef.current
+      pendingRef.current = null
+      if (!p) return
+      setQuestions((prev) => {
+        const idxMap = new Map(prev.map((q, i) => [q.id, i]))
+        const blks = buildBlocks(prev, idxMap)
+        const from = blks.findIndex((b) => String(b.id) === p.activeId)
+        const to = blks.findIndex((b) => String(b.id) === p.overId)
+        if (from === -1 || to === -1 || from === to) return prev
+        if (sectionsAllowed && blks[from].sectionId !== blks[to].sectionId) return prev
+        const nextBlks = arrayMove(blks, from, to)
+        return nextBlks.flatMap((b) => b.type === 'group' ? b.questions : [b.question])
+      })
+    })
+  }
+
+  const restoreOrder = () => {
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+    pendingRef.current = null
+    const snap = dragStartOrderRef.current
+    dragStartOrderRef.current = null
+    if (!snap) return
+    setQuestions((prev) => {
+      if (prev.length !== snap.length) return prev
+      const byId = new Map(prev.map((q) => [q.id, q]))
+      const restored = snap.map((id) => byId.get(id)).filter(Boolean)
+      return restored.length === prev.length ? restored : prev
     })
   }
 
   const handleDragEnd = async (event) => {
-    const { active, over } = event
+    const { over } = event
     setActiveDrag(null)
-    if (!over) return
-
-    // Hanya reorder antar soal. Pindah section lewat dropdown di edit soal —
-    // tidak ada setState di tengah drag = loop pengukuran dnd-kit mustahil.
-    if (active.data.current?.type !== 'question' || over.data.current?.type !== 'question') return
-    const from = questions.findIndex((q) => q.id === active.id)
-    const to = questions.findIndex((q) => q.id === over.id)
-    if (from === -1 || to === -1 || from === to) return
-    const next = arrayMove(questions, from, to)
-    setQuestions(next)
+    // flush pending hover biar drop di posisi terakhir tetap ke-apply
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+    if (pendingRef.current) {
+      const p = pendingRef.current
+      pendingRef.current = null
+      // apply pending swap synchronously sebelum persist
+      setQuestions((prev) => {
+        const idxMap = new Map(prev.map((q, i) => [q.id, i]))
+        const blks = buildBlocks(prev, idxMap)
+        const from = blks.findIndex((b) => String(b.id) === p.activeId)
+        const to = blks.findIndex((b) => String(b.id) === p.overId)
+        if (from === -1 || to === -1 || from === to) return prev
+        if (sectionsAllowed && blks[from].sectionId !== blks[to].sectionId) return prev
+        const nextBlks = arrayMove(blks, from, to)
+        return nextBlks.flatMap((b) => b.type === 'group' ? b.questions : [b.question])
+      })
+      // tunggu state commit sebelum baca questionsRef — pakai timeout 0
+      await new Promise((r) => setTimeout(r, 0))
+    }
+    const before = dragStartOrderRef.current
+    dragStartOrderRef.current = null
+    pendingRef.current = null
+    if (!over) {
+      if (before) {
+        setQuestions((prev) => {
+          const byId = new Map(prev.map((q) => [q.id, q]))
+          const restored = before.map((id) => byId.get(id)).filter(Boolean)
+          return restored.length === prev.length ? restored : prev
+        })
+      }
+      return
+    }
+    const ids = questionsRef.current.map((q) => q.id)
+    if (before && JSON.stringify(ids) === JSON.stringify(before)) return
     setReorderSaving(true)
     try {
-      await api.patch('/questions/reorder', { form_id: parseInt(formId), orders: next.map((q) => q.id) })
+      await api.patch('/questions/reorder', { form_id: parseInt(formId), orders: ids })
     } catch {
       load(true)
     } finally {
@@ -972,22 +1268,19 @@ export default function QuestionBuilder() {
     }
   }
 
-  const handleDragCancel = () => setActiveDrag(null)
+  const handleDragCancel = () => {
+    setActiveDrag(null)
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+    pendingRef.current = null
+    restoreOrder()
+  }
 
-  // Pindah soal via tombol panah (andalan di mobile — drag sentuh sering bentrok scroll).
-  const moveQuestion = async (index, dir) => {
-    const to = index + dir
-    if (to < 0 || to >= questions.length) return
-    const next = arrayMove(questions, index, to)
-    setQuestions(next)
-    setReorderSaving(true)
-    try {
-      await api.patch('/questions/reorder', { form_id: parseInt(formId), orders: next.map((q) => q.id) })
-    } catch {
-      load(true)
-    } finally {
-      setReorderSaving(false)
-    }
+  // ponytail: legacy moveQuestion tetap ada untuk kompatibilitas
+  const _moveQuestion = async (index, dir) => {
+    const q = questions[index]
+    if (!q) return
+    const blockId = q.group_id ? `g-${q.group_id}` : q.id
+    return moveBlock(blockId, dir)
   }
 
   const handleDocxImport = async (e) => {
@@ -1251,23 +1544,24 @@ export default function QuestionBuilder() {
           )}
           <DndContext
             sensors={sensors}
-            collisionDetection={closestCorners}
+            collisionDetection={closestCenter}
             onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
             onDragCancel={handleDragCancel}
           >
-            <SortableContext items={questions.map((q) => q.id)} strategy={verticalListSortingStrategy}>
+            <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
               <div className="space-y-8 mt-6">
                 {sectionsAllowed ? (
                   <>
                     {sections.map((sec) => {
-                      const secQs = questions.filter((q) => q.section_id === sec.id)
+                      const secBlocks = allBlocks.filter((b) => b.sectionId === sec.id)
                       const collapsed = collapsedSections.has(sec.id)
                       return (
                         <SectionDropZone key={sec.id} sectionId={sec.id}>
                           <SectionHeader
                             section={sec}
-                            count={secQs.length}
+                            count={questions.filter((q) => q.section_id === sec.id).length}
                             editing={editingSectionId === sec.id}
                             draft={sectionTitleDraft}
                             setDraft={setSectionTitleDraft}
@@ -1279,33 +1573,72 @@ export default function QuestionBuilder() {
                             collapsed={collapsed}
                             onToggle={() => toggleSectionCollapse(sec.id)}
                           />
-                          {!collapsed && (secQs.length ? (
+                          {!collapsed && (secBlocks.length ? (
                             <div className="space-y-3 mt-3">
-                              {secQs.map((q) => (
-                                <QuestionItem
-                                  key={q.id}
-                                  q={q}
-                                  index={questions.indexOf(q)}
-                                  onEdit={editQuestion}
-                                  onDelete={confirmDeleteSingle}
-                                  isQuiz={form.type === 'quiz'}
-                                  selected={selectedIds.includes(q.id)}
-                                  onToggleSelect={toggleSelect}
-                                  editOpen={showForm && editing?.id === q.id}
-                                  onSave={(data) => handleSaveQuestion(data)}
-                                  onCancel={() => { setShowForm(false); setEditing(null) }}
-                                  saveLoading={saveLoading}
-                                  errors={fieldErrors}
-                                  sections={sections}
-                                  groupId={q.group_id || null}
-                                  groupIndex={q.group_id ? (groupIndexMap[q.group_id] || 0) : 0}
-                                  groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
-                                  onMove={moveQuestion}
-                                  totalCount={questions.length}
-                                  selectCount={selectedIds.length}
-                                  scoringMode={scoringMode}
-                                />
-                              ))}
+                              {secBlocks.map((blk, blkIdx) => {
+                                const isFirst = blkIdx === 0
+                                const isLast = blkIdx === secBlocks.length - 1
+                                if (blk.type === 'group') {
+                                  const gid = blk.groupId
+                                  return (
+                                    <SortableGroupCard
+                                      key={blk.id}
+                                      groupId={gid}
+                                      questions={blk.questions}
+                                      groupIndex={groupIndexMap[gid] || 0}
+                                      expanded={expandedGroups.has(gid)}
+                                      onToggle={() => toggleGroup(gid)}
+                                      isQuiz={form.type === 'quiz'}
+                                      selectedIds={selectedIds}
+                                      onToggleSelect={toggleSelect}
+                                      onToggleGroupSelect={toggleGroupSelect}
+                                      onEdit={editQuestion}
+                                      onDelete={confirmDeleteSingle}
+                                      onUngroup={handleUngroupGroup}
+                                      onMove={(dir) => moveBlock(blk.id, dir)}
+                                      isFirst={isFirst}
+                                      isLast={isLast}
+                                      selectCount={selectedIds.length}
+                                      idToIndex={idToIndex}
+                                      editing={editing}
+                                      showForm={showForm}
+                                      onSave={(data) => handleSaveQuestion(data)}
+                                      onCancel={() => { setShowForm(false); setEditing(null) }}
+                                      saveLoading={saveLoading}
+                                      errors={fieldErrors}
+                                      sections={sections}
+                                      sectionsAllowed={sectionsAllowed}
+                                      scoringMode={scoringMode}
+                                    />
+                                  )
+                                }
+                                const q = blk.question
+                                return (
+                                  <QuestionItem
+                                    key={q.id}
+                                    q={q}
+                                    index={idToIndex.get(q.id) ?? 0}
+                                    onEdit={editQuestion}
+                                    onDelete={confirmDeleteSingle}
+                                    isQuiz={form.type === 'quiz'}
+                                    selected={selectedIds.includes(q.id)}
+                                    onToggleSelect={toggleSelect}
+                                    editOpen={showForm && editing?.id === q.id}
+                                    onSave={(data) => handleSaveQuestion(data)}
+                                    onCancel={() => { setShowForm(false); setEditing(null) }}
+                                    saveLoading={saveLoading}
+                                    errors={fieldErrors}
+                                    sections={sections}
+                                    groupId={null}
+                                    groupIndex={0}
+                                    groupSize={0}
+                                    onMove={(dir) => moveBlock(blk.id, dir)}
+                                    totalCount={questions.length}
+                                    selectCount={selectedIds.length}
+                                    scoringMode={scoringMode}
+                                  />
+                                )
+                              })}
                             </div>
                           ) : (
                             <p className="mt-3 text-xs text-gray-400 dark:text-gray-500 italic">
@@ -1317,54 +1650,103 @@ export default function QuestionBuilder() {
                     })}
                   </>
                 ) : (
-                  questions.map((q) => (
-                               <QuestionItem
-                                key={q.id}
-                                q={q}
-                                index={questions.indexOf(q)}
-                                onEdit={editQuestion}
-                                onDelete={confirmDeleteSingle}
-                                isQuiz={form.type === 'quiz'}
-                                selected={selectedIds.includes(q.id)}
-                                onToggleSelect={toggleSelect}
-                                editOpen={showForm && editing?.id === q.id}
-                                onSave={(data) => handleSaveQuestion(data)}
-                                onCancel={() => { setShowForm(false); setEditing(null) }}
-                                saveLoading={saveLoading}
-                                 errors={fieldErrors}
-                                 sections={sections}
-                                  sectionsAllowed={sectionsAllowed}
-                                  groupId={q.group_id || null}
-                                  groupIndex={q.group_id ? (groupIndexMap[q.group_id] || 0) : 0}
-                                  groupSize={q.group_id ? (groupCounts[q.group_id] || 0) : 0}
-                                 onMove={moveQuestion}
-                                 totalCount={questions.length}
-                                 selectCount={selectedIds.length}
-                                 scoringMode={scoringMode}
-                               />
-                   ))
-                 )}
+                  <div className="space-y-3">
+                    {allBlocks.map((blk, blkIdx) => {
+                      const isFirst = blkIdx === 0
+                      const isLast = blkIdx === allBlocks.length - 1
+                      if (blk.type === 'group') {
+                        const gid = blk.groupId
+                        return (
+                          <SortableGroupCard
+                            key={blk.id}
+                            groupId={gid}
+                            questions={blk.questions}
+                            groupIndex={groupIndexMap[gid] || 0}
+                            expanded={expandedGroups.has(gid)}
+                            onToggle={() => toggleGroup(gid)}
+                            isQuiz={form.type === 'quiz'}
+                            selectedIds={selectedIds}
+                            onToggleSelect={toggleSelect}
+                            onToggleGroupSelect={toggleGroupSelect}
+                            onEdit={editQuestion}
+                            onDelete={confirmDeleteSingle}
+                            onUngroup={handleUngroupGroup}
+                            onMove={(dir) => moveBlock(blk.id, dir)}
+                            isFirst={isFirst}
+                            isLast={isLast}
+                            selectCount={selectedIds.length}
+                            idToIndex={idToIndex}
+                            editing={editing}
+                            showForm={showForm}
+                            onSave={(data) => handleSaveQuestion(data)}
+                            onCancel={() => { setShowForm(false); setEditing(null) }}
+                            saveLoading={saveLoading}
+                            errors={fieldErrors}
+                            sections={sections}
+                            sectionsAllowed={sectionsAllowed}
+                            scoringMode={scoringMode}
+                          />
+                        )
+                      }
+                      const q = blk.question
+                      return (
+                        <QuestionItem
+                          key={q.id}
+                          q={q}
+                          index={idToIndex.get(q.id) ?? 0}
+                          onEdit={editQuestion}
+                          onDelete={confirmDeleteSingle}
+                          isQuiz={form.type === 'quiz'}
+                          selected={selectedIds.includes(q.id)}
+                          onToggleSelect={toggleSelect}
+                          editOpen={showForm && editing?.id === q.id}
+                          onSave={(data) => handleSaveQuestion(data)}
+                          onCancel={() => { setShowForm(false); setEditing(null) }}
+                          saveLoading={saveLoading}
+                          errors={fieldErrors}
+                          sections={sections}
+                          sectionsAllowed={sectionsAllowed}
+                          groupId={null}
+                          groupIndex={0}
+                          groupSize={0}
+                          onMove={(dir) => moveBlock(blk.id, dir)}
+                          totalCount={questions.length}
+                          selectCount={selectedIds.length}
+                          scoringMode={scoringMode}
+                        />
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </SortableContext>
-            <DragOverlay dropAnimation={{ duration: 200, easing: 'ease-out' }}>
+            <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
+              {activeDrag?.type === 'group' && (() => {
+                const blk = allBlocks.find((b) => String(b.id) === String(activeDrag.id))
+                if (!blk || blk.type !== 'group') return null
+                return (
+                  <Card className="shadow-lift border-primary/40 bg-white dark:bg-ink-900 w-[640px] max-w-[90vw] opacity-95">
+                    <div className="flex items-center gap-3">
+                      <span className="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center shrink-0"><ChevronDown className="w-4 h-4 text-gray-500" /></span>
+                      <span className="font-display font-bold text-sm shrink-0">Group {groupIndexMap[blk.groupId] || 0}</span>
+                      <Badge scheme="primary" className="shrink-0">{blk.questions.length} questions</Badge>
+                      <span className="text-sm text-gray-600 dark:text-gray-400 truncate flex-1">{(blk.questions[0]?.question_text || '').replace(/<[^>]*>/g, '').trim().slice(0, 60)}</span>
+                    </div>
+                  </Card>
+                )
+              })()}
               {activeDrag?.type === 'question' && (() => {
                 const q = questions.find((qq) => qq.id === activeDrag.id)
                 return q ? (
-                  <motion.div
-                    initial={{ scale: 1.02, opacity: 0.9 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    <Card className="shadow-lift border-primary/40">
-                      <div className="flex items-center gap-3">
-                        <span className="text-primary"><GripVertical className="w-5 h-5" /></span>
-                        <Badge scheme="gray">{TYPE_LABELS[q.type]}</Badge>
-                        <span className="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[240px]">
-                          {(q.question_text || '').replace(/<[^>]*>/g, '').trim()}
-                        </span>
-                      </div>
-                    </Card>
-                  </motion.div>
+                  <Card className="shadow-lift border-primary/40 bg-white dark:bg-ink-900 w-[640px] max-w-[90vw] opacity-95">
+                    <div className="flex items-center gap-3">
+                      <GripVertical className="w-5 h-5 text-primary shrink-0" />
+                      <Badge scheme="gray" className="shrink-0">{TYPE_LABELS[q.type]}</Badge>
+                      <span className="text-sm text-gray-600 dark:text-gray-400 truncate flex-1">
+                        {(q.question_text || '').replace(/<[^>]*>/g, '').trim().slice(0, 80)}
+                      </span>
+                    </div>
+                  </Card>
                 ) : null
               })()}
             </DragOverlay>

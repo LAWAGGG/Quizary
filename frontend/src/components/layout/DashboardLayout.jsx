@@ -148,26 +148,30 @@ export default function DashboardLayout() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  // Scroll-to-hide navbar (mobile only) — immediate, no debounce
+  // Scroll-to-hide navbar (mobile only) — hysteresis prevents feedback loop
   useEffect(() => {
     const el = mainRef.current
     if (!el) return
     let lastY = 0
+    let lockY = 0 // scroll position at last toggle — blocks reverse toggle within 50px
     let ticking = false
+    const LOCK = 50
     function onScroll() {
       if (ticking) return
       ticking = true
       requestAnimationFrame(() => {
         const y = el.scrollTop
-        const delta = y - lastY
-        const scrollable = el.scrollHeight - el.clientHeight
-        // At top → always show
+        const dy = y - lastY
+        // At top → always show, reset
         if (y <= 5) {
           setNavHidden(false)
-        } else if (scrollable > 80 && delta > 8) {
+          lockY = 0
+        } else if (y - lockY > LOCK && dy > 5) {
           setNavHidden(true)
-        } else if (delta < -8) {
+          lockY = y
+        } else if (lockY - y > LOCK && dy < -5) {
           setNavHidden(false)
+          lockY = y
         }
         lastY = y
         ticking = false
@@ -217,7 +221,16 @@ export default function DashboardLayout() {
               </div>
 
               <div className="flex items-center gap-1 ml-auto">
-                <div className="relative" ref={dropdownRef}>
+               
+                <button
+                  onClick={toggleTheme}
+                  className="p-2.5 rounded-xl text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+                  aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                  title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+                >
+                  {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                </button>
+                 <div className="relative" ref={dropdownRef}>
                   <button
                     onClick={() => setDropdownOpen(!dropdownOpen)}
                     className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
@@ -268,14 +281,6 @@ export default function DashboardLayout() {
                     )}
                   </AnimatePresence>
                 </div>
-                <button
-                  onClick={toggleTheme}
-                  className="p-2.5 rounded-xl text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
-                  aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                  title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
-                >
-                  {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                </button>
               </div>
             </div>
           </div>
