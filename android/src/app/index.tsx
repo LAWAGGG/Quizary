@@ -3,8 +3,12 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityInd
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { apiLogin, saveToken } from '../services/api_service';
+import { useAppTheme } from '../context/ThemeContext'; 
+import { ThemeToggleBtn } from '../components/ThemeToggleBtn';
 
 export default function LoginScreen() {
+  const { colors } = useAppTheme();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -32,35 +36,37 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Logo */}
+    <View style={[styles.container, { backgroundColor: colors.bg }]}>
+      <View style={styles.topBar}>
+        <ThemeToggleBtn />
+      </View>
+      
       <View style={styles.header}>
-        <View style={styles.logoBox}>
+        <View style={[styles.logoBox, { backgroundColor: colors.primary, shadowColor: colors.primary }]}>
           <Text style={styles.logoText}>Q</Text>
         </View>
-        <Text style={styles.title}>Quizary</Text>
-        <Text style={styles.subtitle}>Platform Ujian & Kuis Modern</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Quizary</Text>
+        <Text style={[styles.subtitle, { color: colors.textSub }]}>Platform Ujian & Kuis Modern</Text>
       </View>
 
-      {/* Form */}
       <View style={styles.form}>
-        <Text style={styles.label}>Email</Text>
+        <Text style={[styles.label, { color: colors.text }]}>Email</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.cardBg, color: colors.text, borderColor: colors.cardBorder }]}
           placeholder="email@contoh.com"
-          placeholderTextColor="#475569"
+          placeholderTextColor={colors.textMuted}
           keyboardType="email-address"
           autoCapitalize="none"
           value={email}
           onChangeText={setEmail}
         />
 
-        <Text style={styles.label}>Password</Text>
-        <View style={styles.passwordContainer}>
+        <Text style={[styles.label, { color: colors.text }]}>Password</Text>
+        <View style={[styles.passwordContainer, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
           <TextInput
-            style={styles.passwordInput}
+            style={[styles.passwordInput, { color: colors.text }]}
             placeholder="••••••••"
-            placeholderTextColor="#475569"
+            placeholderTextColor={colors.textMuted}
             secureTextEntry={!showPassword}
             value={password}
             onChangeText={setPassword}
@@ -73,13 +79,13 @@ export default function LoginScreen() {
             <Ionicons
               name={showPassword ? 'eye-outline' : 'eye-off-outline'}
               size={20}
-              color="#94A3B8"
+              color={colors.textMuted}
             />
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity
-          style={[styles.loginBtn, loading && styles.loginBtnDisabled]}
+          style={[styles.loginBtn, { backgroundColor: colors.primary }, loading && styles.loginBtnDisabled]}
           onPress={handleLogin}
           disabled={loading}
           activeOpacity={0.85}
@@ -92,9 +98,9 @@ export default function LoginScreen() {
         </TouchableOpacity>
 
         <View style={styles.registerContainer}>
-          <Text style={styles.registerText}>Belum punya akun? </Text>
+          <Text style={[styles.registerText, { color: colors.textSub }]}>Belum punya akun? </Text>
           <TouchableOpacity onPress={() => router.push('/register')}>
-            <Text style={styles.registerLink}>Daftar</Text>
+            <Text style={[styles.registerLink, { color: colors.primary }]}>Daftar</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -103,50 +109,53 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0F172A', padding: 24, justifyContent: 'center' },
+  container: { flex: 1, padding: 24, justifyContent: 'center' },
+  topBar: {
+    position: 'absolute',
+    top: 50,
+    right: 24,
+    zIndex: 10,
+  },
   header: { alignItems: 'center', marginBottom: 36 },
   logoBox: {
     width: 86, height: 86, borderRadius: 22,
-    backgroundColor: '#6C5CE7', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-    shadowColor: '#6C5CE7', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12,
     elevation: 8,
   },
   logoText: { fontSize: 44, fontWeight: 'bold', color: '#FFF' },
-  title: { color: '#FFF', fontSize: 30, fontWeight: 'bold', marginBottom: 4 },
-  subtitle: { color: '#94A3B8', fontSize: 14 },
+  title: { fontSize: 30, fontWeight: 'bold', marginBottom: 4 },
+  subtitle: { fontSize: 14 },
   form: { gap: 8 },
-  label: { color: '#CBD5E1', fontSize: 13, fontWeight: '600', marginTop: 8 },
+  label: { fontSize: 13, fontWeight: '600', marginTop: 8 },
   input: {
-    backgroundColor: '#1E293B', color: '#FFF', padding: 14,
-    borderRadius: 10, fontSize: 15, borderWidth: 1, borderColor: '#334155',
+    padding: 14,
+    borderRadius: 10,
+    fontSize: 15,
+    borderWidth: 1,
   },
   passwordContainer: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#1E293B', borderRadius: 10,
-    borderWidth: 1, borderColor: '#334155',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
   },
   passwordInput: {
-    flex: 1, color: '#FFF', padding: 14, fontSize: 15,
+    flex: 1,
+    padding: 14,
+    fontSize: 15,
   },
   eyeBtn: {
     paddingHorizontal: 14, paddingVertical: 14,
     justifyContent: 'center', alignItems: 'center',
   },
   loginBtn: {
-    backgroundColor: '#6C5CE7', padding: 16, borderRadius: 12,
+    padding: 16, borderRadius: 12,
     alignItems: 'center', marginTop: 12,
   },
   loginBtnDisabled: { opacity: 0.6 },
   loginBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, gap: 10 },
-  line: { flex: 1, height: 1, backgroundColor: '#1E293B' },
-  orText: { color: '#64748B', fontSize: 13 },
-  guestBtn: {
-    borderWidth: 2, borderColor: '#6C5CE7', padding: 14,
-    borderRadius: 12, alignItems: 'center',
-  },
-  guestBtnText: { color: '#6C5CE7', fontWeight: 'bold', fontSize: 15 },
   registerContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
-  registerText: { color: '#64748B' },
-  registerLink: { color: '#6C5CE7', fontWeight: 'bold' },
+  registerText: {},
+  registerLink: { fontWeight: 'bold' },
 });
