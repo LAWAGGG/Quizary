@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle, Info, ZoomIn, ZoomOut, X, Lock, FileUp } from 'lucide-react'
+import { Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle, Info, ZoomIn, ZoomOut, X, Lock, FileUp, RefreshCw } from 'lucide-react'
 import { Button, Input, Textarea, Card, Select, FallbackPage, QuestionMap, ConfirmSubmitModal, RichText } from '../../components/ui'
 import { useAutosave, loadDraft, clearDraft } from '../../hooks/useAutosave'
 import { useTheme } from '../../hooks/useTheme'
@@ -68,6 +68,10 @@ export default function AnswerQuiz() {
 
   const [data, setData] = useState(null)
   const [publicForm, setPublicForm] = useState(null)
+  // ponytail: live form attrs vs stale URL — design/type/title update after soft refresh
+  const effectiveType = publicForm?.type ?? formType
+  const effectiveStyle = publicForm?.display_style ?? displayStyle
+  const effectiveTitle = publicForm?.title ?? formTitle
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [submitError, setSubmitError] = useState(null)   // inline error, tidak redirect ke FallbackPage
@@ -89,6 +93,7 @@ export default function AnswerQuiz() {
   const [showInfo, setShowInfo] = useState(false)
   const [zoomTarget, setZoomTarget] = useState(null)   // { question, options } yang dibuka modal zoom
   const [zoomScale, setZoomScale] = useState(1)
+  const [refreshing, setRefreshing] = useState(false)
 
   const timerRef = useRef(null)
   const questionRefs = useRef({})   // { [qId]: HTMLElement } untuk scroll ke soal bermasalah
@@ -99,8 +104,8 @@ export default function AnswerQuiz() {
     // Keluar dari fullscreen saat selesai (semua jalur: submit, timeout, cheating).
     const ex = document.exitFullscreen || document.webkitExitFullscreen
     if (ex) Promise.resolve(ex.call(document)).catch(() => { })
-    navigate(`/s/${submissionId}/result?type=${formType}&style=${displayStyle}&title=${encodeURIComponent(formTitle)}&code=${formCode}`, { replace: true })
-  }, [submissionId, navigate, formType, displayStyle, formTitle, formCode])
+    navigate(`/s/${submissionId}/result?type=${effectiveType}&style=${effectiveStyle}&title=${encodeURIComponent(effectiveTitle)}&code=${formCode}`, { replace: true })
+  }, [submissionId, navigate, effectiveType, effectiveStyle, effectiveTitle, formCode])
 
   const onExpired = useCallback(() => {
     setTimeLeft(0)
@@ -235,6 +240,64 @@ export default function AnswerQuiz() {
       .catch(() => { })
   }, [formCode])
 
+  // ponytail: soft refresh — fetch ulang design/setting/question tanpa keluar fullscreen
+  // window.location.reload() memicu exit fullscreen + kioskLocked + reportTabExit (cheating).
+  // Soft fetch hanya update data/publicForm, jawaban lokal (answers/fileAnswers) tetap dipertahankan.
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      const tasks = [api.get(`/submissions/${submissionId}`, { headers: sessionTokenHeaders(submissionId) })]
+      if (formCode) tasks.push(api.get(`/q/${formCode}`).catch(() => null))
+      const results = await Promise.allSettled(tasks)
+      const sub = results[0]
+      if (sub?.status === 'fulfilled' && sub.value?.data) {
+        const d = sub.value.data
+        if (d.status === 'submitted' || d.status === 'auto_submitted' || d.status === 'cheating') {
+          goToResult()
+          return
+        }
+        setLockedInfo(d.status === 'locked' ? { reason: d.cheat_reason || '' } : null)
+        setData((prev) => {
+          if (!prev) return prev
+          return { ...prev, questions: d.questions, sections: d.sections, expired_at: d.expired_at }
+        })
+        // clamp currentIdx jika soal/section berkurang — pakai display_style terbaru dari publicForm
+        const newQuestions = d.questions || []
+        const newSections = d.sections || []
+        const freshStyle = results[1]?.status === 'fulfilled' && results[1].value?.data?.display_style
+          ? results[1].value.data.display_style
+          : effectiveStyle
+        const isOneByOneNow = freshStyle === 'quiz'
+        if (isOneByOneNow) {
+          setCurrentIdx((i) => Math.min(i, Math.max(0, newQuestions.length - 1)))
+        } else {
+          const ordered = []
+          const seen = new Set()
+          newSections.forEach((s) => {
+            newQuestions.filter((q) => q.section_id === s.id && !seen.has(q.id)).forEach((q) => { ordered.push(q); seen.add(q.id) })
+          })
+          newQuestions.filter((q) => !seen.has(q.id)).forEach((q) => { ordered.push(q); seen.add(q.id) })
+          const pages = []
+          ordered.forEach((q) => {
+            const last = pages[pages.length - 1]
+            if (last && last.key === (q.section_id ?? 'none')) last.questions.push(q)
+            else pages.push({ key: q.section_id ?? 'none', questions: [q] })
+          })
+          const maxIdx = Math.max(0, (pages.length || 1) - 1)
+          setCurrentIdx((i) => Math.min(i, maxIdx))
+        }
+      }
+      if (formCode && results[1]?.status === 'fulfilled' && results[1].value?.data) {
+        setPublicForm(results[1].value.data)
+      }
+    } catch {
+      /* soft refresh gagal — biarkan sesi tetap jalan, polling 10d akan coba lagi */
+    } finally {
+      setRefreshing(false)
+    }
+  }, [refreshing, submissionId, formCode, goToResult, effectiveStyle])
+
   const handleAutoSubmit = useCallback(async () => {
     // Auto-submit karena waktu habis: server bisa saja sudah meng-auto-submit
     // sesi lewat sweep/autosave (410/409) — itu sukses, jawaban sudah aman.
@@ -283,14 +346,14 @@ export default function AnswerQuiz() {
 
     return () => clearInterval(timerRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.id, formType, data?.expired_at, handleAutoSubmit])
+  }, [data?.id, effectiveType, data?.expired_at, handleAutoSubmit])
 
   useEffect(() => {
     return () => clearTimers()
   }, [clearTimers])
 
   useEffect(() => {
-    if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data) return
     // Kiosk mode — PIN halaman ke fullscreen. requestFullscreen butuh user gesture,
     // jadi dipicu otomatis pada interaksi pertama. Saat fullscreen keluar / fokus
     // hilang, kunci penyembunyian muncul (tuple di bawah) sampai responden kembali.
@@ -312,7 +375,7 @@ export default function AnswerQuiz() {
       document.removeEventListener('pointerdown', onFirst)
       document.removeEventListener('keydown', onFirst)
     }
-  }, [formType, publicForm?.is_restricted, data])
+  }, [effectiveType, publicForm?.is_restricted, data])
 
   // Keyboard virtual (restricted): lacak tinggi keyboard via visualViewport.
   // Dipakai untuk (1) menyesuaikan tinggi layout supaya input tetap terlihat,
@@ -321,7 +384,7 @@ export default function AnswerQuiz() {
   const [kbInset, setKbInset] = useState(0)
   const kbInsetRef = useRef(0)
   useEffect(() => {
-    if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data) return
     const vv = window.visualViewport
     if (!vv) return
     const onVV = () => {
@@ -337,7 +400,7 @@ export default function AnswerQuiz() {
       vv.removeEventListener('resize', onVV)
       vv.removeEventListener('scroll', onVV)
     }
-  }, [formType, publicForm?.is_restricted, data])
+  }, [effectiveType, publicForm?.is_restricted, data])
 
   // Kiosk lock: kunci penuh — sembunyikan seluruh konten saat responden keluar
   // dari fullscreen / kehilangan fokus / pindah tab. Mencoba interaksi apa pun di
@@ -347,7 +410,7 @@ export default function AnswerQuiz() {
   const [fsAvailable, setFsAvailable] = useState(false)
   const kioskTimer = useRef(null)
   useEffect(() => {
-    if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data) return
     const inFullscreen = () => document.fullscreenElement || document.webkitFullscreenElement
     const lock = () => {
       clearTimeout(kioskTimer.current)
@@ -383,7 +446,7 @@ export default function AnswerQuiz() {
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('focus', onFocus)
     }
-  }, [formType, publicForm?.is_restricted, data, fsAvailable])
+  }, [effectiveType, publicForm?.is_restricted, data, fsAvailable])
 
   // Fullscreen anti-cheat (is_restricted quiz). Detects and reports every
   // cheating vector — tab/app switched, fullscreen exited, split-screen,
@@ -391,7 +454,7 @@ export default function AnswerQuiz() {
   // Debounced so the simultaneous blur + visibilitychange + resize burst that
   // fires on a single "leave" isn't double-counted as multiple violations.
   useEffect(() => {
-    if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data) return
     let lastAt = 0
     const MIN_GAP = 1200
     const report = (reason) => {
@@ -475,7 +538,7 @@ export default function AnswerQuiz() {
       clearTimeout(shrinkTimer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formType, publicForm?.is_restricted, data, reportTabExit])
+  }, [effectiveType, publicForm?.is_restricted, data, reportTabExit])
 
   // Auto-dismiss the cheat warning banner after a few seconds.
   useEffect(() => {
@@ -486,7 +549,7 @@ export default function AnswerQuiz() {
 
   // Keyboard navigation (quiz mode): 1-4 pilih opsi, ←/→ ganti soal, Enter next/submit
   useEffect(() => {
-    if (formType !== 'quiz' || !data) return
+    if (effectiveType !== 'quiz' || !data) return
     const qs = data.questions || []
     const cur = qs[currentIdx]
     if (!cur || showConfirm || showMap) return
@@ -511,7 +574,7 @@ export default function AnswerQuiz() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formType, data, currentIdx, answers, showConfirm, showMap, reviewed])
+  }, [effectiveType, data, currentIdx, answers, showConfirm, showMap, reviewed])
 
   const handleSelect = (qId, optId) => {
     const question = data.questions.find((q) => q.id === qId)
@@ -747,8 +810,8 @@ export default function AnswerQuiz() {
 
   if (!data) return null
 
-  const isQuizStyle = displayStyle === 'quiz'
-  const isOneByOne = displayStyle === 'quiz'
+  const isQuizStyle = effectiveStyle === 'quiz'
+  const isOneByOne = effectiveStyle === 'quiz'
   const palette = themePalette(publicForm?.theme_color, theme === 'dark')
   const isOwnerPreview = publicForm?.is_owner === true && publicForm?.status !== 'published'
   const sectionsById = Object.fromEntries((data.sections || []).map((s) => [s.id, s.title]))
@@ -851,7 +914,7 @@ export default function AnswerQuiz() {
               >
                 <Info className="w-4 h-4" />
               </button>
-              <span className="text-sm font-semibold text-white truncate"><RichText html={formTitle} className="rich-text" /></span>
+              <span className="text-sm font-semibold text-white truncate"><RichText html={effectiveTitle} className="rich-text" /></span>
             </div>
             <div className="flex items-center gap-2">
               {current && (
@@ -1133,6 +1196,18 @@ export default function AnswerQuiz() {
                 <ChevronRight className="w-4 h-4" />
               </Button>
             )}
+            {publicForm?.is_restricted && (
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                aria-label="Refresh"
+                title="Refresh"
+                className="w-[52px] h-[45px] shrink-0 inline-flex items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-ink-800 active:scale-[0.98] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+            )}
           </div>
         </footer>
 
@@ -1192,7 +1267,7 @@ export default function AnswerQuiz() {
           <img src={bannerPath} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
         <div className="flex items-center justify-between gap-3 mb-6">
-          <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={formTitle} className="rich-text" /></h1>
+          <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={effectiveTitle} className="rich-text" /></h1>
           <div className="flex items-center gap-2 shrink-0">
             {timeLeft !== null && (
               <span className={`inline-flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums px-2.5 h-8 rounded-lg transition-colors ${timeLeft < 30000
@@ -1424,7 +1499,7 @@ export default function AnswerQuiz() {
           )}
           <div className="flex gap-3">
             {currentIdx > 0 && (
-              <Button variant="secondary" onClick={handlePrev} className="flex-1" icon={<ChevronLeft className="w-4 h-4" />}>
+              <Button variant="secondary" size="lg" onClick={handlePrev} className="flex-1" icon={<ChevronLeft className="w-4 h-4" />}>
                 Previous
               </Button>
             )}
@@ -1452,6 +1527,18 @@ export default function AnswerQuiz() {
                 Submit
               </Button>
             )}
+            {publicForm?.is_restricted && (
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                aria-label="Refresh"
+                title="Refresh"
+                className="w-[52px] h-[52px] shrink-0 inline-flex items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-ink-800 active:scale-[0.98] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+            )}
           </div>
         </div>
       </footer>
@@ -1463,7 +1550,7 @@ export default function AnswerQuiz() {
       <ZoomModal
         target={zoomTarget}
         scale={zoomScale}
-        variant={displayStyle === 'card' ? 'card' : 'quiz'}
+        variant={effectiveStyle === 'card' ? 'card' : 'quiz'}
         onClose={() => { setZoomTarget(null); setZoomScale(1) }}
         onZoom={(delta) => setZoomScale((s) => Math.min(4, Math.max(1, s + delta)))}
       />

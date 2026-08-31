@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BarChart3, Download, ClipboardList, X, Check, AlertTriangle } from 'lucide-react'
+import { BarChart3, Download, ClipboardList, X, Check, AlertTriangle, Trash2 } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
@@ -294,7 +294,7 @@ export default function Results() {
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </Select>
-            <Button variant="danger" size="sm" icon={<X className="w-4 h-4" />} onClick={() => setShowDelete(true)}>
+            <Button variant="danger" size="sm" icon={<Trash2 className="w-4 h-4" />} onClick={() => setShowDelete(true)}>
               <span className="hidden sm:inline">Delete</span>
             </Button>
           </div>
