@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getPublicForm,
   createSubmission,
@@ -43,6 +44,12 @@ export default function StandaloneQuizScreen() {
   const [isCheckingLock, setIsCheckingLock] = useState(false);
   const appState = useRef(AppState.currentState);
 
+  // KEY LOCAL STORAGE UNTUK DRAFT JAWABAN
+  const getStorageKey = (subId?: number | null) => {
+    const identifier = subId || formId || shortCode || 'temp';
+    return `quiz_draft_${identifier}`;
+  };
+
   // Listener deteksi keluar aplikasi / swipe notification bar
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -61,20 +68,44 @@ export default function StandaloneQuizScreen() {
     };
   }, [step]);
 
+  // Tombol Refresh: Cek apakah creator sudah mengubah status di Web (dari Locked ke In Progress / Cheating)
   const handleRefreshLockStatus = async () => {
     setIsCheckingLock(true);
     try {
       if (submissionId) {
         const detail = await getSubmissionDetail(submissionId);
-        // Buka kuis jika status tidak terkunci dari server
-        if (detail.status !== 'locked') {
+        const currentStatus = String(detail.status).toLowerCase();
+        
+        // SKENARIO 1: Creator mengubah status ke "in_progress" atau "active" -> Buka kunci & Lanjutkan!
+        if (currentStatus === 'in_progress' || currentStatus === 'in progress' || currentStatus === 'active' || currentStatus === 'unlocked') {
+          const storageKey = getStorageKey(submissionId);
+          const savedAnswers = await AsyncStorage.getItem(storageKey);
+          if (savedAnswers) {
+            setAnswers(JSON.parse(savedAnswers));
+          }
           setIsLocked(false);
-        } else {
+        } 
+        // SKENARIO 2: Creator mengubah status ke "cheating", "submitted", atau "terminated" -> Hentikan Ujian!
+        else if (currentStatus === 'cheating' || currentStatus === 'submitted' || currentStatus === 'terminated' || currentStatus === 'rejected') {
+          setIsLocked(false);
+          const storageKey = getStorageKey(submissionId);
+          await AsyncStorage.removeItem(storageKey);
+          setResultData(detail);
+          setStep('submitted');
+          Alert.alert(
+            language === 'ID' ? 'Ujian Diakhiri' : 'Exam Terminated',
+            language === 'ID'
+              ? 'Pengawas telah menandai pengerjaan kamu sebagai Cheating / Dihentikan.'
+              : 'The proctor has marked your exam as Cheating / Terminated.'
+          );
+        } 
+        // SKENARIO 3: Masih status "locked" di web
+        else {
           Alert.alert(
             language === 'ID' ? 'Masih Terkunci' : 'Still Locked',
             language === 'ID'
-              ? 'Pengawas / creator belum membuka kuis kamu.'
-              : 'The proctor / creator has not unlocked your quiz yet.'
+              ? 'Pengawas belum mengubah status kuis kamu ke "In Progress". Silakan minta pengawas membuka kuis di web.'
+              : 'The proctor has not set your status to "In Progress" yet.'
           );
         }
       } else {
@@ -128,6 +159,21 @@ export default function StandaloneQuizScreen() {
       const subId = res.submission_id || res.id;
       setSubmissionId(subId);
 
+      const status = String(res.status).toLowerCase();
+
+      // JIKA SUBMISSION SUDAH DI-SUBMIT ATAU DI-SET CHEATING DARI AWAL
+      if (status === 'submitted' || status === 'completed' || status === 'cheating') {
+        const detail = await getSubmissionDetail(subId);
+        setResultData(detail);
+        setStep('submitted');
+        return;
+      }
+
+      // JIKA DARI WEBPAGE MASIH DALAM KONDISI LOCKED
+      if (status === 'locked') {
+        setIsLocked(true);
+      }
+
       let qs = res.questions || [];
       if (!qs || qs.length === 0) {
         const detail = await getSubmissionDetail(subId);
@@ -152,7 +198,19 @@ export default function StandaloneQuizScreen() {
           }
         });
       }
-      setAnswers(initialAnswers);
+
+      // Load draft lokal jika siswa melanjutkan pengerjaan ("In Progress")
+      const storageKey = getStorageKey(subId);
+      const savedLocal = await AsyncStorage.getItem(storageKey);
+      
+      let mergedAnswers = initialAnswers;
+      if (savedLocal) {
+        mergedAnswers = { ...initialAnswers, ...JSON.parse(savedLocal) };
+      }
+
+      setAnswers(mergedAnswers);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(mergedAnswers));
+
       setStep('answering');
     } catch (e: any) {
       Alert.alert(
@@ -164,6 +222,15 @@ export default function StandaloneQuizScreen() {
       );
     } finally {
       setStarting(false);
+    }
+  };
+
+  const saveAnswerToLocalStorage = async (updatedAnswers: Record<number, any>) => {
+    try {
+      const storageKey = getStorageKey(submissionId);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(updatedAnswers));
+    } catch (err) {
+      console.error('Gagal menyimpan ke AsyncStorage:', err);
     }
   };
 
@@ -180,24 +247,33 @@ export default function StandaloneQuizScreen() {
       newOptionIds = [optionId];
     }
 
-    setAnswers((prev) => ({ ...prev, [questionId]: newOptionIds }));
+    const updatedAnswers = { ...answers, [questionId]: newOptionIds };
+    setAnswers(updatedAnswers);
+    await saveAnswerToLocalStorage(updatedAnswers);
 
     if (submissionId) {
       try {
         await autosaveAnswer(submissionId, { question_id: questionId, option_ids: newOptionIds });
-      } catch (err) {
-        console.error('Autosave error', err);
+      } catch (err: any) {
+        if (err.message?.includes('already completed')) {
+          setStep('submitted');
+        }
       }
     }
   };
 
   const handleTextChange = async (questionId: number, text: string) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: text }));
+    const updatedAnswers = { ...answers, [questionId]: text };
+    setAnswers(updatedAnswers);
+    await saveAnswerToLocalStorage(updatedAnswers);
+
     if (submissionId) {
       try {
         await autosaveAnswer(submissionId, { question_id: questionId, answer_text: text });
-      } catch (err) {
-        console.error('Autosave error', err);
+      } catch (err: any) {
+        if (err.message?.includes('already completed')) {
+          setStep('submitted');
+        }
       }
     }
   };
@@ -216,7 +292,10 @@ export default function StandaloneQuizScreen() {
         setFileUploading((prev) => ({ ...prev, [questionId]: true }));
         const upRes = await uploadAnswerFile(submissionId, questionId, fileUri);
         const savedUrl = upRes.url || upRes.answer_file || fileUri;
-        setAnswers((prev) => ({ ...prev, [questionId]: savedUrl }));
+        
+        const updatedAnswers = { ...answers, [questionId]: savedUrl };
+        setAnswers(updatedAnswers);
+        await saveAnswerToLocalStorage(updatedAnswers);
       }
     } catch (e: any) {
       Alert.alert(
@@ -257,6 +336,9 @@ export default function StandaloneQuizScreen() {
       const res = await finalizeSubmission(submissionId);
       setResultData(res);
       setStep('submitted');
+
+      const storageKey = getStorageKey(submissionId);
+      await AsyncStorage.removeItem(storageKey);
     } catch (e: any) {
       Alert.alert(
         language === 'ID' ? 'Gagal Mengirim' : 'Submission Failed',
@@ -317,7 +399,7 @@ export default function StandaloneQuizScreen() {
     <SafeAreaView style={[styles.answeringContainer, { backgroundColor: colors.bg }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      {/* Lock Overlay ketika terdeteksi keluar aplikasi / swipe bar notifikasi */}
+      {/* Lock Overlay saat terdeteksi melanggar / status locked */}
       {isLocked && (
         <LockOverlay
           onRefresh={handleRefreshLockStatus}
