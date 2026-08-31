@@ -68,7 +68,18 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
 
   const uploadOptionImage = async (opt, i) => {
     const file = optionFileRefs.current[i]?.files?.[0]
-    if (!file || !opt.id || !questionId) return
+    if (!file) return
+    // ponytail: new question/option has no ID — queue file, upload after create
+    if (!opt.id || !questionId) {
+      const preview = URL.createObjectURL(file)
+      setForm((prev) => ({
+        ...prev,
+        options: prev.options.map((o, idx) => (idx !== i ? o : { ...o, image: { path: preview }, _pendingFile: file })),
+      }))
+      if (optionFileRefs.current[i]) optionFileRefs.current[i].value = ''
+      toast.success('Option media dipilih — akan diupload setelah disimpan')
+      return
+    }
     const fd = new FormData()
     fd.append('file', file)
     setImgLoading(`opt-${i}`)
@@ -92,9 +103,17 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   const questionFileRef = useRef(null)
   const [qImgLoading, setQImgLoading] = useState(false)
 
-  const uploadQuestionImage = async () => {
+  const handleQuestionFileChange = async () => {
     const file = questionFileRef.current?.files?.[0]
-    if (!file || !questionId) return
+    if (!file) return
+    // ponytail: new question has no ID yet — queue file, upload after create
+    if (!questionId) {
+      const preview = URL.createObjectURL(file)
+      setForm((prev) => ({ ...prev, image: { path: preview }, _pendingFile: file }))
+      if (questionFileRef.current) questionFileRef.current.value = ''
+      toast.success('Media dipilih — akan diupload setelah pertanyaan disimpan')
+      return
+    }
     const fd = new FormData()
     fd.append('file', file)
     setQImgLoading(true)
@@ -111,6 +130,8 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
       if (questionFileRef.current) questionFileRef.current.value = ''
     }
   }
+
+  const uploadQuestionImage = handleQuestionFileChange
 
   const handleTypeChange = (type) => {
     setForm((prev) => ({
@@ -202,14 +223,13 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
           type="file"
           accept="image/*,audio/*,.mp3,.wav,.m4a,.ogg,.aac,.webm"
           className="hidden"
-          disabled={!questionId}
-          onChange={uploadQuestionImage}
+          onChange={handleQuestionFileChange}
         />
         <button
           type="button"
           onClick={(e) => { e.preventDefault(); questionFileRef.current?.click() }}
-          disabled={!questionId || qImgLoading}
-          title={questionId ? 'Upload image or audio (mp3)' : 'Save question first to add media'}
+          disabled={qImgLoading}
+          title={questionId ? 'Upload image or audio (mp3)' : 'Pilih media — akan diupload setelah disimpan'}
           className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-primary hover:border-primary transition-colors"
         >
           {qImgLoading ? (
@@ -219,7 +239,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
           )}
           {qImgLoading ? 'Uploading...' : form.image ? 'Replace' : 'Add media'}
         </button>
-        {form.image?.path && (isAudioUrl(form.image.path) ? (
+        {form.image?.path && ((form._pendingFile?.type?.startsWith('audio/') || isAudioUrl(form.image.path)) ? (
           <audio controls src={form.image.path} preload="metadata" className="h-10 max-w-[240px] flex-1 min-w-0" />
         ) : (
           <img src={form.image.path} alt="" className="h-10 w-14 object-cover rounded-md border border-gray-200 dark:border-gray-700" />
@@ -328,7 +348,6 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  disabled={!opt.id}
                   onChange={() => uploadOptionImage(opt, i)}
                 />
                 <button
@@ -337,8 +356,8 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                     e.preventDefault()
                     optionFileRefs.current[i]?.click()
                   }}
-                  disabled={!opt.id || !!imgLoading}
-                  title={opt.id ? 'Upload option image' : 'Save question first to add an image'}
+                  disabled={!!imgLoading}
+                  title={opt.id ? 'Upload option image' : 'Pilih gambar — akan diupload setelah disimpan'}
                   className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors shrink-0 ${opt.image ? 'text-primary hover:bg-primary-soft' : 'text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary-soft'
                     }`}
                 >
@@ -1010,7 +1029,30 @@ export default function QuestionBuilder() {
         await api.put(`/questions/${editing.id}`, payload)
         toast.success('Question updated')
       } else {
-        await api.post(`/forms/${formId}/questions`, payload)
+        const res = await api.post(`/forms/${formId}/questions`, payload)
+        // ponytail: upload pending media queued before save (no ID at that time)
+        const newQ = res.data
+        if (data._pendingFile) {
+          try {
+            const fd = new FormData()
+            fd.append('file', data._pendingFile)
+            await api.post(`/questions/${newQ.id}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+          } catch (e) { toast.error(e.response?.data?.detail || 'Gagal upload media pertanyaan') }
+        }
+        const sentOpts = data.options.filter((o) => o.option_text.trim())
+        for (let i = 0; i < sentOpts.length; i++) {
+          const opt = sentOpts[i]
+          if (opt._pendingFile) {
+            const optId = newQ.options?.[i]?.id
+            if (optId) {
+              try {
+                const fd = new FormData()
+                fd.append('file', opt._pendingFile)
+                await api.post(`/questions/${newQ.id}/option/${optId}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+              } catch (e) { toast.error(e.response?.data?.detail || 'Gagal upload media opsi') }
+            }
+          }
+        }
         toast.success('Question added')
       }
       load()
