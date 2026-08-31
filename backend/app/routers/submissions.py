@@ -466,7 +466,7 @@ def create_submission(
 
     for idx, q in enumerate(questions):
         db.add(SubmissionQuestionOrder(submission_id=sub.id, question_id=q.id, order_index=idx))
-        if form.shuffle_options and q.type in (QuestionType.multiple_choice, QuestionType.checkbox):
+        if form.shuffle_options and q.type in (QuestionType.multiple_choice, QuestionType.checkbox, QuestionType.dropdown):
             opts = list(q.options)
             random.shuffle(opts)
             for oi, opt in enumerate(opts):

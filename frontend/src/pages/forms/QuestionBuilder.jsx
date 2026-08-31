@@ -616,7 +616,7 @@ function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, 
     }
   }
   return (
-    <motion.div ref={setNodeRef} style={style} {...attributes} {...holdProps} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.12 }} className="relative select-none" onClick={(e) => { if (isDragging) return; holdProps.onClick(e) }}>
+    <motion.div ref={setNodeRef} style={style} {...attributes} {...holdProps} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.12 }} className={`relative ${expanded ? 'select-text' : 'select-none'}`} onClick={(e) => { if (isDragging) return; holdProps.onClick(e) }}>
       <span ref={setActivatorNodeRef} {...listeners} onPointerDown={(e) => { e.stopPropagation(); listeners?.onPointerDown?.(e) }} className="absolute left-0 top-4 w-6 h-8 hidden md:flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-500 dark:text-gray-400 rounded-md hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"><GripVertical className="w-5 h-5" /></span>
       <div className="md:pl-7">
         <div className={`rounded-2xl border bg-white dark:bg-ink-900 shadow-sm overflow-hidden ${isDragging ? 'opacity-60 border-primary/40 shadow-lift' : allSel ? '!border-primary ring-2 ring-primary/20 bg-primary-50/30 dark:bg-primary-900/10' : expanded ? 'border-primary/30' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'}`}>
@@ -646,15 +646,24 @@ function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, 
           {/* body */}
           <AnimatePresence initial={false}>
             {expanded && (
-              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="overflow-hidden">
-                <div className="p-3 sm:p-4 space-y-2.5 bg-gray-50/50 dark:bg-ink-800/20 border-t border-gray-100 dark:border-gray-700">
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="overflow-hidden select-text">
+                <div className="p-3 sm:p-4 space-y-2.5 bg-gray-50/50 dark:bg-ink-800/20 border-t border-gray-100 dark:border-gray-700 select-text" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
                   {members.map((q) => {
                     const gIdx = idToIndex.get(q.id) ?? 0
                     const isEdit = showForm && editing?.id === q.id
                     if (isEdit) {
                       return (
-                        <motion.div key={q.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="md:pl-0">
-                          <Card className="border-primary/50 shadow-card">
+                        <motion.div
+                          key={q.id}
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="md:pl-0 select-text"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onPointerUp={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
+                          onContextMenu={(e) => e.stopPropagation()}
+                        >
+                          <Card className="border-primary/50 shadow-card" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-between gap-3 mb-4">
                               <span className="font-display font-semibold text-ink dark:text-gray-100 text-sm">Edit Soal {gIdx + 1}</span>
                               <button onClick={onCancel} className="p-1.5 rounded-lg text-gray-400 hover:text-ink hover:bg-gray-100 dark:hover:bg-ink-800"><X className="w-4 h-4" /></button>

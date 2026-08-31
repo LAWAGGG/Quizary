@@ -679,9 +679,30 @@ export default function AnswerQuiz() {
         }, 80)
         return
       }
+    } else {
+      // ponytail: quiz 1-per-halaman harus cek required juga — sebelumnya lolos kosong
+      if (current?.is_required !== false && !isAnswered(current, answers[current?.id])) {
+        setValidationErrors((e) => ({ ...e, [current.id]: true }))
+        setTimeout(() => {
+          if (questionRefs.current[current.id]) {
+            questionRefs.current[current.id].scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }, 80)
+        return
+      }
     }
-    // Gerbang password: jawaban terisi tapi ≠ keyword → blok pindah halaman.
-    const gateQuestions = isOneByOne ? [current].filter(Boolean) : (formPages[currentIdx]?.questions || [])
+    // Gerbang password: hanya di batas section & hanya untuk soal required
+    // Quiz 1-per-halaman: password di tengah section tidak blok Next intra-section
+    let gateQuestions = []
+    if (isOneByOne) {
+      const nextQ = questions[currentIdx + 1]
+      const isSectionBoundary = !nextQ || current?.section_id !== nextQ?.section_id
+      if (isSectionBoundary) {
+        gateQuestions = [current].filter(Boolean).filter((q) => q.type === 'password' && q.is_required !== false)
+      }
+    } else {
+      gateQuestions = (formPages[currentIdx]?.questions || []).filter((q) => q.type === 'password' && q.is_required !== false)
+    }
     const wrongPw = await checkPasswords(gateQuestions)
     if (wrongPw.length) {
       const errs = Object.fromEntries(wrongPw.map((qid) => [qid, true]))
@@ -729,8 +750,8 @@ export default function AnswerQuiz() {
       }
     })
 
-    // Gerbang password sebelum submit: keyword salah di soal mana pun → blok.
-    const pwQs = qs.filter((q) => q.type === 'password')
+    // Gerbang password sebelum submit: hanya required yang salah → blok (optional boleh salah/kosong)
+    const pwQs = qs.filter((q) => q.type === 'password' && q.is_required !== false)
     const wrongPw = await checkPasswords(pwQs)
     if (wrongPw.length) {
       wrongPw.forEach((qid) => { errors[qid] = true })
