@@ -6,6 +6,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider as AppThemeProvider, useAppTheme } from '../context/ThemeContext';
 import { getMe, getToken, removeToken } from '../services/api_service';
+import { AlertProvider } from '../context/AlertContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -55,7 +56,9 @@ function RootStack() {
 export default function RootLayout() {
   return (
     <AppThemeProvider>
-      <RootStack />
+      <AlertProvider>
+        <RootStack />
+      </AlertProvider>
     </AppThemeProvider>
   );
 }

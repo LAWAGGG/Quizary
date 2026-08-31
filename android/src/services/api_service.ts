@@ -2,9 +2,9 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-
 const getHost = () => {
-  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  if (envUrl && !envUrl.includes('loca.lt')) return envUrl;
   const hostUri =
     Constants.expoConfig?.hostUri ||
     (Constants.manifest as any)?.debuggerHost ||
@@ -102,9 +102,7 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
       err.name === 'TypeError' ||
       String(err).includes('Network')
     ) {
-      throw new Error(
-        `Gagal terhubung ke ${BASE_URL}.\n\nPastikan uvicorn dijalankan dengan --host 0.0.0.0`
-      );
+      throw new Error('Gagal terhubung ke server.');
     }
     throw err;
   }
@@ -126,7 +124,7 @@ async function fetchMultipart(endpoint: string, method: string, formData: FormDa
 
 export async function apiLogin(body: { email: string; password: string }) {
   try {
-    console.log('[DEBUG AUTH] Sending POST /login for email:', body.email);
+    console.log('[DEBUG AUTH] Sending POST to:', `${BASE_URL}/login`, 'for email:', body.email);
     const res = await fetch(`${BASE_URL}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -148,9 +146,7 @@ export async function apiLogin(body: { email: string; password: string }) {
       err.name === 'TypeError' ||
       String(err).includes('Network')
     )
-      throw new Error(
-        `Gagal terhubung ke ${BASE_URL}.\n\nPastikan uvicorn dijalankan dengan --host 0.0.0.0`
-      );
+      throw new Error('Gagal terhubung ke server.');
     throw err;
   }
 }
@@ -184,9 +180,7 @@ export async function apiRegister(body: {
       err.name === 'TypeError' ||
       String(err).includes('Network')
     )
-      throw new Error(
-        `Gagal terhubung ke ${BASE_URL}.\n\nPastikan uvicorn dijalankan dengan --host 0.0.0.0`
-      );
+      throw new Error('Gagal terhubung ke server.');
     throw err;
   }
 }
