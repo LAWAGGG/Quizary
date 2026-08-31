@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { GripVertical, X, Plus, Check, ChevronDown, ChevronUp } from 'lucide-react'
+import { GripVertical, X, Plus, Check, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
-  useSensor, useSensors, useDraggable, useDroppable, pointerWithin,
+  useSensor, useSensors, useDraggable, pointerWithin,
 } from '@dnd-kit/core'
 import {
   SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable,
@@ -16,20 +16,31 @@ import { Button, Badge, ConfirmModal } from '../../components/ui'
 
 const QUESTION_PREFIX = 'q-'
 
-function SortableSectionCard({ section, questions, onDelete, editing, editDraft, setEditDraft, onEditStart, onEditSave, onEditCancel, onUnassign, collapsed, onToggleCollapse, onMove, isFirst, isLast }) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+function SortableSectionCard({ section, questions, onDelete, editing, editDraft, setEditDraft, onEditStart, onEditSave, onEditCancel, collapsed, onToggleCollapse, onMove, isFirst, isLast }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } = useSortable({
     id: section.id,
     data: { type: 'section' },
   })
-  const style = { transform: CSS.Transform.toString(transform), transition }
+  // ponytail: dnd-kit transform hanya aktif saat drag. Untuk mobile reorder
+  // (tombol ↑↓), framer-motion `layout` handle animasi position change.
+  const style = isDragging
+    ? { transform: CSS.Transform.toString(transform), transition: 'none' }
+    : undefined // framer layout handles non-drag reorder
   const secQs = questions.filter((q) => q.section_id === section.id)
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`rounded-xl border transition-all ${isDragging ? 'opacity-40 border-primary' : 'border-gray-200 dark:border-gray-700'}`}
+    <motion.div
+      layout={!isDragging}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: -16 }}
+      transition={{ layout: { duration: 0.2, ease: 'easeOut' } }}
     >
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={`rounded-xl border transition-all ${isDragging ? 'opacity-40 border-primary' : 'border-gray-200 dark:border-gray-700'}`}
+      >
       <div className="flex items-center gap-3 px-4 py-3 cursor-default">
         <span
           {...attributes}
@@ -80,15 +91,24 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
               className="input-field h-8 text-sm flex-1"
               autoFocus
             />
-            <Button size="sm" onClick={onEditSave} icon={<Check className="w-3.5 h-3.5" />}>Save</Button>
-            <Button size="sm" variant="ghost" onClick={onEditCancel}>Cancel</Button>
+            <Button size="sm" onClick={onEditSave} icon={<Check className="w-3.5 h-3.5" />}>
+              <span className="hidden sm:inline">Save</span>
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onEditCancel} icon={<X className="w-3.5 h-3.5" />}>
+              <span className="hidden sm:inline">Cancel</span>
+            </Button>
           </>
         ) : (
           <>
-            <span className="font-display font-semibold text-ink dark:text-gray-100 flex-1 truncate">{section.title}</span>
-            <Badge scheme="gray">{secQs.length} question(s)</Badge>
-            <button onClick={onEditStart} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary px-2 py-1 transition-colors">Rename</button>
-            <button onClick={onDelete} className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-incorrect px-2 py-1 transition-colors">Delete</button>
+            <span className="font-display font-semibold text-ink dark:text-gray-100 flex-1 truncate text-sm">{section.title}</span>
+            <Badge scheme="gray" className="hidden sm:inline-flex">{secQs.length} question(s)</Badge>
+            <Badge scheme="gray" className="sm:hidden">{secQs.length}Q</Badge>
+            <button onClick={onEditStart} title="Rename section" className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-primary p-1.5 transition-colors shrink-0">
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={onDelete} title="Delete section" className="text-xs font-medium text-gray-400 dark:text-gray-500 hover:text-incorrect p-1.5 transition-colors shrink-0">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           </>
         )}
       </div>
@@ -101,7 +121,7 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
       ) : secQs.length > 0 ? (
         <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-2 space-y-1.5">
           {secQs.map((q) => (
-            <DraggableQuestion key={q.id} q={q} onUnassign={onUnassign} />
+            <DraggableQuestion key={q.id} q={q} />
           ))}
         </div>
       ) : (
@@ -110,10 +130,11 @@ function SortableSectionCard({ section, questions, onDelete, editing, editDraft,
         </div>
       ))}
     </div>
+    </motion.div>
   )
 }
 
-function DraggableQuestion({ q, onUnassign }) {
+function DraggableQuestion({ q }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `${QUESTION_PREFIX}${q.id}`,
     data: { type: 'question', questionId: q.id },
@@ -122,55 +143,13 @@ function DraggableQuestion({ q, onUnassign }) {
     <div
       ref={setNodeRef}
       className={`group flex items-center gap-2 text-sm px-2 py-1.5 rounded-lg bg-gray-50 dark:bg-ink-800/50 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors ${isDragging ? 'opacity-40' : ''}`}
+      style={{userSelect:'none'}}
     >
       <span {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing inline-flex shrink-0">
         <GripVertical className="w-3.5 h-3.5 opacity-50" />
       </span>
       <span className="truncate flex-1">{(q.question_text || '').replace(/<[^>]*>/g, '').slice(0, 60)}</span>
       <Badge scheme="gray" className="text-[10px] shrink-0">{q.type.replace('_', ' ')}</Badge>
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); onUnassign(q.id) }}
-        title="Remove from section"
-        aria-label={`Remove question ${q.id} from section`}
-        className="shrink-0 p-1 rounded-md text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 hover:text-incorrect hover:bg-incorrect-soft transition-all"
-      >
-        <X className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  )
-}
-
-function UnassignedPool({ questions }) {
-  // useDroppable HARUS dijalankan di komponen yang berada DI DALAM <DndContext>.
-  // Dipanggil di body SectionManager = di luar provider, droppable tak terdaftar.
-  const { setNodeRef, isOver } = useDroppable({
-    id: 'unassigned',
-    data: { type: 'unassigned' },
-  })
-  const unassigned = questions.filter((q) => !q.section_id)
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`space-y-2 rounded-xl p-2 transition-all ${isOver ? 'border border-primary bg-primary-50/50 dark:bg-primary-900/20' : ''}`}
-    >
-      <div className="flex items-center gap-2 px-1">
-        <span className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" />
-        <span className="text-sm font-semibold text-gray-500 dark:text-gray-400">Unassigned</span>
-        <Badge scheme="gray">{unassigned.length}</Badge>
-      </div>
-      {unassigned.length > 0 ? (
-        <div className="space-y-1.5">
-          {unassigned.map((q) => (
-            <DraggableQuestion key={q.id} q={q} onUnassign={() => {}} />
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-700 px-3 py-3 text-xs text-gray-400 dark:text-gray-500 text-center italic">
-          Drop questions here to remove from section
-        </div>
-      )}
     </div>
   )
 }
@@ -229,16 +208,15 @@ export default function SectionManager({ formId, show, onClose, sections: initia
     const q = questions.find((qq) => qq.id === qId)
     if (!q) return
 
-    const newSectionId = targetSectionId === 'unassigned' ? null : targetSectionId
-    if (newSectionId !== null && !sections.some((s) => s.id === newSectionId)) return
-    if (q.section_id === newSectionId) return
+    if (!sections.some((s) => s.id === targetSectionId)) return
+    if (q.section_id === targetSectionId) return
 
     setQuestions((prev) =>
-      prev.map((qq) => qq.id === qId ? { ...qq, section_id: newSectionId } : qq)
+      prev.map((qq) => qq.id === qId ? { ...qq, section_id: targetSectionId } : qq)
     )
 
     try {
-      await api.put(`/questions/${qId}`, { section_id: newSectionId })
+      await api.put(`/questions/${qId}`, { section_id: targetSectionId })
       toast.success('Question moved')
       onSaved()
     } catch (err) {
@@ -320,7 +298,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
       if (typeof over.id === 'string' && over.id.startsWith(QUESTION_PREFIX)) {
         const overQ = questions.find((qq) => qq.id === Number(over.id.slice(QUESTION_PREFIX.length)))
         if (!overQ) return null
-        return overQ.section_id === null ? 'unassigned' : overQ.section_id
+        return overQ.section_id
       }
       return over.id
     }
@@ -328,9 +306,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
     if (type === 'question') {
       const qId = Number(active.data.current.questionId)
       const target = resolveTarget()
-      if (target === 'unassigned') {
-        await moveQuestionToSection(qId, 'unassigned')
-      } else if (typeof target === 'number') {
+      if (typeof target === 'number') {
         await moveQuestionToSection(qId, target)
       }
       return
@@ -480,7 +456,6 @@ export default function SectionManager({ formId, show, onClose, sections: initia
                        onEditSave={() => renameSection(section)}
                        onEditCancel={() => setEditingId(null)}
                         onDelete={() => setDeleteTarget(section)}
-                        onUnassign={(qId) => moveQuestionToSection(qId, 'unassigned')}
                         collapsed={collapsedIds.has(section.id)}
                         onToggleCollapse={() => toggleCollapse(section.id)}
                         onMove={(dir) => moveSection(secIdx, dir)}
@@ -500,8 +475,12 @@ export default function SectionManager({ formId, show, onClose, sections: initia
                       placeholder="Section name"
                       autoFocus
                     />
-                    <Button size="sm" onClick={createSection} loading={creatingSection} disabled={!newSectionTitle.trim()}>Add</Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setNewSectionOpen(false); setNewSectionTitle('') }}>Cancel</Button>
+                    <Button size="sm" onClick={createSection} loading={creatingSection} disabled={!newSectionTitle.trim()} icon={<Check className="w-3.5 h-3.5" />}>
+                      <span className="hidden sm:inline">Add</span>
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setNewSectionOpen(false); setNewSectionTitle('') }} icon={<X className="w-3.5 h-3.5" />}>
+                      <span className="hidden sm:inline">Cancel</span>
+                    </Button>
                   </div>
                 ) : (
                   <button
@@ -512,8 +491,6 @@ export default function SectionManager({ formId, show, onClose, sections: initia
                     Add Section
                   </button>
                 )}
-
-                <UnassignedPool questions={questions} />
               </div>
 
               <DragOverlay dropAnimation={null} className="origin-top-left">

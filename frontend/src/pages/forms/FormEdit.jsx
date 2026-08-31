@@ -45,7 +45,7 @@ function CollapsibleCard({ title, icon, defaultOpen = false, open, onToggle, chi
   const isOpen = open !== undefined ? open : internal
   const toggle = () => (onToggle ? onToggle(!isOpen) : setInternal(!isOpen))
   return (
-    <Card padding={false} className="overflow-hidden">
+    <Card padding={false}>
       <button
         type="button"
         onClick={toggle}

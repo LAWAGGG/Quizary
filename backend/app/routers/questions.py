@@ -12,10 +12,12 @@ from app.models.form import Form
 from app.models.image import Image
 from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
+from app.models.submission import Submission, SubmissionStatus
 from app.models.user import User
 from app.services.points import distribute_quiz_points
 from app.utils import file_url, now_wib, write_limited, MAX_IMAGE_BYTES, _delete_file, UPLOAD_DIR
 from app.schemas.question import (
+    GroupAddRequest,
     QuestionCreate,
     QuestionGroupRequest,
     QuestionUpdate,
@@ -225,6 +227,9 @@ def delete_section(
     form = db.get(Form, section.form_id)
     if not form or form.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Anda bukan pemilik form ini")
+    remaining = db.query(Section).filter(Section.form_id == section.form_id).count()
+    if remaining <= 1:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Tidak bisa menghapus section terakhir")
     db.delete(section)
     db.commit()
     return {"message": "Section dihapus"}
@@ -247,10 +252,18 @@ def create_question(
     )
     next_order = (max_order[0] + 1) if max_order else 0
 
+    # Ensure at least one section exists — auto-create "Default" if needed.
+    sections = db.query(Section).filter(Section.form_id == form.id).all()
+    if not sections:
+        auto = Section(form_id=form.id, title="Default", order_index=0, created_at=now_wib())
+        db.add(auto)
+        db.flush()
+        sections = [auto]
     if body.section_id is not None:
-        section = db.get(Section, body.section_id)
-        if not section or section.form_id != form.id:
+        if not any(s.id == body.section_id for s in sections):
             raise HTTPException(status_code=422, detail="Section tidak ditemukan pada form ini")
+    else:
+        body.section_id = sections[0].id
 
     # multiple_choice hanya wajib punya tepat 1 jawaban benar untuk quiz yang
     # dinilai (count points). Form biasa / kuesioner & soal tidak dinilai bebas.
@@ -269,6 +282,7 @@ def create_question(
         # Auto mode allocates from the 100-point pool after insert; manual mode
         # preserves the creator's per-question value. Non-graded types always 0.
         points=(0 if (form.type.value == "quiz" and (form.scoring_mode is None or form.scoring_mode.value == "auto")) or body.type in _NO_GRADE_TYPES else body.points),
+        is_scored=body.is_scored,
         is_required=body.is_required,
         section_id=body.section_id,
         password_keyword=body.password_keyword if body.type == "password" else None,
@@ -378,6 +392,8 @@ def update_question(
         update_data["points"] = 0
 
     for field, value in update_data.items():
+        if value is None:
+            continue  # jangan tulis NULL ke kolom NOT NULL (mis. points)
         setattr(question, field, value)
 
     question.updated_at = now_wib()
@@ -452,6 +468,25 @@ def update_question(
     return _build_question(question, request)
 
 
+# ── GET /questions/{question_id}/active-count ──────────────────────────────────
+# Pre-flight check: berapa submission in_progress yang mungkin terpengaruh
+# oleh penghapusan soal ini. Frontend pakai sebelum delete untuk modal warning.
+
+@router.get("/questions/{question_id}/active-count")
+def get_active_count(
+    question_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    question = _get_question_or_404(question_id, db)
+    _ensure_owner(question, user, db)
+    count = db.query(Submission).filter(
+        Submission.form_id == question.form_id,
+        Submission.status == SubmissionStatus.in_progress,
+    ).count()
+    return {"active_count": count}
+
+
 # ── DELETE /questions/{question_id} ───────────────────────────────────────────
 
 @router.delete("/questions/{question_id}")
@@ -465,6 +500,26 @@ def delete_question(
     question.is_deleted = True
     db.commit()
     return {"message": "Question deleted"}
+
+
+# ── POST /forms/{form_id}/questions/bulk-active-count ─────────────────────────
+# Pre-flight: beri tahu frontend berapa submission aktif sebelum bulk delete.
+
+@router.post("/forms/{form_id}/questions/bulk-active-count")
+def bulk_active_count(
+    form_id: int,
+    body: dict,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    form = db.get(Form, form_id)
+    if not form or form.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    count = db.query(Submission).filter(
+        Submission.form_id == form_id,
+        Submission.status == SubmissionStatus.in_progress,
+    ).count()
+    return {"active_count": count}
 
 
 # ── POST /forms/{form_id}/questions/bulk-delete ───────────────────────────────
@@ -482,6 +537,7 @@ def bulk_delete_questions(
     ids = body.get("question_ids", [])
     if not ids:
         raise HTTPException(status_code=422, detail="question_ids is required")
+
     db.query(Question).filter(
         Question.id.in_(ids), Question.form_id == form_id, Question.is_deleted.is_(False)
     ).update({Question.is_deleted: True}, synchronize_session=False)
@@ -560,6 +616,40 @@ def group_questions(
         "message": "Soal berhasil dikelompokkan",
         "data": [_build_question(q, request) for q in questions],
     }
+
+
+@router.post("/forms/{form_id}/questions/group/{group_id}/questions")
+def add_questions_to_group(
+    form_id: int,
+    group_id: str,
+    body: GroupAddRequest,
+    request: Request,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    # ponytail: 1 query untuk cek grup, 1 query untuk soal baru — tanpa N+1
+    members = db.query(Question).filter(
+        Question.form_id == form.id, Question.group_id == group_id, Question.is_deleted.is_(False)
+    ).all()
+    if not members:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grup tidak ditemukan")
+    group_section = members[0].section_id
+    to_add = db.query(Question).filter(
+        Question.id.in_(body.question_ids), Question.form_id == form.id, Question.is_deleted.is_(False)
+    ).all()
+    if len(to_add) != len(body.question_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Soal tidak ditemukan pada form ini")
+    for q in to_add:
+        if q.group_id == group_id:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Soal {q.id} sudah ada di grup ini")
+        if q.group_id is not None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Soal sudah tergabung di grup lain — keluarkan dulu")
+        if q.section_id != group_section:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Semua soal harus berada dalam section yang sama dengan grup")
+    for q in to_add:
+        q.group_id = group_id
+    db.commit()
+    return {"message": f"{len(to_add)} soal ditambahkan ke grup", "data": [_build_question(q, request) for q in to_add]}
 
 
 @router.delete("/forms/{form_id}/questions/group/{group_id}")
