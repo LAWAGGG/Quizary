@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getPublicForm,
   createSubmission,
@@ -43,6 +44,19 @@ export default function StandaloneQuizScreen() {
   const [isCheckingLock, setIsCheckingLock] = useState(false);
   const appState = useRef(AppState.currentState);
 
+  // KEY LOCAL STORAGE UNTUK DRAFT JAWABAN
+  const getStorageKey = (subId?: number | null) => {
+    const identifier = subId || formId || shortCode || 'temp';
+    return `quiz_draft_${identifier}`;
+  };
+
+  // Helper hapus state jawaban & cache lokal
+  const resetQuizState = async (subId?: number | null) => {
+    setAnswers({});
+    const storageKey = getStorageKey(subId);
+    await AsyncStorage.removeItem(storageKey);
+  };
+
   // Listener deteksi keluar aplikasi / swipe notification bar
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -61,14 +75,31 @@ export default function StandaloneQuizScreen() {
     };
   }, [step]);
 
+  // Cek respon status dari backend
   const handleRefreshLockStatus = async () => {
     setIsCheckingLock(true);
     try {
       if (submissionId) {
         const detail = await getSubmissionDetail(submissionId);
-        // Buka kuis jika status tidak terkunci dari server
-        if (detail.status !== 'locked') {
+        
+        if (detail.status === 'active' || detail.status === 'unlocked' || detail.status !== 'locked') {
+          const storageKey = getStorageKey(submissionId);
+          const savedAnswers = await AsyncStorage.getItem(storageKey);
+          if (savedAnswers) {
+            setAnswers(JSON.parse(savedAnswers));
+          }
           setIsLocked(false);
+        } else if (detail.status === 'rejected' || detail.status === 'terminated' || detail.status === 'submitted') {
+          setIsLocked(false);
+          await resetQuizState(submissionId);
+          setResultData(detail);
+          setStep('submitted');
+          Alert.alert(
+            language === 'ID' ? 'Ujian Diakhiri' : 'Exam Terminated',
+            language === 'ID'
+              ? 'Pengawas telah menghentikan atau menolak akses kuis kamu.'
+              : 'The proctor has terminated your quiz session.'
+          );
         } else {
           Alert.alert(
             language === 'ID' ? 'Masih Terkunci' : 'Still Locked',
@@ -128,31 +159,29 @@ export default function StandaloneQuizScreen() {
       const subId = res.submission_id || res.id;
       setSubmissionId(subId);
 
+      // JIKA SUBMISSION SUDAH SELESAI/TERKUNCI DI SERVER
+      if (res.status === 'submitted' || res.status === 'completed' || res.status === 'terminated') {
+        const detail = await getSubmissionDetail(subId);
+        setResultData(detail);
+        setStep('submitted');
+        return;
+      }
+
+      // SAAT DIIZINKAN MENGERJAKAN ULANG: Hapus semua cache jawaban lama
+      await resetQuizState(subId);
+
       let qs = res.questions || [];
       if (!qs || qs.length === 0) {
         const detail = await getSubmissionDetail(subId);
         qs = detail.questions || [];
+
+        if (detail.status === 'submitted' || detail.status === 'completed') {
+          setResultData(detail);
+          setStep('submitted');
+          return;
+        }
       }
       setQuestions(qs);
-
-      const initialAnswers: Record<number, any> = {};
-      if (res.answers) {
-        res.answers.forEach((a: any) => {
-          if (
-            a.question_type === 'short_answer' ||
-            a.question_type === 'essay' ||
-            a.question_type === 'date' ||
-            a.question_type === 'time'
-          ) {
-            initialAnswers[a.question_id] = a.answer_text || '';
-          } else if (a.question_type === 'file_upload') {
-            initialAnswers[a.question_id] = a.answer_file || '';
-          } else {
-            initialAnswers[a.question_id] = a.selected_option_ids || [];
-          }
-        });
-      }
-      setAnswers(initialAnswers);
       setStep('answering');
     } catch (e: any) {
       Alert.alert(
@@ -164,6 +193,15 @@ export default function StandaloneQuizScreen() {
       );
     } finally {
       setStarting(false);
+    }
+  };
+
+  const saveAnswerToLocalStorage = async (updatedAnswers: Record<number, any>) => {
+    try {
+      const storageKey = getStorageKey(submissionId);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(updatedAnswers));
+    } catch (err) {
+      console.error('Gagal menyimpan ke AsyncStorage:', err);
     }
   };
 
@@ -180,24 +218,37 @@ export default function StandaloneQuizScreen() {
       newOptionIds = [optionId];
     }
 
-    setAnswers((prev) => ({ ...prev, [questionId]: newOptionIds }));
+    const updatedAnswers = { ...answers, [questionId]: newOptionIds };
+    setAnswers(updatedAnswers);
+    await saveAnswerToLocalStorage(updatedAnswers);
 
     if (submissionId) {
       try {
         await autosaveAnswer(submissionId, { question_id: questionId, option_ids: newOptionIds });
-      } catch (err) {
-        console.error('Autosave error', err);
+      } catch (err: any) {
+        if (err.message?.includes('already completed')) {
+          setStep('submitted');
+        } else {
+          console.error('Autosave error', err);
+        }
       }
     }
   };
 
   const handleTextChange = async (questionId: number, text: string) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: text }));
+    const updatedAnswers = { ...answers, [questionId]: text };
+    setAnswers(updatedAnswers);
+    await saveAnswerToLocalStorage(updatedAnswers);
+
     if (submissionId) {
       try {
         await autosaveAnswer(submissionId, { question_id: questionId, answer_text: text });
-      } catch (err) {
-        console.error('Autosave error', err);
+      } catch (err: any) {
+        if (err.message?.includes('already completed')) {
+          setStep('submitted');
+        } else {
+          console.error('Autosave error', err);
+        }
       }
     }
   };
@@ -216,7 +267,10 @@ export default function StandaloneQuizScreen() {
         setFileUploading((prev) => ({ ...prev, [questionId]: true }));
         const upRes = await uploadAnswerFile(submissionId, questionId, fileUri);
         const savedUrl = upRes.url || upRes.answer_file || fileUri;
-        setAnswers((prev) => ({ ...prev, [questionId]: savedUrl }));
+        
+        const updatedAnswers = { ...answers, [questionId]: savedUrl };
+        setAnswers(updatedAnswers);
+        await saveAnswerToLocalStorage(updatedAnswers);
       }
     } catch (e: any) {
       Alert.alert(
@@ -257,6 +311,8 @@ export default function StandaloneQuizScreen() {
       const res = await finalizeSubmission(submissionId);
       setResultData(res);
       setStep('submitted');
+
+      await resetQuizState(submissionId);
     } catch (e: any) {
       Alert.alert(
         language === 'ID' ? 'Gagal Mengirim' : 'Submission Failed',
@@ -317,7 +373,6 @@ export default function StandaloneQuizScreen() {
     <SafeAreaView style={[styles.answeringContainer, { backgroundColor: colors.bg }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
-      {/* Lock Overlay ketika terdeteksi keluar aplikasi / swipe bar notifikasi */}
       {isLocked && (
         <LockOverlay
           onRefresh={handleRefreshLockStatus}
