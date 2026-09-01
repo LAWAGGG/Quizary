@@ -7,15 +7,12 @@ import { ImageZoomModal } from '../ImageZoomModal';
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
-const OPT_COLORS = ['#3B82F6', '#EF4444', '#F59E0B', '#10B981', '#8B5CF6', '#EC4899'];
-
 interface QuizQuestionCardProps {
   question: any;
   index: number;
   userAnswer: any;
   isFileUploading: boolean;
   themeColor?: string;
-  displayStyle?: string;
   hasError?: boolean;
   onZoomQuestion?: (q: any) => void;
   onSelectOption: (qId: number, optId: number, isCheckbox: boolean) => void;
@@ -29,7 +26,6 @@ function QuizQuestionCardComponent({
   userAnswer,
   isFileUploading,
   themeColor,
-  displayStyle = 'quiz',
   hasError,
   onZoomQuestion,
   onSelectOption,
@@ -40,7 +36,6 @@ function QuizQuestionCardComponent({
   const activeColor = themeColor || colors.primary;
   const [zoomUri, setZoomUri] = useState<string | null>(null);
   const isReq = q.is_required !== false;
-  const isQuizStyle = displayStyle === 'quiz';
 
   const rawImg = q.image?.path || q.image;
   const imgUri = typeof rawImg === 'string' ? rawImg : null;
@@ -103,39 +98,6 @@ function QuizQuestionCardComponent({
             const selectedIds: number[] = Array.isArray(userAnswer) ? userAnswer : [];
             const isSelected = selectedIds.includes(opt.id);
             const letter = LETTERS[i % LETTERS.length];
-            const tileColor = OPT_COLORS[i % OPT_COLORS.length];
-
-            if (isQuizStyle) {
-              return (
-                <TouchableOpacity
-                  key={opt.id || i}
-                  style={[
-                    styles.quizOptionTile,
-                    { backgroundColor: tileColor },
-                    isSelected && styles.quizOptionTileSelected,
-                  ]}
-                  onPress={() => onSelectOption(q.id, opt.id, q.type === 'checkbox')}
-                  activeOpacity={0.85}
-                >
-                  <View style={styles.quizLetterBubble}>
-                    <Text style={styles.quizLetterText}>{letter}</Text>
-                  </View>
-
-                  <View style={{ flex: 1, flexShrink: 1, paddingRight: 4 }}>
-                    <RichTextRenderer
-                      html={opt.option_text || ''}
-                      style={{ fontSize: 15, color: '#FFFFFF', fontWeight: '600' }}
-                    />
-                  </View>
-
-                  {isSelected && (
-                    <View style={styles.quizCheckBadge}>
-                      <Ionicons name="checkmark" size={16} color="#FFF" />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            }
 
             return (
               <TouchableOpacity
@@ -278,7 +240,6 @@ export const QuizQuestionCard = React.memo(
       prevProps.isFileUploading === nextProps.isFileUploading &&
       prevProps.question === nextProps.question &&
       prevProps.themeColor === nextProps.themeColor &&
-      prevProps.displayStyle === nextProps.displayStyle &&
       prevProps.index === nextProps.index
     );
   }
@@ -343,47 +304,6 @@ const styles = StyleSheet.create({
   optionCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, borderWidth: 1, gap: 12 },
   letterBubble: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   letterText: { fontSize: 13, fontWeight: 'bold' },
-
-  quizOptionTile: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    minHeight: 76,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 4,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-  },
-  quizOptionTileSelected: {
-    borderWidth: 2.5,
-    borderColor: '#FFFFFF',
-  },
-  quizLetterBubble: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quizLetterText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  quizCheckBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   textInput: { padding: 14, borderRadius: 12, borderWidth: 1, fontSize: 14, marginTop: 12 },
   textArea: { height: 110, textAlignVertical: 'top' },
