@@ -79,11 +79,7 @@ export default function StandaloneQuizScreen() {
         setIsLocked(true);
         const targetSubId = submissionIdRef.current || submissionId;
         if (targetSubId) {
-          try {
-            await lockSubmission(targetSubId, 'Keluar dari aplikasi (App background/inactive)');
-          } catch (err: any) {
-            console.error('Gagal mengunci kuis di server:', err?.message || err);
-          }
+          await lockSubmission(targetSubId, 'Keluar dari aplikasi (App background/inactive)');
         }
       }
       appState.current = nextAppState;
