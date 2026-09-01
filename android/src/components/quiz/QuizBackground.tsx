@@ -22,7 +22,7 @@ export function QuizBackground({ children, themeColor }: QuizBackgroundProps) {
   return (
     <View style={[styles.container, { backgroundColor: isDark ? '#0B0F19' : colors.bg }]}>
       {/* Background Dot Matrix Pattern */}
-      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      <View style={styles.absoluteFill} pointerEvents="none">
         {Array.from({ length: rows }).map((_, r) => (
           <View key={`row-${r}`} style={styles.gridRow}>
             {Array.from({ length: columns }).map((_, c) => (
@@ -83,6 +83,7 @@ export function QuizBackground({ children, themeColor }: QuizBackgroundProps) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  absoluteFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   gridRow: { position: 'absolute' },
   bgDot: {
     position: 'absolute',

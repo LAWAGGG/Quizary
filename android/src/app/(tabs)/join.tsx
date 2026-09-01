@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
 
   cameraContainer: { height: 260, borderRadius: 20, overflow: 'hidden', borderWidth: 2, marginBottom: 20 },
   cameraPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scannerOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
+  scannerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
   scanTargetBox: { width: 180, height: 180, borderRadius: 16, borderWidth: 2, borderColor: '#10B981', backgroundColor: 'transparent' },
   scannerHintText: { color: '#FFF', fontWeight: 'bold', marginTop: 14, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
 
