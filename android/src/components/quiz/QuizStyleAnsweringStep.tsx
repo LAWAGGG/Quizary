@@ -11,6 +11,8 @@ import {
   Platform,
   Keyboard,
   TouchableWithoutFeedback,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -19,7 +21,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAppAlert } from '../../context/AlertContext';
 import { RichTextRenderer, stripHtmlTags } from '../RichTextRenderer';
-import { QuizQuestionCard } from './QuizQuestionCard';
 import { getThemeGradientColors } from './QuizBackground';
 
 interface QuizStyleAnsweringStepProps {
@@ -36,6 +37,9 @@ interface QuizStyleAnsweringStepProps {
   onOpenZoom: (question: any) => void;
   onCloseQuiz: () => void;
 }
+
+const OPT_COLORS = ['#3B82F6', '#EF4444', '#F59E0B', '#10B981'];
+const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
 export function QuizStyleAnsweringStep({
   publicForm,
@@ -226,7 +230,7 @@ export function QuizStyleAnsweringStep({
                         styles.reviewFlagBtn,
                         reviewed[currentQ.id]
                           ? styles.reviewFlagBtnActive
-                          : { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.7)' : '#F1F5F9' },
+                          : { backgroundColor: 'rgba(255, 255, 255, 0.1)' },
                       ]}
                       onPress={() => toggleReview(currentQ.id)}
                       activeOpacity={0.75}
@@ -234,12 +238,12 @@ export function QuizStyleAnsweringStep({
                       <Ionicons
                         name={reviewed[currentQ.id] ? 'bookmark' : 'bookmark-outline'}
                         size={14}
-                        color={reviewed[currentQ.id] ? '#FFF' : colors.textSub}
+                        color={reviewed[currentQ.id] ? '#FFF' : '#94A3B8'}
                       />
                       <Text
                         style={[
                           styles.reviewFlagText,
-                          { color: reviewed[currentQ.id] ? '#FFF' : colors.textSub },
+                          { color: reviewed[currentQ.id] ? '#FFF' : '#94A3B8' },
                         ]}
                       >
                         {reviewed[currentQ.id] ? 'Marked' : 'Mark for review'}
@@ -249,7 +253,7 @@ export function QuizStyleAnsweringStep({
 
                   {/* Centered Large Question Title */}
                   <View style={styles.qTitleCenterWrapper}>
-                    <Text style={[styles.qTitleText, { color: colors.text, fontSize: 22 * fontSizeScale }]}>
+                    <Text style={[styles.qTitleText, { color: '#FFFFFF', fontSize: 22 * fontSizeScale }]}>
                       {stripHtmlTags(currentQ.question_text)}
                       {currentQ.is_required !== false ? (
                         <Text style={{ color: '#EF4444', fontWeight: 'bold' }}> *</Text>
@@ -260,37 +264,108 @@ export function QuizStyleAnsweringStep({
                   {/* Zoom Button Pill */}
                   <View style={styles.zoomCenterWrapper}>
                     <TouchableOpacity
-                      style={[
-                        styles.zoomPillBtn,
-                        {
-                          backgroundColor: isDark ? 'rgba(30, 41, 59, 0.8)' : '#F1F5F9',
-                          borderColor: colors.cardBorder,
-                        },
-                      ]}
+                      style={styles.zoomPillBtn}
                       onPress={() => onOpenZoom(currentQ)}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="search-outline" size={14} color={colors.textSub} />
-                      <Text style={[styles.zoomPillText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
-                        {language === 'ID' ? 'Perbesar Soal' : 'Zoom in on question'}
+                      <Ionicons name="search-outline" size={14} color="#94A3B8" />
+                      <Text style={[styles.zoomPillText, { fontSize: 13 * fontSizeScale }]}>
+                        Zoom in on question
                       </Text>
                     </TouchableOpacity>
                   </View>
 
-                  {/* Interactive Question Card (Options / Short Answer / File Upload) */}
-                  <View style={styles.questionCardBox}>
-                    <QuizQuestionCard
-                      question={currentQ}
-                      index={currentIdx}
-                      userAnswer={answers[currentQ.id]}
-                      onSelectOption={onSelectOption}
-                      onTextChange={onTextChange}
-                      onPickFile={onPickFile}
-                      isFileUploading={!!fileUploading[currentQ.id]}
-                      themeColor={themeColor}
-                      onZoomQuestion={onOpenZoom}
-                    />
-                  </View>
+                  {/* Helper Text (Pick one answer / Pick all that apply) */}
+                  {(currentQ.type === 'multiple_choice' || currentQ.type === 'checkbox') && (
+                    <Text style={styles.helperText}>
+                      {currentQ.type === 'checkbox' ? 'Pick all that apply' : 'Pick one answer'}
+                    </Text>
+                  )}
+
+                  {/* VIBRANT OPTION TILES (Matching Web Screenshot 1) */}
+                  {(currentQ.type === 'multiple_choice' || currentQ.type === 'checkbox') && (
+                    <View style={styles.optionsListContainer}>
+                      {currentQ.options?.map((opt: any, i: number) => {
+                        const userAns = answers[currentQ.id];
+                        const selected = Array.isArray(userAns)
+                          ? userAns.includes(opt.id)
+                          : userAns === opt.id;
+                        const bgCol = OPT_COLORS[i % OPT_COLORS.length];
+                        const isCheckbox = currentQ.type === 'checkbox';
+
+                        return (
+                          <TouchableOpacity
+                            key={opt.id}
+                            style={[
+                              styles.optionTile,
+                              { backgroundColor: bgCol },
+                              selected && styles.optionTileSelected,
+                            ]}
+                            onPress={() => onSelectOption(currentQ.id, opt.id, isCheckbox)}
+                            activeOpacity={0.85}
+                          >
+                            <View style={[styles.letterCircle, selected && isCheckbox && { backgroundColor: '#FFFFFF' }]}>
+                              {isCheckbox && selected ? (
+                                <Ionicons name="checkmark" size={16} color={bgCol} />
+                              ) : (
+                                <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
+                              )}
+                            </View>
+
+                            <Text style={[styles.optionTileText, { fontSize: 16 * fontSizeScale }]}>
+                              {stripHtmlTags(opt.option_text)}
+                            </Text>
+
+                            {selected && !isCheckbox && (
+                              <View style={styles.selectedBadgeCircle}>
+                                <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {/* Short Answer Input */}
+                  {(currentQ.type === 'short_answer' || currentQ.type === 'essay') && (
+                    <View style={styles.textInputBox}>
+                      <TextInput
+                        style={[
+                          styles.shortAnswerInput,
+                          currentQ.type === 'essay' && { height: 160, textAlignVertical: 'top' },
+                          { color: '#FFF', fontSize: 16 * fontSizeScale },
+                        ]}
+                        placeholder={currentQ.type === 'essay' ? 'Write your answer here...' : 'Tap to answer'}
+                        placeholderTextColor="#64748B"
+                        value={answers[currentQ.id] || ''}
+                        onChangeText={(text) => onTextChange(currentQ.id, text)}
+                        multiline={currentQ.type === 'essay'}
+                      />
+                    </View>
+                  )}
+
+                  {/* File Upload Input */}
+                  {currentQ.type === 'file_upload' && (
+                    <View style={styles.fileUploadBox}>
+                      <TouchableOpacity
+                        style={styles.fileUploadBtn}
+                        onPress={() => onPickFile(currentQ.id)}
+                        disabled={fileUploading[currentQ.id]}
+                      >
+                        {fileUploading[currentQ.id] ? (
+                          <ActivityIndicator color="#FFF" />
+                        ) : (
+                          <>
+                            <Ionicons name="cloud-upload-outline" size={24} color="#FFF" />
+                            <Text style={styles.fileUploadBtnText}>
+                              {answers[currentQ.id] ? 'File Attached' : 'Upload File'}
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               )}
             </Animated.View>
@@ -298,24 +373,19 @@ export function QuizStyleAnsweringStep({
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* BOTTOM ACTION BAR (Matching Web Screenshot 1 Bright Green Full-Width Next Button) */}
-      <View
-        style={[
-          styles.bottomActionBar,
-          {
-            backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
-            borderTopColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
-          },
-        ]}
-      >
+      {/* BOTTOM ACTION BAR (Matching Web Screenshot 1 with Previous Text & Bright Green Next Button) */}
+      <View style={styles.bottomActionBar}>
         <View style={styles.bottomButtonsRow}>
           {currentIdx > 0 && (
             <TouchableOpacity
-              style={[styles.prevBtn, { borderColor: colors.cardBorder, backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : '#F8FAFC' }]}
+              style={styles.prevBtnWithText}
               onPress={handlePrev}
               activeOpacity={0.8}
             >
-              <Ionicons name="chevron-back" size={18} color={colors.text} />
+              <Ionicons name="chevron-back" size={18} color="#94A3B8" />
+              <Text style={[styles.prevBtnText, { fontSize: 15 * fontSizeScale }]}>
+                {language === 'ID' ? 'Previous' : 'Previous'}
+              </Text>
             </TouchableOpacity>
           )}
 
@@ -327,7 +397,7 @@ export function QuizStyleAnsweringStep({
           >
             <Text style={[styles.nextBtnText, { fontSize: 16 * fontSizeScale }]}>
               {currentIdx === totalQ - 1
-                ? (language === 'ID' ? 'Kirim Jawaban' : 'Submit Quiz')
+                ? (language === 'ID' ? 'Kirim Jawaban' : 'Submit')
                 : (language === 'ID' ? 'Next >' : 'Next >')}
             </Text>
           </TouchableOpacity>
@@ -465,23 +535,82 @@ const styles = StyleSheet.create({
   optionalBadge: { backgroundColor: 'rgba(148, 163, 184, 0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   optionalText: { color: '#94A3B8', fontSize: 10, fontWeight: 'bold', letterSpacing: 0.8 },
 
-  reviewFlagBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14 },
-  reviewFlagBtnActive: { backgroundColor: '#F59E0B' },
+  reviewFlagBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)' },
+  reviewFlagBtnActive: { backgroundColor: '#F59E0B', borderColor: '#F59E0B' },
   reviewFlagText: { fontSize: 12, fontWeight: '700' },
 
   qTitleCenterWrapper: { width: '100%', alignItems: 'center', marginVertical: 12, paddingHorizontal: 10 },
-  qTitleText: { fontWeight: '800', textAlign: 'center', lineHeight: 30 },
+  qTitleText: { fontWeight: '800', textAlign: 'center', lineHeight: 32 },
 
-  zoomCenterWrapper: { width: '100%', alignItems: 'center', marginBottom: 20 },
-  zoomPillBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
-  zoomPillText: { fontWeight: '600' },
+  zoomCenterWrapper: { width: '100%', alignItems: 'center', marginBottom: 12 },
+  zoomPillBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(30, 41, 59, 0.7)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)' },
+  zoomPillText: { color: '#94A3B8', fontWeight: '600' },
 
-  questionCardBox: { width: '100%' },
+  helperText: { color: '#94A3B8', fontSize: 12, fontWeight: '600', textAlign: 'center', marginBottom: 20 },
+
+  /* VIBRANT KAHOOT-STYLE OPTION TILES */
+  optionsListContainer: { width: '100%' },
+  optionTile: {
+    width: '100%',
+    minHeight: 72,
+    borderRadius: 20,
+    marginBottom: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  optionTileSelected: {
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  letterCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  letterText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 16,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  optionTileText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  selectedBadgeCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  /* INPUT FIELDS */
+  textInputBox: { width: '100%', marginTop: 10 },
+  shortAnswerInput: { width: '100%', minHeight: 56, borderRadius: 18, backgroundColor: '#1E293B', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', paddingHorizontal: 18, paddingVertical: 14 },
+  fileUploadBox: { width: '100%', marginTop: 10 },
+  fileUploadBtn: { width: '100%', height: 60, borderRadius: 18, backgroundColor: '#1E293B', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  fileUploadBtnText: { color: '#FFF', fontWeight: 'bold' },
 
   /* BOTTOM ACTION BAR */
-  bottomActionBar: { paddingHorizontal: 20, paddingVertical: 12, borderTopWidth: 1 },
-  bottomButtonsRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  prevBtn: { width: 48, height: 48, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  bottomActionBar: { paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#0F172A', borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)' },
+  bottomButtonsRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  prevBtnWithText: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', backgroundColor: 'rgba(30, 41, 59, 0.6)' },
+  prevBtnText: { color: '#94A3B8', fontWeight: '700' },
   nextBtn: { flex: 1, height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
   nextBtnText: { color: '#FFFFFF', fontWeight: 'bold' },
 
