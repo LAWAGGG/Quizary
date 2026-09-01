@@ -340,34 +340,49 @@ export default function StandaloneQuizScreen() {
   // Group questions into section pages (matching web AnswerQuiz.jsx)
   const formPages = React.useMemo(() => {
     if (!questions || questions.length === 0) return [];
-    if (!sections || sections.length === 0) {
-      return [{ section: null, questions }];
+
+    const ordered: any[] = [];
+    const seen = new Set<number>();
+
+    // 1. Order questions by section if sections array exists
+    if (sections && sections.length > 0) {
+      sections.forEach((s) => {
+        questions
+          .filter((q) => q.section_id === s.id && !seen.has(q.id))
+          .forEach((q) => {
+            ordered.push(q);
+            seen.add(q.id);
+          });
+      });
     }
 
-    const pages: { section: any; questions: any[] }[] = [];
-    const seenQIds = new Set<number>();
+    // 2. Add remaining questions
+    questions
+      .filter((q) => !seen.has(q.id))
+      .forEach((q) => {
+        ordered.push(q);
+        seen.add(q.id);
+      });
 
-    sections.forEach((sec) => {
-      const secQs = questions.filter((q) => q.section_id === sec.id && !seenQIds.has(q.id));
-      if (secQs.length > 0) {
-        secQs.forEach((q) => seenQIds.add(q.id));
-        pages.push({ section: sec, questions: secQs });
+    // 3. Group questions into pages by section_id
+    const pages: { key: any; title: string | null; section: any; questions: any[] }[] = [];
+    ordered.forEach((q) => {
+      const secObj = (sections || []).find((s) => s.id === q.section_id);
+      const title = secObj?.title || null;
+      const key = q.section_id ?? 'none';
+
+      const last = pages[pages.length - 1];
+      if (last && last.key === key) {
+        last.questions.push(q);
+      } else {
+        pages.push({ key, title, section: secObj || null, questions: [q] });
       }
     });
 
-    const leftoverQs = questions.filter((q) => !seenQIds.has(q.id));
-    if (leftoverQs.length > 0) {
-      if (pages.length > 0) {
-        pages[pages.length - 1].questions.push(...leftoverQs);
-      } else {
-        pages.push({ section: null, questions: leftoverQs });
-      }
-    }
-
-    return pages.length > 0 ? pages : [{ section: null, questions }];
+    return pages.length > 0 ? pages : [{ key: 'none', title: null, section: null, questions: ordered }];
   }, [questions, sections]);
 
-  const currentPage = formPages[currentSectionIdx] || formPages[0] || { section: null, questions: [] };
+  const currentPage = formPages[currentSectionIdx] || formPages[0] || { key: 'none', title: null, section: null, questions: [] };
 
   const isQuestionAnswered = (q: any, val: any) => {
     if (q?.type === 'file_upload') return !!val;
@@ -569,17 +584,21 @@ export default function StandaloneQuizScreen() {
                 </View>
 
                 {/* Section Indicator Row (Matching Web Screenshot) */}
-                {currentPage?.section && (
-                  <View style={styles.sectionHeaderRow}>
-                    <View style={[styles.sectionPillIndicator, { backgroundColor: themeColor || colors.primary }]} />
-                    <Text style={[styles.sectionTitleText, { color: colors.text }]}>
-                      {currentPage.section.title || 'Section'}
-                    </Text>
-                    <Text style={[styles.sectionStepText, { color: colors.textSub }]}>
-                      {currentSectionIdx + 1}/{formPages.length}
-                    </Text>
-                  </View>
-                )}
+                {(() => {
+                  const secTitle = currentPage?.title || currentPage?.section?.title || (formPages.length > 1 ? (language === 'ID' ? `Bagian ${currentSectionIdx + 1}` : `Section ${currentSectionIdx + 1}`) : null);
+                  if (!secTitle && formPages.length <= 1) return null;
+                  return (
+                    <View style={styles.sectionHeaderRow}>
+                      <View style={[styles.sectionPillIndicator, { backgroundColor: themeColor || colors.primary }]} />
+                      <Text style={[styles.sectionTitleText, { color: colors.text }]} numberOfLines={1}>
+                        {secTitle || (language === 'ID' ? `Bagian ${currentSectionIdx + 1}` : `Section ${currentSectionIdx + 1}`)}
+                      </Text>
+                      <Text style={[styles.sectionStepText, { color: colors.textSub }]}>
+                        {currentSectionIdx + 1}/{formPages.length}
+                      </Text>
+                    </View>
+                  );
+                })()}
 
                 {/* Questions of current section page (Progressive rendering for super-fast section switching) */}
                 {(currentPage?.questions || []).slice(0, visibleLimit).map((q: any, idx: number) => {
