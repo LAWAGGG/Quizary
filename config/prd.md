@@ -114,7 +114,7 @@ Aturan kunci yang **tidak boleh dilanggar** oleh implementasi apapun:
 
 - Shuffle, limit submit, dan validasi waktu **harus** divalidasi ulang di backend pada setiap request, klien tidak dipercaya sepenuhnya
 - Halaman pengerjaan tidak boleh mengirim jawaban benar (`is_correct` dari opsi) ke klien sebelum submit — cek response `GET /submissions/{id}` sebelum status `submitted`/`auto_submitted`, field opsi hanya berisi `option_text`, bukan `is_correct`
-- **Mode fullscreen (`is_restricted`)** hanya berlaku untuk tipe `quiz`. Anticheat ini client-reported: tiap keluar dari tab/loss-of-focus dilaporkan ke `POST /submissions/{id}/tab-exit`, server yang menghitung. Masuk ambang ke-3 → submission `status='cheating'`, `score=0`, `submitted_at` diisi. Penalti ada di server, bukan klien.
+- **Mode fullscreen (`is_restricted`)** hanya berlaku untuk tipe `quiz`. Anticheat ini client-reported: saat keluar dari tab/loss-of-focus, klien memberi grace period 5 detik untuk kembali fullscreen. Jika tidak kembali, satu laporan dikirim ke `POST /submissions/{id}/tab-exit` dan server mengubah submission menjadi `status='locked'`. Penalti ada di server, bukan klien.
 - **Rantai setting (auto-coerce):** `is_restricted=true` memaksa `submission_limit='once'`; `submission_limit='once'` memaksa `require_login=true`. Identitas berbasis akun membuat "sekali per orang" dan atribusi anti-cheat tidak bergantung IP yang bisa dipalsukan.
 - **Leaderboard (`show_leaderboard`)** bersifat read-only setelah submit (bukan real-time). Publik via `GET /q/{code}/leaderboard`; submission `cheating` dikecualikan supaya tidak terekspos ke responden.
 

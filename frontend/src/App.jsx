@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { MotionConfig } from 'framer-motion'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
@@ -22,13 +22,23 @@ import MySubmissions from './pages/profile/MySubmissions'
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
-  if (!user) return <Navigate to="/login" replace />
+  const location = useLocation()
+  if (!user) {
+    const from = location.pathname + location.search
+    return <Navigate to={`/login?next=${encodeURIComponent(from)}`} state={{ from }} replace />
+  }
   return children
 }
 
 function PublicRoute({ children }) {
   const { user } = useAuth()
-  if (user) return <Navigate to="/" replace />
+  const location = useLocation()
+  if (user) {
+    const from = location.state?.from || new URLSearchParams(location.search).get('next')
+    // cegah loop jika from masih halaman auth
+    const safe = from && !from.startsWith('/login') && !from.startsWith('/register') ? from : '/'
+    return <Navigate to={safe} replace />
+  }
   return children
 }
 

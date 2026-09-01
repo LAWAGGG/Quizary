@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Mail, Lock, User, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
@@ -8,7 +8,9 @@ import { AuthShell } from '../../components/auth/AuthShell'
 
 export default function Register() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { register } = useAuth()
+  const from = location.state?.from || new URLSearchParams(location.search).get('next') || '/'
 
   const [form, setForm] = useState({
     name: '',
@@ -53,7 +55,7 @@ export default function Register() {
         form.password,
         form.password_confirmation
       )
-      navigate('/')
+      navigate(from, { replace: true })
     } catch (err) {
       const status = err.response?.status
       const msg = err.response?.data?.message
@@ -93,7 +95,7 @@ export default function Register() {
       footer={
         <>
           Already have an account?{' '}
-          <Link to="/login" className="font-semibold text-primary hover:text-primary-600 transition-colors">
+          <Link to={from !== '/' ? `/login?next=${encodeURIComponent(from)}` : '/login'} state={from !== '/' ? { from } : undefined} className="font-semibold text-primary hover:text-primary-600 transition-colors">
             Sign in
           </Link>
         </>

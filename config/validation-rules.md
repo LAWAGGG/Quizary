@@ -210,7 +210,8 @@ Creator atur ulang status hasil (universal): `in_progress` (buka kembali, score/
 submitted_at dikosongkan), `submitted` (grading normal), `cheating` (grading + nilai 0).
 Status lain → 422 (pattern). Submission bukan milik form → 404.
 Test: 200 semua transisi · 422 status invalid · 401 · 403 · 404.
-Terkait anti-cheat `locked`: pelanggaran ke-3 → `locked` (bukan langsung 0);
+Terkait anti-cheat `locked`: satu pelanggaran yang tidak kembali fullscreen dalam
+5 detik → `locked` (bukan langsung 0);
 autosave/submit/tab-exit saat locked → 409; locked tak diputuskan 5 menit
 (`updated_at`) → sweep otomatis `cheating` nilai 0.
 
@@ -276,7 +277,7 @@ Setiap business logic non-trivial WAJIB di-test:
 | Rantai `is_restricted` (chain) | PUT `is_restricted=true` → respons `submission_limit="once"` & `require_login=true` |
 | Rantai `once` (chain) | PUT `submission_limit="once"` → respons `require_login=true` |
 | once + login (server-side) | POST /submissions tanpa token untuk form `submission_limit="once"` → 401 |
-| Anti-cheat tab-exit (threshold) | `POST /submissions/{id}/tab-exit` ×2 → `warnings_left` turun; ×3 → status `cheating`, score `0` |
+| Anti-cheat tab-exit (grace period) | Keluar fullscreen → grace period 5 detik; jika tidak kembali → satu `POST /submissions/{id}/tab-exit` menghasilkan `status=locked` |
 | Anti-cheat non-quiz/off | `tab-exit` pada form form/`is_restricted=false` → 403 |
 | Leaderboard gating | `GET /q/{code}/leaderboard` saat `show_leaderboard=false` → 404 |
 | Leaderboard exclude cheating | Submission `cheating` tidak muncul di daftar leaderboard |

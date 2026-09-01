@@ -723,15 +723,8 @@ Auth: - (sesuai submission) atau Bearer Token (pemilik form)
 Auth: - (sesuai submission) atau Bearer Token (pemilik form)
 > Fullscreen anti-cheat (`is_restricted` quiz). Responden melaporkan tiap keluar dari tab/hilang fokus; penalti ditentukan server, bukan klien.
 ```json
-// Response 200 — belum ambang batas (peringatan 1 & 2)
-{
-  "message": "Tab exit recorded",
-  "tab_exit_count": 1,
-  "warnings_left": 2
-}
-```
-```json
-// Response 200 — exit ke-3 → submission DIKUNCI (status locked), bukan langsung 0.
+// Response 200 — satu exit yang sudah melewati grace period 5 detik
+// → submission DIKUNCI (status locked), bukan langsung 0.
 // Layar responden menampilkan pesan pelanggaran; creator memutuskan lewat
 // PATCH /forms/{id}/results/{submission_id}/status. Tak diputuskan 5 menit →
 // sweep otomatis finalisasi sebagai cheating (nilai 0).
@@ -739,7 +732,8 @@ Auth: - (sesuai submission) atau Bearer Token (pemilik form)
   "message": "Pelanggaran terdeteksi. Ujian dikunci sementara — menunggu keputusan pengawas.",
   "status": "locked",
   "warnings_left": 0,
-  "cheat_reason": "left-fullscreen; tab-hidden"
+  "cheat_reason": "left-fullscreen; tab-hidden",
+  "locked_at": "24-07-2026 17:05:00"
 }
 ```
 ```json
@@ -828,6 +822,7 @@ Auth: - (respondent via IP) atau Bearer Token (respondent/owner)
   "submitted_at": "24-07-2026 17:08:00",
   "tab_exit_count": 0,
   "cheat_reason": null,
+  "locked_at": null,
   "questions": [ ... ],
   "answers": [
     {

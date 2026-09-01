@@ -136,6 +136,55 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
 
   const uploadQuestionImage = handleQuestionFileChange
 
+  const handleRemoveQuestionImage = async () => {
+    if (!form.image) return
+    // pending (belum disimpan) → hapus lokal saja
+    if (form._pendingFile) {
+      setForm((prev) => ({ ...prev, image: null, _pendingFile: null }))
+      return
+    }
+    if (!questionId) {
+      setForm((prev) => ({ ...prev, image: null }))
+      return
+    }
+    try {
+      await api.delete(`/questions/${questionId}/image`)
+      setForm((prev) => ({ ...prev, image: null }))
+      toast.success('Gambar soal dihapus')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Gagal menghapus gambar')
+    }
+  }
+
+  const handleRemoveOptionImage = async (i) => {
+    const opt = form.options[i]
+    if (!opt?.image) return
+    if (opt._pendingFile) {
+      setForm((prev) => ({
+        ...prev,
+        options: prev.options.map((o, idx) => idx === i ? { ...o, image: null, _pendingFile: null } : o),
+      }))
+      return
+    }
+    if (!opt.id || !questionId) {
+      setForm((prev) => ({
+        ...prev,
+        options: prev.options.map((o, idx) => idx === i ? { ...o, image: null } : o),
+      }))
+      return
+    }
+    try {
+      await api.delete(`/questions/${questionId}/option/${opt.id}/image`)
+      setForm((prev) => ({
+        ...prev,
+        options: prev.options.map((o, idx) => idx === i ? { ...o, image: null } : o),
+      }))
+      toast.success('Gambar opsi dihapus')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Gagal menghapus gambar')
+    }
+  }
+
   const handleTypeChange = (type) => {
     setForm((prev) => ({
       ...prev,
@@ -220,34 +269,50 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         {ferr('question_text') && <p className="field-error">{ferr('question_text')}</p>}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          ref={questionFileRef}
-          type="file"
-          accept="image/*,audio/*,.mp3,.wav,.m4a,.ogg,.aac,.webm"
-          className="hidden"
-          onChange={handleQuestionFileChange}
-        />
-        <button
-          type="button"
-          onClick={(e) => { e.preventDefault(); questionFileRef.current?.click() }}
-          disabled={qImgLoading}
-          title={questionId ? 'Upload image or audio (mp3)' : 'Pilih media — akan diupload setelah disimpan'}
-          className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-semibold border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-primary hover:border-primary transition-colors"
-        >
-          {qImgLoading ? (
-            <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <ImageIcon className="w-4 h-4" />
-          )}
-          {qImgLoading ? 'Uploading...' : form.image ? 'Replace' : 'Add media'}
-        </button>
-        {form.image?.path && ((form._pendingFile?.type?.startsWith('audio/') || isAudioUrl(form.image.path)) ? (
-          <audio controls src={form.image.path} preload="metadata" className="h-10 max-w-[240px] flex-1 min-w-0" />
+      <div className="space-y-3">
+  <input
+    ref={questionFileRef}
+    type="file"
+    accept="image/*,audio/*,.mp3,.wav,.m4a,.ogg,.aac,.webm"
+    className="hidden"
+    onChange={handleQuestionFileChange}
+  />
+  {form.image?.path ? (
+    <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-ink-800/50">
+      {(form._pendingFile?.type?.startsWith('audio/') || isAudioUrl(form.image.path)) ? (
+        <audio controls src={form.image.path} preload="metadata" className="w-full p-3" />
+      ) : (
+        <img src={form.image.path} alt="" className="w-full max-h-72 object-contain bg-white dark:bg-ink-900" />
+      )}
+      <button
+        type="button"
+        onClick={handleRemoveQuestionImage}
+        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-ink/70 hover:bg-incorrect text-white flex items-center justify-center backdrop-blur-sm transition-colors"
+        aria-label="Remove image"
+        title="Hapus gambar"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  ) : (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); questionFileRef.current?.click() }}
+        disabled={qImgLoading}
+        title="Upload image or audio (mp3)"
+        className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 h-9 rounded-xl text-xs font-semibold border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:text-primary hover:border-primary hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-colors"
+      >
+        {qImgLoading ? (
+          <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
         ) : (
-          <img src={form.image.path} alt="" className="h-10 w-14 object-cover rounded-md border border-gray-200 dark:border-gray-700" />
-        ))}
-      </div>
+          <ImageIcon className="w-4 h-4" />
+        )}
+        {qImgLoading ? 'Uploading...' : 'Tambah gambar / audio'}
+      </button>
+    </div>
+  )}
+</div>
 
       <div className="flex items-end gap-4">
         {isQuiz && !noGrade && (
@@ -299,44 +364,44 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
               + Add option
             </button>
           </div>
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {form.options.map((opt, i) => (
               <motion.div
                 key={i}
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="flex items-center gap-2.5"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                className="flex flex-col gap-2 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-ink-800/30"
               >
-                {form.type === 'dropdown' ? (
-                  <span className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-ink-800 text-gray-500 dark:text-gray-400 flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
-                ) : form.type === 'checkbox' ? (
-                  <button
-                    type="button"
-                    onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
-                    aria-label={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
-                    title={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
-                    className="shrink-0 rounded-lg transition-transform hover:scale-105 active:scale-95"
-                  >
-                    <span className={`flex items-center justify-center w-7 h-7 rounded-lg border-2 transition-colors ${opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 bg-white dark:bg-ink-900 text-transparent hover:border-primary/60'
-                      }`}>
-                      {opt.is_correct && <Check className="w-4 h-4" strokeWidth={3.5} />}
-                    </span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
-                    aria-label={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
-                    title={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
-                    className="shrink-0 transition-transform hover:scale-105 active:scale-95"
-                  >
-                    <span className={`bubble ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
-                      {opt.is_correct ? <Check className="w-3.5 h-3.5" /> : LETTERS[i % LETTERS.length]}
-                    </span>
-                  </button>
-                )}
-                <div className="flex-1 min-w-0">
+                <div className="space-y-3">
+                  {form.type === 'dropdown' ? (
+                    <span className="w-7 h-7 rounded-lg bg-white dark:bg-ink-900 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center text-xs font-bold mt-1">{i + 1}</span>
+                  ) : form.type === 'checkbox' ? (
+                    <button
+                      type="button"
+                      onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
+                      aria-label={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
+                      title={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
+                      className="shrink-0 rounded-lg transition-transform hover:scale-105 active:scale-95 mt-1"
+                    >
+                      <span className={`flex items-center justify-center w-7 h-7 rounded-lg border-2 transition-colors ${opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 bg-white dark:bg-ink-900 text-transparent hover:border-primary/60'
+                        }`}>
+                        {opt.is_correct && <Check className="w-4 h-4" strokeWidth={3.5} />}
+                      </span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
+                      aria-label={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
+                      title={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
+                      className="shrink-0 transition-transform hover:scale-105 active:scale-95 mt-1"
+                    >
+                      <span className={`bubble ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
+                        {opt.is_correct ? <Check className="w-3.5 h-3.5" /> : LETTERS[i % LETTERS.length]}
+                      </span>
+                    </button>
+                  )}
                   <RichTextEditor
                     value={opt.option_text}
                     onChange={(html) => setOption(i, 'option_text', html)}
@@ -344,44 +409,58 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                     compact
                     minHeight={48}
                   />
-                </div>
-                {opt.image?.path && (
-                  <img src={opt.image.path} alt="" className="w-9 h-9 object-cover rounded-md border border-gray-200 dark:border-gray-700 shrink-0" />
-                )}
-                <input
-                  ref={(el) => (optionFileRefs.current[i] = el)}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={() => uploadOptionImage(opt, i)}
-                />
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    optionFileRefs.current[i]?.click()
-                  }}
-                  disabled={!!imgLoading}
-                  title={opt.id ? 'Upload option image' : 'Pilih gambar — akan diupload setelah disimpan'}
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors shrink-0 ${opt.image ? 'text-primary hover:bg-primary-soft' : 'text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary-soft'
-                    }`}
-                >
-                  {imgLoading === `opt-${i}` ? (
-                    <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <ImageIcon className="w-4 h-4" />
+                  <div className="flex gap-1 shrink-0 pt-1">
+                    <input
+                      ref={(el) => (optionFileRefs.current[i] = el)}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={() => uploadOptionImage(opt, i)}
+                    />
+                    {!opt.image?.path && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          optionFileRefs.current[i]?.click()
+                        }}
+                        disabled={!!imgLoading}
+                        title={opt.id ? 'Upload option image' : 'Pilih gambar — akan diupload setelah disimpan'}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center border transition-colors shrink-0 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20"
+                      >
+                        {imgLoading === `opt-${i}` ? (
+                          <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <ImageIcon className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+                    {form.options.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeOption(i)}
+                        className="w-8 h-8 rounded-lg text-gray-400 dark:text-gray-500 hover:text-incorrect hover:bg-incorrect-soft border border-transparent hover:border-incorrect/20 transition-colors text-lg leading-none"
+                        aria-label="Remove option"
+                      >
+                        &times;
+                      </button>
+                    )}
+                  </div>
+                  {opt.image?.path && (
+                    <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900">
+                      <img src={opt.image.path} alt="" className="w-full max-h-64 object-contain" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveOptionImage(i)}
+                        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-ink/70 hover:bg-incorrect text-white flex items-center justify-center backdrop-blur-sm transition-colors"
+                        aria-label="Remove option image"
+                        title="Hapus gambar opsi"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   )}
-                </button>
-                {form.options.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeOption(i)}
-                    className="w-9 h-9 rounded-lg text-gray-400 dark:text-gray-500 hover:text-incorrect hover:bg-incorrect-soft transition-colors text-lg leading-none"
-                    aria-label="Remove option"
-                  >
-                    &times;
-                  </button>
-                )}
+                </div>
               </motion.div>
             ))}
           </div>
@@ -1024,11 +1103,15 @@ export default function QuestionBuilder() {
       section_id: data.section_id || null,
       password_keyword: data.type === 'password' ? data.password_keyword : undefined,
       options: OPTION_TYPES.includes(data.type)
-        ? data.options.filter((o) => o.option_text.trim()).map((o) => ({
-          ...(o.id ? { id: o.id } : {}),
-          option_text: o.option_text,
-          is_correct: data.type === 'dropdown' ? false : !!o.is_correct,
-        }))
+        ? data.options.filter((o) => {
+            const hasText = (o.option_text || '').replace(/<[^>]*>/g, '').trim()
+            const hasImage = !!(o.image?.path || o._pendingFile)
+            return hasText || hasImage
+          }).map((o) => ({
+            ...(o.id ? { id: o.id } : {}),
+            option_text: (o.option_text || '').replace(/<[^>]*>/g, '').trim() ? o.option_text : (o.image?.path || o._pendingFile ? '<p><br></p>' : o.option_text),
+            is_correct: data.type === 'dropdown' ? false : !!o.is_correct,
+          }))
         : [],
     }
     try {

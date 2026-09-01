@@ -99,6 +99,9 @@ class SubmissionDetailResponse(BaseModel):
     # Detail pelanggaran anti-curang (status cheating) untuk header modal hasil.
     tab_exit_count: int = 0
     cheat_reason: Optional[str] = None
+    # Waktu submission masuk status locked; dipakai klien untuk countdown
+    # fallback sweep lima menit yang tetap akurat setelah reload.
+    locked_at: Optional[str] = None
     # For in-progress: questions in order (to allow UI rebuild after reload)
     questions: list[QuestionWithOptions] = []
     # Sections for grouping questions into pages (title map by id)

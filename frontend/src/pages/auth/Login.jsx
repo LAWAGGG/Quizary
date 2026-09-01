@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
@@ -8,7 +8,9 @@ import { AuthShell } from '../../components/auth/AuthShell'
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login } = useAuth()
+  const from = location.state?.from || new URLSearchParams(location.search).get('next') || '/'
 
   const [form, setForm] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
@@ -35,7 +37,7 @@ export default function Login() {
     setLoading(true)
     try {
       await login(form.email, form.password)
-      navigate('/')
+      navigate(from, { replace: true })
     } catch (err) {
       const status = err.response?.status
       const msg = err.response?.data?.message
@@ -74,7 +76,7 @@ export default function Login() {
       footer={
         <>
           Don&apos;t have an account?{' '}
-          <Link to="/register" className="font-semibold text-primary hover:text-primary-600 transition-colors">
+          <Link to={from !== '/' ? `/register?next=${encodeURIComponent(from)}` : '/register'} state={from !== '/' ? { from } : undefined} className="font-semibold text-primary hover:text-primary-600 transition-colors">
             Sign up
           </Link>
         </>

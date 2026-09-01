@@ -630,11 +630,14 @@ def check_password(
 
 
 # ── POST /submissions/{id}/tab-exit ──────────────────────────────────────────
-# Fullscreen anti-cheat (is_restricted quiz). Respondent leaving the tab reports
-# each exit; on the 3rd the submission is auto-submitted with score 0 + status
-# "cheating" server-side (the client is never trusted to self-impose the penalty).
+# Fullscreen anti-cheat (is_restricted quiz). Client memberi grace period 5
+# detik sebelum melaporkan exit yang bertahan; satu laporan terkonfirmasi
+# mengunci submission server-side.
 
-CHEAT_THRESHOLD = 3
+# Satu pelanggaran yang bertahan melewati grace period frontend sudah cukup
+# untuk mengunci sesi. Grace period 5 detik mencegah false-positive ketika
+# browser memancarkan blur/visibility/fullscreen event secara bersamaan.
+CHEAT_THRESHOLD = 1
 
 
 @router.post("/submissions/{submission_id}/tab-exit")
@@ -678,13 +681,14 @@ def report_tab_exit(
             "status": "locked",
             "warnings_left": 0,
             "cheat_reason": sub.cheat_reason,
+            "locked_at": fmt_dt(sub.updated_at),
         }
 
     db.commit()
     return {
         "message": "Tab exit recorded",
         "tab_exit_count": sub.tab_exit_count,
-        "warnings_left": CHEAT_THRESHOLD - sub.tab_exit_count,
+        "warnings_left": 0,
     }
 
 
@@ -872,6 +876,7 @@ def get_submission(
         respondent_email=sub.respondent_email,
         tab_exit_count=sub.tab_exit_count or 0,
         cheat_reason=sub.cheat_reason,
+        locked_at=fmt_dt(sub.updated_at) if sub.status == SubmissionStatus.locked else None,
         questions=questions,
         sections=sections,
         answers=answers_data,

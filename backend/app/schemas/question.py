@@ -14,7 +14,7 @@ class OptionCreate(BaseModel):
 
 class OptionUpdate(BaseModel):
     id: Optional[int] = None
-    option_text: Optional[str] = Field(None, min_length=1, max_length=2000)
+    option_text: Optional[str] = Field(None, min_length=0, max_length=2000)
     is_correct: Optional[bool] = None
 
 

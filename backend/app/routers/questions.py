@@ -727,6 +727,48 @@ def _replace_image(owner, subdir: str, file: UploadFile, db: Session, request: R
     return file_url(request, new_path)
 
 
+# ── Delete images ─────────────────────────────────────────────────────────────
+
+@router.delete("/questions/{question_id}/image")
+def delete_question_image(
+    question_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    question = _get_question_or_404(question_id, db)
+    _ensure_owner(question, user, db)
+    imgs = sorted(question.images, key=lambda i: i.order_index or 0)
+    if not imgs:
+        raise HTTPException(status_code=404, detail="Gambar tidak ditemukan")
+    for img in imgs:
+        _delete_file(img.path)
+        db.delete(img)
+    db.commit()
+    return {"message": "Gambar soal dihapus"}
+
+
+@router.delete("/questions/{question_id}/option/{option_id}/image")
+def delete_option_image(
+    question_id: int,
+    option_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    question = _get_question_or_404(question_id, db)
+    _ensure_owner(question, user, db)
+    opt = db.get(QuestionOption, option_id)
+    if not opt or opt.question_id != question_id:
+        raise HTTPException(status_code=404, detail="Option not found in this question")
+    imgs = sorted(opt.images, key=lambda i: i.order_index or 0)
+    if not imgs:
+        raise HTTPException(status_code=404, detail="Gambar tidak ditemukan")
+    for img in imgs:
+        _delete_file(img.path)
+        db.delete(img)
+    db.commit()
+    return {"message": "Gambar opsi dihapus"}
+
+
 # ── Upload images ─────────────────────────────────────────────────────────────
 
 @router.post("/questions/{question_id}/option/{option_id}/image", status_code=201)

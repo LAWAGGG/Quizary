@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Lock, Clock, ArrowRight, CheckCircle2, HelpCircle } from 'lucide-react'
 import { Button, Input, Card, AppMark, FallbackPage, DotCorner, SpotlightCard, AuroraBg, RichText } from '../../components/ui'
@@ -32,6 +32,7 @@ function BlockedState({ background, icon, title, children }) {
 export default function FormLanding() {
   const { shortCode } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { theme } = useTheme()
 
   const [form, setForm] = useState(null)
@@ -162,6 +163,8 @@ export default function FormLanding() {
     }
 
     if (startState.requires_login) {
+      const from = location.pathname + location.search
+      const next = encodeURIComponent(from)
       return (
         <BlockedState
           background={palette.gradient}
@@ -169,9 +172,14 @@ export default function FormLanding() {
           title="Sign in required"
         >
           <p className="text-white/70 text-sm mt-2 mb-6">You need to sign in to access <RichText html={form.title} className="rich-text" />.</p>
-          <Button variant="secondary" size="xl" onClick={() => navigate('/login')}>
-            Login
-          </Button>
+          <div className="flex flex-col gap-3">
+            <Button variant="secondary" size="xl" onClick={() => navigate(`/login?next=${next}`, { state: { from } })}>
+              Login
+            </Button>
+            <Button variant="secondary" size="xl" className="bg-white/10 border-white/20 text-white hover:bg-white/20" onClick={() => navigate(`/register?next=${next}`, { state: { from } })}>
+              Register
+            </Button>
+          </div>
         </BlockedState>
       )
     }

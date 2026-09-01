@@ -20,7 +20,8 @@ api.interceptors.response.use(
     if (err.response?.status === 401 && !isPublic && !path.includes('/login')) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      window.location.href = '/login'
+      const next = encodeURIComponent(path + window.location.search)
+      window.location.href = `/login?next=${next}`
     }
     return Promise.reject(err)
   }

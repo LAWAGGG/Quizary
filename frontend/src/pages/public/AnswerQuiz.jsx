@@ -23,32 +23,50 @@ function parseDate(str) {
   return new Date(Date.UTC(Y, m - 1, d, (H || 0) - 7, M || 0, S || 0))
 }
 
+function lockedInfoFromSubmission(submission, previous = null) {
+  if (submission?.status !== 'locked') return null
+  const serverLockedAt = parseDate(submission.locked_at)?.getTime()
+  return {
+    reason: submission.cheat_reason || '',
+    // Preserve the first local timestamp only as a fallback for old API data.
+    lockedAt: serverLockedAt || previous?.lockedAt || Date.now(),
+  }
+}
+
 function OptionTile({ letter, color, selected, checkbox, children, onClick, disabled, image }) {
   return (
     <motion.button
       whileTap={{ scale: 0.96 }}
       onClick={onClick}
       disabled={disabled}
-      className={`relative py-4 px-4 rounded-2xl font-medium text-white text-center min-h-[88px] flex items-center gap-3 transition-all ${selected ? 'ring-2 ring-white ring-offset-2 shadow-lift scale-[1.02]' : 'shadow hover:brightness-110 active:brightness-95'
-        }`}
+      className={`relative py-4 px-4 rounded-2xl font-medium text-white text-center min-h-[88px] flex flex-col items-center gap-3 transition-all ${
+        selected ? 'ring-2 ring-white ring-offset-2 shadow-lift scale-[1.02]' : 'shadow hover:brightness-110 active:brightness-95'
+      }`}
       style={{ backgroundColor: color }}
     >
-      {checkbox ? (
-        <span className={`flex items-center justify-center w-7 h-7 rounded-lg shrink-0 transition-colors ${selected ? 'bg-white' : 'bg-white/25'
+      <div className="flex items-center gap-3 w-full">
+        {checkbox ? (
+          <span className={`flex items-center justify-center w-7 h-7 rounded-lg shrink-0 transition-colors ${
+            selected ? 'bg-white' : 'bg-white/25'
           }`}>
-          {selected && <Check className="w-4 h-4 text-[var(--t,#6C5CE7)]" strokeWidth={3.5} />}
-        </span>
-      ) : (
-        <span className="flex items-center justify-center w-9 h-9 rounded-full bg-white/25 font-mono font-bold text-sm shrink-0">
-          {letter}
-        </span>
-      )}
-      {image && (
-        <img src={image.path} alt="" className="max-h-24 w-auto rounded-lg object-contain shrink-0" />
-      )}
-      {children ? <span className="flex-1 leading-snug text-left">{children}</span> : null}
+            {selected && <Check className="w-4 h-4 text-[var(--t,#6C5CE7)]" strokeWidth={3.5} />}
+          </span>
+        ) : (
+          <span className="flex items-center justify-center w-9 h-9 rounded-full bg-white/25 font-mono font-bold text-sm shrink-0">
+            {letter}
+          </span>
+        )}
+        {children ? (
+          <span className="flex-1 leading-snug text-left">{children}</span>
+        ) : (
+          <span className="flex-1" />
+        )}
+      </div>
 
-      {!children && !image && <span className="flex-1" />}
+      {image && (
+        <img src={image.path} alt="" className="max-h-24 w-auto rounded-lg object-contain" />
+      )}
+
       {selected && !checkbox && (
         <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white/25 flex items-center justify-center">
           <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
@@ -90,7 +108,10 @@ export default function AnswerQuiz() {
   const [timeLeft, setTimeLeft] = useState(null)
   const [direction, setDirection] = useState(1)
   const [cheatWarn, setCheatWarn] = useState(null)
-  // Submission dilock anti-cheat (pelanggaran ke-3): menunggu keputusan creator.
+  // Countdown 5 detik sebelum lock: null = tidak dalam grace, 5..0 = detik tersisa
+  const [graceCountdown, setGraceCountdown] = useState(null)
+  // Submission dilock anti-cheat setelah satu exit fullscreen yang bertahan
+  // melewati grace period 5 detik; menunggu keputusan creator.
   const [lockedInfo, setLockedInfo] = useState(null)
   const [showInfo, setShowInfo] = useState(false)
   const [zoomTarget, setZoomTarget] = useState(null)   // { question, options } yang dibuka modal zoom
@@ -116,14 +137,15 @@ export default function AnswerQuiz() {
 
   const reportTabExit = useCallback(async (reason = '') => {
     // Fullscreen anti-cheat: pelanggaran dilaporkan ke server (server pegang penalti).
-    // Pelanggaran ke-3 → submission 'locked': layar dikunci, creator memutuskan
+    // Exit yang bertahan melewati grace period → submission 'locked': layar
+    // dikunci, creator memutuskan
     // lanjut / finalisasi. Tak diputuskan 5 menit → otomatis cheating (sweep).
     try {
       const res = await api.post(`/submissions/${submissionId}/tab-exit`, reason ? { reason } : undefined, { headers: sessionTokenHeaders(submissionId) })
       const d = res.data
       if (d.status === 'locked') {
         setCheatWarn(null)
-        setLockedInfo({ reason: d.cheat_reason || reason })
+        setLockedInfo((previous) => lockedInfoFromSubmission({ ...d, cheat_reason: d.cheat_reason || reason }, previous))
       } else if (d.status === 'cheating' || d.warnings_left === 0) {
         goToResult()
       } else {
@@ -148,7 +170,7 @@ export default function AnswerQuiz() {
         goToResult()
         return
       }
-      setLockedInfo(d.status === 'locked' ? { reason: d.cheat_reason || '' } : null)
+      setLockedInfo((previous) => lockedInfoFromSubmission(d, previous))
       setData(d)
       const ans = {}
       const files = {}
@@ -210,30 +232,9 @@ export default function AnswerQuiz() {
     }
   }, [submissionId, flushAll])
 
-  // Poll soal terbaru — creator update form, preview responden ikut ter-update
-  // tanpa perlu refresh manual. Jawaban lokal (answers/fileAnswers) dipertahankan.
-  useEffect(() => {
-    if (!submissionId) return
-    const id = setInterval(async () => {
-      try {
-        const res = await api.get(`/submissions/${submissionId}`, { headers: sessionTokenHeaders(submissionId) })
-        const d = res.data
-        if (d.status === 'submitted' || d.status === 'auto_submitted' || d.status === 'cheating') {
-          goToResult()
-          return
-        }
-        // Creator memutuskan submission yang dilock: in_progress = buka kunci,
-        // selain itu sudah ditangani goToResult di atas.
-        setLockedInfo(d.status === 'locked' ? { reason: d.cheat_reason || '' } : null)
-        setData((prev) => {
-          if (!prev) return prev
-          return { ...prev, questions: d.questions, sections: d.sections, expired_at: d.expired_at }
-        })
-      } catch { /* poll gagal diabaikan, sesi tetap jalan */ }
-    }, 10000)
-    return () => clearInterval(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submissionId, goToResult])
+  // ponytail: auto-poll 10 detik dihapus — traffic tinggi bikin server lemot.
+  // Cek status locked / update soal sekarang hanya via tombol manual
+  // "Periksa status terbaru" / refresh (handleRefresh). Hemat request.
 
   useEffect(() => {
     if (!formCode) return
@@ -259,7 +260,7 @@ export default function AnswerQuiz() {
           goToResult()
           return
         }
-        setLockedInfo(d.status === 'locked' ? { reason: d.cheat_reason || '' } : null)
+        setLockedInfo((previous) => lockedInfoFromSubmission(d, previous))
         setData((prev) => {
           if (!prev) return prev
           return { ...prev, questions: d.questions, sections: d.sections, expired_at: d.expired_at }
@@ -294,7 +295,7 @@ export default function AnswerQuiz() {
         setPublicForm(results[1].value.data)
       }
     } catch {
-      /* soft refresh gagal — biarkan sesi tetap jalan, polling 10d akan coba lagi */
+      /* soft refresh gagal — biarkan sesi tetap jalan, user retry manual */
     } finally {
       setRefreshing(false)
     }
@@ -412,7 +413,7 @@ export default function AnswerQuiz() {
   const [fsAvailable, setFsAvailable] = useState(false)
   const kioskTimer = useRef(null)
   useEffect(() => {
-    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data?.id) return
     const inFullscreen = () => document.fullscreenElement || document.webkitFullscreenElement
     const lock = () => {
       clearTimeout(kioskTimer.current)
@@ -448,30 +449,72 @@ export default function AnswerQuiz() {
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('focus', onFocus)
     }
-  }, [effectiveType, publicForm?.is_restricted, data, fsAvailable])
+  }, [effectiveType, publicForm?.is_restricted, data?.id, fsAvailable])
 
-  // Fullscreen anti-cheat (is_restricted quiz). Detects and reports every
-  // cheating vector — tab/app switched, fullscreen exited, split-screen,
-  // floating window/PiP, print, devtools/shortcuts, right-click, copy.
-  // Debounced so the simultaneous blur + visibilitychange + resize burst that
-  // fires on a single "leave" isn't double-counted as multiple violations.
+  // Fullscreen anti-cheat (is_restricted quiz). Satu event keluar hanya
+  // memulai grace window 5 detik. Penalti baru dikirim ke server jika user
+  // belum kembali fullscreen setelah grace window berakhir. Ini menghindari
+  // false-positive dari burst blur + visibilitychange + fullscreenchange.
+  // FIX: deps pakai data?.id (bukan data) agar poll 10 detik tidak cancel timer.
+  // Tambah graceCountdown visible di KioskLockOverlay — user lihat hitung mundur
+  // 5..0 sebelum benar-benar dikunci server.
   useEffect(() => {
-    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data) return
-    let lastAt = 0
-    const MIN_GAP = 1200
+    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data?.id) return
+    let graceTimer = null
+    let graceInterval = null
+    let graceEndAt = 0
+    let graceReason = ''
+    const GRACE_MS = 5000
+
+    const clearGrace = () => {
+      if (graceTimer) clearTimeout(graceTimer)
+      if (graceInterval) clearInterval(graceInterval)
+      graceTimer = null
+      graceInterval = null
+      graceEndAt = 0
+      graceReason = ''
+      setGraceCountdown(null)
+    }
+
+    const startGrace = (reason) => {
+      if (graceTimer) return // already counting — debounce burst
+      graceReason = reason
+      graceEndAt = Date.now() + GRACE_MS
+      setGraceCountdown(5)
+      graceInterval = setInterval(() => {
+        const remaining = Math.max(0, Math.ceil((graceEndAt - Date.now()) / 1000))
+        setGraceCountdown(remaining)
+      }, 200)
+      graceTimer = setTimeout(() => {
+        clearInterval(graceInterval)
+        graceInterval = null
+        graceTimer = null
+        const stillOutside = !document.fullscreenElement && !document.webkitFullscreenElement
+        const stillHidden = document.visibilityState === 'hidden'
+        if (stillOutside || stillHidden) {
+          setGraceCountdown(null)
+          graceEndAt = 0
+          reportTabExit(graceReason)
+        } else {
+          clearGrace()
+        }
+      }, GRACE_MS)
+    }
+
     const report = (reason) => {
-      const now = Date.now()
-      if (now - lastAt < MIN_GAP) return
-      lastAt = now
-      reportTabExit(reason)
+      startGrace(reason)
     }
 
     const inFullscreen = () => document.fullscreenElement || document.webkitFullscreenElement
 
     const onFsChange = () => {
-      if (!inFullscreen()) report('left-fullscreen')
+      if (inFullscreen() && document.visibilityState === 'visible') clearGrace()
+      else report('left-fullscreen')
     }
-    const onVis = () => { if (document.visibilityState === 'hidden') report('tab-hidden') }
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') report('tab-hidden')
+      else if (inFullscreen()) clearGrace()
+    }
     const onBlur = () => { if (!kbInsetRef.current) report('window-blur') }
 
     // Split-screen / floating window: only meaningful while fullscreen is ON —
@@ -538,9 +581,10 @@ export default function AnswerQuiz() {
       document.removeEventListener('dragstart', onDragStart)
       document.removeEventListener('keydown', onKey)
       clearTimeout(shrinkTimer)
+      clearGrace()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveType, publicForm?.is_restricted, data, reportTabExit])
+  }, [effectiveType, publicForm?.is_restricted, data?.id, reportTabExit])
 
   // Auto-dismiss the cheat warning banner after a few seconds.
   useEffect(() => {
@@ -652,21 +696,34 @@ export default function AnswerQuiz() {
   // jadi pencocokan hanya bisa di backend. Gagal request = dianggap salah
   // (fail-closed); ponytail: tambah retry/timeout kalau network sering flake.
   const checkPasswords = async (qs) => {
-    const targets = qs.filter((q) => q.type === 'password' && String(answers[q.id] ?? '').length > 0)
-    if (!targets.length) return []
-    const wrong = await Promise.all(targets.map(async (q) => {
-      try {
-        const res = await api.post(
-          `/submissions/${submissionId}/questions/${q.id}/check-password`,
-          { answer: answers[q.id] },
-          { headers: sessionTokenHeaders(submissionId) },
-        )
-        return res.data.valid ? null : q.id
-      } catch {
-        return q.id
-      }
-    }))
-    return wrong.filter(Boolean)
+    if (!qs.length) return []
+    const emptyWrong = []
+    const toCheck = []
+    for (const q of qs) {
+      if (q.type !== 'password') continue
+      const ans = String(answers[q.id] ?? '')
+      if (!ans.length) emptyWrong.push(q.id)
+      else toCheck.push(q)
+    }
+    const checked = toCheck.length
+      ? (
+          await Promise.all(
+            toCheck.map(async (q) => {
+              try {
+                const res = await api.post(
+                  `/submissions/${submissionId}/questions/${q.id}/check-password`,
+                  { answer: answers[q.id] },
+                  { headers: sessionTokenHeaders(submissionId) },
+                )
+                return res.data.valid ? null : q.id
+              } catch {
+                return q.id
+              }
+            }),
+          )
+        ).filter(Boolean)
+      : []
+    return [...emptyWrong, ...checked]
   }
 
   const handleNext = async () => {
@@ -675,22 +732,36 @@ export default function AnswerQuiz() {
     if (Object.keys(textLimitErrors).length) {
       const firstId = Number(Object.keys(textLimitErrors)[0])
       setValidationErrors((e) => ({ ...e, [firstId]: true }))
-      setSubmitError(Object.values(textLimitErrors)[0])
       setTimeout(() => questionRefs.current[firstId]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
       return
     }
-    // required tidak block next — hanya block submit (handleSubmitAll)
-    // Gerbang password: hanya di batas section & hanya untuk soal required
-    // Quiz 1-per-halaman: password di tengah section tidak blok Next intra-section
+    // CARD/Form: required wajib blok Next Section — cek semua required di halaman ini.
+    // Quiz (isOneByOne) memang tidak blok Next Question untuk required, hanya password.
+    if (!isOneByOne) {
+      const pageQs = formPages[currentIdx]?.questions || []
+      const isAns = (q) => {
+        if (q.type === 'file_upload') return !!fileAnswers[q.id]?.url
+        const v = answers[q.id]
+        return Array.isArray(v) ? v.length > 0 : !!v && String(v).trim().length > 0
+      }
+      const missing = pageQs.filter((q) => q.is_required !== false && !isAns(q))
+      if (missing.length) {
+        const errs = Object.fromEntries(missing.map((q) => [q.id, true]))
+        setValidationErrors((e) => ({ ...e, ...errs }))
+        const first = missing[0].id
+        setTimeout(() => questionRefs.current[first]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
+        return
+      }
+    }
+    // Gerbang password: blok next apapun jika password salah/kosong —
+    // berlaku semua design & semua password (required maupun optional) —
+    // sesuai request: walaupun bukan required tetap harus sesuai keyword
+    // baru bisa next. Fix sebelumnya hanya required.
     let gateQuestions = []
     if (isOneByOne) {
-      const nextQ = questions[currentIdx + 1]
-      const isSectionBoundary = !nextQ || current?.section_id !== nextQ?.section_id
-      if (isSectionBoundary) {
-        gateQuestions = [current].filter(Boolean).filter((q) => q.type === 'password' && q.is_required !== false)
-      }
+      if (current?.type === 'password') gateQuestions = [current]
     } else {
-      gateQuestions = (formPages[currentIdx]?.questions || []).filter((q) => q.type === 'password' && q.is_required !== false)
+      gateQuestions = (formPages[currentIdx]?.questions || []).filter((q) => q.type === 'password')
     }
     const wrongPw = await checkPasswords(gateQuestions)
     if (wrongPw.length) {
@@ -701,6 +772,22 @@ export default function AnswerQuiz() {
         questionRefs.current[wrongPw[0]]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }, 80)
       return
+    }
+    // bersihkan error password sebelumnya jika sekarang sudah benar
+    if (gateQuestions.length) {
+      setPwWrong((prev) => {
+        const n = { ...prev }
+        gateQuestions.forEach((q) => delete n[q.id])
+        return n
+      })
+      setValidationErrors((prev) => {
+        const n = { ...prev }
+        gateQuestions.forEach((q) => {
+          // hanya hapus jika penyebabnya password, jangan hapus error required lain
+          if (prev[q.id] && q.type === 'password') delete n[q.id]
+        })
+        return n
+      })
     }
     const total = formPages.length
     if (currentIdx < total - 1) {
@@ -716,7 +803,49 @@ export default function AnswerQuiz() {
     }
   }
 
-  const goToQuestion = (idx) => {
+  const goToQuestion = async (idx) => {
+    // Forward jump wajib lolos gate password & limit seperti Next
+    if (idx > currentIdx) {
+      if (Object.keys(textLimitErrors).length) {
+        const firstId = Number(Object.keys(textLimitErrors)[0])
+        setValidationErrors((e) => ({ ...e, [firstId]: true }))
+        setTimeout(() => questionRefs.current[firstId]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
+        return
+      }
+      // CARD: required blok forward jump (section) — mirip Next
+      if (!isOneByOne) {
+        const pageQs = formPages[currentIdx]?.questions || []
+        const isAns = (q) => {
+          if (q.type === 'file_upload') return !!fileAnswers[q.id]?.url
+          const v = answers[q.id]
+          return Array.isArray(v) ? v.length > 0 : !!v && String(v).trim().length > 0
+        }
+        const missing = pageQs.filter((q) => q.is_required !== false && !isAns(q))
+        if (missing.length) {
+          const errs = Object.fromEntries(missing.map((q) => [q.id, true]))
+          setValidationErrors((e) => ({ ...e, ...errs }))
+          const first = missing[0].id
+          setTimeout(() => questionRefs.current[first]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
+          return
+        }
+      }
+      let gate = []
+      if (isOneByOne) {
+        if (current?.type === 'password') gate = [current]
+      } else {
+        gate = (formPages[currentIdx]?.questions || []).filter((q) => q.type === 'password')
+      }
+      if (gate.length) {
+        const wrong = await checkPasswords(gate)
+        if (wrong.length) {
+          const errs = Object.fromEntries(wrong.map((id) => [id, true]))
+          setPwWrong((w) => ({ ...w, ...errs }))
+          setValidationErrors((e) => ({ ...e, ...errs }))
+          setTimeout(() => questionRefs.current[wrong[0]]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
+          return
+        }
+      }
+    }
     setDirection(idx > currentIdx ? 1 : -1)
     setCurrentIdx(idx)
   }
@@ -726,7 +855,6 @@ export default function AnswerQuiz() {
     if (Object.keys(textLimitErrors).length) {
       const firstId = Number(Object.keys(textLimitErrors)[0])
       setValidationErrors((e) => ({ ...e, [firstId]: true }))
-      setSubmitError(Object.values(textLimitErrors)[0])
       const idx = (data?.questions || []).findIndex((q) => q.id === firstId)
       if (idx >= 0) {
         if (!isOneByOne) {
@@ -1108,14 +1236,12 @@ export default function AnswerQuiz() {
                     <Input
                       value={answers[current.id] || ''}
                       onChange={(e) => handleTextChange(current.id, e.target.value)}
-                      className={`text-center text-lg h-14 ${textLimitErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
-                      placeholder="Tap to answer (max 500 char)"
+                      className={`text-center text-lg h-14 ${(textLimitErrors[current.id] || validationErrors[current.id]) ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                      placeholder="Tap to answer"
                       maxLength={TEXT_LIMITS.short_answer + 50}
                     />
-                    <div className="flex justify-between mt-1.5">
-                      {textLimitErrors[current.id] ? <p className="text-xs font-medium text-incorrect">{textLimitErrors[current.id]}</p> : <span />}
-                      <span className={`text-xs ${String(answers[current.id] || '').length > TEXT_LIMITS.short_answer ? 'text-incorrect font-semibold' : 'text-gray-400'}`}>{String(answers[current.id] || '').length}/{TEXT_LIMITS.short_answer}</span>
-                    </div>
+                    {textLimitErrors[current.id] && <p className="text-xs font-medium text-incorrect mt-1.5 text-center">{textLimitErrors[current.id]}</p>}
+                    {validationErrors[current.id] && !textLimitErrors[current.id] && <p className="text-xs font-medium text-incorrect mt-1.5 text-center">This question is required</p>}
                   </div>
                 )}
 
@@ -1131,15 +1257,13 @@ export default function AnswerQuiz() {
                     <Textarea
                       value={answers[current.id] || ''}
                       onChange={(e) => handleTextChange(current.id, e.target.value)}
-                      className={`min-h-[180px] text-base leading-relaxed ${textLimitErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
-                      placeholder="Write your answer here... (max 5000 char)"
+                      className={`min-h-[180px] text-base leading-relaxed ${(textLimitErrors[current.id] || validationErrors[current.id]) ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                      placeholder="Write your answer here..."
                       rows={6}
                       maxLength={TEXT_LIMITS.essay + 100}
                     />
-                    <div className="flex justify-between mt-1.5">
-                      {textLimitErrors[current.id] ? <p className="text-xs font-medium text-incorrect">{textLimitErrors[current.id]}</p> : <span />}
-                      <span className={`text-xs ${String(answers[current.id] || '').length > TEXT_LIMITS.essay ? 'text-incorrect font-semibold' : 'text-gray-400'}`}>{String(answers[current.id] || '').length}/{TEXT_LIMITS.essay}</span>
-                    </div>
+                    {textLimitErrors[current.id] && <p className="text-xs font-medium text-incorrect mt-1.5">{textLimitErrors[current.id]}</p>}
+                    {validationErrors[current.id] && !textLimitErrors[current.id] && <p className="text-xs font-medium text-incorrect mt-1.5">This question is required</p>}
                   </div>
                 )}
                 {current.type === 'password' && (
@@ -1275,7 +1399,9 @@ export default function AnswerQuiz() {
           locked={kioskLocked}
           palette={palette}
           onResume={pinToFullscreen}
+          countdown={graceCountdown}
         />
+        <CheatLockOverlay info={lockedInfo} onRefresh={handleRefresh} refreshing={refreshing} />
         <ExamInfoDrawer show={showInfo} onClose={() => setShowInfo(false)} form={publicForm} data={data} />
         <ZoomModal
           target={zoomTarget}
@@ -1377,7 +1503,7 @@ export default function AnswerQuiz() {
                       Zoom in on question
                     </button>
                   </div>
-                  {validationErrors[q.id] && (
+                  {(validationErrors[q.id] && !textLimitErrors[q.id]) && (
                     <p className="text-xs font-semibold text-red-500 flex items-center gap-1 mb-3">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                       {q.type === 'password' && pwWrong[q.id] ? 'Wrong password, please try again' : 'This question is required'}
@@ -1401,26 +1527,28 @@ export default function AnswerQuiz() {
                         return (
                           <label
                             key={opt.id}
-                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-[var(--t)] bg-[var(--t-soft)]' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
+                            className={`flex flex-col gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-[var(--t)] bg-[var(--t-soft)]' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
                               }`}
                             style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
                           >
-                            <span
-                              className={`bubble w-6 h-6 text-xs ${selected ? 'bubble-selected' : 'bubble-empty'}`}
-                              style={selected ? { borderColor: palette.base, backgroundColor: palette.base, color: palette.onBase } : undefined}
-                            >
-                              {LETTERS[i % LETTERS.length]}
-                            </span>
-                            <input
-                              type="radio"
-                              name={`q-${q.id}`}
-                              checked={selected}
-                              onChange={() => handleSelect(q.id, opt.id)}
-                              className="sr-only"
-                            />
-                            <span className="text-sm text-ink dark:text-gray-200"><RichText html={opt.option_text} className="rich-text" /></span>
+                            <div className="flex items-center gap-3 w-full">
+                              <span
+                                className={`bubble w-6 h-6 text-xs shrink-0 ${selected ? 'bubble-selected' : 'bubble-empty'}`}
+                                style={selected ? { borderColor: palette.base, backgroundColor: palette.base, color: palette.onBase } : undefined}
+                              >
+                                {LETTERS[i % LETTERS.length]}
+                              </span>
+                              <input
+                                type="radio"
+                                name={`q-${q.id}`}
+                                checked={selected}
+                                onChange={() => handleSelect(q.id, opt.id)}
+                                className="sr-only"
+                              />
+                              <span className="text-sm text-ink dark:text-gray-200 flex-1 leading-snug"><RichText html={opt.option_text} className="rich-text" /></span>
+                            </div>
                             {opt.image && (
-                              <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                              <img src={opt.image.path} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
                             )}
                           </label>
                         )
@@ -1435,26 +1563,28 @@ export default function AnswerQuiz() {
                         return (
                           <label
                             key={opt.id}
-                            className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-[var(--t)] bg-[var(--t-soft)]' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
+                            className={`flex flex-col gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${selected ? 'border-[var(--t)] bg-[var(--t-soft)]' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-ink-800'
                               }`}
                             style={selected ? { borderColor: palette.base, backgroundColor: palette.soft } : undefined}
                           >
-                            <span
-                              className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 transition-colors ${selected ? '' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-ink-800'
-                                }`}
-                              style={selected ? { borderColor: palette.base, backgroundColor: palette.base, color: palette.onBase } : undefined}
-                            >
-                              {selected && <Check className="w-3.5 h-3.5" strokeWidth={3.5} />}
-                            </span>
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={() => handleSelect(q.id, opt.id)}
-                              className="sr-only"
-                            />
-                            <span className="text-sm text-ink dark:text-gray-200"><RichText html={opt.option_text} className="rich-text" /></span>
+                            <div className="flex items-center gap-3 w-full">
+                              <span
+                                className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 transition-colors ${selected ? '' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-ink-800'
+                                  }`}
+                                style={selected ? { borderColor: palette.base, backgroundColor: palette.base, color: palette.onBase } : undefined}
+                              >
+                                {selected && <Check className="w-3.5 h-3.5" strokeWidth={3.5} />}
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() => handleSelect(q.id, opt.id)}
+                                className="sr-only"
+                              />
+                              <span className="text-sm text-ink dark:text-gray-200 flex-1 leading-snug"><RichText html={opt.option_text} className="rich-text" /></span>
+                            </div>
                             {opt.image && (
-                              <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                              <img src={opt.image.path} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
                             )}
                           </label>
                         )
@@ -1467,14 +1597,11 @@ export default function AnswerQuiz() {
                       <Input
                         value={answers[q.id] || ''}
                         onChange={(e) => handleTextChange(q.id, e.target.value)}
-                        placeholder="Your answer (max 500)"
-                        className={textLimitErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}
+                        placeholder="Your answer"
+                        className={(textLimitErrors[q.id] || validationErrors[q.id]) ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}
                         maxLength={TEXT_LIMITS.short_answer + 50}
                       />
-                      <div className="flex justify-between mt-1.5">
-                        {textLimitErrors[q.id] ? <p className="text-xs font-medium text-incorrect">{textLimitErrors[q.id]}</p> : <span />}
-                        <span className={`text-xs ${String(answers[q.id] || '').length > TEXT_LIMITS.short_answer ? 'text-incorrect font-semibold' : 'text-gray-400'}`}>{String(answers[q.id] || '').length}/{TEXT_LIMITS.short_answer}</span>
-                      </div>
+                      {textLimitErrors[q.id] && <p className="text-xs font-medium text-incorrect mt-1.5">{textLimitErrors[q.id]}</p>}
                     </div>
                   )}
 
@@ -1483,15 +1610,12 @@ export default function AnswerQuiz() {
                       <Textarea
                         value={answers[q.id] || ''}
                         onChange={(e) => handleTextChange(q.id, e.target.value)}
-                        className={`min-h-[120px] ${textLimitErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                        className={`min-h-[120px] ${(textLimitErrors[q.id] || validationErrors[q.id]) ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
                         rows={4}
-                        placeholder="Write your answer... (max 5000)"
+                        placeholder="Write your answer..."
                         maxLength={TEXT_LIMITS.essay + 100}
                       />
-                      <div className="flex justify-between mt-1.5">
-                        {textLimitErrors[q.id] ? <p className="text-xs font-medium text-incorrect">{textLimitErrors[q.id]}</p> : <span />}
-                        <span className={`text-xs ${String(answers[q.id] || '').length > TEXT_LIMITS.essay ? 'text-incorrect font-semibold' : 'text-gray-400'}`}>{String(answers[q.id] || '').length}/{TEXT_LIMITS.essay}</span>
-                      </div>
+                      {textLimitErrors[q.id] && <p className="text-xs font-medium text-incorrect mt-1.5">{textLimitErrors[q.id]}</p>}
                     </div>
                   )}
 
@@ -1614,8 +1738,8 @@ export default function AnswerQuiz() {
         </div>
       </footer>
 
-      <CheatLockOverlay info={lockedInfo} />
-      <KioskLockOverlay locked={kioskLocked} palette={palette} onResume={pinToFullscreen} />
+      <KioskLockOverlay locked={kioskLocked} palette={palette} onResume={pinToFullscreen} countdown={graceCountdown} />
+      <CheatLockOverlay info={lockedInfo} onRefresh={handleRefresh} refreshing={refreshing} />
       <ExamInfoDrawer show={showInfo} onClose={() => setShowInfo(false)} form={publicForm} data={data} />
 
       <ZoomModal
@@ -1704,10 +1828,28 @@ function FileAnswer({ value, uploading, onFile, onRemove, error }) {
   )
 }
 
-function CheatLockOverlay({ info }) {
-  // Layar lock anti-cheat: pelanggaran ke-3. Responden tidak bisa berbuat apa-
-  // pun — menunggu creator memutuskan (lanjut / nilai 0, maks 5 menit; lewat
-  // waktu → sweep otomatis finalisasi). Poll 10 dtk membuka lock bila dilepas.
+function CheatLockOverlay({ info, onRefresh, refreshing }) {
+  // Countdown sinkron ke lockedAt lokal — bukan penanda pasti dari server,
+  // tapi cukup buat kasih gambaran ke responden berapa lama lagi menunggu
+  // sebelum sweep otomatis. Refresh manual tetap sumber kebenaran status asli.
+  const [remaining, setRemaining] = useState(300)
+
+  useEffect(() => {
+    if (!info?.lockedAt) return
+    const tick = () => {
+      const elapsed = Math.floor((Date.now() - info.lockedAt) / 1000)
+      setRemaining(Math.max(0, 300 - elapsed))
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [info?.lockedAt])
+
+  const mm = String(Math.floor(remaining / 60)).padStart(2, '0')
+  const ss = String(remaining % 60).padStart(2, '0')
+  const urgent = remaining <= 30
+  const expired = remaining <= 0
+
   return (
     <AnimatePresence>
       {info && (
@@ -1715,12 +1857,12 @@ function CheatLockOverlay({ info }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-ink"
+          className="fixed inset-0 z-[10000] flex items-center justify-center p-6 bg-ink"
         >
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="text-center text-white max-w-lg"
+            className="text-center text-white max-w-sm w-full"
           >
             <span className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-incorrect/20 mb-6">
               <AlertTriangle className="w-8 h-8 text-incorrect" />
@@ -1731,8 +1873,27 @@ function CheatLockOverlay({ info }) {
             )}
             <p className="text-sm text-white/70 mt-4 leading-relaxed">
               Exam is temporarily locked. Your answers are saved and will be reviewed
-              by the proctor (up to 5 minutes). Do not close this page.
+              by the proctor. Do not close this page.
             </p>
+
+            <div className="mt-6 inline-flex flex-col items-center gap-1.5 px-6 py-4 rounded-2xl bg-white/5 border border-white/10">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">
+                {expired ? 'Finalizing…' : 'Auto-finalize in'}
+              </span>
+              <span className={`font-mono text-3xl font-bold tabular-nums ${urgent ? 'text-incorrect animate-pulse' : 'text-white'}`}>
+                {mm}:{ss}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={refreshing}
+              className="mt-6 inline-flex items-center justify-center gap-2 min-h-12 px-6 rounded-xl bg-white text-ink hover:bg-white/90 active:scale-[0.98] border border-white/10 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Memeriksa status…' : 'Periksa status terbaru'}
+            </button>
           </motion.div>
         </motion.div>
       )}
@@ -1740,12 +1901,16 @@ function CheatLockOverlay({ info }) {
   )
 }
 
-function KioskLockOverlay({ locked, palette, onResume }) {
+function KioskLockOverlay({ locked, palette, onResume, countdown }) {
   // Layar kunci full — menutupi SEMUA konten. Interaksi apa pun (klik/keyboard/
   // sentuh) langsung mem-pin ulang ke fullscreen lewat onResume; konten ujian
   // tidak terlihat sampai responden kembali benar-benar ke dalam ujian.
+  // countdown 5..0: warning sebelum server lock. ponytail: countdown dikontrol
+  // dari anti-cheat effect (graceCountdown), bukan timer lokal duplikat.
+  // visible juga saat countdown aktif meski locked belum (fsAvailable race).
+  const visible = locked || (countdown !== null && countdown !== undefined)
   useEffect(() => {
-    if (!locked) return
+    if (!visible) return
     const tryResume = () => onResume()
     window.addEventListener('pointerdown', tryResume)
     window.addEventListener('keydown', tryResume)
@@ -1755,11 +1920,11 @@ function KioskLockOverlay({ locked, palette, onResume }) {
       window.removeEventListener('keydown', tryResume)
       window.removeEventListener('touchstart', tryResume)
     }
-  }, [locked, onResume])
+  }, [visible, onResume])
 
   return (
     <AnimatePresence>
-      {locked && (
+      {visible && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -1768,14 +1933,31 @@ function KioskLockOverlay({ locked, palette, onResume }) {
           className="fixed inset-0 z-[9999] flex items-center justify-center p-6"
           style={{ background: palette.gradient }}
         >
-          <div className="text-center text-white">
+          <div className="text-center text-white max-w-sm w-full">
             <span className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-white/10 mb-6">
               <Lock className="w-7 h-7" />
             </span>
             <h2 className="font-display text-xl font-bold">Exam locked</h2>
-            <p className="text-white/80 text-sm mt-2 max-w-xs">
-              You left the exam window. Tap or click anywhere to return to fullscreen and continue the exam.
-            </p>
+            {countdown !== null && countdown !== undefined ? (
+              <>
+                <div className="mt-5 inline-flex flex-col items-center gap-1 px-8 py-5 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
+                    Kembali dalam
+                  </span>
+                  <span className={`font-mono text-5xl font-bold tabular-nums leading-none ${countdown <= 2 ? 'text-red-300 animate-pulse' : 'text-white'}`}>
+                    {countdown}
+                  </span>
+                  <span className="text-xs font-medium text-white/70 -mt-1">detik atau ujian akan dikunci</span>
+                </div>
+                <p className="text-white/80 text-sm mt-4 max-w-xs mx-auto leading-relaxed">
+                  Peringatan: Anda keluar dari fullscreen. Segera kembali sebelum hitungan habis!
+                </p>
+              </>
+            ) : (
+              <p className="text-white/80 text-sm mt-2 max-w-xs mx-auto">
+                You left the exam window. Tap or click anywhere to return to fullscreen and continue the exam.
+              </p>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); onResume() }}
               className="mt-6 inline-flex items-center gap-2 h-12 px-8 rounded-full bg-white text-sm font-bold text-[var(--t,#6C5CE7)] hover:scale-[1.02] active:scale-95 transition-transform shadow-lift"
@@ -1784,7 +1966,7 @@ function KioskLockOverlay({ locked, palette, onResume }) {
               Lock again &amp; continue
             </button>
             <p className="text-white/60 text-xs mt-4">
-              Quiz will be auto-submitted with score 0 if you leave too often.
+              {countdown !== null ? 'Jika hitungan mencapai 0, ujian dikunci & menunggu pengawas.' : 'Quiz will be auto-submitted with score 0 if you leave too often.'}
             </p>
           </div>
         </motion.div>
@@ -1954,11 +2136,6 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
               </div>
             </div>
 
-            {/* Area soal yang diperbesar sebagai SATU kesatuan (zoom full).
-                Konten di-`transform: scale` dari kiri-atas, dan spacer luar diberi
-                lebar/tinggi = ukuran alami × scale supaya area scroll jendela tahu
-                dimensi konten yang membesar → seluruh soal (teks + gambar + opsi)
-                tetap TERGULIR di dalam modal, tidak keluar. */}
             <div ref={scrollRef} className="flex-1 overflow-auto px-5 sm:px-7 py-5">
               <div style={{ width: natural.w * scale, height: natural.h * scale }}>
                 <div
