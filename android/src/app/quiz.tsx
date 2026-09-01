@@ -61,6 +61,8 @@ export default function StandaloneQuizScreen() {
   // Anti-cheat & Lock states
   const [isLocked, setIsLocked] = useState(false);
   const [isCheckingLock, setIsCheckingLock] = useState(false);
+  const [lockReason, setLockReason] = useState('window-blur');
+  const lockTimerRef = useRef<any>(null);
   const appState = useRef(AppState.currentState);
 
   // Synchronize ref whenever submissionId updates
@@ -68,17 +70,28 @@ export default function StandaloneQuizScreen() {
     submissionIdRef.current = submissionId;
   }, [submissionId]);
 
-  // Listener deteksi keluar aplikasi / swipe notification bar
+  // Listener deteksi keluar aplikasi / swipe notification bar (5s grace period)
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (
-        step === 'answering' &&
-        (nextAppState === 'inactive' || nextAppState === 'background')
-      ) {
-        setIsLocked(true);
-        const targetSubId = submissionIdRef.current || submissionId;
-        if (targetSubId) {
-          lockSubmission(targetSubId, 'Keluar dari aplikasi (App background/inactive)');
+      if (step !== 'answering') return;
+
+      if (nextAppState === 'inactive' || nextAppState === 'background') {
+        // Start 5-second grace countdown timer before locking (matching web behavior)
+        if (!lockTimerRef.current) {
+          lockTimerRef.current = setTimeout(() => {
+            setIsLocked(true);
+            setLockReason('window-blur');
+            const targetSubId = submissionIdRef.current || submissionId;
+            if (targetSubId) {
+              lockSubmission(targetSubId, 'window-blur');
+            }
+          }, 5000);
+        }
+      } else if (nextAppState === 'active') {
+        // User returned within 5 seconds -> cancel lock!
+        if (lockTimerRef.current) {
+          clearTimeout(lockTimerRef.current);
+          lockTimerRef.current = null;
         }
       }
       appState.current = nextAppState;
@@ -86,6 +99,9 @@ export default function StandaloneQuizScreen() {
 
     return () => {
       subscription.remove();
+      if (lockTimerRef.current) {
+        clearTimeout(lockTimerRef.current);
+      }
     };
   }, [step, submissionId]);
 
@@ -585,6 +601,8 @@ export default function StandaloneQuizScreen() {
           <LockOverlay
             onRefresh={handleRefreshLockStatus}
             isChecking={isCheckingLock}
+            reason={lockReason}
+            language={language}
           />
         )}
         <QuizStyleAnsweringStep
@@ -629,6 +647,8 @@ export default function StandaloneQuizScreen() {
           <LockOverlay
             onRefresh={handleRefreshLockStatus}
             isChecking={isCheckingLock}
+            reason={lockReason}
+            language={language}
           />
         )}
 
