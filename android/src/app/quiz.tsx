@@ -93,11 +93,30 @@ export default function StandaloneQuizScreen() {
   const handleRefreshLockStatus = async () => {
     setIsCheckingLock(true);
     try {
-      const subId = submissionId || submissionIdRef.current;
+      let subId = submissionId || submissionIdRef.current;
+      if (!subId && publicForm?.id) {
+        try {
+          const res = await createSubmission(publicForm.id);
+          if (res && (res.submission_id || res.id)) {
+            subId = res.submission_id || res.id;
+            setSubmissionId(subId as number);
+            submissionIdRef.current = subId;
+          }
+        } catch {}
+      }
+
       if (subId) {
         const detail = await getSubmissionDetail(subId);
-        // Buka kuis jika status tidak terkunci dari server (misal diubah oleh admin di web jadi in_progress)
-        if (detail.status !== 'locked') {
+        if (detail && detail.status === 'locked') {
+          setIsLocked(true);
+          showAlert({
+            type: 'warning',
+            title: language === 'ID' ? 'Masih Terkunci' : 'Still Locked',
+            message: language === 'ID'
+              ? 'Pengawas / creator belum membuka kuis kamu dari Web Admin.'
+              : 'The proctor / creator has not unlocked your quiz yet.',
+          });
+        } else {
           setIsLocked(false);
           showAlert({
             type: 'success',
@@ -106,20 +125,20 @@ export default function StandaloneQuizScreen() {
               ? 'Pengawas / creator telah membuka kuis kamu. Kamu bisa melanjutkan pengerjaan.'
               : 'The proctor / creator has unlocked your quiz. You can continue.',
           });
-        } else {
-          showAlert({
-            type: 'warning',
-            title: language === 'ID' ? 'Masih Terkunci' : 'Still Locked',
-            message: language === 'ID'
-              ? 'Pengawas / creator belum membuka kuis kamu dari Web Admin.'
-              : 'The proctor / creator has not unlocked your quiz yet.',
-          });
         }
       } else {
-        setIsLocked(false);
+        setIsLocked(true);
+        showAlert({
+          type: 'warning',
+          title: language === 'ID' ? 'Masih Terkunci' : 'Still Locked',
+          message: language === 'ID'
+            ? 'Pengawas / creator belum membuka kuis kamu dari Web Admin.'
+            : 'The proctor / creator has not unlocked your quiz yet.',
+        });
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Gagal mengecek status lock:', e);
+      setIsLocked(true);
     } finally {
       setIsCheckingLock(false);
     }
