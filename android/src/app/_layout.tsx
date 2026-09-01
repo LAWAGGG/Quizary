@@ -8,7 +8,11 @@ import { ThemeProvider as AppThemeProvider, useAppTheme } from '../context/Theme
 import { getMe, getToken, removeToken } from '../services/api_service';
 import { AlertProvider } from '../context/AlertContext';
 
-LogBox.ignoreLogs(['Cannot connect to Expo CLI']);
+LogBox.ignoreLogs([
+  'Cannot connect to Expo CLI',
+  'DateTimePicker: `onChange` is deprecated',
+  'DateTimePicker: `onChange` is deprecated. Use `onValueChange`',
+]);
 
 SplashScreen.preventAutoHideAsync();
 

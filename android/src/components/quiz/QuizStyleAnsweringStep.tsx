@@ -74,15 +74,24 @@ export function QuizStyleAnsweringStep({
     let d = new Date();
     if (typeof currentVal === 'string' && currentVal.trim().length > 0) {
       if (mode === 'date') {
-        const parts = currentVal.split('-');
+        const parts = currentVal.trim().split('-');
         if (parts.length === 3) {
-          const parsed = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-          if (!isNaN(parsed.getTime())) d = parsed;
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const day = parseInt(parts[2], 10);
+          if (!isNaN(y) && !isNaN(m) && !isNaN(day)) {
+            d = new Date(y, m, day);
+          }
         }
       } else if (mode === 'time') {
-        const parts = currentVal.split(':');
-        if (parts.length === 2) {
-          d.setHours(Number(parts[0]) || 0, Number(parts[1]) || 0, 0, 0);
+        const parts = currentVal.trim().split(':');
+        if (parts.length >= 2) {
+          const h = parseInt(parts[0], 10);
+          const min = parseInt(parts[1], 10);
+          if (!isNaN(h) && !isNaN(min)) {
+            d = new Date();
+            d.setHours(h, min, 0, 0);
+          }
         }
       }
     }
@@ -91,19 +100,40 @@ export function QuizStyleAnsweringStep({
   };
 
   const handlePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
+    const activePicker = showPicker;
+
+    if (event.type === 'dismissed') {
       setShowPicker(null);
+      return;
     }
-    if (event.type === 'set' && selectedDate && showPicker) {
-      if (showPicker.mode === 'date') {
-        const yyyy = selectedDate.getFullYear();
-        const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
-        const dd = String(selectedDate.getDate()).padStart(2, '0');
-        onTextChange(showPicker.qId, `${yyyy}-${mm}-${dd}`);
-      } else {
-        const hh = String(selectedDate.getHours()).padStart(2, '0');
-        const min = String(selectedDate.getMinutes()).padStart(2, '0');
-        onTextChange(showPicker.qId, `${hh}:${min}`);
+
+    if (event.type === 'set' || (Platform.OS === 'ios' && selectedDate)) {
+      setShowPicker(null);
+
+      let dateToSave = selectedDate;
+      if (!dateToSave && (event as any)?.nativeEvent?.timestamp) {
+        const ts = Number((event as any).nativeEvent.timestamp);
+        if (!isNaN(ts)) {
+          dateToSave = new Date(ts);
+        }
+      }
+      if (!dateToSave || isNaN(dateToSave.getTime())) {
+        dateToSave = pickerDate;
+      }
+
+      setPickerDate(dateToSave);
+
+      if (activePicker) {
+        if (activePicker.mode === 'date') {
+          const yyyy = dateToSave.getFullYear();
+          const mm = String(dateToSave.getMonth() + 1).padStart(2, '0');
+          const dd = String(dateToSave.getDate()).padStart(2, '0');
+          onTextChange(activePicker.qId, `${yyyy}-${mm}-${dd}`);
+        } else if (activePicker.mode === 'time') {
+          const hh = String(dateToSave.getHours()).padStart(2, '0');
+          const min = String(dateToSave.getMinutes()).padStart(2, '0');
+          onTextChange(activePicker.qId, `${hh}:${min}`);
+        }
       }
     }
   };
@@ -500,8 +530,10 @@ export function QuizStyleAnsweringStep({
                     <DateTimePicker
                       value={pickerDate}
                       mode={showPicker.mode}
-                      display={Platform.OS === 'android' ? 'default' : 'spinner'}
+                      display="spinner"
+                      is24Hour={true}
                       onChange={handlePickerChange}
+                      onDismiss={() => setShowPicker(null)}
                     />
                   )}
 
