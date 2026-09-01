@@ -57,7 +57,7 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
 
           {isQuizDesign && (
             <View style={styles.brandTitleRow}>
-              <Image source={require('../../../assets/images/logo.png')} style={styles.brandLogo} resizeMode="contain" />
+              <Image source={require('../../../assets/images/Quizary_Logo_White.png')} style={styles.brandLogo} resizeMode="contain" />
               <Text style={styles.brandTitleText}>Quizary</Text>
             </View>
           )}
