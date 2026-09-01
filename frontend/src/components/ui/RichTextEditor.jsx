@@ -35,6 +35,11 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
   const quillRef = useRef(null)
   const onChangeRef = useRef(onChange)
   const hideTimer = useRef(null)
+  const isInternalChange = useRef(false)
+  const normalize = (html) => {
+    if (!html || html === '<p><br></p>') return ''
+    return String(html).replace(/<select[^>]*class="ql-ui"[^>]*>[\s\S]*?<\/select>/gi, '')
+  }
   const [active, setActive] = useState(false)
   const [symbolsOpen, setSymbolsOpen] = useState(false)
   // Dialog formula: { tex, index, length } — index/length = rentang
@@ -58,40 +63,29 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       const range = quill.getSelection(true)
       if (!range) return
       if (range.length === 0) {
-        const len = quill.getLength()
-        if (len <= 1) return
-        const fmt = quill.getFormat(0, Math.min(len, 10))
+        const fmt = quill.getFormat(range)
         const isBlock = !!fmt['code-block']
-        quill.setSelection(0, len)
-        if (isBlock) quill.format('code-block', false)
-        else quill.format('code-block', true)
-        quill.setSelection(len, 0)
+        quill.format('code-block', !isBlock, 'user')
+        quill.format('code', false, 'user')
+        quill.setSelection(range.index, 0, 'user')
+        quill.focus()
       } else {
-        const text = quill.getText(range.index, range.length)
-        const isMultiLine = text.includes('\n')
-        if (isMultiLine) {
-          const fmt = quill.getFormat(range)
-          const isBlock = !!fmt['code-block']
-          // toggle block untuk semua baris dalam seleksi — jadi 1 compact block, bukan pill per baris
-          quill.format('code-block', !isBlock)
-          // jika dari inline code sebelumnya, bersihkan inline di range tersebut
-          if (!isBlock) {
-            const after = quill.getSelection()
-            // hapus inline code di range yang baru jadi block agar tidak double style
-            quill.setSelection(range.index, range.length)
-            quill.format('code', false)
-            quill.setSelection(range.index, range.length)
-          }
-        } else {
-          const fmt = quill.getFormat(range)
-          const isCode = !!fmt.code
-          const wasBlock = !!fmt['code-block']
-          if (wasBlock) {
-            quill.format('code-block', false)
-            quill.setSelection(range.index, range.length)
-          }
-          quill.format('code', !isCode)
+        const isBlock = !!quill.getFormat(range)['code-block']
+        // pakai formatText agar toggle block untuk semua baris dalam range (1 container, bukan pill)
+        quill.formatText(range.index, range.length, 'code-block', !isBlock, 'user')
+        quill.formatText(range.index, range.length, 'code', false, 'user')
+        // collapse ke dalam akhir block (sebelum newline pembatas) biar ketik lanjut di dalam, tidak terbalik & tidak keluar
+        let end = range.index + range.length
+        const len = quill.getLength()
+        if (end > len) end = len
+        if (end > 0 && quill.getText(end - 1, 1) === '\n') {
+          try {
+            const beforeFmt = quill.getFormat(end - 1, 1)
+            if (beforeFmt['code-block']) end = end - 1
+          } catch {}
         }
+        quill.setSelection(end, 0, 'user')
+        quill.focus()
       }
     }
 
@@ -155,14 +149,9 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       return true
     })
 
-    const normalize = (html) => {
-      if (!html || html === '<p><br></p>') return ''
-      // buang chrome <select class="ql-ui"> — bukan konten
-      return html.replace(/<select[^>]*class="ql-ui"[^>]*>[\s\S]*?<\/select>/gi, '')
-    }
-
     if (value) quill.clipboard.dangerouslyPasteHTML(value)
-    quill.on('text-change', () => {
+    quill.on('text-change', (_delta, _old, source) => {
+      if (source === 'user') isInternalChange.current = true
       onChangeRef.current?.(normalize(quill.root.innerHTML))
     })
 
@@ -199,7 +188,12 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
 
   useEffect(() => {
     const quill = quillRef.current
-    if (quill && value !== quill.root.innerHTML) {
+    if (!quill) return
+    if (isInternalChange.current) {
+      isInternalChange.current = false
+      return
+    }
+    if (normalize(value) !== normalize(quill.root.innerHTML)) {
       quill.clipboard.dangerouslyPasteHTML(value || '')
     }
   }, [value])

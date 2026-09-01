@@ -471,6 +471,9 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   background: #0f0f0f !important;
   color: #f5f5f5 !important;
   border-color: #27272a !important;
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 .dark .rich-editor .ql-editor .ql-code-block-container,
 .dark .rich-editor .ql-editor pre.ql-code-block,
@@ -497,6 +500,33 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 }
 .rich-editor .ql-editor .ql-code-block-container .ql-code-block + .ql-code-block {
   margin-top: 0;
+}
+/* Gabungkan consecutive code-block containers jadi 1 block visual (bila user bikin per baris terpisah) */
+.rich-editor .ql-editor .ql-code-block-container + .ql-code-block-container,
+.rich-text .ql-code-block-container + .ql-code-block-container {
+  margin-top: -0.6em;
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.rich-editor .ql-editor .ql-code-block-container + .ql-code-block-container:last-of-type,
+.rich-text .ql-code-block-container + .ql-code-block-container:last-of-type {
+  border-bottom-left-radius: 0.5rem;
+  border-bottom-right-radius: 0.5rem;
+}
+
+/* Quiz: block code jangan di-center — tab jadi berantakan kalau center */
+.rich-text .ql-code-block-container,
+.rich-text pre.ql-syntax,
+.rich-text pre.ql-code-block,
+.rich-text div.ql-code-block {
+  text-align: left !important;
+}
+h2:has(.ql-code-block-container),
+h2:has(pre.ql-syntax),
+h2:has(pre.ql-code-block) {
+  justify-content: flex-start !important;
+  text-align: left !important;
 }
 
 /* Inline code — seleksi parsial, hitam teks putih seperti block (tidak bikin block baru saat enter) */
