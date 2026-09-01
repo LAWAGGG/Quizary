@@ -28,6 +28,9 @@ export default function ProfileScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Preview avatar yang BARU DIPILIH tapi belum di-upload ke server
+  const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
+
   const extractUserData = (data: any) => {
     if (!data) return null;
     if (data.user) return data.user;
@@ -36,10 +39,8 @@ export default function ProfileScreen() {
   };
 
   const loadProfile = useCallback(async () => {
-    // 1. Load instantly from cache if available
     try {
       const cached = await getStoredUser();
-      console.log('[DEBUG PROFILE] Cached user in SecureStore:', JSON.stringify(cached));
       if (cached) {
         setUser(cached);
         setName(cached.name || '');
@@ -48,12 +49,9 @@ export default function ProfileScreen() {
       console.log('[DEBUG PROFILE] Failed to get stored user:', e);
     }
 
-    // 2. Fetch fresh user data from server
     try {
       const response = await getMe();
-      console.log('[DEBUG PROFILE] getMe response:', JSON.stringify(response));
       const userData = extractUserData(response);
-      console.log('[DEBUG PROFILE] extracted userData:', JSON.stringify(userData));
       if (userData) {
         setUser(userData);
         setName(userData.name || '');
@@ -76,6 +74,7 @@ export default function ProfileScreen() {
     loadProfile();
   };
 
+  // Cuma milih gambar & nampilin preview lokal — BELUM upload
   const handlePickAvatar = async () => {
     try {
       const res = await ImagePicker.launchImageLibraryAsync({
@@ -85,51 +84,56 @@ export default function ProfileScreen() {
         quality: 0.8,
       });
 
-      console.log('[DEBUG AVATAR] ImagePicker result:', JSON.stringify(res));
-
       if (!res.canceled && res.assets && res.assets.length > 0) {
-        const pickedUri = res.assets[0].uri;
-        console.log('[DEBUG AVATAR] Picked image URI:', pickedUri);
-        setUploadingAvatar(true);
-        try {
-          console.log('[DEBUG AVATAR] Calling updateProfile with avatar...');
-          const response = await updateProfile({ avatar: pickedUri });
-          console.log('[DEBUG AVATAR] updateProfile response:', JSON.stringify(response));
-          const updatedUser = extractUserData(response);
-          if (updatedUser) {
-            setUser(updatedUser);
-            await saveUser(updatedUser);
-          } else {
-            const fresh = await getMe();
-            const freshData = extractUserData(fresh);
-            if (freshData) {
-              setUser(freshData);
-              await saveUser(freshData);
-            }
-          }
-          showAlert({
-            type: 'success',
-            title: language === 'ID' ? 'Sukses 🎉' : 'Success 🎉',
-            message: language === 'ID' ? 'Avatar berhasil diperbarui' : 'Avatar updated successfully',
-          });
-        } catch (e: any) {
-          console.log('[DEBUG AVATAR] updateProfile error:', e);
-          showAlert({
-            type: 'error',
-            title: language === 'ID' ? 'Gagal Mengubah Avatar' : 'Failed to Update Avatar',
-            message: e.message || (language === 'ID' ? 'Terjadi kesalahan saat mengunggah avatar.' : 'An error occurred while uploading avatar.'),
-          });
-        } finally {
-          setUploadingAvatar(false);
-        }
+        setPendingAvatarUri(res.assets[0].uri);
       }
     } catch (err: any) {
-      console.log('[DEBUG AVATAR] launchImageLibraryAsync error:', err);
       showAlert({
         type: 'error',
         title: language === 'ID' ? 'Error' : 'Error',
         message: err.message || (language === 'ID' ? 'Gagal memilih gambar.' : 'Failed to pick image.'),
       });
+    }
+  };
+
+  // Batal — buang preview, balik ke avatar lama
+  const handleCancelAvatar = () => {
+    setPendingAvatarUri(null);
+  };
+
+  // Baru di titik INI request upload beneran dikirim ke server
+  const handleSaveAvatar = async () => {
+    if (!pendingAvatarUri) return;
+    setUploadingAvatar(true);
+    try {
+      const response = await updateProfile({ avatar: pendingAvatarUri });
+      const updatedUser = extractUserData(response);
+      if (updatedUser) {
+        setUser(updatedUser);
+        await saveUser(updatedUser);
+      } else {
+        const fresh = await getMe();
+        const freshData = extractUserData(fresh);
+        if (freshData) {
+          setUser(freshData);
+          await saveUser(freshData);
+        }
+      }
+      setPendingAvatarUri(null);
+      showAlert({
+        type: 'success',
+        title: language === 'ID' ? 'Sukses 🎉' : 'Success 🎉',
+        message: language === 'ID' ? 'Avatar berhasil diperbarui' : 'Avatar updated successfully',
+      });
+    } catch (e: any) {
+      showAlert({
+        type: 'error',
+        title: language === 'ID' ? 'Gagal Mengubah Avatar' : 'Failed to Update Avatar',
+        message: e.message || (language === 'ID' ? 'Terjadi kesalahan saat mengunggah avatar.' : 'An error occurred while uploading avatar.'),
+      });
+      // Preview TETAP ditampilkan biar user tau apa yang dipilih, walau upload gagal
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -144,9 +148,7 @@ export default function ProfileScreen() {
     }
     setSaving(true);
     try {
-      console.log('[DEBUG PROFILE] Calling updateProfile with name:', name.trim());
       const response = await updateProfile({ name: name.trim() });
-      console.log('[DEBUG PROFILE] updateProfile name response:', JSON.stringify(response));
       const updatedUser = extractUserData(response);
 
       if (updatedUser) {
@@ -169,7 +171,6 @@ export default function ProfileScreen() {
         message: language === 'ID' ? 'Profil berhasil disimpan' : 'Profile saved successfully',
       });
     } catch (err: any) {
-      console.log('[DEBUG PROFILE] updateProfile name error:', err);
       showAlert({
         type: 'error',
         title: language === 'ID' ? 'Update Gagal' : 'Update Failed',
@@ -211,6 +212,17 @@ export default function ProfileScreen() {
 
   const initial = user?.name ? user.name.charAt(0).toUpperCase() : 'U';
 
+  // Sumber gambar avatar: preview lokal (kalau ada) > avatar tersimpan di server > inisial huruf
+  const resolvedAvatarSource = pendingAvatarUri
+    ? { uri: pendingAvatarUri }
+    : user?.avatar
+    ? {
+        uri: user.avatar.startsWith('http')
+          ? `${user.avatar}?t=${Date.now()}`
+          : `${BASE_URL.replace('/api', '')}${user.avatar}?t=${Date.now()}`,
+      }
+    : null;
+
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.bg }]}
@@ -226,15 +238,8 @@ export default function ProfileScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <ThemeToggleBtn />
           <View style={[styles.userAvatarBtn, { backgroundColor: colors.primarySoft, borderColor: isDark ? colors.cardBorder : '#C7D2FE' }]}>
-            {user?.avatar ? (
-              <Image 
-                source={{ 
-                  uri: user.avatar.startsWith('http') 
-                     ? `${user.avatar}?t=${Date.now()}` 
-                     : `${BASE_URL.replace('/api', '')}${user.avatar}?t=${Date.now()}` 
-                  }} 
-                  style={styles.userAvatarImg} 
-                />
+            {resolvedAvatarSource ? (
+              <Image source={resolvedAvatarSource} style={styles.userAvatarImg} />
             ) : (
               <Text style={[styles.userAvatarText, { color: colors.primary, fontSize: 14 * fontSizeScale }]}>{initial}</Text>
             )}
@@ -266,15 +271,8 @@ export default function ProfileScreen() {
           >
             {uploadingAvatar ? (
               <ActivityIndicator color={colors.primary} size="small" />
-            ) : user?.avatar ? (
-            <Image 
-            source={{ 
-              uri: user.avatar.startsWith('http') 
-                ? `${user.avatar}?t=${Date.now()}` 
-                : `${BASE_URL.replace('/api', '')}${user.avatar}?t=${Date.now()}` 
-            }} 
-          style={styles.avatarLargeImg} 
-            />
+            ) : resolvedAvatarSource ? (
+              <Image source={resolvedAvatarSource} style={styles.avatarLargeImg} />
             ) : (
               <Text style={[styles.avatarText, { color: colors.primary, fontSize: 32 * fontSizeScale }]}>
                 {initial}
@@ -291,7 +289,32 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.userName, { color: colors.text, fontSize: 20 * fontSizeScale }]}>
+        {/* Tombol Save/Cancel Avatar — muncul HANYA kalau ada preview baru yang belum disimpan */}
+        {pendingAvatarUri && (
+          <View style={styles.avatarActionRow}>
+            <TouchableOpacity
+              style={[styles.avatarSaveBtn, { backgroundColor: colors.primary }, uploadingAvatar && styles.btnDisabled]}
+              onPress={handleSaveAvatar}
+              disabled={uploadingAvatar}
+              activeOpacity={0.85}
+            >
+              {uploadingAvatar ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <Text style={styles.avatarSaveBtnText}>
+                  {language === 'ID' ? 'Simpan Avatar' : 'Save Avatar'}
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleCancelAvatar} disabled={uploadingAvatar} style={styles.avatarCancelBtn}>
+              <Text style={[styles.avatarCancelBtnText, { color: colors.textSub }]}>
+                {language === 'ID' ? 'Batal' : 'Cancel'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <Text style={[styles.userName, { color: colors.text, fontSize: 20 * fontSizeScale, marginTop: pendingAvatarUri ? 16 : 0 }]}>
           {user?.name || (language === 'ID' ? 'Responden' : 'Respondent')}
         </Text>
         <Text style={[styles.userEmail, { color: colors.textSub, fontSize: 14 * fontSizeScale }]}>{user?.email || 'email@quizary.id'}</Text>
@@ -395,6 +418,23 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   avatarText: { fontWeight: 'bold' },
+  avatarActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 4,
+  },
+  avatarSaveBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
+  avatarSaveBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 14 },
+  avatarCancelBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+  },
+  avatarCancelBtnText: { fontWeight: '600', fontSize: 14 },
   userName: { fontWeight: 'bold', marginBottom: 2 },
   userEmail: { marginBottom: 10 },
   roleBadge: {

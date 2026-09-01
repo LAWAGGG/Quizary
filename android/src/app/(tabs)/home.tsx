@@ -1,13 +1,14 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, ActivityIndicator, Image } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getMySubmissions, getSubmissionDetail, getMe, getStoredUser } from '../../services/api_service';
+import { getMySubmissions, getSubmissionDetail, getMe, getStoredUser, BASE_URL } from '../../services/api_service';
 import { ThemeToggleBtn } from '../../components/ThemeToggleBtn';
 import { useAppTheme } from '../../context/ThemeContext';
 import { QuickJoinBanner } from '../../components/QuickJoinBanner';
 import { SubmissionHistoryCard } from '../../components/SubmissionHistoryCard';
 import { SubmissionDetailModal } from '../../components/SubmissionDetailModal';
+
 
 export default function HomeScreen() {
   const { colors, language, fontSizeScale } = useAppTheme();
@@ -98,10 +99,21 @@ export default function HomeScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <ThemeToggleBtn />
             <TouchableOpacity
-              style={[styles.avatarBtn, { backgroundColor: colors.primarySoft, borderColor: colors.inputBorder }]}
+              style={[styles.avatarBtn, { backgroundColor: colors.primarySoft, borderColor: colors.inputBorder, overflow: 'hidden' }]}
               onPress={() => router.push('/(tabs)/profile')}
             >
-              <Text style={[styles.avatarText, { color: colors.primary, fontSize: 16 * fontSizeScale }]}>{initial}</Text>
+              {user?.avatar ? (
+                <Image
+                source={{
+                  uri: user.avatar.startsWith('http')
+                  ? `${user.avatar}?t=${Date.now()}`
+                  : `${BASE_URL.replace('/api', '')}${user.avatar}?t=${Date.now()}`,
+                }}
+                style={styles.avatarImg}
+                />
+              ) : (
+                <Text style={[styles.avatarText, { color: colors.primary, fontSize: 16 * fontSizeScale }]}>{initial}</Text>
+              )} 
             </TouchableOpacity>
           </View>
         </View>
@@ -186,4 +198,5 @@ const styles = StyleSheet.create({
   emptyCard: { borderRadius: 16, padding: 32, borderWidth: 1, alignItems: 'center', gap: 8, marginTop: 10 },
   emptyTitle: { fontWeight: 'bold' },
   emptySub: { textAlign: 'center', lineHeight: 18 },
+  avatarImg: { width: '100%', height: '100%'},
 });

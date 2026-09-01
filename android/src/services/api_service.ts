@@ -197,29 +197,53 @@ export async function getMe() {
   return data;
 }
 
+import * as FileSystem from 'expo-file-system/legacy';
+
 export async function updateProfile(body: { name?: string; avatar?: string }) {
-  const formData = new FormData();
-  if (body.name !== undefined) {
-    formData.append('name', body.name);
-  }
+  // Kalau ADA avatar baru, upload pakai FileSystem.uploadAsync (lebih tahan koneksi tidak stabil)
   if (body.avatar) {
+    const token = await getToken();
     const rawName = body.avatar.split('/').pop() || 'avatar.jpg';
     const match = /\.(\w+)$/.exec(rawName);
     const ext = match ? match[1].toLowerCase() : 'jpg';
     const filename = rawName.includes('.') ? rawName : `${rawName}.${ext}`;
 
-    let type = 'image/jpeg';
-    if (ext === 'png') type = 'image/png';
-    else if (ext === 'webp') type = 'image/webp';
-    else if (ext === 'gif') type = 'image/gif';
+    let mimeType = 'image/jpeg';
+    if (ext === 'png') mimeType = 'image/png';
+    else if (ext === 'webp') mimeType = 'image/webp';
+    else if (ext === 'gif') mimeType = 'image/gif';
 
-    console.log('[DEBUG AVATAR] Prepared avatar for multipart upload...');
-    const response = await fetch(body.avatar);
-    const blob = await response.blob();
+    console.log('[DEBUG AVATAR] Uploading via FileSystem.uploadAsync...');
+    const uploadResult = await FileSystem.uploadAsync(`${BASE_URL}/me`, body.avatar, {
+      httpMethod: 'PUT',
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: 'avatar',
+      mimeType,
+      parameters: body.name !== undefined ? { name: body.name } : undefined,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
 
-    formData.append('avatar', blob, filename);
+    console.log('[DEBUG AVATAR] Upload status:', uploadResult.status);
+    console.log('[DEBUG AVATAR] Upload body:', uploadResult.body);
+
+    if (uploadResult.status < 200 || uploadResult.status >= 300) {
+      let errData: any = {};
+      try {
+        errData = JSON.parse(uploadResult.body);
+      } catch {}
+      throw new Error(extractErrorMessage(errData, `Upload gagal (${uploadResult.status})`));
+    }
+
+    const res = JSON.parse(uploadResult.body);
+    if (res) await saveUser(res);
+    return res;
   }
 
+  // Kalau CUMA update nama (tanpa avatar), tetap pakai cara lama (JSON via FormData biasa)
+  const formData = new FormData();
+  if (body.name !== undefined) {
+    formData.append('name', body.name);
+  }
   console.log('[DEBUG PROFILE] Sending PUT /me with formData...');
   const res = await fetchMultipart('/me', 'PUT', formData);
   console.log('[DEBUG PROFILE] PUT /me response data:', JSON.stringify(res));
