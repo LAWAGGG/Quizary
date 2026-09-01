@@ -47,10 +47,53 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     if (!container || quillRef.current) return
 
     const toolbar = compact
-      ? [['bold', 'italic', 'underline', 'link', 'fx', 'clean']]
+      ? [['bold', 'italic', 'underline', 'code-block', 'link', 'fx', 'clean']]
       : [
         ['bold', 'italic', 'underline', 'strike', 'code-block', 'link', 'fx', 'clean'],
       ]
+
+    const handleCodeBlock = () => {
+      const quill = quillRef.current
+      if (!quill) return
+      const range = quill.getSelection(true)
+      if (!range) return
+      if (range.length === 0) {
+        const len = quill.getLength()
+        if (len <= 1) return
+        const fmt = quill.getFormat(0, Math.min(len, 10))
+        const isBlock = !!fmt['code-block']
+        quill.setSelection(0, len)
+        if (isBlock) quill.format('code-block', false)
+        else quill.format('code-block', true)
+        quill.setSelection(len, 0)
+      } else {
+        const text = quill.getText(range.index, range.length)
+        const isMultiLine = text.includes('\n')
+        if (isMultiLine) {
+          const fmt = quill.getFormat(range)
+          const isBlock = !!fmt['code-block']
+          // toggle block untuk semua baris dalam seleksi — jadi 1 compact block, bukan pill per baris
+          quill.format('code-block', !isBlock)
+          // jika dari inline code sebelumnya, bersihkan inline di range tersebut
+          if (!isBlock) {
+            const after = quill.getSelection()
+            // hapus inline code di range yang baru jadi block agar tidak double style
+            quill.setSelection(range.index, range.length)
+            quill.format('code', false)
+            quill.setSelection(range.index, range.length)
+          }
+        } else {
+          const fmt = quill.getFormat(range)
+          const isCode = !!fmt.code
+          const wasBlock = !!fmt['code-block']
+          if (wasBlock) {
+            quill.format('code-block', false)
+            quill.setSelection(range.index, range.length)
+          }
+          quill.format('code', !isCode)
+        }
+      }
+    }
 
     const quill = new Quill(container, {
       theme: 'snow',
@@ -61,6 +104,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
           handlers: {
             symbol: () => setSymbolsOpen((open) => !open),
             fx: () => openFormulaDialog(),
+            'code-block': handleCodeBlock,
           },
         },
         syntax: {
@@ -70,6 +114,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       },
     })
     quillRef.current = quill
+    quill.root.setAttribute('spellcheck', 'false')
 
     const symbolBtn = container.parentNode?.querySelector('.ql-symbol')
     if (symbolBtn) symbolBtn.title = 'Insert symbol'
@@ -81,6 +126,33 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     quill.keyboard.addBinding({ key: 'm', shortKey: true, altKey: true }, () => {
       openFormulaDialog()
       return false
+    })
+
+    // Tab di dalam code-block → sisipkan tab nyata (preserve indent), bukan pindah focus
+    quill.keyboard.addBinding({ key: 'Tab' }, (range, context) => {
+      if (context.format['code-block']) {
+        quill.insertText(range.index, '\t', 'user')
+        quill.setSelection(range.index + 1, 0, 'silent')
+        return false
+      }
+      return true
+    })
+    quill.keyboard.addBinding({ key: 'Tab', shiftKey: true }, (range, context) => {
+      if (context.format['code-block'] && range.index > 0) {
+        const text = quill.getText(Math.max(0, range.index - 4), 4)
+        // outdent sederhana: hapus hingga 1 tab / 4 spasi di sebelum cursor
+        if (text.endsWith('\t')) {
+          quill.deleteText(range.index - 1, 1, 'user')
+          quill.setSelection(range.index - 1, 0, 'silent')
+          return false
+        }
+        if (text.endsWith('    ')) {
+          quill.deleteText(range.index - 4, 4, 'user')
+          quill.setSelection(range.index - 4, 0, 'silent')
+          return false
+        }
+      }
+      return true
     })
 
     const normalize = (html) => {
@@ -219,6 +291,9 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       <div
         ref={containerRef}
         style={{ minHeight }}
+        spellCheck={false}
+        autoCorrect="off"
+        autoComplete="off"
         onClick={() => quillRef.current?.focus()}
       />
       {symbolsOpen && (

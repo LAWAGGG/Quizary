@@ -438,7 +438,7 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 }
 
 /* ── Code block — IDE-like (editor + render) ────────────────────────────── */
-/* Quill 2: code = div.ql-code-block inside div.ql-code-block-container (bukan pre) */
+/* Quill 2: code = div.ql-code-block inside div.ql-code-block-container (bukan pre) — 1 container = 1 compact block, bukan pill per baris */
 .rich-editor .ql-editor .ql-code-block-container,
 .rich-editor .ql-editor pre.ql-code-block,
 .rich-editor .ql-editor pre.ql-syntax,
@@ -452,11 +452,36 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   line-height: 1.6;
   padding: 0.75rem 1rem;
   margin: 0.6em 0;
+  white-space: pre;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-x: auto;
   tab-size: 4;
+  -moz-tab-size: 4;
   position: relative;
+}
+/* Block code selalu hitam teks putih — baik light maupun dark, biar kontras */
+.rich-editor .ql-editor .ql-code-block-container,
+.rich-editor .ql-editor pre.ql-code-block,
+.rich-editor .ql-editor pre.ql-syntax,
+.rich-text .ql-code-block-container,
+.rich-text pre.ql-code-block,
+.rich-text pre.ql-syntax,
+.rich-text div.ql-code-block {
+  background: #0f0f0f !important;
+  color: #f5f5f5 !important;
+  border-color: #27272a !important;
+}
+.dark .rich-editor .ql-editor .ql-code-block-container,
+.dark .rich-editor .ql-editor pre.ql-code-block,
+.dark .rich-editor .ql-editor pre.ql-syntax,
+.dark .rich-text .ql-code-block-container,
+.dark .rich-text pre.ql-code-block,
+.dark .rich-text pre.ql-syntax,
+.dark .rich-text div.ql-code-block {
+  background: #0f0f0f !important;
+  color: #f5f5f5 !important;
+  border-color: #27272a !important;
 }
 .rich-editor .ql-editor .ql-code-block,
 .rich-text div.ql-code-block {
@@ -465,9 +490,43 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   padding: 0;
   margin: 0;
   border-radius: 0;
+  white-space: pre;
+  white-space: pre-wrap;
+  tab-size: 4;
+  -moz-tab-size: 4;
 }
 .rich-editor .ql-editor .ql-code-block-container .ql-code-block + .ql-code-block {
   margin-top: 0;
+}
+
+/* Inline code — seleksi parsial, hitam teks putih seperti block (tidak bikin block baru saat enter) */
+.rich-editor .ql-editor code,
+.rich-text code {
+  background: #0f0f0f !important;
+  border: 1px solid #27272a !important;
+  border-radius: 0.375rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+  color: #f5f5f5 !important;
+  word-break: break-word;
+  text-decoration: none !important;
+}
+.dark .rich-editor .ql-editor code,
+.dark .rich-text code {
+  background: #0f0f0f !important;
+  border-color: #27272a !important;
+  color: #f5f5f5 !important;
+}
+.rich-editor .ql-editor pre code,
+.rich-text pre code,
+.rich-text .ql-code-block code,
+.rich-editor .ql-code-block code,
+.rich-text .ql-code-block-container code {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  color: inherit !important;
 }
 
 /* Syntax token colors — monokai-ish, readable on dark bg */
