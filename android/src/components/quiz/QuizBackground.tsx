@@ -120,7 +120,7 @@ export function QuizBackground({ children, themeColor, isQuizDesign }: QuizBackg
 
 const styles = StyleSheet.create({
   container: { flex: 1, position: 'relative' },
-  absoluteFill: { ...StyleSheet.absoluteFillObject },
+  absoluteFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   gridRow: { position: 'absolute' },
   bgDot: { position: 'absolute', width: 4, height: 4, borderRadius: 2 },
   topLeftAccent: { position: 'absolute', top: 50, left: 20 },
