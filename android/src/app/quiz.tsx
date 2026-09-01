@@ -12,6 +12,7 @@ import {
   finalizeSubmission,
   getSubmissionDetail,
   uploadAnswerFile,
+  lockSubmission,
 } from '../services/api_service';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppAlert } from '../context/AlertContext';
@@ -35,6 +36,7 @@ export default function StandaloneQuizScreen() {
   // Data states
   const [publicForm, setPublicForm] = useState<any>(null);
   const [submissionId, setSubmissionId] = useState<number | null>(null);
+  const submissionIdRef = useRef<number | string | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [collapsedSections, setCollapsedSections] = useState<Record<number, boolean>>({});
@@ -61,15 +63,27 @@ export default function StandaloneQuizScreen() {
   const [isCheckingLock, setIsCheckingLock] = useState(false);
   const appState = useRef(AppState.currentState);
 
+  // Synchronize ref whenever submissionId updates
+  useEffect(() => {
+    submissionIdRef.current = submissionId;
+  }, [submissionId]);
+
   // Listener deteksi keluar aplikasi / swipe notification bar
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
+    const subscription = AppState.addEventListener('change', async (nextAppState) => {
       if (
         step === 'answering' &&
         appState.current.match(/active/) &&
         (nextAppState === 'inactive' || nextAppState === 'background')
       ) {
         setIsLocked(true);
+        if (submissionIdRef.current) {
+          try {
+            await lockSubmission(submissionIdRef.current, 'Keluar dari aplikasi (App background/inactive)');
+          } catch (err) {
+            console.error('Gagal mengunci kuis di server:', err);
+          }
+        }
       }
       appState.current = nextAppState;
     });
@@ -84,15 +98,22 @@ export default function StandaloneQuizScreen() {
     try {
       if (submissionId) {
         const detail = await getSubmissionDetail(submissionId);
-        // Buka kuis jika status tidak terkunci dari server
+        // Buka kuis jika status tidak terkunci dari server (misal diubah oleh admin di web jadi in_progress)
         if (detail.status !== 'locked') {
           setIsLocked(false);
+          showAlert({
+            type: 'success',
+            title: language === 'ID' ? 'Kuis Dibuka Kembali' : 'Quiz Unlocked',
+            message: language === 'ID'
+              ? 'Pengawas / creator telah membuka kuis kamu. Kamu bisa melanjutkan pengerjaan.'
+              : 'The proctor / creator has unlocked your quiz. You can continue.',
+          });
         } else {
           showAlert({
             type: 'warning',
             title: language === 'ID' ? 'Masih Terkunci' : 'Still Locked',
             message: language === 'ID'
-              ? 'Pengawas / creator belum membuka kuis kamu.'
+              ? 'Pengawas / creator belum membuka kuis kamu dari Web Admin.'
               : 'The proctor / creator has not unlocked your quiz yet.',
           });
         }
@@ -146,6 +167,11 @@ export default function StandaloneQuizScreen() {
       const res = await createSubmission(publicForm.id);
       const subId = res.submission_id || res.id;
       setSubmissionId(subId);
+      submissionIdRef.current = subId;
+
+      if (res.status === 'locked') {
+        setIsLocked(true);
+      }
 
       let qs = res.questions || [];
       let secList = res.sections || [];

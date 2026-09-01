@@ -411,6 +411,13 @@ export async function autosaveAnswer(
   });
 }
 
+export async function lockSubmission(submissionId: string | number, reason?: string) {
+  return fetchWithAuth(`/submissions/${submissionId}/lock`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason || 'Keluar dari aplikasi (App background/inactive)' }),
+  });
+}
+
 export async function finalizeSubmission(submissionId: string | number) {
   return fetchWithAuth(`/submissions/${submissionId}/submit`, { method: 'POST' });
 }

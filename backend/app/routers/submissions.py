@@ -348,7 +348,7 @@ def create_submission(
     # di-resume & di-claim agar tidak ter-orphan setelah login.
     in_progress_q = db.query(Submission).filter(
         Submission.form_id == form.id,
-        Submission.status == SubmissionStatus.in_progress,
+        Submission.status.in_([SubmissionStatus.in_progress, SubmissionStatus.locked]),
     )
     if user:
         in_progress_q = in_progress_q.filter(
@@ -395,6 +395,7 @@ def create_submission(
         return SubmissionCreateResponse(
             submission_id=existing.id,
             access_token=existing.access_token,
+            status=existing.status.value,
             started_at=fmt_dt(existing.started_at),
             expired_at=fmt_dt(display_deadline(existing, form)),
             questions=_build_questions_response(existing.id, request, db),
@@ -689,6 +690,34 @@ def report_tab_exit(
         "message": "Tab exit recorded",
         "tab_exit_count": sub.tab_exit_count,
         "warnings_left": 0,
+    }
+
+
+# ── POST /submissions/{id}/lock ───────────────────────────────────────────────
+
+@router.post("/submissions/{submission_id}/lock")
+def lock_submission(
+    submission_id: int,
+    request: Request,
+    body: dict | None = None,
+    x_submission_token: str | None = Header(None, alias="X-Submission-Token"),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    sub = _get_sub_or_404(submission_id, db)
+    _verify_submission_access(sub, request, user, db, x_submission_token)
+
+    if sub.status == SubmissionStatus.in_progress:
+        sub.status = SubmissionStatus.locked
+        sub.tab_exit_count = (sub.tab_exit_count or 0) + 1
+        reason = body.get("reason") if body else None
+        sub.cheat_reason = reason or "Keluar dari aplikasi (App background/inactive)"
+        sub.updated_at = _now()
+        db.commit()
+
+    return {
+        "message": "Submission terkunci — menunggu keputusan pengawas",
+        "status": sub.status.value,
     }
 
 
