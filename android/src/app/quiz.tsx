@@ -594,6 +594,7 @@ export default function StandaloneQuizScreen() {
                       userAnswer={answers[q.id]}
                       isFileUploading={!!fileUploading[q.id]}
                       themeColor={themeColor}
+                      displayStyle={publicForm?.display_style || 'quiz'}
                       hasError={!!validationErrors[q.id]}
                       onZoomQuestion={handleZoomQuestion}
                       onSelectOption={handleSelectOption}

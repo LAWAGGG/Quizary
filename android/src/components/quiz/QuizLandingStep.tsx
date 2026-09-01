@@ -57,9 +57,12 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
 
           {/* Title & Description Main Card */}
           <View style={[styles.titleCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-            <Text style={[styles.quizTitle, { color: colors.text, fontSize: 24 * fontSizeScale }]}>
-              {stripHtmlTags(publicForm?.title) || (language === 'ID' ? 'Kuis' : 'Quiz')}
-            </Text>
+            <View style={{ marginBottom: 12 }}>
+              <RichTextRenderer
+                html={publicForm?.title || (language === 'ID' ? 'Kuis' : 'Quiz')}
+                style={[styles.quizTitle, { color: colors.text, fontSize: 24 * fontSizeScale }]}
+              />
+            </View>
 
             {publicForm?.description ? (
               <View style={{ marginBottom: 20 }}>
