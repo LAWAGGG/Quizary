@@ -19,6 +19,7 @@ import { stripHtmlTags } from '../components/RichTextRenderer';
 import { QuizLandingStep } from '../components/quiz/QuizLandingStep';
 import { QuizQuestionCard } from '../components/quiz/QuizQuestionCard';
 import { QuizSubmittedStep } from '../components/quiz/QuizSubmittedStep';
+import { QuizStyleAnsweringStep } from '../components/quiz/QuizStyleAnsweringStep';
 import { QuestionZoomModal } from '../components/quiz/QuestionZoomModal';
 import LockOverlay from '../components/quiz/LockOverlay';
 import { QuizBackground } from '../components/quiz/QuizBackground';
@@ -512,6 +513,48 @@ export default function StandaloneQuizScreen() {
   }
 
   const formattedTimerStr = formatTimer(timeLeft);
+  const displayStyle = publicForm?.display_style || 'card';
+
+  if (displayStyle === 'quiz') {
+    return (
+      <View style={{ flex: 1 }}>
+        {isLocked && (
+          <LockOverlay
+            onRefresh={handleRefreshLockStatus}
+            isChecking={isCheckingLock}
+          />
+        )}
+        <QuizStyleAnsweringStep
+          publicForm={publicForm}
+          questions={questions}
+          answers={answers}
+          onSelectOption={handleSelectOption}
+          onTextChange={handleTextChange}
+          onPickFile={handlePickAnswerFile}
+          fileUploading={fileUploading}
+          formattedTimerStr={formattedTimerStr}
+          submitting={submitting}
+          onSubmit={handleSubmit}
+          onOpenZoom={(q) => setZoomQuestionTarget(q)}
+          onCloseQuiz={() => router.replace('/(tabs)/home')}
+        />
+        {zoomQuestionTarget && (
+          <QuestionZoomModal
+            visible={!!zoomQuestionTarget}
+            question={zoomQuestionTarget}
+            index={questions.findIndex((q) => q.id === zoomQuestionTarget.id)}
+            userAnswer={answers[zoomQuestionTarget.id]}
+            isFileUploading={!!fileUploading[zoomQuestionTarget.id]}
+            themeColor={themeColor}
+            onSelectOption={handleSelectOption}
+            onTextChange={handleTextChange}
+            onPickFile={handlePickAnswerFile}
+            onClose={() => setZoomQuestionTarget(null)}
+          />
+        )}
+      </View>
+    );
+  }
 
   return (
     <QuizBackground themeColor={themeColor}>
