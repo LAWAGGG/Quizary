@@ -12,6 +12,11 @@ LogBox.ignoreLogs([
   'Cannot connect to Expo CLI',
   'DateTimePicker: `onChange` is deprecated',
   'DateTimePicker: `onChange` is deprecated. Use `onValueChange`',
+  'SafeAreaView has been deprecated',
+  '"shadow*" style props are deprecated',
+  'props.pointerEvents is deprecated',
+  'Animated: `useNativeDriver` is not supported',
+  'TouchableWithoutFeedback is deprecated',
 ]);
 
 SplashScreen.preventAutoHideAsync();

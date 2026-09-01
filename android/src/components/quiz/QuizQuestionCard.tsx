@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Platform, Modal, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useAppTheme } from '../../context/ThemeContext';
@@ -74,6 +74,7 @@ function QuizQuestionCardComponent({
 
   const [showPicker, setShowPicker] = useState<'date' | 'time' | null>(null);
   const [pickerDate, setPickerDate] = useState<Date>(new Date());
+  const [showDropdownModal, setShowDropdownModal] = useState(false);
 
   const openPicker = (mode: 'date' | 'time') => {
     let d = new Date();
@@ -197,7 +198,7 @@ function QuizQuestionCardComponent({
       )}
 
       {/* Multiple Choice / Checkbox Options */}
-      {(q.type === 'multiple_choice' || q.type === 'checkbox' || q.type === 'dropdown') && (
+      {(q.type === 'multiple_choice' || q.type === 'checkbox') && (
         <View style={styles.optionsList}>
           {(q.options || []).map((opt: any, i: number) => {
             const selectedIds: number[] = Array.isArray(userAnswer) ? userAnswer : [];
@@ -229,6 +230,112 @@ function QuizQuestionCardComponent({
           })}
         </View>
       )}
+
+      {/* Dropdown Select Input */}
+      {(q.type === 'dropdown' || q.type === 'select') && (() => {
+        const selectedIds: number[] = Array.isArray(userAnswer) ? userAnswer : typeof userAnswer === 'number' ? [userAnswer] : [];
+        const selectedOptId = selectedIds[0];
+        const optionsList = q.options || [];
+        const selectedOpt = optionsList.find((opt: any) => opt.id === selectedOptId);
+        const selectedOptIdx = optionsList.findIndex((opt: any) => opt.id === selectedOptId);
+
+        return (
+          <View style={{ width: '100%', marginVertical: 8 }}>
+            <TouchableOpacity
+              style={{
+                width: '100%',
+                minHeight: 52,
+                borderRadius: 14,
+                borderWidth: 1.5,
+                borderColor: selectedOpt ? activeColor : colors.inputBorder,
+                backgroundColor: colors.inputBg,
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+              onPress={() => setShowDropdownModal(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: selectedOpt ? colors.text : colors.textMuted, fontSize: 15, fontWeight: '500', flex: 1, paddingRight: 8 }} numberOfLines={1}>
+                {selectedOpt
+                  ? `${LETTERS[selectedOptIdx >= 0 ? selectedOptIdx % LETTERS.length : 0]}. ${(selectedOpt.option_text || selectedOpt.text || '').replace(/<[^>]*>/g, '').trim()}`
+                  : (language === 'ID' ? '— Pilih jawaban —' : '— Select an answer —')}
+              </Text>
+              <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+
+            <Modal
+              visible={showDropdownModal}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setShowDropdownModal(false)}
+            >
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)', justifyContent: 'center', alignItems: 'center', padding: 20 }}
+                activeOpacity={1}
+                onPress={() => setShowDropdownModal(false)}
+              >
+                <View
+                  style={{
+                    width: '100%',
+                    maxWidth: 420,
+                    borderRadius: 20,
+                    borderWidth: 1,
+                    backgroundColor: colors.cardBg,
+                    borderColor: colors.cardBorder,
+                    padding: 18,
+                    elevation: 10,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, marginBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.cardBorder }}>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text }}>
+                      {language === 'ID' ? 'Pilih Jawaban' : 'Select Answer'}
+                    </Text>
+                    <TouchableOpacity onPress={() => setShowDropdownModal(false)} style={{ padding: 4 }}>
+                      <Ionicons name="close" size={22} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
+                    {optionsList.map((opt: any, i: number) => {
+                      const isSel = selectedOpt?.id === opt.id;
+                      const letter = LETTERS[i % LETTERS.length];
+
+                      return (
+                        <TouchableOpacity
+                          key={opt.id || i}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            paddingVertical: 12,
+                            paddingHorizontal: 14,
+                            borderRadius: 12,
+                            marginVertical: 3,
+                            backgroundColor: isSel ? (isDark ? 'rgba(79, 70, 229, 0.2)' : '#EEF2FF') : 'transparent',
+                          }}
+                          onPress={() => {
+                            onSelectOption(q.id, opt.id, false);
+                            setShowDropdownModal(false);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={{ fontSize: 15, fontWeight: '500', color: isSel ? activeColor : colors.text, flex: 1, paddingRight: 8 }}>
+                            {letter}. {(opt.option_text || opt.text || '').replace(/<[^>]*>/g, '').trim()}
+                          </Text>
+                          {isSel && <Ionicons name="checkmark" size={18} color={activeColor} />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              </TouchableOpacity>
+            </Modal>
+          </View>
+        );
+      })()}
 
       {/* Short Answer Input */}
       {q.type === 'short_answer' && (

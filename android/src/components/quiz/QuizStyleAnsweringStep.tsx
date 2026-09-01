@@ -68,6 +68,7 @@ export function QuizStyleAnsweringStep({
 
   const [showPicker, setShowPicker] = useState<{ qId: number; mode: 'date' | 'time' } | null>(null);
   const [pickerDate, setPickerDate] = useState<Date>(new Date());
+  const [showDropdownModal, setShowDropdownModal] = useState<number | null>(null);
 
   const openPicker = (qId: number, mode: 'date' | 'time') => {
     const currentVal = answers[qId];
@@ -220,20 +221,20 @@ export function QuizStyleAnsweringStep({
   const rawType = String(currentQ?.type || currentQ?.question_type || '').toLowerCase();
   const qOptions = currentQ?.options || currentQ?.choices || [];
 
+  const isDropdownType = rawType === 'dropdown' || rawType === 'select';
   const isOptionType =
-    rawType === 'multiple_choice' ||
-    rawType === 'checkbox' ||
-    rawType === 'dropdown' ||
-    rawType === 'select' ||
-    rawType === 'choice' ||
-    qOptions.length > 0;
+    (rawType === 'multiple_choice' ||
+      rawType === 'checkbox' ||
+      rawType === 'choice' ||
+      (qOptions.length > 0 && !isDropdownType && !rawType.includes('date') && !rawType.includes('time') && !rawType.includes('essay') && !rawType.includes('file'))) &&
+    !isDropdownType;
 
   const isDateType = rawType === 'date';
   const isTimeType = rawType === 'time';
   const isPasswordType = rawType === 'password';
   const isEssayType = rawType === 'essay' || rawType === 'long_text';
   const isFileUploadType = rawType === 'file_upload' || rawType === 'file';
-  const isTextType = !isOptionType && !isDateType && !isTimeType && !isPasswordType && !isFileUploadType;
+  const isTextType = !isOptionType && !isDropdownType && !isDateType && !isTimeType && !isPasswordType && !isFileUploadType;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -399,7 +400,7 @@ export function QuizStyleAnsweringStep({
                     </Text>
                   )}
 
-                  {/* VIBRANT OPTION TILES (Multiple Choice, Checkbox, Dropdown) */}
+                  {/* VIBRANT OPTION TILES (Multiple Choice, Checkbox) */}
                   {isOptionType && (
                     <View style={styles.optionsListContainer}>
                       {qOptions.map((opt: any, i: number) => {
@@ -452,6 +453,94 @@ export function QuizStyleAnsweringStep({
                       })}
                     </View>
                   )}
+
+                  {/* DROPDOWN SELECT INPUT */}
+                  {isDropdownType && (() => {
+                    const userAns = answers[currentQ.id];
+                    const selectedOptId = Array.isArray(userAns) ? userAns[0] : userAns;
+                    const selectedOpt = qOptions.find((opt: any) => opt.id === selectedOptId);
+                    const selectedOptIdx = qOptions.findIndex((opt: any) => opt.id === selectedOptId);
+
+                    return (
+                      <View style={styles.dropdownWrapper}>
+                        <TouchableOpacity
+                          style={[
+                            styles.dropdownTriggerBtn,
+                            {
+                              backgroundColor: isDark ? 'rgba(30, 41, 59, 0.8)' : '#1E293B',
+                              borderColor: selectedOpt ? '#3B82F6' : (isDark ? 'rgba(255, 255, 255, 0.15)' : '#475569'),
+                            },
+                          ]}
+                          onPress={() => setShowDropdownModal(currentQ.id)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={[styles.dropdownTriggerText, { color: selectedOpt ? '#FFFFFF' : '#94A3B8', fontSize: 16 * fontSizeScale }]}>
+                            {selectedOpt
+                              ? `${LETTERS[selectedOptIdx >= 0 ? selectedOptIdx % LETTERS.length : 0]}. ${stripHtmlTags(selectedOpt.option_text || selectedOpt.text || '')}`
+                              : (language === 'ID' ? '— Pilih jawaban —' : '— Select an answer —')}
+                          </Text>
+                          <Ionicons name="chevron-down" size={20} color="#94A3B8" />
+                        </TouchableOpacity>
+
+                        {/* Modal Dropdown Picker */}
+                        <Modal
+                          visible={showDropdownModal === currentQ.id}
+                          transparent
+                          animationType="fade"
+                          onRequestClose={() => setShowDropdownModal(null)}
+                        >
+                          <TouchableOpacity
+                            style={styles.dropdownModalBackdrop}
+                            activeOpacity={1}
+                            onPress={() => setShowDropdownModal(null)}
+                          >
+                            <View
+                              style={[
+                                styles.dropdownModalContent,
+                                { backgroundColor: isDark ? '#0F172A' : '#1E293B', borderColor: isDark ? '#334155' : '#475569' },
+                              ]}
+                            >
+                              <View style={styles.dropdownModalHeader}>
+                                <Text style={[styles.dropdownModalTitle, { color: '#FFFFFF', fontSize: 16 * fontSizeScale }]}>
+                                  {language === 'ID' ? 'Pilih Jawaban' : 'Select Answer'}
+                                </Text>
+                                <TouchableOpacity onPress={() => setShowDropdownModal(null)} style={{ padding: 4 }}>
+                                  <Ionicons name="close" size={22} color="#94A3B8" />
+                                </TouchableOpacity>
+                              </View>
+
+                              <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+                                {qOptions.map((opt: any, i: number) => {
+                                  const isSel = selectedOpt?.id === opt.id;
+                                  const letter = LETTERS[i % LETTERS.length];
+
+                                  return (
+                                    <TouchableOpacity
+                                      key={opt.id || i}
+                                      style={[
+                                        styles.dropdownOptionItem,
+                                        isSel && { backgroundColor: 'rgba(59, 130, 246, 0.25)' },
+                                      ]}
+                                      onPress={() => {
+                                        onSelectOption(currentQ.id, opt.id, false);
+                                        setShowDropdownModal(null);
+                                      }}
+                                      activeOpacity={0.7}
+                                    >
+                                      <Text style={[styles.dropdownOptionText, { color: isSel ? '#60A5FA' : '#FFFFFF', fontSize: 15 * fontSizeScale }]}>
+                                        {letter}. {stripHtmlTags(opt.option_text || opt.text || '')}
+                                      </Text>
+                                      {isSel && <Ionicons name="checkmark" size={18} color="#60A5FA" />}
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </ScrollView>
+                            </View>
+                          </TouchableOpacity>
+                        </Modal>
+                      </View>
+                    );
+                  })()}
 
                   {/* Short Answer / General Text Input */}
                   {isTextType && (
@@ -865,6 +954,60 @@ const styles = StyleSheet.create({
   fileUploadBox: { width: '100%', marginTop: 10 },
   fileUploadBtn: { width: '100%', height: 60, borderRadius: 18, backgroundColor: '#1E293B', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   fileUploadBtnText: { color: '#FFF', fontWeight: 'bold' },
+
+  /* DROPDOWN SELECT STYLES */
+  dropdownWrapper: { width: '100%', marginTop: 10 },
+  dropdownTriggerBtn: {
+    width: '100%',
+    minHeight: 56,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dropdownTriggerText: { fontWeight: '600', flex: 1, paddingRight: 10 },
+  dropdownModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  dropdownModalContent: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 10,
+  },
+  dropdownModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 14,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(148, 163, 184, 0.2)',
+  },
+  dropdownModalTitle: { fontWeight: 'bold' },
+  dropdownOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    marginVertical: 3,
+  },
+  dropdownOptionText: { fontWeight: '600', flex: 1, paddingRight: 10 },
 
   /* BOTTOM ACTION BAR */
   bottomActionBar: { paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#0F172A', borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)' },
