@@ -100,7 +100,7 @@ export function QuizStyleAnsweringStep({
   };
 
   const isAnswered = (q: any, val: any) => {
-    if (q?.type === 'file_upload') return !!val;
+    if (q?.type === 'file_upload' || q?.question_type === 'file_upload') return !!val;
     if (Array.isArray(val)) return val.length > 0;
     return !!val && String(val).trim().length > 0;
   };
@@ -140,6 +140,25 @@ export function QuizStyleAnsweringStep({
   };
 
   const progressPct = totalQ > 0 ? Math.round(((currentIdx + 1) / totalQ) * 100) : 0;
+
+  // Determine question type & available options
+  const rawType = String(currentQ?.type || currentQ?.question_type || '').toLowerCase();
+  const qOptions = currentQ?.options || currentQ?.choices || [];
+
+  const isOptionType =
+    rawType === 'multiple_choice' ||
+    rawType === 'checkbox' ||
+    rawType === 'dropdown' ||
+    rawType === 'select' ||
+    rawType === 'choice' ||
+    qOptions.length > 0;
+
+  const isDateType = rawType === 'date';
+  const isTimeType = rawType === 'time';
+  const isPasswordType = rawType === 'password';
+  const isEssayType = rawType === 'essay' || rawType === 'long_text';
+  const isFileUploadType = rawType === 'file_upload' || rawType === 'file';
+  const isTextType = !isOptionType && !isDateType && !isTimeType && !isPasswordType && !isFileUploadType;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -276,26 +295,26 @@ export function QuizStyleAnsweringStep({
                   </View>
 
                   {/* Helper Text (Pick one answer / Pick all that apply) */}
-                  {(currentQ.type === 'multiple_choice' || currentQ.type === 'checkbox') && (
+                  {isOptionType && (
                     <Text style={styles.helperText}>
-                      {currentQ.type === 'checkbox' ? 'Pick all that apply' : 'Pick one answer'}
+                      {rawType === 'checkbox' ? 'Pick all that apply' : 'Pick one answer'}
                     </Text>
                   )}
 
-                  {/* VIBRANT OPTION TILES (Matching Web Screenshot 1) */}
-                  {(currentQ.type === 'multiple_choice' || currentQ.type === 'checkbox') && (
+                  {/* VIBRANT OPTION TILES (Multiple Choice, Checkbox, Dropdown) */}
+                  {isOptionType && (
                     <View style={styles.optionsListContainer}>
-                      {currentQ.options?.map((opt: any, i: number) => {
+                      {qOptions.map((opt: any, i: number) => {
                         const userAns = answers[currentQ.id];
                         const selected = Array.isArray(userAns)
                           ? userAns.includes(opt.id)
                           : userAns === opt.id;
                         const bgCol = OPT_COLORS[i % OPT_COLORS.length];
-                        const isCheckbox = currentQ.type === 'checkbox';
+                        const isCheckbox = rawType === 'checkbox';
 
                         return (
                           <TouchableOpacity
-                            key={opt.id}
+                            key={opt.id || i}
                             style={[
                               styles.optionTile,
                               { backgroundColor: bgCol },
@@ -313,7 +332,7 @@ export function QuizStyleAnsweringStep({
                             </View>
 
                             <Text style={[styles.optionTileText, { fontSize: 16 * fontSizeScale }]}>
-                              {stripHtmlTags(opt.option_text)}
+                              {stripHtmlTags(opt.option_text || opt.text || '')}
                             </Text>
 
                             {selected && !isCheckbox && (
@@ -327,26 +346,77 @@ export function QuizStyleAnsweringStep({
                     </View>
                   )}
 
-                  {/* Short Answer Input */}
-                  {(currentQ.type === 'short_answer' || currentQ.type === 'essay') && (
+                  {/* Short Answer / General Text Input */}
+                  {isTextType && (
                     <View style={styles.textInputBox}>
                       <TextInput
-                        style={[
-                          styles.shortAnswerInput,
-                          currentQ.type === 'essay' && { height: 160, textAlignVertical: 'top' },
-                          { color: '#FFF', fontSize: 16 * fontSizeScale },
-                        ]}
-                        placeholder={currentQ.type === 'essay' ? 'Write your answer here...' : 'Tap to answer'}
+                        style={[styles.shortAnswerInput, { color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                        placeholder="Tap to answer"
                         placeholderTextColor="#64748B"
-                        value={answers[currentQ.id] || ''}
+                        value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                         onChangeText={(text) => onTextChange(currentQ.id, text)}
-                        multiline={currentQ.type === 'essay'}
+                      />
+                    </View>
+                  )}
+
+                  {/* Essay Input */}
+                  {isEssayType && (
+                    <View style={styles.textInputBox}>
+                      <TextInput
+                        style={[styles.shortAnswerInput, { height: 160, textAlignVertical: 'top', color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                        placeholder="Write your answer here..."
+                        placeholderTextColor="#64748B"
+                        value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
+                        onChangeText={(text) => onTextChange(currentQ.id, text)}
+                        multiline
+                      />
+                    </View>
+                  )}
+
+                  {/* Date Input */}
+                  {isDateType && (
+                    <View style={styles.textInputBox}>
+                      <Text style={styles.inputHelperLabel}>Format: YYYY-MM-DD (contoh: 2026-08-25)</Text>
+                      <TextInput
+                        style={[styles.shortAnswerInput, { color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor="#64748B"
+                        value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
+                        onChangeText={(text) => onTextChange(currentQ.id, text)}
+                      />
+                    </View>
+                  )}
+
+                  {/* Time Input */}
+                  {isTimeType && (
+                    <View style={styles.textInputBox}>
+                      <Text style={styles.inputHelperLabel}>Format: HH:MM (contoh: 14:30)</Text>
+                      <TextInput
+                        style={[styles.shortAnswerInput, { color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                        placeholder="HH:MM"
+                        placeholderTextColor="#64748B"
+                        value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
+                        onChangeText={(text) => onTextChange(currentQ.id, text)}
+                      />
+                    </View>
+                  )}
+
+                  {/* Password Input */}
+                  {isPasswordType && (
+                    <View style={styles.textInputBox}>
+                      <TextInput
+                        style={[styles.shortAnswerInput, { color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                        placeholder="Enter password"
+                        placeholderTextColor="#64748B"
+                        secureTextEntry
+                        value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
+                        onChangeText={(text) => onTextChange(currentQ.id, text)}
                       />
                     </View>
                   )}
 
                   {/* File Upload Input */}
-                  {currentQ.type === 'file_upload' && (
+                  {isFileUploadType && (
                     <View style={styles.fileUploadBox}>
                       <TouchableOpacity
                         style={styles.fileUploadBtn}
@@ -547,6 +617,7 @@ const styles = StyleSheet.create({
   zoomPillText: { color: '#94A3B8', fontWeight: '600' },
 
   helperText: { color: '#94A3B8', fontSize: 12, fontWeight: '600', textAlign: 'center', marginBottom: 20 },
+  inputHelperLabel: { color: '#94A3B8', fontSize: 12, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
 
   /* VIBRANT KAHOOT-STYLE OPTION TILES */
   optionsListContainer: { width: '100%' },
