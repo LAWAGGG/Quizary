@@ -185,27 +185,36 @@ export function QuizStyleAnsweringStep({
     setReviewed((prev) => ({ ...prev, [qId]: !prev[qId] }));
   };
 
+  const checkRequiredAndSubmit = () => {
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      const isRequired = q.is_required !== false;
+      const val = answers[q.id];
+      if (isRequired && !isAnswered(q, val)) {
+        showAlert({
+          type: 'warning',
+          title: language === 'ID' ? 'Soal Wajib Belum Diisi' : 'Required Question Missing',
+          message:
+            language === 'ID'
+              ? `Soal nomor ${i + 1} (wajib) belum diisi. Mohon lengkapi semua soal wajib sebelum mengirim.`
+              : `Question #${i + 1} (required) is not answered. Please complete all required questions before submitting.`,
+        });
+        if (i !== currentIdx) {
+          animateToQuestion(i, i > currentIdx ? 1 : -1);
+        }
+        return;
+      }
+    }
+    onSubmit();
+  };
+
   const handleNext = () => {
     if (!currentQ) return;
-
-    // Validation check for required question
-    const answerVal = answers[currentQ.id];
-    const isRequired = currentQ.is_required !== false;
-    if (isRequired && !isAnswered(currentQ, answerVal)) {
-      showAlert({
-        type: 'warning',
-        title: language === 'ID' ? 'Soal Wajib Belum Diisi' : 'Required Question Missing',
-        message: language === 'ID'
-          ? 'Mohon isi jawaban untuk soal ini sebelum melanjutkannya.'
-          : 'Please select or enter an answer for this question before proceeding.',
-      });
-      return;
-    }
 
     if (currentIdx < totalQ - 1) {
       animateToQuestion(currentIdx + 1, 1);
     } else {
-      onSubmit();
+      checkRequiredAndSubmit();
     }
   };
 
