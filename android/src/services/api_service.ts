@@ -81,6 +81,12 @@ function extractErrorMessage(err: any, defaultMsg: string): string {
   return defaultMsg;
 }
 
+let activeSubmissionToken: string | null = null;
+
+export function setSubmissionToken(token: string | null) {
+  activeSubmissionToken = token;
+}
+
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
   const token = await getToken();
   const headers: Record<string, string> = {
@@ -88,6 +94,7 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
     ...(options.headers as any),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (activeSubmissionToken) headers['X-Submission-Token'] = activeSubmissionToken;
   try {
     const response = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
     if (!response.ok) {
@@ -112,6 +119,7 @@ async function fetchMultipart(endpoint: string, method: string, formData: FormDa
   const token = await getToken();
   const headers: Record<string, string> = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (activeSubmissionToken) headers['X-Submission-Token'] = activeSubmissionToken;
 
   const response = await fetch(`${BASE_URL}${endpoint}`, { method, headers, body: formData });
 
@@ -398,7 +406,11 @@ export async function createSubmission(
   const body: any = { form_id: Number(formId) };
   if (name) body.respondent_name = name;
   if (email) body.respondent_email = email;
-  return fetchWithAuth('/submissions', { method: 'POST', body: JSON.stringify(body) });
+  const res = await fetchWithAuth('/submissions', { method: 'POST', body: JSON.stringify(body) });
+  if (res && res.access_token) {
+    setSubmissionToken(res.access_token);
+  }
+  return res;
 }
 
 export async function autosaveAnswer(

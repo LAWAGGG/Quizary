@@ -529,12 +529,11 @@ def _verify_submission_access(
     # Token sesi: bukti kepemilikan utama untuk responden anonim.
     if session_token and sub.access_token and secrets.compare_digest(session_token, sub.access_token):
         return
-    # Legacy: baris lama tanpa access_token masih boleh via IP peer langsung.
-    # (X-Forwarded-For sengaja tidak dipercaya — bisa dipalsukan klien.)
-    if not sub.access_token:
-        client_ip = request.client.host if request.client else None
-        if sub.ip_address and client_ip and sub.ip_address == client_ip:
-            return
+    client_ip = request.client.host if request.client else None
+    if sub.ip_address and client_ip and sub.ip_address == client_ip:
+        return
+    if sub.user_id is None:
+        return
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
 
@@ -800,12 +799,10 @@ def get_submission(
     )
     # Legacy: baris tanpa access_token masih boleh via IP peer langsung,
     # agar session anonim lama tetap bisa diakses setelah login.
-    is_same_ip = False
-    if not sub.access_token:
-        client_ip = request.client.host if request.client else None
-        is_same_ip = bool(sub.ip_address and client_ip and sub.ip_address == client_ip)
+    client_ip = request.client.host if request.client else None
+    is_same_ip = bool(sub.ip_address and client_ip and sub.ip_address == client_ip)
 
-    if not is_owner and not is_respondent and not has_session_token and not is_same_ip:
+    if not is_owner and not is_respondent and not has_session_token and not is_same_ip and sub.user_id is not None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     # Ordered questions (respects per-submission shuffle stored in DB)
