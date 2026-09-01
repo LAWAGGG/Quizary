@@ -32,13 +32,12 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
     : (publicForm?.time_limit || publicForm?.duration || publicForm?.settings?.time_limit);
 
   const bannerUri = publicForm?.banner_path || publicForm?.banner_url || publicForm?.banner;
-
   const isQuizDesign = displayStyle === 'quiz';
 
   return (
-    <QuizBackground themeColor={themeColor}>
+    <QuizBackground themeColor={themeColor} isQuizDesign={isQuizDesign}>
       <SafeAreaView style={styles.landingContainer}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <StatusBar style={isQuizDesign ? 'light' : (isDark ? 'light' : 'dark')} />
 
         {/* Top Header Navigation */}
         <View style={styles.landingHeader}>
@@ -55,122 +54,156 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
             <Ionicons name="arrow-back" size={20} color={isQuizDesign ? '#FFF' : colors.text} />
           </TouchableOpacity>
 
-          {isQuizDesign && (
-            <View style={styles.brandTitleRow}>
+          {isQuizDesign ? (
+            <View style={styles.brandTitleRowCentered}>
               <Image source={require('../../../assets/images/Quizary_Logo_White.png')} style={styles.brandLogo} resizeMode="contain" />
               <Text style={styles.brandTitleText}>Quizary</Text>
             </View>
-          )}
-        </View>
-
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Banner Hero Image (if present) */}
-          {bannerUri ? (
-            <Image source={{ uri: bannerUri }} style={styles.heroBanner} resizeMode="cover" />
           ) : null}
 
-          {/* Title & Description Main Card / Hero Container */}
-          <View
-            style={[
-              isQuizDesign ? styles.heroTitleContainer : styles.titleCard,
-              !isQuizDesign && { backgroundColor: colors.cardBg, borderColor: colors.cardBorder },
-            ]}
-          >
-            <Text
-              style={[
-                styles.quizTitle,
-                isQuizDesign ? styles.heroQuizTitle : { color: colors.text, fontSize: 24 * fontSizeScale },
-              ]}
-            >
-              {stripHtmlTags(publicForm?.title) || (language === 'ID' ? 'Kuis' : 'Quiz')}
-            </Text>
+          {/* Dummy view for symmetry in Header */}
+          {isQuizDesign ? <View style={{ width: 40 }} /> : null}
+        </View>
 
-            {publicForm?.description ? (
-              <View style={{ marginBottom: 20, width: '100%' }}>
-                <RichTextRenderer
-                  html={publicForm.description}
-                  style={{
-                    color: isQuizDesign ? 'rgba(255, 255, 255, 0.9)' : colors.textSub,
-                    fontSize: 14 * fontSizeScale,
-                    lineHeight: 22,
-                    textAlign: isQuizDesign ? 'center' : 'left',
-                  }}
-                />
+        {isQuizDesign ? (
+          /* DESIGN QUIZ: Fullscreen Hero matching Web Screenshot 1 */
+          <View style={styles.quizHeroWrapper}>
+            <ScrollView contentContainerStyle={styles.quizHeroScrollContent} showsVerticalScrollIndicator={false}>
+              {/* Banner Image with subtle border */}
+              {bannerUri ? (
+                <Image source={{ uri: bannerUri }} style={styles.heroBannerQuizStyle} resizeMode="cover" />
+              ) : null}
+
+              {/* Form Title */}
+              <Text style={[styles.quizTitleQuizStyle, { fontSize: 32 * fontSizeScale }]}>
+                {stripHtmlTags(publicForm?.title) || (language === 'ID' ? 'Kuis' : 'Quiz')}
+              </Text>
+
+              {/* Form Description */}
+              {publicForm?.description ? (
+                <View style={{ marginBottom: 16, width: '100%', alignItems: 'center' }}>
+                  <RichTextRenderer
+                    html={publicForm.description}
+                    style={{
+                      color: 'rgba(255, 255, 255, 0.85)',
+                      fontSize: 15 * fontSizeScale,
+                      lineHeight: 22,
+                      textAlign: 'center',
+                    }}
+                  />
+                </View>
+              ) : null}
+
+              {/* Metadata Pill Badges (Dark translucent pills matching Web) */}
+              <View style={styles.metaPillsRowQuizStyle}>
+                <View style={styles.pillBadgeQuizStyle}>
+                  <Ionicons name="help-circle-outline" size={16 * fontSizeScale} color="#FFF" />
+                  <Text style={[styles.pillBadgeTextQuizStyle, { fontSize: 13 * fontSizeScale }]}>
+                    {language === 'ID' ? `${qCount} questions` : `${qCount} questions`}
+                  </Text>
+                </View>
+
+                <View style={styles.pillBadgeQuizStyle}>
+                  <Ionicons name="time-outline" size={16 * fontSizeScale} color="#FFF" />
+                  <Text style={[styles.pillBadgeTextQuizStyle, { fontSize: 13 * fontSizeScale }]}>
+                    {timeLimit
+                      ? (language === 'ID' ? `${timeLimit} min` : `${timeLimit} min`)
+                      : (language === 'ID' ? 'No time limit' : 'No time limit')}
+                  </Text>
+                </View>
               </View>
+
+              {/* Start Button (Centered White Rounded Pill matching Web) */}
+              <TouchableOpacity
+                style={styles.startButtonQuizStyle}
+                onPress={onStart}
+                disabled={starting}
+                activeOpacity={0.85}
+              >
+                {starting ? (
+                  <ActivityIndicator color={themeColor} />
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={[styles.startButtonTextQuizStyle, { color: themeColor, fontSize: 16 * fontSizeScale }]}>
+                      {language === 'ID' ? 'Start' : 'Start'}
+                    </Text>
+                    <Ionicons name="arrow-forward" size={18} color={themeColor} />
+                  </View>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+
+            {/* Bottom Row of 12 Circular Bubbles (Matching Web Screenshot) */}
+            <View style={styles.bubblesRow}>
+              {Array.from({ length: 12 }).map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.bubbleDot,
+                    (i === 2 || i === 5 || i === 8)
+                      ? { backgroundColor: '#FFF', borderColor: '#FFF' }
+                      : { borderColor: 'rgba(255, 255, 255, 0.25)' },
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+        ) : (
+          /* DESIGN FORM: Card Layout */
+          <ScrollView contentContainerStyle={styles.scrollContentForm} showsVerticalScrollIndicator={false}>
+            {bannerUri ? (
+              <Image source={{ uri: bannerUri }} style={styles.heroBannerForm} resizeMode="cover" />
             ) : null}
 
-            {/* Quiz Info Badges (Shown inside Hero in Quiz Design) */}
-            {isQuizDesign && (
-              <View style={styles.metaPillsRowHero}>
-                <View style={styles.pillBadgeHero}>
-                  <Ionicons name="help-circle-outline" size={14 * fontSizeScale} color="#FFF" />
-                  <Text style={styles.pillBadgeTextHero}>
-                    {language === 'ID' ? `${qCount} Soal` : `${qCount} questions`}
-                  </Text>
-                </View>
+            <View style={[styles.titleCardForm, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+              <Text style={[styles.quizTitleForm, { color: colors.text, fontSize: 24 * fontSizeScale }]}>
+                {stripHtmlTags(publicForm?.title) || (language === 'ID' ? 'Kuis' : 'Quiz')}
+              </Text>
 
-                <View style={styles.pillBadgeHero}>
-                  <Ionicons name="time-outline" size={14 * fontSizeScale} color="#FFF" />
-                  <Text style={styles.pillBadgeTextHero}>
-                    {timeLimit
-                      ? (language === 'ID' ? `${timeLimit} menit` : `${timeLimit} min`)
-                      : (language === 'ID' ? 'Tanpa batas waktu' : 'No time limit')}
-                  </Text>
+              {publicForm?.description ? (
+                <View style={{ marginBottom: 20 }}>
+                  <RichTextRenderer
+                    html={publicForm.description}
+                    style={{ color: colors.textSub, fontSize: 14 * fontSizeScale, lineHeight: 20 }}
+                  />
                 </View>
-              </View>
-            )}
+              ) : null}
 
-            {/* Start Action Button */}
-            <TouchableOpacity
-              style={[
-                styles.startButton,
-                isQuizDesign
-                  ? styles.heroStartButton
-                  : { backgroundColor: themeColor },
-              ]}
-              onPress={onStart}
-              disabled={starting}
-              activeOpacity={0.85}
-            >
-              {starting ? (
-                <ActivityIndicator color={isQuizDesign ? themeColor : '#FFF'} />
-              ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text
-                    style={[
-                      styles.startButtonText,
-                      isQuizDesign ? { color: themeColor, fontSize: 17 * fontSizeScale } : { color: '#FFF', fontSize: 16 * fontSizeScale },
-                    ]}
-                  >
-                    {language === 'ID' ? 'Mulai' : 'Start'}
+              <TouchableOpacity
+                style={[styles.startButtonForm, { backgroundColor: themeColor }]}
+                onPress={onStart}
+                disabled={starting}
+                activeOpacity={0.85}
+              >
+                {starting ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <Text style={[styles.startButtonTextForm, { fontSize: 16 * fontSizeScale }]}>
+                    {language === 'ID' ? '→ Mulai' : '→ Start'}
                   </Text>
-                  <Ionicons name="arrow-forward" size={18} color={isQuizDesign ? themeColor : '#FFF'} />
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
+                )}
+              </TouchableOpacity>
+            </View>
 
-          {/* Metadata Pill Badges Row (Shown below card in Form Design) */}
-          {!isQuizDesign && (
-            <View style={styles.metaPillsRow}>
-              <View style={[styles.pillBadge, { borderColor: colors.cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
+            <View style={styles.metaPillsRowForm}>
+              <View style={[styles.pillBadgeForm, { borderColor: colors.cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
                 <Ionicons name="help-circle-outline" size={16 * fontSizeScale} color={colors.textMuted} />
-                <Text style={[styles.pillBadgeText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
+                <Text style={[styles.pillBadgeTextForm, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
                   {language === 'ID' ? `${qCount} Soal` : `${qCount} questions`}
                 </Text>
               </View>
 
-              <View style={[styles.pillBadge, { borderColor: colors.cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
+              <View style={[styles.pillBadgeForm, { borderColor: colors.cardBorder, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
                 <Ionicons name="time-outline" size={16 * fontSizeScale} color={colors.textMuted} />
-                <Text style={[styles.pillBadgeText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
+                <Text style={[styles.pillBadgeTextForm, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
                   {timeLimit
                     ? (language === 'ID' ? `${timeLimit} menit` : `${timeLimit} min`)
                     : (language === 'ID' ? 'Tanpa batas waktu' : 'No time limit')}
                 </Text>
               </View>
             </View>
-          )}
-        </ScrollView>
+          </ScrollView>
+        )}
       </SafeAreaView>
     </QuizBackground>
   );
@@ -178,30 +211,37 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
 
 const styles = StyleSheet.create({
   landingContainer: { flex: 1 },
-  landingHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+  landingHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
   iconCircleBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  brandTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  
+  brandTitleRowCentered: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   brandLogo: { width: 28, height: 28 },
-  brandTitleText: { color: '#FFF', fontSize: 20, fontWeight: 'bold' },
+  brandTitleText: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
 
-  scrollContent: { padding: 20, paddingBottom: 40, justifyContent: 'center', alignItems: 'center' },
+  /* QUIZ STYLE (Full Match with Web Screenshot 1) */
+  quizHeroWrapper: { flex: 1, justifyContent: 'space-between' },
+  quizHeroScrollContent: { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 20, alignItems: 'center', justifyContent: 'center' },
+  heroBannerQuizStyle: { width: '100%', height: 180, borderRadius: 20, marginBottom: 20, borderWidth: 3, borderColor: 'rgba(255, 255, 255, 0.25)' },
+  quizTitleQuizStyle: { color: '#FFF', fontWeight: '900', textAlign: 'center', marginBottom: 8 },
   
-  heroBanner: { width: '100%', height: 180, borderRadius: 20, marginBottom: 20 },
+  metaPillsRowQuizStyle: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginVertical: 12 },
+  pillBadgeQuizStyle: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 24, backgroundColor: 'rgba(15, 23, 42, 0.4)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.2)' },
+  pillBadgeTextQuizStyle: { color: '#FFF', fontWeight: '700' },
 
-  titleCard: { width: '100%', borderRadius: 20, padding: 24, borderWidth: 1, marginBottom: 16 },
-  heroTitleContainer: { width: '100%', alignItems: 'center', marginVertical: 12, paddingHorizontal: 10 },
-  
-  quizTitle: { fontWeight: '800', marginBottom: 10 },
-  heroQuizTitle: { color: '#FFF', fontSize: 28, fontWeight: '900', textAlign: 'center', marginBottom: 12, lineHeight: 36 },
-  
-  startButton: { width: '100%', paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  heroStartButton: { backgroundColor: '#FFFFFF', paddingVertical: 16, paddingHorizontal: 36, borderRadius: 30, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5, marginTop: 16 },
-  startButtonText: { fontWeight: 'bold' },
+  startButtonQuizStyle: { backgroundColor: '#FFFFFF', paddingHorizontal: 44, paddingVertical: 14, borderRadius: 30, marginTop: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
+  startButtonTextQuizStyle: { fontWeight: '800' },
 
-  metaPillsRow: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 4 },
-  metaPillsRowHero: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 20 },
-  pillBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24, borderWidth: 1 },
-  pillBadgeHero: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: 'rgba(255, 255, 255, 0.18)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.25)' },
-  pillBadgeText: { fontWeight: '600' },
-  pillBadgeTextHero: { color: '#FFF', fontSize: 13, fontWeight: '700' },
+  bubblesRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, paddingBottom: 24 },
+  bubbleDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
+
+  /* FORM STYLE */
+  scrollContentForm: { padding: 20, paddingBottom: 40, justifyContent: 'center' },
+  heroBannerForm: { width: '100%', height: 180, borderRadius: 20, marginBottom: 16 },
+  titleCardForm: { width: '100%', borderRadius: 20, padding: 24, borderWidth: 1, marginBottom: 16 },
+  quizTitleForm: { fontWeight: '800', marginBottom: 10 },
+  startButtonForm: { width: '100%', paddingVertical: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  startButtonTextForm: { color: '#FFF', fontWeight: 'bold' },
+  metaPillsRowForm: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 4 },
+  pillBadgeForm: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24, borderWidth: 1 },
+  pillBadgeTextForm: { fontWeight: '600' },
 });
