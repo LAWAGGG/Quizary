@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useAppTheme } from '../../context/ThemeContext';
 import { RichTextRenderer } from '../RichTextRenderer';
 import { ImageZoomModal } from '../ImageZoomModal';
@@ -70,6 +71,47 @@ function QuizQuestionCardComponent({
   const activeColor = themeColor || colors.primary;
   const [zoomUri, setZoomUri] = useState<string | null>(null);
   const isReq = q.is_required !== false;
+
+  const [showPicker, setShowPicker] = useState<'date' | 'time' | null>(null);
+  const [pickerDate, setPickerDate] = useState<Date>(new Date());
+
+  const openPicker = (mode: 'date' | 'time') => {
+    let d = new Date();
+    if (typeof userAnswer === 'string' && userAnswer.trim().length > 0) {
+      if (mode === 'date') {
+        const parts = userAnswer.split('-');
+        if (parts.length === 3) {
+          const parsed = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+          if (!isNaN(parsed.getTime())) d = parsed;
+        }
+      } else if (mode === 'time') {
+        const parts = userAnswer.split(':');
+        if (parts.length === 2) {
+          d.setHours(Number(parts[0]) || 0, Number(parts[1]) || 0, 0, 0);
+        }
+      }
+    }
+    setPickerDate(d);
+    setShowPicker(mode);
+  };
+
+  const handlePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowPicker(null);
+    }
+    if (event.type === 'set' && selectedDate && showPicker) {
+      if (showPicker === 'date') {
+        const yyyy = selectedDate.getFullYear();
+        const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(selectedDate.getDate()).padStart(2, '0');
+        onTextChange(q.id, `${yyyy}-${mm}-${dd}`);
+      } else {
+        const hh = String(selectedDate.getHours()).padStart(2, '0');
+        const min = String(selectedDate.getMinutes()).padStart(2, '0');
+        onTextChange(q.id, `${hh}:${min}`);
+      }
+    }
+  };
 
   const imgUri = extractImgUrl(q, q.question_text);
 
@@ -184,23 +226,50 @@ function QuizQuestionCardComponent({
 
       {/* Date Input */}
       {q.type === 'date' && (
-        <TextInput
-          style={[styles.textInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
-          placeholder="Format: YYYY-MM-DD (contoh: 2026-08-25)"
-          placeholderTextColor={colors.textMuted}
-          value={typeof userAnswer === 'string' ? userAnswer : ''}
-          onChangeText={(txt) => onTextChange(q.id, txt)}
-        />
+        <View style={styles.pickerFieldContainer}>
+          <TextInput
+            style={[styles.textInput, { flex: 1, backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
+            placeholder="Format: YYYY-MM-DD (contoh: 2026-08-25)"
+            placeholderTextColor={colors.textMuted}
+            value={typeof userAnswer === 'string' ? userAnswer : ''}
+            onChangeText={(txt) => onTextChange(q.id, txt)}
+          />
+          <TouchableOpacity
+            style={[styles.pickerTriggerBtn, { backgroundColor: activeColor }]}
+            onPress={() => openPicker('date')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="calendar-outline" size={20} color="#FFF" />
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Time Input */}
       {q.type === 'time' && (
-        <TextInput
-          style={[styles.textInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
-          placeholder="Format: HH:MM (contoh: 14:30)"
-          placeholderTextColor={colors.textMuted}
-          value={typeof userAnswer === 'string' ? userAnswer : ''}
-          onChangeText={(txt) => onTextChange(q.id, txt)}
+        <View style={styles.pickerFieldContainer}>
+          <TextInput
+            style={[styles.textInput, { flex: 1, backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
+            placeholder="Format: HH:MM (contoh: 14:30)"
+            placeholderTextColor={colors.textMuted}
+            value={typeof userAnswer === 'string' ? userAnswer : ''}
+            onChangeText={(txt) => onTextChange(q.id, txt)}
+          />
+          <TouchableOpacity
+            style={[styles.pickerTriggerBtn, { backgroundColor: activeColor }]}
+            onPress={() => openPicker('time')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="time-outline" size={20} color="#FFF" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {showPicker && (
+        <DateTimePicker
+          value={pickerDate}
+          mode={showPicker}
+          display={Platform.OS === 'android' ? 'default' : 'spinner'}
+          onChange={handlePickerChange}
         />
       )}
 
@@ -340,6 +409,9 @@ const styles = StyleSheet.create({
 
   textInput: { padding: 14, borderRadius: 12, borderWidth: 1, fontSize: 14, marginTop: 12 },
   textArea: { height: 110, textAlignVertical: 'top' },
+
+  pickerFieldContainer: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
+  pickerTriggerBtn: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
 
   fileBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 14, borderRadius: 12, borderWidth: 1, marginTop: 12 },
   fileBtnText: { fontWeight: 'bold', fontSize: 14 },

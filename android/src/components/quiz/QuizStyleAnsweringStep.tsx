@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAppAlert } from '../../context/AlertContext';
@@ -64,6 +65,48 @@ export function QuizStyleAnsweringStep({
   const [reviewed, setReviewed] = useState<Record<number, boolean>>({});
   const [showMapModal, setShowMapModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+
+  const [showPicker, setShowPicker] = useState<{ qId: number; mode: 'date' | 'time' } | null>(null);
+  const [pickerDate, setPickerDate] = useState<Date>(new Date());
+
+  const openPicker = (qId: number, mode: 'date' | 'time') => {
+    const currentVal = answers[qId];
+    let d = new Date();
+    if (typeof currentVal === 'string' && currentVal.trim().length > 0) {
+      if (mode === 'date') {
+        const parts = currentVal.split('-');
+        if (parts.length === 3) {
+          const parsed = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+          if (!isNaN(parsed.getTime())) d = parsed;
+        }
+      } else if (mode === 'time') {
+        const parts = currentVal.split(':');
+        if (parts.length === 2) {
+          d.setHours(Number(parts[0]) || 0, Number(parts[1]) || 0, 0, 0);
+        }
+      }
+    }
+    setPickerDate(d);
+    setShowPicker({ qId, mode });
+  };
+
+  const handlePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowPicker(null);
+    }
+    if (event.type === 'set' && selectedDate && showPicker) {
+      if (showPicker.mode === 'date') {
+        const yyyy = selectedDate.getFullYear();
+        const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(selectedDate.getDate()).padStart(2, '0');
+        onTextChange(showPicker.qId, `${yyyy}-${mm}-${dd}`);
+      } else {
+        const hh = String(selectedDate.getHours()).padStart(2, '0');
+        const min = String(selectedDate.getMinutes()).padStart(2, '0');
+        onTextChange(showPicker.qId, `${hh}:${min}`);
+      }
+    }
+  };
 
   const themeColor =
     publicForm?.theme_color ||
@@ -411,13 +454,22 @@ export function QuizStyleAnsweringStep({
                   {isDateType && (
                     <View style={styles.textInputBox}>
                       <Text style={styles.inputHelperLabel}>Format: YYYY-MM-DD (contoh: 2026-08-25)</Text>
-                      <TextInput
-                        style={[styles.shortAnswerInput, { color: '#FFF', fontSize: 16 * fontSizeScale }]}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor="#64748B"
-                        value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
-                        onChangeText={(text) => onTextChange(currentQ.id, text)}
-                      />
+                      <View style={styles.pickerFieldRow}>
+                        <TextInput
+                          style={[styles.shortAnswerInput, { flex: 1, color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                          placeholder="YYYY-MM-DD"
+                          placeholderTextColor="#64748B"
+                          value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
+                          onChangeText={(text) => onTextChange(currentQ.id, text)}
+                        />
+                        <TouchableOpacity
+                          style={styles.pickerTriggerBtnStyle}
+                          onPress={() => openPicker(currentQ.id, 'date')}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="calendar-outline" size={22} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   )}
 
@@ -425,14 +477,32 @@ export function QuizStyleAnsweringStep({
                   {isTimeType && (
                     <View style={styles.textInputBox}>
                       <Text style={styles.inputHelperLabel}>Format: HH:MM (contoh: 14:30)</Text>
-                      <TextInput
-                        style={[styles.shortAnswerInput, { color: '#FFF', fontSize: 16 * fontSizeScale }]}
-                        placeholder="HH:MM"
-                        placeholderTextColor="#64748B"
-                        value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
-                        onChangeText={(text) => onTextChange(currentQ.id, text)}
-                      />
+                      <View style={styles.pickerFieldRow}>
+                        <TextInput
+                          style={[styles.shortAnswerInput, { flex: 1, color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                          placeholder="HH:MM"
+                          placeholderTextColor="#64748B"
+                          value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
+                          onChangeText={(text) => onTextChange(currentQ.id, text)}
+                        />
+                        <TouchableOpacity
+                          style={styles.pickerTriggerBtnStyle}
+                          onPress={() => openPicker(currentQ.id, 'time')}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="time-outline" size={22} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      </View>
                     </View>
+                  )}
+
+                  {showPicker && (
+                    <DateTimePicker
+                      value={pickerDate}
+                      mode={showPicker.mode}
+                      display={Platform.OS === 'android' ? 'default' : 'spinner'}
+                      onChange={handlePickerChange}
+                    />
                   )}
 
                   {/* Password Input */}
@@ -693,6 +763,18 @@ const styles = StyleSheet.create({
 
   helperText: { color: '#94A3B8', fontSize: 12, fontWeight: '600', textAlign: 'center', marginBottom: 20 },
   inputHelperLabel: { color: '#94A3B8', fontSize: 12, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
+
+  pickerFieldRow: { flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' },
+  pickerTriggerBtnStyle: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: 'rgba(59, 130, 246, 0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
 
   /* VIBRANT KAHOOT-STYLE OPTION TILES */
   optionsListContainer: { width: '100%' },
