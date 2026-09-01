@@ -4,8 +4,42 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { RichTextRenderer } from '../RichTextRenderer';
 import { ImageZoomModal } from '../ImageZoomModal';
+import { BASE_URL } from '../../services/api_service';
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+export const extractImgUrl = (item: any, htmlText?: string): string | null => {
+  if (!item && !htmlText) return null;
+
+  const rawProp =
+    item?.image?.path ||
+    item?.image?.url ||
+    (typeof item?.image === 'string' ? item.image : null) ||
+    item?.image_path ||
+    item?.image_url ||
+    item?.imageUrl ||
+    item?.media ||
+    item?.question_image;
+
+  let urlStr = typeof rawProp === 'string' ? rawProp : null;
+
+  if (!urlStr && htmlText) {
+    const match = htmlText.match(/<img[^>]+src=["']([^"']+)["']/i);
+    if (match && match[1]) {
+      urlStr = match[1];
+    }
+  }
+
+  if (!urlStr) return null;
+
+  if (urlStr.startsWith('http://') || urlStr.startsWith('https://') || urlStr.startsWith('data:')) {
+    return urlStr;
+  }
+
+  const rootHost = BASE_URL.replace(/\/api\/?$/, '');
+  const cleanPath = urlStr.startsWith('/') ? urlStr : `/${urlStr}`;
+  return `${rootHost}${cleanPath}`;
+};
 
 interface QuizQuestionCardProps {
   question: any;
@@ -37,8 +71,7 @@ function QuizQuestionCardComponent({
   const [zoomUri, setZoomUri] = useState<string | null>(null);
   const isReq = q.is_required !== false;
 
-  const rawImg = q.image?.path || q.image;
-  const imgUri = typeof rawImg === 'string' ? rawImg : null;
+  const imgUri = extractImgUrl(q, q.question_text);
 
   return (
     <View style={[

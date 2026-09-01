@@ -13,6 +13,7 @@ import {
   TouchableWithoutFeedback,
   TextInput,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -22,6 +23,7 @@ import { useAppTheme } from '../../context/ThemeContext';
 import { useAppAlert } from '../../context/AlertContext';
 import { RichTextRenderer, stripHtmlTags } from '../RichTextRenderer';
 import { getThemeGradientColors } from './QuizBackground';
+import { extractImgUrl } from './QuizQuestionCard';
 
 interface QuizStyleAnsweringStepProps {
   publicForm: any;
@@ -280,6 +282,29 @@ export function QuizStyleAnsweringStep({
                     </Text>
                   </View>
 
+                  {/* Question Image (if present) */}
+                  {(() => {
+                    const qImgUrl = extractImgUrl(currentQ, currentQ?.question_text);
+                    if (!qImgUrl) return null;
+                    return (
+                      <TouchableOpacity
+                        style={styles.qImageContainer}
+                        onPress={() => onOpenZoom(currentQ)}
+                        activeOpacity={0.85}
+                      >
+                        <Image
+                          source={{ uri: qImgUrl }}
+                          style={styles.qImageStyle}
+                          resizeMode="contain"
+                        />
+                        <View style={styles.zoomBadgeOverlay}>
+                          <Ionicons name="expand-outline" size={12} color="#FFF" />
+                          <Text style={styles.zoomBadgeText}>Ketuk untuk Zoom</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })()}
+
                   {/* Zoom Button Pill */}
                   <View style={styles.zoomCenterWrapper}>
                     <TouchableOpacity
@@ -311,6 +336,7 @@ export function QuizStyleAnsweringStep({
                           : userAns === opt.id;
                         const bgCol = OPT_COLORS[i % OPT_COLORS.length];
                         const isCheckbox = rawType === 'checkbox';
+                        const optImgUrl = extractImgUrl(opt, opt?.option_text || opt?.text);
 
                         return (
                           <TouchableOpacity
@@ -330,6 +356,14 @@ export function QuizStyleAnsweringStep({
                                 <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
                               )}
                             </View>
+
+                            {optImgUrl && (
+                              <Image
+                                source={{ uri: optImgUrl }}
+                                style={styles.optionImgStyle}
+                                resizeMode="contain"
+                              />
+                            )}
 
                             <Text style={[styles.optionTileText, { fontSize: 16 * fontSizeScale }]}>
                               {stripHtmlTags(opt.option_text || opt.text || '')}
@@ -611,6 +645,47 @@ const styles = StyleSheet.create({
 
   qTitleCenterWrapper: { width: '100%', alignItems: 'center', marginVertical: 12, paddingHorizontal: 10 },
   qTitleText: { fontWeight: '800', textAlign: 'center', lineHeight: 32 },
+
+  qImageContainer: {
+    width: '100%',
+    maxHeight: 250,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 16,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  qImageStyle: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+  },
+  zoomBadgeOverlay: {
+    position: 'absolute',
+    bottom: 8,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  zoomBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  optionImgStyle: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
 
   zoomCenterWrapper: { width: '100%', alignItems: 'center', marginBottom: 12 },
   zoomPillBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(30, 41, 59, 0.7)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)' },
