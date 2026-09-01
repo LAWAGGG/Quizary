@@ -93,8 +93,9 @@ export default function StandaloneQuizScreen() {
   const handleRefreshLockStatus = async () => {
     setIsCheckingLock(true);
     try {
-      if (submissionId) {
-        const detail = await getSubmissionDetail(submissionId);
+      const subId = submissionId || submissionIdRef.current;
+      if (subId) {
+        const detail = await getSubmissionDetail(subId);
         // Buka kuis jika status tidak terkunci dari server (misal diubah oleh admin di web jadi in_progress)
         if (detail.status !== 'locked') {
           setIsLocked(false);

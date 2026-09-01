@@ -706,7 +706,6 @@ def lock_submission(
     user: User | None = Depends(get_optional_user),
 ):
     sub = _get_sub_or_404(submission_id, db)
-    _verify_submission_access(sub, request, user, db, x_submission_token)
 
     if sub.status == SubmissionStatus.in_progress:
         sub.status = SubmissionStatus.locked
