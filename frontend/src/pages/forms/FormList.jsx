@@ -43,7 +43,7 @@ function FormTypeCluster({ form }) {
       <span
         className="relative z-20 h-9 px-2.5 rounded-xl border-2 flex items-center gap-1 text-xs font-bold tabular-nums shadow-chip bg-white dark:bg-ink-800 text-gray-600 dark:text-gray-300 transition-all duration-200 ease-in-out group-hover:-translate-y-2 delay-[40ms]"
         style={{ borderColor: 'var(--ts)' }}
-        title={`${form.question_count} soal`}
+        title={`${form.question_count} question(s)`}
       >
         <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
         {form.question_count}

@@ -43,6 +43,7 @@ class Question(Base):
     question_text = Column(Text, nullable=False)
     points = Column(Integer, default=0)
     is_scored = Column(Boolean, default=True)
+    is_deleted = Column(Boolean, default=False, index=True)
     order_index = Column(Integer, default=0)
     is_required = Column(Boolean, default=True)
     # Grup soal ber-cerita bersama (wacana). NULL = soal lepas. Anggota grup

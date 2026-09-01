@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, verify_form_owner
-from app.models.form import Form, FormStatus, FormType, SubmissionLimit
+from app.models.form import Form, FormStatus, FormType, SubmissionLimit, ScoringMode
 from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
 from app.models.image import Image
@@ -16,6 +16,7 @@ from app.models.user import User
 from app.services.points import distribute_quiz_points
 from app.utils import file_url, fmt_dt, now_wib, _delete_file
 from app.schemas.form import (
+    BatchPointsUpdate,
     FormCreate,
     FormListItem,
     FormListResponse,
@@ -62,7 +63,7 @@ def _apply_setting_chain(update_data: dict, form: Form) -> dict:
 def _ensure_publishable(form: Form, db: Session) -> None:
     """A form can only be published if it has at least 1 question.
     Quiz forms wajib punya timer (per menit) sebelum bisa dipublikasikan."""
-    if db.query(Question).filter(Question.form_id == form.id).count() == 0:
+    if db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).count() == 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Form must have at least 1 question before publishing",
@@ -99,6 +100,7 @@ def _form_dict(form: Form, request: Request) -> dict:
         "show_in_history": form.show_in_history,
         "reveal_score": form.reveal_score,
         "reveal_answers": form.reveal_answers,
+        "scoring_mode": form.scoring_mode.value if form.scoring_mode else "auto",
         "created_at": fmt_dt(form.created_at),
         "updated_at": fmt_dt(form.updated_at),
     }
@@ -134,7 +136,7 @@ def list_forms(
     if forms:
         rows = (
             db.query(Question.form_id, func.count(Question.id))
-            .filter(Question.form_id.in_([f.id for f in forms]))
+            .filter(Question.form_id.in_([f.id for f in forms]), Question.is_deleted.is_(False))
             .group_by(Question.form_id)
             .all()
         )
@@ -178,6 +180,7 @@ def create_form(
         show_in_history=body.show_in_history,
         reveal_score=body.reveal_score,
         reveal_answers=body.reveal_answers,
+        scoring_mode=_parse_enum(body.scoring_mode, ScoringMode, "scoring_mode"),
         timer_seconds=body.timer_seconds,
         short_code=_generate_short_code(db),
         created_at=now,
@@ -220,6 +223,9 @@ def update_form(
         if new_type != form.type:
             form.type = new_type  # set first so helpers/distribute see the new type
             if new_type == FormType.quiz:
+                # A form converted into quiz starts with the canonical 100-point
+                # pool; creator can switch to manual after conversion.
+                form.scoring_mode = ScoringMode.auto
                 _prepare_quiz_after_form_conversion(form.id, db)
             else:
                 _clear_correct_after_quiz_conversion(form.id, db)
@@ -238,7 +244,17 @@ def update_form(
             value = _parse_enum(value, FormStatus, "status")
         elif field == "submission_limit":
             value = _parse_enum(value, SubmissionLimit, "submission_limit")
+        elif field == "scoring_mode":
+            value = _parse_enum(value, ScoringMode, "scoring_mode")
         setattr(form, field, value)
+
+    # Switching back to automatic allocation immediately restores the 100
+    # point pool. Manual mode intentionally preserves creator-entered points.
+    if (
+        form.type == FormType.quiz
+        and update_data.get("scoring_mode") == ScoringMode.auto
+    ):
+        distribute_quiz_points(form.id, db)
 
     if will_publish:
         _ensure_publishable(form, db)
@@ -254,7 +270,7 @@ def _prepare_quiz_after_form_conversion(form_id: int, db: Session) -> None:
     reset all points, then auto-distribute quiz points across questions."""
     questions = (
         db.query(Question)
-        .filter(Question.form_id == form_id)
+        .filter(Question.form_id == form_id, Question.is_deleted.is_(False))
         .order_by(Question.order_index)
         .all()
     )
@@ -271,7 +287,7 @@ def _clear_correct_after_quiz_conversion(form_id: int, db: Session) -> None:
     """quiz → form: no correct answers are needed anymore."""
     db.query(QuestionOption).filter(
         QuestionOption.question_id.in_(
-            db.query(Question.id).filter(Question.form_id == form_id)
+            db.query(Question.id).filter(Question.form_id == form_id, Question.is_deleted.is_(False))
         )
     ).update({"is_correct": False}, synchronize_session=False)
 
@@ -281,7 +297,7 @@ def _clear_correct_after_quiz_conversion(form_id: int, db: Session) -> None:
 @router.delete("/forms/{form_id}")
 def delete_form(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
     _delete_file(form.banner_path)
-    questions = db.query(Question).filter(Question.form_id == form.id).all()
+    questions = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).all()
     for q in questions:
         for img in db.query(Image).filter(Image.question_id == q.id).all():
             _delete_file(img.path)
@@ -322,3 +338,38 @@ def publish_form(
         message="Form published" if form.status == FormStatus.published else "Form moved to draft",
         short_code=form.short_code,
     )
+
+
+# ── PATCH /forms/{form_id}/questions/points ─────────────────────────────────
+
+@router.patch("/forms/{form_id}/questions/points")
+def batch_update_points(
+    body: BatchPointsUpdate,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    if form.type != FormType.quiz:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Fitur ini hanya tersedia untuk tipe quiz",
+        )
+    if form.scoring_mode == ScoringMode.auto:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Ubah poin per soal secara manual hanya bisa di mode Manual",
+        )
+
+    from app.models.question import QuestionType
+    _NO_GRADE = (QuestionType.essay, QuestionType.date, QuestionType.time, QuestionType.file_upload)
+    updated = (
+        db.query(Question)
+        .filter(
+            Question.form_id == form.id,
+            Question.is_scored.is_(True),
+            Question.is_deleted.is_(False),
+            Question.type.notin_(_NO_GRADE),
+        )
+        .update({"points": body.points}, synchronize_session=False)
+    )
+    db.commit()
+    return {"message": f"Semua soal dinilai diatur ke {body.points} poin", "updated_count": updated}

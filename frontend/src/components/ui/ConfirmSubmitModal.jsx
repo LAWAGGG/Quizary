@@ -60,7 +60,7 @@ export function ConfirmSubmitModal({
             {missing.length > 0 && (
               <div className="mt-4 shrink-0">
                 <p className="text-sm font-medium text-incorrect">
-                  {missing.length} soal wajib belum dijawab:
+                  {missing.length} required question(s) unanswered:
                 </p>
                 <ul className="mt-2 space-y-1 max-h-32 overflow-y-auto pr-1">
                   {missing.map((text, i) => (
@@ -75,8 +75,8 @@ export function ConfirmSubmitModal({
 
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-4 shrink-0">
               {missing.length
-                ? 'Kamu masih bisa kembali dan mengisi soal yang kosong.'
-                : 'Pastikan semua jawaban sudah sesuai sebelum mengirim.'}
+                ? 'You can still go back and fill in empty questions.'
+                : 'Make sure all answers are correct before submitting.'}
             </p>
 
             <div className="flex gap-3 justify-end mt-5 pt-4 border-t border-gray-100 dark:border-gray-700 shrink-0">

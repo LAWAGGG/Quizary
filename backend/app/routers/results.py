@@ -25,6 +25,7 @@ from app.services.grading import grade_submission
 from app.schemas.results import (
     ResultDeleteRequest,
     ResultStatusRequest,
+    ResultBulkStatusRequest,
     ResultItem,
     ResultListResponse,
     AnalyticsResponse,
@@ -32,6 +33,7 @@ from app.schemas.results import (
     ScoreDistribution,
     OptionChoice,
     QuestionStat,
+    QuestionHighlight,
     DashboardResponse,
     RecentForm,
     SubmissionTrend,
@@ -85,7 +87,7 @@ def list_results(
 
     answer_summary: dict[int, str] = {}
     if form.type.value != "quiz" and subs:
-        q_ids = [row[0] for row in db.query(Question.id).filter(Question.form_id == form.id).all()]
+        q_ids = [row[0] for row in db.query(Question.id).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).all()]
         opt_text = {o.id: _strip_html(o.option_text) for o in db.query(QuestionOption).filter(QuestionOption.question_id.in_(q_ids)).all()}
         answers = db.query(Answer).filter(
             Answer.submission_id.in_([s.id for s in subs]),
@@ -177,6 +179,7 @@ def set_result_status(
     now = now_wib()
     if body.status == "in_progress":
         sub.status = SubmissionStatus.in_progress
+        sub.started_at = now
         sub.submitted_at = None
         sub.score = None
         message = "Submission dibuka kembali — responden dapat melanjutkan"
@@ -202,6 +205,44 @@ def set_result_status(
     }
 
 
+@router.patch("/forms/{form_id}/results/status")
+def set_bulk_result_status(
+    body: ResultBulkStatusRequest,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    """Bulk update status submission."""
+    subs = (
+        db.query(Submission)
+        .filter(Submission.form_id == form.id, Submission.id.in_(body.submission_ids))
+        .all()
+    )
+    if not subs:
+        return {"updated": 0, "message": "Tidak ada hasil yang diubah"}
+
+    now = now_wib()
+    for sub in subs:
+        if body.status == "in_progress":
+            sub.status = SubmissionStatus.in_progress
+            sub.started_at = now
+            sub.submitted_at = None
+            sub.score = None
+        elif body.status == "submitted":
+            sub.status = SubmissionStatus.submitted
+            sub.submitted_at = sub.submitted_at or now
+            grade_submission(db, sub, form)
+        else:  # cheating
+            sub.status = SubmissionStatus.cheating
+            sub.submitted_at = sub.submitted_at or now
+            grade_submission(db, sub, form)
+            sub.score = 0
+        
+        sub.updated_at = now
+
+    db.commit()
+    return {"updated": len(subs), "message": f"{len(subs)} hasil berhasil diperbarui ke {body.status}"}
+
+
 @router.get("/forms/{form_id}/analytics", response_model=AnalyticsResponse)
 def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
     subs = db.query(Submission).filter(
@@ -210,7 +251,7 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
     ).all()
 
     total = len(subs)
-    questions = db.query(Question).filter(Question.form_id == form.id).order_by(Question.order_index).all()
+    questions = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).order_by(Question.order_index).all()
     sub_ids = [s.id for s in subs]
 
     if total == 0:
@@ -321,17 +362,57 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
     median = (sorted_scores[n // 2] + sorted_scores[(n - 1) // 2]) / 2 if n else 0
     above_avg = sum(1 for s in scores if s > avg) / total if total else 0
 
+    # Quiz pool = 100 (auto) atau dinormalisasi ke 100 (manual).
+    # Bucket berbasis persentase agar relevan untuk kedua mode.
     dist: dict[str, int] = {}
     for s in scores:
-        if s <= 1:
-            key = "0-1"
-        elif s <= 3:
-            key = "2-3"
-        elif s <= 5:
-            key = "4-5"
+        if s <= 25:
+            key = "0-25"
+        elif s <= 50:
+            key = "26-50"
+        elif s <= 75:
+            key = "51-75"
         else:
-            key = "6+"
+            key = "76-100"
         dist[key] = dist.get(key, 0) + 1
+
+    # ── Pace (Duration) calculation ─────────────────────────────────────────
+    durations = []
+    for s in subs:
+        if s.started_at and s.submitted_at:
+            diff = (s.submitted_at - s.started_at).total_seconds()
+            if diff >= 0:
+                durations.append(diff)
+
+    avg_duration = int(sum(durations) / len(durations)) if durations else None
+    fastest_duration = int(min(durations)) if durations else None
+
+    # ── Item Difficulty Diagnostics (Easiest & Hardest) ───────────────────────
+    evaluated_questions = []
+    for idx, q_stat in enumerate(per_q):
+        attempt_total = q_stat.correct_count + q_stat.wrong_count
+        if attempt_total > 0:
+            acc = q_stat.correct_count / attempt_total
+            evaluated_questions.append({
+                "order_index": idx + 1,
+                "question_text": q_stat.question_text,
+                "accuracy": round(acc * 100, 1),
+            })
+
+    easiest_q = None
+    hardest_q = None
+    if evaluated_questions:
+        sorted_by_acc = sorted(evaluated_questions, key=lambda x: x["accuracy"])
+        hardest_q = QuestionHighlight(
+            order_index=sorted_by_acc[0]["order_index"],
+            question_text=sorted_by_acc[0]["question_text"],
+            accuracy=sorted_by_acc[0]["accuracy"],
+        )
+        easiest_q = QuestionHighlight(
+            order_index=sorted_by_acc[-1]["order_index"],
+            question_text=sorted_by_acc[-1]["question_text"],
+            accuracy=sorted_by_acc[-1]["accuracy"],
+        )
 
     return AnalyticsResponse(
         type="quiz",
@@ -343,6 +424,10 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
         above_average_pct=round(above_avg, 2),
         correct_rate=round(rate, 2),
         wrong_rate=round(1 - rate, 2),
+        avg_duration_seconds=avg_duration,
+        fastest_duration_seconds=fastest_duration,
+        easiest_question=easiest_q,
+        hardest_question=hardest_q,
         score_distribution=[ScoreDistribution(range=k, count=v) for k, v in sorted(dist.items())],
         per_question_stats=per_q,
     )
@@ -374,7 +459,7 @@ def _safe_cell(value):
 
 def _export_columns(form: Form, subs: list[Submission], db: Session):
     """Build dynamic export: one column per question + Dikirim/Skor/Status."""
-    questions = db.query(Question).filter(Question.form_id == form.id).order_by(Question.order_index).all()
+    questions = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).order_by(Question.order_index).all()
     q_ids = [q.id for q in questions]
     headers = [_safe_cell(_strip_html(q.question_text) or f"Soal {i+1}") for i, q in enumerate(questions)] + ["Dikirim", "Skor", "Status"]
 

@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -13,22 +14,55 @@ app = FastAPI(title="Quizary API")
 
 logger = logging.getLogger("quizary")
 
-from fastapi.middleware.cors import CORSMiddleware
-
-origins = [
+_CORS_ORIGIN_RE = re.compile(r"^https://[a-z0-9-]+\.trycloudflare\.com$")
+_CORS_LOCA_RE = re.compile(r"^https://[a-z0-9-]+\.loca\.lt$")
+_CORS_LAN_RE = re.compile(r"^https?://(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[0-1]))\.\d{1,3}\.\d{1,3}(:\d+)?$")
+_CORS_LOCALHOST_RE = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$")
+_CORS_STATIC_ORIGINS = {
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:8081",
-]
-# allow_credentials=False: auth is Bearer-token based (no cookies), so a
-# wildcard origin is safe. Wildcard + credentials is rejected by browsers.
+    "http://127.0.0.1:8081",
+    "http://localhost:19006",
+    "http://127.0.0.1:19006",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "exp://localhost:8081",
+    "exp://127.0.0.1:8081",
+    "exp://localhost:19006",
+}
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=list(_CORS_STATIC_ORIGINS),
+    allow_origin_regex=r"https://.*\.(trycloudflare\.com|loca\.lt)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _cors_headers(request: Request) -> dict[str, str]:
+    """Keep CORS on errors too.
+
+    Starlette's exception middleware can turn an unhandled exception into a
+    response outside CORSMiddleware. Without this header, browsers report a
+    misleading CORS failure and hide the actual HTTP 500 payload.
+    """
+    origin = request.headers.get("origin", "")
+    if (
+        origin in _CORS_STATIC_ORIGINS
+        or _CORS_ORIGIN_RE.fullmatch(origin)
+        or _CORS_LOCA_RE.fullmatch(origin)
+        or _CORS_LAN_RE.fullmatch(origin)
+        or _CORS_LOCALHOST_RE.fullmatch(origin)
+    ):
+        headers = {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
+        # CORSMiddleware would also set Allow-Credentials when origin is allowed
+        # Include it here so preflight error responses still pass browser check.
+        headers["Access-Control-Allow-Credentials"] = "true"
+        return headers
+    return {}
         
 UPLOAD_DIR = "uploads"
 os.makedirs(os.path.join(UPLOAD_DIR, "banners"), exist_ok=True)
@@ -61,6 +95,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(
         status_code=422,
         content={"message": "Invalid fields", "errors": errors},
+        headers=_cors_headers(request),
     )
 
 
@@ -69,6 +104,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,
         content={"message": exc.detail},
+        headers=_cors_headers(request),
     )
 
 
@@ -79,6 +115,7 @@ async def catch_all_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"message": "Internal server error"},
+        headers=_cors_headers(request),
     )
 
 

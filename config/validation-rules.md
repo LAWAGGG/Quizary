@@ -79,6 +79,7 @@ def create_handler(body: MyRequest, user: User = Depends(get_current_user), db: 
 | `type` | `"form"` / `"quiz"` — default `"form"` |
 | `require_login` | `boolean` — default `false` |
 | `submission_limit` | `"unlimited"` / `"once"` — default `"unlimited"` |
+| `scoring_mode` | `"auto"` / `"manual"` — default `"auto"` (quiz) |
 
 **Source:** `schemas/form.py:FormCreate`
 
@@ -92,6 +93,7 @@ Semua opsional (partial update). Field tambahan:
 | `status` | `"draft"` / `"published"` / `"closed"` |
 | `shuffle_questions` / `shuffle_options` | `boolean` |
 | `show_leaderboard` / `is_restricted` | `boolean` — `is_restricted` hanya relevan untuk quiz |
+| `scoring_mode` | `"auto"` / `"manual"` — mode bobot quiz |
 
 **Rantai setting (auto-coerce):** `is_restricted=true` → `submission_limit="once"` → `require_login=true`. Nilai ter-coerce tersimpan di DB (bukan sekadar validasi). Berlaku di `POST /forms` & `PUT /forms/{id}`.
 
@@ -173,6 +175,15 @@ Bisnis: grup di-shuffle sebagai blok utuh saat `shuffle_questions` aktif; cerita
 #### `DELETE /api/forms/{form_id}/questions/group/{group_id}`
 Set `group_id=NULL` untuk semua anggota. 404 jika group_id tidak ada pada form ini.
 
+#### `PATCH /api/forms/{form_id}/questions/points`
+| Field | Rule |
+|---|---|
+| `points` | `int(0-999)` — wajib |
+
+**Business rule:** Hanya berlaku untuk quiz (422 jika tipe form). Hanya update soal dengan `is_scored=true`.
+
+**Source:** `schemas/form.py:BatchPointsUpdate`
+
 ### 2.4 Ownership & Authorization
 
 | Endpoint | Mekanisme |
@@ -185,6 +196,7 @@ Set `group_id=NULL` untuk semua anggota. 404 jika group_id tidak ada pada form i
 | `PATCH /api/sections/reorder` | inline check → 403 |
 | `POST /api/forms/{form_id}/questions/group` | `verify_form_owner` → 403 |
 | `DELETE /api/forms/{form_id}/questions/group/{group_id}` | `verify_form_owner` → 403 |
+| `PATCH /api/forms/{form_id}/questions/points` | `verify_form_owner` → 403 |
 | `DELETE /api/forms/{form_id}/results` | `verify_form_owner` → 403 |
 | `PATCH /api/forms/{form_id}/results/{submission_id}/status` | `verify_form_owner` → 403 |
 

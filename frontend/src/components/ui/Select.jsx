@@ -15,7 +15,7 @@ const parseOptions = (children) =>
       disabled: !!el.props.disabled,
     }))
 
-const Select = forwardRef(({ label, error, helper, disabled, className = '', value, onChange, name, id, children, ...rest }, ref) => {
+const Select = forwardRef(({ label, error, helper, disabled, className = '', value, onChange, name, id, children, onClick, onKeyDown: customOnKeyDown, ...rest }, ref) => {
   const opts = parseOptions(children)
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
@@ -56,7 +56,7 @@ const Select = forwardRef(({ label, error, helper, disabled, className = '', val
     setOpen(true)
   }
 
-  const onKeyDown = (e) => {
+  const handleKeyDown = (e) => {
     if (disabled) return
     if (!open) {
       if (['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
@@ -102,11 +102,17 @@ const Select = forwardRef(({ label, error, helper, disabled, className = '', val
           type="button"
           id={id}
           disabled={disabled}
-          onClick={() => (open ? setOpen(false) : openPanel())}
-          onKeyDown={onKeyDown}
           aria-haspopup="listbox"
           aria-expanded={open}
           {...rest}
+          onClick={(e) => {
+            onClick?.(e)
+            open ? setOpen(false) : openPanel()
+          }}
+          onKeyDown={(e) => {
+            customOnKeyDown?.(e)
+            handleKeyDown(e)
+          }}
           className={`input-field appearance-none text-left flex items-center justify-between gap-2 cursor-pointer ${className} ${
             error ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''
           } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}

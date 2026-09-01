@@ -5,7 +5,7 @@ import { Copy, Check, ArrowLeft, Save, Trash2, ImageUp, Link2, ChevronDown, Info
 import { QRCodeCanvas } from 'qrcode.react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
-import { Button, Input, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, PageSkeleton, RichTextEditor, RichText } from '../../components/ui'
+import { Button, Input, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, PageSkeleton, RichTextEditor, RichText, ScoringSettings } from '../../components/ui'
 import { stripTags } from '../../lib/sanitize'
 
 function ShareLink({ value }) {
@@ -45,7 +45,7 @@ function CollapsibleCard({ title, icon, defaultOpen = false, open, onToggle, chi
   const isOpen = open !== undefined ? open : internal
   const toggle = () => (onToggle ? onToggle(!isOpen) : setInternal(!isOpen))
   return (
-    <Card padding={false} className="overflow-hidden">
+    <Card padding={false}>
       <button
         type="button"
         onClick={toggle}
@@ -89,6 +89,9 @@ export default function FormEdit() {
   const [showDelete, setShowDelete] = useState(false)
   const [showQr, setShowQr] = useState(false)
   const [errors, setErrors] = useState({})
+  const [scoringMode, setScoringMode] = useState('auto')
+  const [scoringSaving, setScoringSaving] = useState(false)
+  const [questions, setQuestions] = useState([])
   const titleRef = useRef(null)
   const timerRef = useRef(null)
   const designRef = useRef(null)
@@ -107,9 +110,13 @@ export default function FormEdit() {
       .then((res) => {
         setForm(res.data)
         setBase(res.data)
+        setScoringMode(res.data.scoring_mode || 'auto')
         const minutes = res.data.timer_seconds ? String(Math.round(res.data.timer_seconds / 60)) : ''
         setTimerMinutes(minutes)
         setInitialTimerMinutes(minutes)
+        if (res.data.type === 'quiz') {
+          api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => {})
+        }
       })
       .catch(() => navigate('/forms'))
       .finally(() => setLoading(false))
@@ -254,7 +261,7 @@ export default function FormEdit() {
     }
     // Quiz wajib punya timer (per menit) — dicek juga di backend saat publish.
     if (isQuiz && !timerMinutes) {
-      setErrors({ timer_seconds: 'Quiz harus memiliki waktu pengerjaan (menit)' })
+      setErrors({ timer_seconds: 'Quiz must have a time limit (minutes)' })
       revealError(setBehaviorOpen, timerRef)
       return
     }
@@ -333,6 +340,39 @@ export default function FormEdit() {
     }
   }
 
+  const handleBatchUpdatePoints = async (points) => {
+    try {
+      await api.patch(`/forms/${id}/questions/points`, { points })
+      const qRes = await api.get(`/forms/${id}/questions`)
+      setQuestions(qRes.data.data)
+      toast.success(`Semua soal dinilai diatur ke ${points} poin`)
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to update points')
+      throw err
+    }
+  }
+
+  const handleScoringModeChange = async (mode) => {
+    if (!form || mode === scoringMode || scoringSaving) return
+    const previous = scoringMode
+    setScoringMode(mode)
+    setScoringSaving(true)
+    try {
+      const res = await api.put(`/forms/${id}`, { scoring_mode: mode })
+      setForm((prev) => ({ ...prev, ...res.data }))
+      setBase((prev) => ({ ...prev, ...res.data }))
+      if (mode === 'auto') {
+        api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => {})
+      }
+      toast.success(mode === 'auto' ? 'Auto scoring activated' : 'Manual scoring activated')
+    } catch (err) {
+      setScoringMode(previous)
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to change scoring method')
+    } finally {
+      setScoringSaving(false)
+    }
+  }
+
   if (loading) return <PageSkeleton />
   if (!form) return null
 
@@ -376,11 +416,6 @@ export default function FormEdit() {
                 onClick={() => setShowQr(true)}
               >
                 Show QR Code
-              </Button>
-            </div>
-            <div className="mt-3">
-              <Button onClick={() => setShowDelete(true)} variant="ghost-danger" className="w-full" icon={<Trash2 className="w-4 h-4" />}>
-                Delete
               </Button>
             </div>
           </CollapsibleCard>
@@ -574,6 +609,19 @@ export default function FormEdit() {
               />
               {isQuiz && (
                 <>
+                  <div className="py-3">
+                    <p className="text-sm font-medium text-ink dark:text-gray-100">Scoring mode</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Auto distributes 100 points evenly. Manual lets you set each question's weight.</p>
+                    <div className="mt-3">
+                      <ScoringSettings
+                        mode={scoringMode}
+                        onModeChange={handleScoringModeChange}
+                        saving={scoringSaving}
+                        questions={questions}
+                        onBatchUpdate={handleBatchUpdatePoints}
+                      />
+                    </div>
+                  </div>
                   <SettingRow
                     title="Show leaderboard"
                     desc="Show a read-only ranking to respondents after they submit."
@@ -605,7 +653,7 @@ export default function FormEdit() {
                   placeholder="e.g. 10"
                   min={1}
                   max={1440}
-                  helper={isQuiz ? 'Wajib untuk quiz. Pengerjaan otomatis dikumpulkan saat waktu habis.' : 'Leave empty for no time limit.'}
+                  helper={isQuiz ? 'Required for quiz. Submissions are auto-collected when time runs out.' : 'Leave empty for no time limit.'}
                   error={errors.timer_seconds}
                   ref={timerRef}
                 />
@@ -647,6 +695,11 @@ export default function FormEdit() {
                   />
                   {errors.thank_you_message && <p className="field-error">{errors.thank_you_message}</p>}
                 </div>
+              </div>
+              <div className="pt-3 mt-1 border-t border-gray-100 dark:border-gray-800">
+                <Button onClick={() => setShowDelete(true)} variant="ghost-danger" size="sm" icon={<Trash2 className="w-4 h-4" />}>
+                  Delete form
+                </Button>
               </div>
             </div>
           </CollapsibleCard>
@@ -736,7 +789,7 @@ export default function FormEdit() {
                 <X className="w-5 h-5" />
               </button>
               <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 mb-1">Scan to open</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Pindai kode QR untuk membuka <RichText html={form.title} className="rich-text" />.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Scan QR code to open <RichText html={form.title} className="rich-text" />.</p>
               <div className="flex justify-center p-4 border border-gray-100 dark:border-gray-800 rounded-2xl">
                 <QRCodeCanvas
                   ref={qrRef}

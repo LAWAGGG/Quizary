@@ -36,6 +36,7 @@ class SubmissionCreateResponse(BaseModel):
     started_at: Optional[str] = None    # "d-m-Y H:i:s"
     expired_at: Optional[str] = None
     questions: list[QuestionWithOptions]
+    sections: list[dict] = []
     # True  = session was already in-progress and is being resumed (e.g. after refresh)
     # False = brand new session was just created
     resumed: bool = False

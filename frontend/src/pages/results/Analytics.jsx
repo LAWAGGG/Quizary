@@ -1,9 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Users, Trophy, TrendingUp, TrendingDown, ArrowLeft, BarChart3, ClipboardList, ChevronDown, CheckCircle2 } from 'lucide-react'
+import { Users, Trophy, TrendingUp, TrendingDown, ArrowLeft, BarChart3, ClipboardList, ChevronDown, CheckCircle2, Clock, Zap, AlertCircle, Timer } from 'lucide-react'
 import api from '../../api/client'
 import { Card, Button, PageHeader, FormSubNav, CardSkeleton, RichText } from '../../components/ui'
+
+function formatDuration(seconds) {
+  if (seconds == null || seconds < 0) return '-'
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  if (mins === 0) return `${secs}s`
+  return `${mins}m ${secs}s`
+}
 
 function StatCard({ label, value, icon: Icon, tint, delay }) {
   return (
@@ -236,34 +244,76 @@ function QuizAnalytics({ data }) {
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
           <Card className="h-full">
             <div className="flex items-center gap-2 mb-5">
-              <BarChart3 className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold text-ink dark:text-gray-100">Score Summary</h2>
+              <Timer className="w-4 h-4 text-primary" />
+              <h2 className="font-display font-semibold text-ink dark:text-gray-100">Pace & Question Diagnostics</h2>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-xl bg-gray-50 dark:bg-ink-800/50 border border-gray-100 dark:border-gray-800 p-4 text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Average</p>
-                <p className="font-display text-2xl font-bold tabular-nums mt-1">{data.average_score}</p>
+              <div className="rounded-xl bg-gray-50 dark:bg-ink-800/50 border border-gray-100 dark:border-gray-800 p-4">
+                <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                  <Clock className="w-3.5 h-3.5 text-primary" />
+                  <span className="font-medium truncate">Avg Completion</span>
+                </div>
+                <p className="font-display text-2xl font-bold tabular-nums text-ink dark:text-gray-100">
+                  {formatDuration(data.avg_duration_seconds)}
+                </p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 truncate">Average completion time</p>
               </div>
-              <div className="rounded-xl bg-gray-50 dark:bg-ink-800/50 border border-gray-100 dark:border-gray-800 p-4 text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Median</p>
-                <p className="font-display text-2xl font-bold tabular-nums mt-1">{data.median_score}</p>
+
+              <div className="rounded-xl bg-gray-50 dark:bg-ink-800/50 border border-gray-100 dark:border-gray-800 p-4">
+                <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                  <Zap className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="font-medium truncate">Fastest Time</span>
+                </div>
+                <p className="font-display text-2xl font-bold tabular-nums text-ink dark:text-gray-100">
+                  {formatDuration(data.fastest_duration_seconds)}
+                </p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 truncate">Fastest completion</p>
               </div>
-              <div className="rounded-xl bg-correct-soft border border-correct/20 p-4 text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Above Average</p>
-                <p className="font-display text-2xl font-bold tabular-nums mt-1 text-correct">
-                  {Math.round(data.above_average_pct * 100)}%
+
+              <div className="rounded-xl bg-correct-soft border border-correct/20 p-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-xs font-semibold text-correct flex items-center gap-1 truncate">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Easiest Question</span>
+                    </span>
+                    {data.easiest_question && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-correct/10 text-correct tabular-nums shrink-0">
+                        {data.easiest_question.accuracy}%
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-display text-xl font-bold text-correct">
+                    {data.easiest_question ? `Question #${data.easiest_question.order_index}` : '-'}
+                  </p>
+                </div>
+                <p className="text-[11px] text-correct/80 mt-1 truncate" title={stripHtml(data.easiest_question?.question_text)}>
+                  {data.easiest_question ? stripHtml(data.easiest_question.question_text) : 'No data yet'}
                 </p>
               </div>
-              <div className="rounded-xl bg-warn-soft border border-warn/20 p-4 text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Below Average</p>
-                <p className="font-display text-2xl font-bold tabular-nums mt-1 text-warn">
-                  {Math.round((1 - data.above_average_pct) * 100)}%
+
+              <div className="rounded-xl bg-warn-soft border border-warn/20 p-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-xs font-semibold text-warn flex items-center gap-1 truncate">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Hardest Question</span>
+                    </span>
+                    {data.hardest_question && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-warn/10 text-warn tabular-nums shrink-0">
+                        {data.hardest_question.accuracy}%
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-display text-xl font-bold text-warn">
+                    {data.hardest_question ? `Question #${data.hardest_question.order_index}` : '-'}
+                  </p>
+                </div>
+                <p className="text-[11px] text-warn/80 mt-1 truncate" title={stripHtml(data.hardest_question?.question_text)}>
+                  {data.hardest_question ? stripHtml(data.hardest_question.question_text) : 'No data yet'}
                 </p>
               </div>
             </div>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-4 leading-relaxed">
-              Rata-rata & median menunjukkan pusat nilai peserta. Median lebih kebal terhadap outlier (satu nilai ekstrem) daripada rata-rata: jika median jauh di bawah rata-rata, mayoritas peserta dapat nilai rendah tetapi ada beberapa nilai sangat tinggi.
-            </p>
           </Card>
         </motion.div>
       </div>

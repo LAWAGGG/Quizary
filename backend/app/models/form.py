@@ -26,6 +26,16 @@ class SubmissionLimit(str, enum.Enum):
     once = "once"
 
 
+class ScoringMode(str, enum.Enum):
+    """Quiz point allocation strategy.
+
+    auto keeps the 100-point pool balanced by the points service; manual keeps
+    creator-entered points and normalizes the final result to 100.
+    """
+    auto = "auto"
+    manual = "manual"
+
+
 class Form(Base):
     __tablename__ = "forms"
 
@@ -52,6 +62,7 @@ class Form(Base):
     show_in_history = Column(Boolean, default=True)
     reveal_score = Column(Boolean, default=True)
     reveal_answers = Column(Boolean, default=True)
+    scoring_mode = Column(SAEnum(ScoringMode), default=ScoringMode.auto, nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=True)
 

@@ -279,16 +279,18 @@ def import_docx(
             detail="python-docx is not installed",
         )
 
-    # Soal import masuk ke satu-satunya section form (bila ada), konsisten
-    # dengan add manual di frontend yang auto-assign saat section cuma satu.
-    # Bila section lebih dari satu, section tujuan wajib dipilih.
+    # Ensure at least one section exists — auto-create "Default" if needed.
     sections = db.query(Section).filter(Section.form_id == form.id).all()
+    if not sections:
+        auto = Section(form_id=form.id, title="Default", order_index=0, created_at=now_wib())
+        db.add(auto)
+        db.flush()
+        sections = [auto]
     if len(sections) > 1 and not section_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Pilih section tujuan terlebih dahulu",
         )
-    target_section_id = None
     if section_id:
         if not any(s.id == section_id for s in sections):
             raise HTTPException(
@@ -296,7 +298,7 @@ def import_docx(
                 detail="Section tidak ditemukan pada form ini",
             )
         target_section_id = section_id
-    elif len(sections) == 1:
+    else:
         target_section_id = sections[0].id
 
     content = read_limited(file.file, MAX_DOCX_BYTES)
@@ -313,7 +315,7 @@ def import_docx(
 
     max_order = (
         db.query(Question.order_index)
-        .filter(Question.form_id == form.id)
+        .filter(Question.form_id == form.id, Question.is_deleted.is_(False))
         .order_by(Question.order_index.desc())
         .first()
     )
@@ -332,11 +334,13 @@ def import_docx(
         else:
             q_type = QuestionType.essay
 
+        _no_grade = q_type in (QuestionType.essay, QuestionType.date, QuestionType.time, QuestionType.file_upload)
         q = Question(
             form_id=form.id,
             type=q_type,
             question_text=q_data["question_text"],
-            points=0 if form.type.value == "quiz" else 1,
+            points=0 if form.type.value == "quiz" or _no_grade else 1,
+            is_scored=not _no_grade,
             section_id=target_section_id,
             order_index=next_order,
             created_at=now,

@@ -31,6 +31,11 @@ class ResultStatusRequest(BaseModel):
     status: str = Field(pattern="^(in_progress|submitted|cheating)$")
 
 
+class ResultBulkStatusRequest(BaseModel):
+    submission_ids: list[int] = Field(min_length=1, max_length=1000)
+    status: str = Field(pattern="^(in_progress|submitted|cheating)$")
+
+
 class PerQuestionStat(BaseModel):
     question_id: int
     question_text: str = ""
@@ -63,6 +68,12 @@ class QuestionStat(BaseModel):
     sample_answers: list[str] = []
 
 
+class QuestionHighlight(BaseModel):
+    order_index: int
+    question_text: str
+    accuracy: float
+
+
 class AnalyticsResponse(BaseModel):
     type: str = "quiz"  # "quiz" | "form"
     total_participants: int
@@ -74,6 +85,10 @@ class AnalyticsResponse(BaseModel):
     above_average_pct: float = 0
     correct_rate: float = 0
     wrong_rate: float = 0
+    avg_duration_seconds: Optional[int] = None
+    fastest_duration_seconds: Optional[int] = None
+    easiest_question: Optional[QuestionHighlight] = None
+    hardest_question: Optional[QuestionHighlight] = None
     score_distribution: list[ScoreDistribution] = []
     per_question_stats: list[PerQuestionStat] = []
     # form-specific

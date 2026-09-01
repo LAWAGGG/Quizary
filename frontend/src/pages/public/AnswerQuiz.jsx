@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle, Info, ZoomIn, ZoomOut, X, Lock, FileUp } from 'lucide-react'
+import { Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle, Info, ZoomIn, ZoomOut, X, Lock, FileUp, RefreshCw } from 'lucide-react'
 import { Button, Input, Textarea, Card, Select, FallbackPage, QuestionMap, ConfirmSubmitModal, RichText } from '../../components/ui'
 import { useAutosave, loadDraft, clearDraft } from '../../hooks/useAutosave'
 import { useTheme } from '../../hooks/useTheme'
@@ -68,6 +68,10 @@ export default function AnswerQuiz() {
 
   const [data, setData] = useState(null)
   const [publicForm, setPublicForm] = useState(null)
+  // ponytail: live form attrs vs stale URL — design/type/title update after soft refresh
+  const effectiveType = publicForm?.type ?? formType
+  const effectiveStyle = publicForm?.display_style ?? displayStyle
+  const effectiveTitle = publicForm?.title ?? formTitle
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [submitError, setSubmitError] = useState(null)   // inline error, tidak redirect ke FallbackPage
@@ -89,6 +93,7 @@ export default function AnswerQuiz() {
   const [showInfo, setShowInfo] = useState(false)
   const [zoomTarget, setZoomTarget] = useState(null)   // { question, options } yang dibuka modal zoom
   const [zoomScale, setZoomScale] = useState(1)
+  const [refreshing, setRefreshing] = useState(false)
 
   const timerRef = useRef(null)
   const questionRefs = useRef({})   // { [qId]: HTMLElement } untuk scroll ke soal bermasalah
@@ -99,8 +104,8 @@ export default function AnswerQuiz() {
     // Keluar dari fullscreen saat selesai (semua jalur: submit, timeout, cheating).
     const ex = document.exitFullscreen || document.webkitExitFullscreen
     if (ex) Promise.resolve(ex.call(document)).catch(() => { })
-    navigate(`/s/${submissionId}/result?type=${formType}&style=${displayStyle}&title=${encodeURIComponent(formTitle)}&code=${formCode}`, { replace: true })
-  }, [submissionId, navigate, formType, displayStyle, formTitle, formCode])
+    navigate(`/s/${submissionId}/result?type=${effectiveType}&style=${effectiveStyle}&title=${encodeURIComponent(effectiveTitle)}&code=${formCode}`, { replace: true })
+  }, [submissionId, navigate, effectiveType, effectiveStyle, effectiveTitle, formCode])
 
   const onExpired = useCallback(() => {
     setTimeLeft(0)
@@ -235,6 +240,64 @@ export default function AnswerQuiz() {
       .catch(() => { })
   }, [formCode])
 
+  // ponytail: soft refresh — fetch ulang design/setting/question tanpa keluar fullscreen
+  // window.location.reload() memicu exit fullscreen + kioskLocked + reportTabExit (cheating).
+  // Soft fetch hanya update data/publicForm, jawaban lokal (answers/fileAnswers) tetap dipertahankan.
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      const tasks = [api.get(`/submissions/${submissionId}`, { headers: sessionTokenHeaders(submissionId) })]
+      if (formCode) tasks.push(api.get(`/q/${formCode}`).catch(() => null))
+      const results = await Promise.allSettled(tasks)
+      const sub = results[0]
+      if (sub?.status === 'fulfilled' && sub.value?.data) {
+        const d = sub.value.data
+        if (d.status === 'submitted' || d.status === 'auto_submitted' || d.status === 'cheating') {
+          goToResult()
+          return
+        }
+        setLockedInfo(d.status === 'locked' ? { reason: d.cheat_reason || '' } : null)
+        setData((prev) => {
+          if (!prev) return prev
+          return { ...prev, questions: d.questions, sections: d.sections, expired_at: d.expired_at }
+        })
+        // clamp currentIdx jika soal/section berkurang — pakai display_style terbaru dari publicForm
+        const newQuestions = d.questions || []
+        const newSections = d.sections || []
+        const freshStyle = results[1]?.status === 'fulfilled' && results[1].value?.data?.display_style
+          ? results[1].value.data.display_style
+          : effectiveStyle
+        const isOneByOneNow = freshStyle === 'quiz'
+        if (isOneByOneNow) {
+          setCurrentIdx((i) => Math.min(i, Math.max(0, newQuestions.length - 1)))
+        } else {
+          const ordered = []
+          const seen = new Set()
+          newSections.forEach((s) => {
+            newQuestions.filter((q) => q.section_id === s.id && !seen.has(q.id)).forEach((q) => { ordered.push(q); seen.add(q.id) })
+          })
+          newQuestions.filter((q) => !seen.has(q.id)).forEach((q) => { ordered.push(q); seen.add(q.id) })
+          const pages = []
+          ordered.forEach((q) => {
+            const last = pages[pages.length - 1]
+            if (last && last.key === (q.section_id ?? 'none')) last.questions.push(q)
+            else pages.push({ key: q.section_id ?? 'none', questions: [q] })
+          })
+          const maxIdx = Math.max(0, (pages.length || 1) - 1)
+          setCurrentIdx((i) => Math.min(i, maxIdx))
+        }
+      }
+      if (formCode && results[1]?.status === 'fulfilled' && results[1].value?.data) {
+        setPublicForm(results[1].value.data)
+      }
+    } catch {
+      /* soft refresh gagal — biarkan sesi tetap jalan, polling 10d akan coba lagi */
+    } finally {
+      setRefreshing(false)
+    }
+  }, [refreshing, submissionId, formCode, goToResult, effectiveStyle])
+
   const handleAutoSubmit = useCallback(async () => {
     // Auto-submit karena waktu habis: server bisa saja sudah meng-auto-submit
     // sesi lewat sweep/autosave (410/409) — itu sukses, jawaban sudah aman.
@@ -283,14 +346,14 @@ export default function AnswerQuiz() {
 
     return () => clearInterval(timerRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.id, formType, data?.expired_at, handleAutoSubmit])
+  }, [data?.id, effectiveType, data?.expired_at, handleAutoSubmit])
 
   useEffect(() => {
     return () => clearTimers()
   }, [clearTimers])
 
   useEffect(() => {
-    if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data) return
     // Kiosk mode — PIN halaman ke fullscreen. requestFullscreen butuh user gesture,
     // jadi dipicu otomatis pada interaksi pertama. Saat fullscreen keluar / fokus
     // hilang, kunci penyembunyian muncul (tuple di bawah) sampai responden kembali.
@@ -312,7 +375,7 @@ export default function AnswerQuiz() {
       document.removeEventListener('pointerdown', onFirst)
       document.removeEventListener('keydown', onFirst)
     }
-  }, [formType, publicForm?.is_restricted, data])
+  }, [effectiveType, publicForm?.is_restricted, data])
 
   // Keyboard virtual (restricted): lacak tinggi keyboard via visualViewport.
   // Dipakai untuk (1) menyesuaikan tinggi layout supaya input tetap terlihat,
@@ -321,7 +384,7 @@ export default function AnswerQuiz() {
   const [kbInset, setKbInset] = useState(0)
   const kbInsetRef = useRef(0)
   useEffect(() => {
-    if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data) return
     const vv = window.visualViewport
     if (!vv) return
     const onVV = () => {
@@ -337,7 +400,7 @@ export default function AnswerQuiz() {
       vv.removeEventListener('resize', onVV)
       vv.removeEventListener('scroll', onVV)
     }
-  }, [formType, publicForm?.is_restricted, data])
+  }, [effectiveType, publicForm?.is_restricted, data])
 
   // Kiosk lock: kunci penuh — sembunyikan seluruh konten saat responden keluar
   // dari fullscreen / kehilangan fokus / pindah tab. Mencoba interaksi apa pun di
@@ -347,7 +410,7 @@ export default function AnswerQuiz() {
   const [fsAvailable, setFsAvailable] = useState(false)
   const kioskTimer = useRef(null)
   useEffect(() => {
-    if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data) return
     const inFullscreen = () => document.fullscreenElement || document.webkitFullscreenElement
     const lock = () => {
       clearTimeout(kioskTimer.current)
@@ -383,7 +446,7 @@ export default function AnswerQuiz() {
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('focus', onFocus)
     }
-  }, [formType, publicForm?.is_restricted, data, fsAvailable])
+  }, [effectiveType, publicForm?.is_restricted, data, fsAvailable])
 
   // Fullscreen anti-cheat (is_restricted quiz). Detects and reports every
   // cheating vector — tab/app switched, fullscreen exited, split-screen,
@@ -391,7 +454,7 @@ export default function AnswerQuiz() {
   // Debounced so the simultaneous blur + visibilitychange + resize burst that
   // fires on a single "leave" isn't double-counted as multiple violations.
   useEffect(() => {
-    if (formType !== 'quiz' || !publicForm?.is_restricted || !data) return
+    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data) return
     let lastAt = 0
     const MIN_GAP = 1200
     const report = (reason) => {
@@ -475,7 +538,7 @@ export default function AnswerQuiz() {
       clearTimeout(shrinkTimer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formType, publicForm?.is_restricted, data, reportTabExit])
+  }, [effectiveType, publicForm?.is_restricted, data, reportTabExit])
 
   // Auto-dismiss the cheat warning banner after a few seconds.
   useEffect(() => {
@@ -486,7 +549,7 @@ export default function AnswerQuiz() {
 
   // Keyboard navigation (quiz mode): 1-4 pilih opsi, ←/→ ganti soal, Enter next/submit
   useEffect(() => {
-    if (formType !== 'quiz' || !data) return
+    if (effectiveType !== 'quiz' || !data) return
     const qs = data.questions || []
     const cur = qs[currentIdx]
     if (!cur || showConfirm || showMap) return
@@ -511,7 +574,7 @@ export default function AnswerQuiz() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formType, data, currentIdx, answers, showConfirm, showMap, reviewed])
+  }, [effectiveType, data, currentIdx, answers, showConfirm, showMap, reviewed])
 
   const handleSelect = (qId, optId) => {
     const question = data.questions.find((q) => q.id === qId)
@@ -559,7 +622,7 @@ export default function AnswerQuiz() {
       setFileAnswers((f) => ({ ...f, [qId]: { url: res.data.answer_file, filename: res.data.filename || file.name } }))
       setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
     } catch (err) {
-      setSubmitError(err.response?.data?.detail || err.response?.data?.message || 'Gagal mengunggah file')
+      setSubmitError(err.response?.data?.detail || err.response?.data?.message || 'File upload failed')
     } finally {
       setUploading((u) => ({ ...u, [qId]: false }))
     }
@@ -616,9 +679,30 @@ export default function AnswerQuiz() {
         }, 80)
         return
       }
+    } else {
+      // ponytail: quiz 1-per-halaman harus cek required juga — sebelumnya lolos kosong
+      if (current?.is_required !== false && !isAnswered(current, answers[current?.id])) {
+        setValidationErrors((e) => ({ ...e, [current.id]: true }))
+        setTimeout(() => {
+          if (questionRefs.current[current.id]) {
+            questionRefs.current[current.id].scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }, 80)
+        return
+      }
     }
-    // Gerbang password: jawaban terisi tapi ≠ keyword → blok pindah halaman.
-    const gateQuestions = isOneByOne ? [current].filter(Boolean) : (formPages[currentIdx]?.questions || [])
+    // Gerbang password: hanya di batas section & hanya untuk soal required
+    // Quiz 1-per-halaman: password di tengah section tidak blok Next intra-section
+    let gateQuestions = []
+    if (isOneByOne) {
+      const nextQ = questions[currentIdx + 1]
+      const isSectionBoundary = !nextQ || current?.section_id !== nextQ?.section_id
+      if (isSectionBoundary) {
+        gateQuestions = [current].filter(Boolean).filter((q) => q.type === 'password' && q.is_required !== false)
+      }
+    } else {
+      gateQuestions = (formPages[currentIdx]?.questions || []).filter((q) => q.type === 'password' && q.is_required !== false)
+    }
     const wrongPw = await checkPasswords(gateQuestions)
     if (wrongPw.length) {
       const errs = Object.fromEntries(wrongPw.map((qid) => [qid, true]))
@@ -666,8 +750,8 @@ export default function AnswerQuiz() {
       }
     })
 
-    // Gerbang password sebelum submit: keyword salah di soal mana pun → blok.
-    const pwQs = qs.filter((q) => q.type === 'password')
+    // Gerbang password sebelum submit: hanya required yang salah → blok (optional boleh salah/kosong)
+    const pwQs = qs.filter((q) => q.type === 'password' && q.is_required !== false)
     const wrongPw = await checkPasswords(pwQs)
     if (wrongPw.length) {
       wrongPw.forEach((qid) => { errors[qid] = true })
@@ -747,8 +831,8 @@ export default function AnswerQuiz() {
 
   if (!data) return null
 
-  const isQuizStyle = displayStyle === 'quiz'
-  const isOneByOne = displayStyle === 'quiz'
+  const isQuizStyle = effectiveStyle === 'quiz'
+  const isOneByOne = effectiveStyle === 'quiz'
   const palette = themePalette(publicForm?.theme_color, theme === 'dark')
   const isOwnerPreview = publicForm?.is_owner === true && publicForm?.status !== 'published'
   const sectionsById = Object.fromEntries((data.sections || []).map((s) => [s.id, s.title]))
@@ -831,9 +915,9 @@ export default function AnswerQuiz() {
             <div className="flex items-start gap-3 bg-incorrect text-white px-4 py-3.5 rounded-2xl shadow-lift">
               <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-semibold">Aktivitas mencurigakan terdeteksi ({cheatWarn.reason || 'keluar halaman'}).</p>
+                <p className="font-semibold">Suspicious activity detected ({cheatWarn.reason || 'leaving page'}).</p>
                 <p className="text-white/85 mt-0.5">
-                  Peringatan {3 - cheatWarn.left}/2. Melanjutkan akan mengumpulkan jawaban otomatis dengan nilai 0.
+                  Warning {3 - cheatWarn.left}/2. Continuing will auto-submit your answers with score 0.
                 </p>
               </div>
             </div>
@@ -847,11 +931,11 @@ export default function AnswerQuiz() {
                 onClick={() => setShowInfo(true)}
                 className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-white/80 hover:bg-white/15 hover:text-white transition-colors shrink-0"
                 aria-label="Exam info"
-                title="Lihat informasi ujian"
+                title="View exam info"
               >
                 <Info className="w-4 h-4" />
               </button>
-              <span className="text-sm font-semibold text-white truncate"><RichText html={formTitle} className="rich-text" /></span>
+              <span className="text-sm font-semibold text-white truncate"><RichText html={effectiveTitle} className="rich-text" /></span>
             </div>
             <div className="flex items-center gap-2">
               {current && (
@@ -961,10 +1045,10 @@ export default function AnswerQuiz() {
                   <button
                     onClick={() => { setZoomTarget(current); setZoomScale(1) }}
                     className="inline-flex items-center gap-2 text-xs font-semibold px-4 h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-600 dark:text-gray-300 hover:text-[var(--t)] hover:border-[var(--t-border)] hover:bg-[var(--t-soft)] transition-colors shadow-chip"
-                    aria-label="Perbesar soal"
+                    aria-label="Zoom in on question"
                   >
                     <ZoomIn className="w-4 h-4" />
-                    Perbesar soal
+                    Zoom in on question
                   </button>
                 </div>
                 {current.type === 'multiple_choice' && (
@@ -1028,7 +1112,7 @@ export default function AnswerQuiz() {
                 {pwWrong[current.id] && (
                   <p className="mt-3 text-sm font-semibold text-red-500 flex items-center justify-center gap-1.5">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
-                    Password salah
+                    Wrong password
                   </p>
                 )}
 
@@ -1049,8 +1133,8 @@ export default function AnswerQuiz() {
                       value={answers[current.id] || ''}
                       onChange={(e) => handleTextChange(current.id, e.target.value)}
                       className={`text-center text-lg h-14 font-mono ${validationErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
-                      placeholder="Masukkan password"
-                      error={pwWrong[current.id] ? 'Password salah' : undefined}
+                      placeholder="Enter password"
+                      error={pwWrong[current.id] ? 'Wrong password' : undefined}
                     />
                   </div>
                 )}
@@ -1062,7 +1146,7 @@ export default function AnswerQuiz() {
                       error={!!validationErrors[current.id]}
                       className="text-base h-14"
                     >
-                      <option value="">— Pilih jawaban —</option>
+                      <option value="">— Select an answer —</option>
                       {current.options.map((opt, i) => (
                         <option key={opt.id} value={opt.id}>{LETTERS[i % LETTERS.length]}. {opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
                       ))}
@@ -1133,6 +1217,18 @@ export default function AnswerQuiz() {
                 <ChevronRight className="w-4 h-4" />
               </Button>
             )}
+            {publicForm?.is_restricted && (
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                aria-label="Refresh"
+                title="Refresh"
+                className="w-[52px] h-[45px] shrink-0 inline-flex items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-ink-800 active:scale-[0.98] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+            )}
           </div>
         </footer>
 
@@ -1178,9 +1274,9 @@ export default function AnswerQuiz() {
           <div className="flex items-start gap-3 bg-incorrect text-white px-4 py-3.5 rounded-2xl shadow-lift">
             <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
             <div className="text-sm">
-              <p className="font-semibold">Aktivitas mencurigakan terdeteksi ({cheatWarn.reason || 'keluar halaman'}).</p>
+              <p className="font-semibold">Suspicious activity detected ({cheatWarn.reason || 'leaving page'}).</p>
               <p className="text-white/85 mt-0.5">
-                Peringatan {3 - cheatWarn.left}/2. Melanjutkan akan mengumpulkan jawaban otomatis dengan nilai 0.
+                Warning {3 - cheatWarn.left}/2. Continuing will auto-submit your answers with score 0.
               </p>
             </div>
           </div>
@@ -1192,7 +1288,7 @@ export default function AnswerQuiz() {
           <img src={bannerPath} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
         <div className="flex items-center justify-between gap-3 mb-6">
-          <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={formTitle} className="rich-text" /></h1>
+          <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={effectiveTitle} className="rich-text" /></h1>
           <div className="flex items-center gap-2 shrink-0">
             {timeLeft !== null && (
               <span className={`inline-flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums px-2.5 h-8 rounded-lg transition-colors ${timeLeft < 30000
@@ -1249,16 +1345,16 @@ export default function AnswerQuiz() {
                     <button
                       onClick={() => { setZoomTarget(q); setZoomScale(1) }}
                       className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 h-8 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-500 dark:text-gray-400 hover:text-[var(--t)] hover:border-[var(--t-border)] hover:bg-[var(--t-soft)] transition-colors"
-                      aria-label="Perbesar soal"
+                      aria-label="Zoom in on question"
                     >
                       <ZoomIn className="w-4 h-4" />
-                      Perbesar soal
+                      Zoom in on question
                     </button>
                   </div>
                   {validationErrors[q.id] && (
                     <p className="text-xs font-semibold text-red-500 flex items-center gap-1 mb-3">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      {q.type === 'password' && pwWrong[q.id] ? 'Password salah, periksa kembali' : 'This question is required'}
+                      {q.type === 'password' && pwWrong[q.id] ? 'Wrong password, please try again' : 'This question is required'}
                     </p>
                   )}
                   {q.image && (isAudioUrl(q.image.path) ? (
@@ -1363,7 +1459,7 @@ export default function AnswerQuiz() {
                       value={answers[q.id] || ''}
                       onChange={(e) => handleTextChange(q.id, e.target.value)}
                       className={`font-mono ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
-                      placeholder="Masukkan password"
+                      placeholder="Enter password"
                     />
                   )}
 
@@ -1373,7 +1469,7 @@ export default function AnswerQuiz() {
                       onChange={(e) => handleSelect(q.id, e.target.value === '' ? null : Number(e.target.value))}
                       error={!!validationErrors[q.id]}
                     >
-                      <option value="">— Pilih jawaban —</option>
+                      <option value="">— Select an answer —</option>
                       {q.options.map((opt, i) => (
                         <option key={opt.id} value={opt.id}>{LETTERS[i % LETTERS.length]}. {opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
                       ))}
@@ -1424,7 +1520,7 @@ export default function AnswerQuiz() {
           )}
           <div className="flex gap-3">
             {currentIdx > 0 && (
-              <Button variant="secondary" onClick={handlePrev} className="flex-1" icon={<ChevronLeft className="w-4 h-4" />}>
+              <Button variant="secondary" size="lg" onClick={handlePrev} className="flex-1" icon={<ChevronLeft className="w-4 h-4" />}>
                 Previous
               </Button>
             )}
@@ -1452,6 +1548,18 @@ export default function AnswerQuiz() {
                 Submit
               </Button>
             )}
+            {publicForm?.is_restricted && (
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                aria-label="Refresh"
+                title="Refresh"
+                className="w-[52px] h-[52px] shrink-0 inline-flex items-center justify-center rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-ink-800 active:scale-[0.98] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+            )}
           </div>
         </div>
       </footer>
@@ -1463,7 +1571,7 @@ export default function AnswerQuiz() {
       <ZoomModal
         target={zoomTarget}
         scale={zoomScale}
-        variant={displayStyle === 'card' ? 'card' : 'quiz'}
+        variant={effectiveStyle === 'card' ? 'card' : 'quiz'}
         onClose={() => { setZoomTarget(null); setZoomScale(1) }}
         onZoom={(delta) => setZoomScale((s) => Math.min(4, Math.max(1, s + delta)))}
       />
@@ -1517,8 +1625,8 @@ function FileAnswer({ value, uploading, onFile, onRemove, error }) {
             <FileUp className="w-5 h-5" />
           </span>
           <span className="flex-1 min-w-0 text-sm font-medium text-ink dark:text-gray-100 truncate">{value.filename}</span>
-          <a href={value.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[var(--t)] hover:underline shrink-0">Lihat</a>
-          <button onClick={onRemove} className="text-xs font-medium text-gray-400 hover:text-incorrect shrink-0">Hapus</button>
+          <a href={value.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[var(--t)] hover:underline shrink-0">View</a>
+          <button onClick={onRemove} className="text-xs font-medium text-gray-400 hover:text-incorrect shrink-0">Remove</button>
         </div>
       ) : (
         <button
@@ -1532,13 +1640,13 @@ function FileAnswer({ value, uploading, onFile, onRemove, error }) {
           ) : (
             <FileUp className="w-4 h-4" />
           )}
-          {uploading ? 'Mengunggah...' : 'Unggah file jawaban'}
+          {uploading ? 'Uploading...' : 'Upload answer file'}
         </button>
       )}
       <input ref={inputRef} type="file" className="hidden" onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = '' }} />
       {error && (
         <p className="text-xs font-semibold text-incorrect mt-1.5 flex items-center gap-1">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Soal wajib — unggah file dulu
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Required question — upload a file first
         </p>
       )}
       <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">PDF, DOC, XLS, PPT, TXT, CSV, gambar, ZIP</p>
@@ -1567,13 +1675,13 @@ function CheatLockOverlay({ info }) {
             <span className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-incorrect/20 mb-6">
               <AlertTriangle className="w-8 h-8 text-incorrect" />
             </span>
-            <p className="font-display text-2xl font-bold">Anda terdeteksi melakukan pelanggaran</p>
+            <p className="font-display text-2xl font-bold">You have been detected violating the rules</p>
             {info.reason && (
-              <p className="text-sm text-white/70 mt-2">Pelanggaran terakhir: {info.reason}</p>
+              <p className="text-sm text-white/70 mt-2">Last violation: {info.reason}</p>
             )}
             <p className="text-sm text-white/70 mt-4 leading-relaxed">
-              Ujian dikunci sementara. Jawaban Anda tetap tersimpan dan akan ditinjau
-              oleh pengawas (maksimal 5 menit). Jangan tutup halaman ini.
+              Exam is temporarily locked. Your answers are saved and will be reviewed
+              by the proctor (up to 5 minutes). Do not close this page.
             </p>
           </motion.div>
         </motion.div>
@@ -1614,19 +1722,19 @@ function KioskLockOverlay({ locked, palette, onResume }) {
             <span className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-white/10 mb-6">
               <Lock className="w-7 h-7" />
             </span>
-            <h2 className="font-display text-xl font-bold">Ujian terkunci</h2>
+            <h2 className="font-display text-xl font-bold">Exam locked</h2>
             <p className="text-white/80 text-sm mt-2 max-w-xs">
-              Kamu keluar dari jendela ujian. Sentuh atau klik di mana saja untuk kembali memin halaman ke fullscreen dan melanjutkan ujian.
+              You left the exam window. Tap or click anywhere to return to fullscreen and continue the exam.
             </p>
             <button
               onClick={(e) => { e.stopPropagation(); onResume() }}
               className="mt-6 inline-flex items-center gap-2 h-12 px-8 rounded-full bg-white text-sm font-bold text-[var(--t,#6C5CE7)] hover:scale-[1.02] active:scale-95 transition-transform shadow-lift"
             >
               <Lock className="w-4 h-4" />
-              Kunci ulang &amp; lanjut
+              Lock again &amp; continue
             </button>
             <p className="text-white/60 text-xs mt-4">
-              Kuis dikumpulkan otomatis dengan nilai 0 jika kamu keluar terlalu sering.
+              Quiz will be auto-submitted with score 0 if you leave too often.
             </p>
           </div>
         </motion.div>
@@ -1664,11 +1772,11 @@ function ExamInfoDrawer({ show, onClose, form, data }) {
             className="fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-white dark:bg-ink-900 shadow-lift flex flex-col"
           >
             <div className="flex items-center justify-between px-5 h-16 border-b border-gray-100 dark:border-gray-800 shrink-0">
-              <h3 className="font-display font-bold text-ink dark:text-gray-100">Informasi Ujian</h3>
+              <h3 className="font-display font-bold text-ink dark:text-gray-100">Exam Information</h3>
               <button
                 onClick={onClose}
                 className="p-2 -mr-2 rounded-xl text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
-                aria-label="Tutup"
+                aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1684,22 +1792,22 @@ function ExamInfoDrawer({ show, onClose, form, data }) {
               {form?.description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 mb-4"><RichText html={form.description} className="rich-text" /></p>}
 
               <div className="mt-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Identitas Pengisi</p>
-                {chip('Nama', respondent)}
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Respondent Info</p>
+                {chip('Name', respondent)}
                 {chip('Email', respondentEmail)}
               </div>
 
               <div className="mt-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Detail</p>
-                {chip('Jumlah soal', form?.question_count ?? data?.questions?.length ?? '—')}
-                {form?.timer_seconds ? chip('Waktu', `${Math.ceil(form.timer_seconds / 60)} menit`) : chip('Waktu', 'Tanpa batas')}
-                {form?.submission_limit === 'once' ? chip('Pengiriman', 'Sekali saja') : chip('Pengiriman', 'Bebas')}
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Details</p>
+                {chip('Number of questions', form?.question_count ?? data?.questions?.length ?? '—')}
+                {form?.timer_seconds ? chip('Time', `${Math.ceil(form.timer_seconds / 60)} minutes`) : chip('Time', 'No limit')}
+                {form?.submission_limit === 'once' ? chip('Submission', 'Once only') : chip('Submission', 'Unlimited')}
               </div>
 
               {form?.is_restricted && (
                 <div className="mt-5 rounded-2xl bg-gray-50 dark:bg-ink-800/50 px-4 py-3">
                   <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                    Tetap di tab ini selama ujian berlangsung. Timer berjalan otomatis dan jawaban dikumpulkan saat waktu habis.
+                    Stay on this tab during the exam. Timer runs automatically and answers are submitted when time runs out.
                   </p>
                 </div>
               )}
@@ -1774,7 +1882,7 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label="Perbesar soal"
+            aria-label="Zoom in on question"
           >
             {/* Header ramping: hanya judul panel + tombol tutup, teks soal ada di
                 area zoom supaya seluruh soal (teks+gambar+opsi) terzoom sebagai satu. */}
@@ -1788,7 +1896,7 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                   <button
                     onClick={onClose}
                     className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
-                    aria-label="Tutup"
+                    aria-label="Close"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -1879,7 +1987,7 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
               onClick={() => onZoom(-STEP)}
               disabled={scale <= 0.75}
               className="w-12 h-12 rounded-xl flex items-center justify-center text-gray-600 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-ink-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              aria-label="Perkecil tampilan soal"
+              aria-label="Zoom out question"
             >
               <ZoomOut className="w-5 h-5" />
             </button>
@@ -1890,7 +1998,7 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
               onClick={() => onZoom(STEP)}
               disabled={scale >= 5}
               className="w-12 h-12 rounded-xl flex items-center justify-center text-gray-600 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-ink-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              aria-label="Perbesar tampilan soal"
+              aria-label="Zoom in question"
             >
               <ZoomIn className="w-5 h-5" />
             </button>
@@ -1907,7 +2015,7 @@ function PreviewNotice() {
       <div className="inline-flex items-center gap-2 bg-ink text-white px-3.5 py-2 rounded-full shadow-lift text-xs">
         <Lock className="w-3.5 h-3.5 shrink-0" />
         <span>
-          <span className="font-semibold">Preview mode</span> — belum dipublikasikan
+          <span className="font-semibold">Preview mode</span> — not yet published
         </span>
       </div>
     </div>

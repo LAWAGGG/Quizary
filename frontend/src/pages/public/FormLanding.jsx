@@ -152,7 +152,7 @@ export default function FormLanding() {
           title="Your previous session ended"
         >
           <p className="text-white/70 text-sm mt-2 mb-6">
-            Waktu pengerjaan sebelumnya habis dan jawabanmu sudah otomatis terkirim. Kamu bisa mulai sesi baru jika masih tersedia.
+            Your previous time expired and answers were auto-submitted. You can start a new session if available.
           </p>
           <Button variant="secondary" size="xl" onClick={handleStart}>
             Start New Session
@@ -377,7 +377,7 @@ function PreviewNotice() {
       <div className="inline-flex items-center gap-2 bg-ink text-white px-3.5 py-2 rounded-full shadow-lift text-xs">
         <Lock className="w-3.5 h-3.5 shrink-0" />
         <span>
-          <span className="font-semibold">Preview mode</span> — belum dipublikasikan
+          <span className="font-semibold">Preview mode</span> — not yet published
         </span>
       </div>
     </div>

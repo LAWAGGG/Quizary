@@ -40,6 +40,7 @@ class QuestionCreate(BaseModel):
     type: str = Field(pattern=QUESTION_TYPE_PATTERN)
     question_text: str = Field(min_length=1, max_length=5000)
     points: int = Field(default=1, ge=0, le=999)
+    is_scored: bool = True
     is_required: bool = True
     section_id: Optional[int] = None
     password_keyword: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -97,6 +98,16 @@ class QuestionResponse(BaseModel):
 
 class QuestionGroupRequest(BaseModel):
     question_ids: list[int] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def validate_question_ids(self):
+        if len(set(self.question_ids)) != len(self.question_ids):
+            raise ValueError("question_ids must not contain duplicates")
+        return self
+
+
+class GroupAddRequest(BaseModel):
+    question_ids: list[int] = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_question_ids(self):
