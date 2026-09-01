@@ -25,6 +25,8 @@ import { useAppAlert } from '../../context/AlertContext';
 import { RichTextRenderer, stripHtmlTags } from '../RichTextRenderer';
 import { getThemeGradientColors } from './QuizBackground';
 import { extractImgUrl } from './QuizQuestionCard';
+import { AudioPlayer } from '../AudioPlayer';
+import { isAudioUrl } from '../../utils/media';
 
 interface QuizStyleAnsweringStepProps {
   publicForm: any;
@@ -39,6 +41,7 @@ interface QuizStyleAnsweringStepProps {
   onSubmit: () => void;
   onOpenZoom: (question: any) => void;
   onCloseQuiz: () => void;
+  submissionId?: string | number | null;
 }
 
 const OPT_COLORS = ['#3B82F6', '#EF4444', '#F59E0B', '#10B981'];
@@ -57,9 +60,12 @@ export function QuizStyleAnsweringStep({
   onSubmit,
   onOpenZoom,
   onCloseQuiz,
+  submissionId,
 }: QuizStyleAnsweringStepProps) {
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
   const { showAlert } = useAppAlert();
+  const [pwWrong, setPwWrong] = useState<Record<number, boolean>>({});
+  const [pwChecking, setPwChecking] = useState(false);
 
   const [currentIdx, setCurrentIdx] = useState(0);
   const [reviewed, setReviewed] = useState<Record<number, boolean>>({});
@@ -185,7 +191,27 @@ export function QuizStyleAnsweringStep({
     setReviewed((prev) => ({ ...prev, [qId]: !prev[qId] }));
   };
 
-  const checkRequiredAndSubmit = () => {
+  const checkPasswordForQuestions = async (qs: any[]): Promise<number[]> => {
+    // untuk quiz: semua password jadi gate — kosong pun salah (token hahay OPTIONAL tetap harus benar untuk Next)
+    const targets = qs.filter((q) => String(q.type || q.question_type || '').toLowerCase() === 'password');
+    if (!targets.length) return [];
+    if (!submissionId) return targets.map((q: any) => q.id);
+    const { checkPassword } = await import('../../services/api_service');
+    const wrong: number[] = [];
+    for (const q of targets) {
+      const ans = String(answers[q.id] ?? '');
+      if (!ans.trim()) { wrong.push(q.id); continue; }
+      try {
+        const res = await checkPassword(submissionId, q.id, ans);
+        if (!res.valid) wrong.push(q.id);
+      } catch {
+        wrong.push(q.id);
+      }
+    }
+    return wrong;
+  };
+
+  const checkRequiredAndSubmit = async () => {
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
       const isRequired = q.is_required !== false;
@@ -205,16 +231,83 @@ export function QuizStyleAnsweringStep({
         return;
       }
     }
+    // password gate on submit: semua password required harus valid
+    setPwChecking(true);
+    const wrongIds = await checkPasswordForQuestions(questions);
+    setPwChecking(false);
+    if (wrongIds.length) {
+      const errs: Record<number, boolean> = {};
+      wrongIds.forEach((id) => (errs[id] = true));
+      setPwWrong((p) => ({ ...p, ...errs }));
+      const firstIdx = questions.findIndex((q) => wrongIds.includes(q.id));
+      showAlert({
+        type: 'warning',
+        title: language === 'ID' ? 'Password salah' : 'Wrong password',
+        message: language === 'ID' ? 'Password soal wajib belum benar. Periksa kembali.' : 'Password for required question is incorrect.',
+      });
+      if (firstIdx >= 0 && firstIdx !== currentIdx) animateToQuestion(firstIdx, firstIdx > currentIdx ? 1 : -1);
+      return;
+    }
+    setPwWrong({});
     onSubmit();
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!currentQ) return;
+    // Gate password: semua password (termasuk OPTIONAL seperti token hahay) wajib benar untuk Next
+    const t = String(currentQ.type || currentQ.question_type || '').toLowerCase();
+    if (t === 'password') {
+      const ans = String(answers[currentQ.id] ?? '');
+      if (!ans.trim()) {
+        showAlert({
+          type: 'warning',
+          title: language === 'ID' ? 'Password wajib' : 'Password required',
+          message: language === 'ID' ? 'Isi password sebelum lanjut ke soal berikutnya.' : 'Enter password before next question.',
+        });
+        setPwWrong((p) => ({ ...p, [currentQ.id]: true }));
+        return;
+      }
+      if (!submissionId) {
+        setPwWrong((p) => ({ ...p, [currentQ.id]: true }));
+        showAlert({
+          type: 'warning',
+          title: language === 'ID' ? 'Password wajib diverifikasi' : 'Password must be verified',
+          message: language === 'ID' ? 'Tunggu sesi siap lalu coba lagi.' : 'Wait for session then try again.',
+        });
+        return;
+      }
+      setPwChecking(true);
+      try {
+        const { checkPassword } = await import('../../services/api_service');
+        const res = await checkPassword(submissionId, currentQ.id, ans);
+        if (!res.valid) {
+          setPwWrong((p) => ({ ...p, [currentQ.id]: true }));
+          showAlert({
+            type: 'warning',
+            title: language === 'ID' ? 'Password salah' : 'Wrong password',
+            message: language === 'ID' ? 'Password tidak cocok. Tidak bisa lanjut.' : 'Wrong password. Cannot proceed.',
+          });
+          setPwChecking(false);
+          return;
+        }
+        setPwWrong((p) => {
+          const n = { ...p };
+          delete n[currentQ.id];
+          return n;
+        });
+      } catch {
+        setPwWrong((p) => ({ ...p, [currentQ.id]: true }));
+        showAlert({ type: 'warning', title: 'Password salah', message: 'Gagal verifikasi password.' });
+        setPwChecking(false);
+        return;
+      }
+      setPwChecking(false);
+    }
 
     if (currentIdx < totalQ - 1) {
       animateToQuestion(currentIdx + 1, 1);
     } else {
-      checkRequiredAndSubmit();
+      await checkRequiredAndSubmit();
     }
   };
 
@@ -365,10 +458,13 @@ export function QuizStyleAnsweringStep({
                     </Text>
                   </View>
 
-                  {/* Question Image (if present) */}
+                  {/* Question Media: image OR audio (listening) */}
                   {(() => {
                     const qImgUrl = extractImgUrl(currentQ, currentQ?.question_text);
                     if (!qImgUrl) return null;
+                    if (isAudioUrl(qImgUrl)) {
+                      return <AudioPlayer uri={qImgUrl} themeColor={themeColor} />;
+                    }
                     return (
                       <TouchableOpacity
                         style={styles.qImageContainer}
@@ -409,7 +505,7 @@ export function QuizStyleAnsweringStep({
                     </Text>
                   )}
 
-                  {/* VIBRANT OPTION TILES (Multiple Choice, Checkbox) */}
+                  {/* VIBRANT OPTION TILES (Multiple Choice, Checkbox) — audio per option */}
                   {isOptionType && (
                     <View style={styles.optionsListContainer}>
                       {qOptions.map((opt: any, i: number) => {
@@ -420,41 +516,49 @@ export function QuizStyleAnsweringStep({
                         const bgCol = OPT_COLORS[i % OPT_COLORS.length];
                         const isCheckbox = rawType === 'checkbox';
                         const optImgUrl = extractImgUrl(opt, opt?.option_text || opt?.text);
+                        const optIsAudio = isAudioUrl(optImgUrl);
 
                         return (
                           <TouchableOpacity
                             key={opt.id || i}
                             style={[
                               styles.optionTile,
-                              { backgroundColor: bgCol },
+                              { backgroundColor: bgCol, flexDirection: optIsAudio ? 'column' : 'row', alignItems: optIsAudio ? 'stretch' : 'center' },
                               selected && styles.optionTileSelected,
                             ]}
                             onPress={() => onSelectOption(currentQ.id, opt.id, isCheckbox)}
                             activeOpacity={0.85}
                           >
-                            <View style={[styles.letterCircle, selected && isCheckbox && { backgroundColor: '#FFFFFF' }]}>
-                              {isCheckbox && selected ? (
-                                <Ionicons name="checkmark" size={16} color={bgCol} />
-                              ) : (
-                                <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
+                              <View style={[styles.letterCircle, selected && isCheckbox && { backgroundColor: '#FFFFFF' }]}>
+                                {isCheckbox && selected ? (
+                                  <Ionicons name="checkmark" size={16} color={bgCol} />
+                                ) : (
+                                  <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
+                                )}
+                              </View>
+
+                              {optImgUrl && !optIsAudio && (
+                                <Image
+                                  source={{ uri: optImgUrl }}
+                                  style={styles.optionImgStyle}
+                                  resizeMode="contain"
+                                />
+                              )}
+
+                              <Text style={[styles.optionTileText, { fontSize: 16 * fontSizeScale, flex: 1 }]}>
+                                {stripHtmlTags(opt.option_text || opt.text || '')}
+                              </Text>
+
+                              {selected && !isCheckbox && (
+                                <View style={styles.selectedBadgeCircle}>
+                                  <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                                </View>
                               )}
                             </View>
-
-                            {optImgUrl && (
-                              <Image
-                                source={{ uri: optImgUrl }}
-                                style={styles.optionImgStyle}
-                                resizeMode="contain"
-                              />
-                            )}
-
-                            <Text style={[styles.optionTileText, { fontSize: 16 * fontSizeScale }]}>
-                              {stripHtmlTags(opt.option_text || opt.text || '')}
-                            </Text>
-
-                            {selected && !isCheckbox && (
-                              <View style={styles.selectedBadgeCircle}>
-                                <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                            {optIsAudio && optImgUrl && (
+                              <View style={{ marginTop: 12 }} onTouchEnd={(e: any) => e.stopPropagation?.()}>
+                                <AudioPlayer uri={optImgUrl} themeColor="#FFF" compact />
                               </View>
                             )}
                           </TouchableOpacity>
@@ -635,17 +739,32 @@ export function QuizStyleAnsweringStep({
                     />
                   )}
 
-                  {/* Password Input */}
+                  {/* Password Input — blocked until correct */}
                   {isPasswordType && (
                     <View style={styles.textInputBox}>
                       <TextInput
-                        style={[styles.shortAnswerInput, { color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                        style={[
+                          styles.shortAnswerInput,
+                          { color: '#FFF', fontSize: 16 * fontSizeScale },
+                          pwWrong[currentQ.id] && { borderColor: '#EF4444', borderWidth: 2 },
+                        ]}
                         placeholder="Enter password"
                         placeholderTextColor="#64748B"
                         secureTextEntry
                         value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
-                        onChangeText={(text) => onTextChange(currentQ.id, text)}
+                        onChangeText={(text) => {
+                          if (pwWrong[currentQ.id]) setPwWrong((p) => { const n = { ...p }; delete n[currentQ.id]; return n; });
+                          onTextChange(currentQ.id, text);
+                        }}
                       />
+                      {pwWrong[currentQ.id] && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                          <Ionicons name="warning-outline" size={14} color="#EF4444" />
+                          <Text style={{ color: '#EF4444', fontSize: 13, fontWeight: '700' }}>
+                            {language === 'ID' ? 'Password salah — tidak bisa lanjut' : 'Wrong password — cannot proceed'}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   )}
 
@@ -745,7 +864,26 @@ export function QuizStyleAnsweringStep({
                   <TouchableOpacity
                     key={q.id || idx}
                     style={[styles.mapGridItem, { backgroundColor: bg }]}
-                    onPress={() => {
+                    onPress={async () => {
+                      if (idx > currentIdx) {
+                        // cegah skip password: validasi semua password dari current sampai idx-1
+                        const range = questions.slice(currentIdx, idx);
+                        const hasBlockingPw = range.some((qq: any) => String(qq.type || qq.question_type || '').toLowerCase() === 'password' && qq.is_required !== false);
+                        if (hasBlockingPw) {
+                          const wrong = await checkPasswordForQuestions(range);
+                          if (wrong.length) {
+                            const errs: Record<number, boolean> = {};
+                            wrong.forEach((id) => (errs[id] = true));
+                            setPwWrong((p) => ({ ...p, ...errs }));
+                            showAlert({
+                              type: 'warning',
+                              title: language === 'ID' ? 'Password wajib' : 'Password required',
+                              message: language === 'ID' ? 'Selesaikan password yang benar sebelum loncat soal.' : 'Complete correct password before jumping.',
+                            });
+                            return;
+                          }
+                        }
+                      }
                       setShowMapModal(false);
                       animateToQuestion(idx, idx > currentIdx ? 1 : -1);
                     }}

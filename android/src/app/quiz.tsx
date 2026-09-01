@@ -1,891 +1,844 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, AppState, Image, Animated, Platform, KeyboardAvoidingView, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  TextInput,
+  AppState,
+  AppStateStatus,
+  Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { useLocalSearchParams, router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import {
-  getPublicForm,
-  createSubmission,
-  autosaveAnswer,
-  finalizeSubmission,
-  getSubmissionDetail,
-  uploadAnswerFile,
-  lockSubmission,
-} from '../services/api_service';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAppAlert } from '../context/AlertContext';
-import { stripHtmlTags } from '../components/RichTextRenderer';
+import {
+  getPublicForm,
+  checkCanStart,
+  createSubmission,
+  getSubmissionDetail,
+  autosaveAnswer,
+  lockSubmission,
+  finalizeSubmission,
+  setSubmissionToken,
+  getToken,
+  uploadAnswerFile,
+} from '../services/api_service';
 import { QuizLandingStep } from '../components/quiz/QuizLandingStep';
-import { QuizQuestionCard } from '../components/quiz/QuizQuestionCard';
-import { QuizSubmittedStep } from '../components/quiz/QuizSubmittedStep';
 import { QuizStyleAnsweringStep } from '../components/quiz/QuizStyleAnsweringStep';
+import { QuizQuestionCard } from '../components/quiz/QuizQuestionCard';
 import { QuestionZoomModal } from '../components/quiz/QuestionZoomModal';
-import LockOverlay from '../components/quiz/LockOverlay';
-import { QuizBackground } from '../components/quiz/QuizBackground';
+import { QuizSubmittedStep } from '../components/quiz/QuizSubmittedStep';
+import { RestrictedWarningOverlay } from '../components/quiz/RestrictedWarningOverlay';
+import { ViolatingLockOverlay } from '../components/quiz/ViolatingLockOverlay';
+import { getThemeGradientColors } from '../components/quiz/QuizBackground';
 
-export default function StandaloneQuizScreen() {
-  const { colors, isDark, language, fontSizeScale } = useAppTheme();
+function parseWibDate(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const parts = dateStr.split(/[\s:-]+/).map(Number);
+  if (parts.length < 3) return null;
+  const [d, m, Y, H = 0, M = 0, S = 0] = parts;
+  return new Date(Date.UTC(Y, m - 1, d, (H || 0) - 7, M || 0, S || 0));
+}
+
+function formatTimer(ms: number | null) {
+  if (ms === null || ms <= 0) return '00:00';
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+export default function QuizScreen() {
+  const params = useLocalSearchParams<{ shortCode?: string; formId?: string }>();
+  const shortCode = (params.shortCode as string) || '';
+  const { colors, language } = useAppTheme();
   const { showAlert } = useAppAlert();
-  const { shortCode, formId } = useLocalSearchParams<{ shortCode?: string; formId?: string }>();
 
-  // Zoom & Modal states
-  const [zoomQuestionTarget, setZoomQuestionTarget] = useState<any>(null);
-
-  // Data states
   const [publicForm, setPublicForm] = useState<any>(null);
-  const [submissionId, setSubmissionId] = useState<number | null>(null);
-  const submissionIdRef = useRef<number | string | null>(null);
+  const [canStartInfo, setCanStartInfo] = useState<any>(null);
+  const [submission, setSubmission] = useState<any>(null);
   const [questions, setQuestions] = useState<any[]>([]);
-  const [sections, setSections] = useState<any[]>([]);
-  const [collapsedSections, setCollapsedSections] = useState<Record<number, boolean>>({});
   const [answers, setAnswers] = useState<Record<number, any>>({});
   const [fileUploading, setFileUploading] = useState<Record<number, boolean>>({});
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-
-  // Flow states
-  const [step, setStep] = useState<'loading' | 'landing' | 'answering' | 'submitted' | 'error'>('loading');
-  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [resultData, setResultData] = useState<any>(null);
+  const [fetching, setFetching] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [respondentName, setRespondentName] = useState('');
+  const [respondentEmail, setRespondentEmail] = useState('');
+  const [showIdentityForm, setShowIdentityForm] = useState(false);
+  const [zoomQuestion, setZoomQuestion] = useState<any>(null);
 
-  // Smooth Section Transition Animation & Scroll Ref (Matching Web Framer Motion)
-  const [direction, setDirection] = useState<number>(1);
-  const [visibleLimit, setVisibleLimit] = useState<number>(6);
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const translateXAnim = useRef(new Animated.Value(0)).current;
-  const scrollViewRef = useRef<ScrollView>(null);
+  // Restricted flow states
+  const [warningVisible, setWarningVisible] = useState(false);
+  const [warningCountdown, setWarningCountdown] = useState(5);
+  const [lockedVisible, setLockedVisible] = useState(false);
+  const [cheatReason, setCheatReason] = useState<string>('window-blur');
+  const [lockedAt, setLockedAt] = useState<number | null>(null);
+  const [refreshingLock, setRefreshingLock] = useState(false);
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+  const [sections, setSections] = useState<any[]>([]);
+  const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
+  const [pwWrong, setPwWrong] = useState<Record<number, boolean>>({});
+  const [pwChecking, setPwChecking] = useState(false);
 
-  // Anti-cheat & Lock states
-  const [isLocked, setIsLocked] = useState(false);
-  const [isCheckingLock, setIsCheckingLock] = useState(false);
-  const [lockReason, setLockReason] = useState('window-blur');
-  const lockTimerRef = useRef<any>(null);
-  const appState = useRef(AppState.currentState);
+  const warningTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownRef = useRef(5);
+  const submissionIdRef = useRef<number | null>(null);
+  const isRestrictedRef = useRef(false);
+  const answeringRef = useRef(false);
+  const warningVisibleRef = useRef(false);
+  const lockedVisibleRef = useRef(false);
 
-  // Synchronize ref whenever submissionId updates
+  const themeColor =
+    publicForm?.theme_color ||
+    publicForm?.color ||
+    publicForm?.themeColor ||
+    publicForm?.settings?.theme_color ||
+    colors.primary;
+
+  const isQuizStyle = (publicForm?.display_style || 'card') === 'quiz';
+
+  // Keep refs updated
   useEffect(() => {
-    submissionIdRef.current = submissionId;
-  }, [submissionId]);
-
-  // Listener deteksi keluar aplikasi / swipe notification bar (5s grace period)
+    submissionIdRef.current = submission?.submission_id || submission?.id || null;
+  }, [submission]);
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (step !== 'answering') return;
-
-      if (nextAppState === 'inactive' || nextAppState === 'background') {
-        // Start 5-second grace countdown timer before locking (matching web behavior)
-        if (!lockTimerRef.current) {
-          lockTimerRef.current = setTimeout(() => {
-            setIsLocked(true);
-            setLockReason('window-blur');
-            const targetSubId = submissionIdRef.current || submissionId;
-            if (targetSubId) {
-              lockSubmission(targetSubId, 'window-blur');
-            }
-          }, 5000);
-        }
-      } else if (nextAppState === 'active') {
-        // User returned within 5 seconds -> cancel lock!
-        if (lockTimerRef.current) {
-          clearTimeout(lockTimerRef.current);
-          lockTimerRef.current = null;
-        }
-      }
-      appState.current = nextAppState;
-    });
-
-    return () => {
-      subscription.remove();
-      if (lockTimerRef.current) {
-        clearTimeout(lockTimerRef.current);
-      }
-    };
-  }, [step, submissionId]);
-
-  // Auto-poll lock status every 5 seconds when locked (mirroring Web AnswerQuiz.jsx)
+    isRestrictedRef.current = !!(publicForm?.type === 'quiz' && publicForm?.is_restricted);
+  }, [publicForm]);
   useEffect(() => {
-    if (!isLocked) return;
-    const interval = setInterval(() => {
-      handleRefreshLockStatus();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [isLocked, submissionId]);
+    warningVisibleRef.current = warningVisible;
+  }, [warningVisible]);
+  useEffect(() => {
+    lockedVisibleRef.current = lockedVisible;
+  }, [lockedVisible]);
 
-  const handleRefreshLockStatus = async () => {
-    setIsCheckingLock(true);
+  const refreshCanStart = useCallback(async () => {
+    if (!shortCode) return null;
     try {
-      let subId = submissionId || submissionIdRef.current;
-      if (!subId && publicForm?.id) {
+      const can = await checkCanStart(shortCode);
+      setCanStartInfo(can);
+      if (can && !can.can_start && can.reason === 'already_submitted') setAlreadySubmitted(true);
+      return can;
+    } catch {
+      return null;
+    }
+  }, [shortCode]);
+
+  // Fetch public form + canStart
+  useEffect(() => {
+    (async () => {
+      if (!shortCode) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const form = await getPublicForm(shortCode);
+        setPublicForm(form);
         try {
-          const res = await createSubmission(publicForm.id);
-          if (res && (res.submission_id || res.id)) {
-            subId = res.submission_id || res.id;
-            setSubmissionId(subId as number);
-            submissionIdRef.current = subId;
+          const can = await checkCanStart(shortCode);
+          setCanStartInfo(can);
+          if (can && !can.can_start && can.reason === 'already_submitted') setAlreadySubmitted(true);
+          if (can && can.can_start && can.require_identity) {
+            setShowIdentityForm(true);
           }
         } catch {}
+      } catch (e: any) {
+        showAlert({ type: 'error', title: 'Gagal memuat', message: e.message });
+      } finally {
+        setLoading(false);
       }
+    })();
+  }, [shortCode]);
 
-      if (subId) {
-        const detail = await getSubmissionDetail(subId);
-        if (detail && detail.status === 'locked') {
-          setIsLocked(true);
-          showAlert({
-            type: 'warning',
-            title: language === 'ID' ? 'Masih Terkunci' : 'Still Locked',
-            message: language === 'ID'
-              ? 'Pengawas / creator belum membuka kuis kamu dari Web Admin.'
-              : 'The proctor / creator has not unlocked your quiz yet.',
-          });
-        } else {
-          setIsLocked(false);
-          showAlert({
-            type: 'success',
-            title: language === 'ID' ? 'Kuis Dibuka Kembali' : 'Quiz Unlocked',
-            message: language === 'ID'
-              ? 'Pengawas / creator telah membuka kuis kamu. Kamu bisa melanjutkan pengerjaan.'
-              : 'The proctor / creator has unlocked your quiz. You can continue.',
-          });
-        }
-      } else {
-        setIsLocked(true);
-        showAlert({
-          type: 'warning',
-          title: language === 'ID' ? 'Masih Terkunci' : 'Still Locked',
-          message: language === 'ID'
-            ? 'Pengawas / creator belum membuka kuis kamu dari Web Admin.'
-            : 'The proctor / creator has not unlocked your quiz yet.',
-        });
+  // Poll submission if locked (check if creator unlocked)
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (warningTimerRef.current) clearInterval(warningTimerRef.current);
+    };
+  }, []);
+
+  const handleCheckLockedStatus = useCallback(async () => {
+    const sid = submissionIdRef.current;
+    if (!sid) return;
+    setRefreshingLock(true);
+    try {
+      const detail = await getSubmissionDetail(sid);
+      const status = detail.status;
+      if (status === 'in_progress') {
+        // Creator unlocked -> continue
+        setLockedVisible(false);
+        lockedVisibleRef.current = false;
+        setWarningVisible(false);
+        warningVisibleRef.current = false;
+        setCheatReason('window-blur');
+        setLockedAt(null);
+        setSubmission((prev: any) => ({ ...prev, status: 'in_progress' }));
+        showAlert({ type: 'success', title: language === 'ID' ? 'Dibuka Kembali' : 'Unlocked', message: language === 'ID' ? 'Pengawas telah membuka kembali ujian. Silakan lanjutkan.' : 'Proctor has unlocked the exam. Please continue.' });
+      } else if (status === 'locked') {
+        // Still locked, refresh timer
+        setCheatReason(detail.cheat_reason || 'window-blur');
+        showAlert({ type: 'warning', title: language === 'ID' ? 'Masih Terkunci' : 'Still Locked', message: language === 'ID' ? 'Ujian masih terkunci, tunggu keputusan pengawas.' : 'Exam is still locked, waiting for proctor decision.' });
+      } else if (status === 'cheating' || status === 'submitted' || status === 'auto_submitted') {
+        setLockedVisible(false);
+        setWarningVisible(false);
+        router.replace({ pathname: '/(tabs)/home' } as any);
       }
     } catch (e: any) {
-      console.error('Gagal mengecek status lock:', e);
-      setIsLocked(true);
+      showAlert({ type: 'error', title: 'Gagal cek status', message: e.message });
     } finally {
-      setIsCheckingLock(false);
+      setRefreshingLock(false);
     }
-  };
+  }, [language]);
 
+  // Timer countdown for exam (expired_at)
   useEffect(() => {
-    if (!shortCode && !formId) {
-      setErrorMessage(
-        language === 'ID'
-          ? 'Token atau ID kuis tidak valid.'
-          : 'Invalid quiz token or ID.'
-      );
-      setStep('error');
+    if (!submission?.expired_at) return;
+    const deadline = parseWibDate(submission.expired_at);
+    if (!deadline) return;
+    const id = setInterval(() => {
+      const diff = deadline.getTime() - Date.now();
+      if (diff <= 0) {
+        clearInterval(id);
+        setTimeLeft(0);
+        handleAutoSubmit();
+      } else {
+        setTimeLeft(diff);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [submission?.expired_at]);
+
+  // AppState restricted handler -> 5 sec warning
+  useEffect(() => {
+    const warningStartRef = { current: 0 } as { current: number };
+    const onChange = (next: AppStateStatus) => {
+      const restricted = isRestrictedRef.current;
+      const sid = submissionIdRef.current;
+      const isAnswering = answeringRef.current;
+      if (!restricted || !sid || !isAnswering) return;
+      if (lockedVisibleRef.current) return; // already locked, ignore
+
+      if (next === 'background' || next === 'inactive') {
+        // Start warning if not already
+        if (warningVisibleRef.current) return;
+        warningStartRef.current = Date.now();
+        countdownRef.current = 5;
+        setWarningCountdown(5);
+        setWarningVisible(true);
+        warningVisibleRef.current = true;
+        if (warningTimerRef.current) clearInterval(warningTimerRef.current);
+        warningTimerRef.current = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - warningStartRef.current) / 1000);
+          const remain = Math.max(0, 5 - elapsed);
+          countdownRef.current = remain;
+          setWarningCountdown(remain);
+          if (remain <= 0) {
+            if (warningTimerRef.current) clearInterval(warningTimerRef.current);
+            warningTimerRef.current = null;
+            setWarningVisible(false);
+            warningVisibleRef.current = false;
+            // Trigger lock
+            const now = Date.now();
+            setLockedAt(now);
+            setCheatReason('window-blur');
+            setLockedVisible(true);
+            lockedVisibleRef.current = true;
+            // Server lock
+            lockSubmission(sid, 'window-blur').catch(() => {});
+          }
+        }, 250);
+      } else if (next === 'active') {
+        // Jika kembali sebelum habis, biarkan user tekan tombol.
+        // Jika sudah lewat 5 detik saat di background (timer throttled),
+        // cek langsung saat active dan lock jika perlu
+        if (warningVisibleRef.current) {
+          const elapsed = Math.floor((Date.now() - warningStartRef.current) / 1000);
+          if (elapsed >= 5) {
+            if (warningTimerRef.current) clearInterval(warningTimerRef.current);
+            warningTimerRef.current = null;
+            setWarningVisible(false);
+            warningVisibleRef.current = false;
+            const now = Date.now();
+            setLockedAt(now);
+            setCheatReason('window-blur');
+            setLockedVisible(true);
+            lockedVisibleRef.current = true;
+            const sid2 = submissionIdRef.current;
+            if (sid2) lockSubmission(sid2, 'window-blur').catch(() => {});
+          }
+        }
+      }
+    };
+
+    const sub = AppState.addEventListener('change', onChange);
+    return () => {
+      sub.remove();
+    };
+  }, []);
+
+  const handleReenter = useCallback(() => {
+    if (warningTimerRef.current) clearInterval(warningTimerRef.current);
+    warningTimerRef.current = null;
+    setWarningVisible(false);
+    warningVisibleRef.current = false;
+    setWarningCountdown(5);
+    countdownRef.current = 5;
+  }, []);
+
+  const handleStart = async () => {
+    if (!publicForm) return;
+    if (showIdentityForm) {
+      if (!respondentName.trim()) {
+        showAlert({ type: 'warning', title: language === 'ID' ? 'Nama wajib' : 'Name required', message: language === 'ID' ? 'Masukkan nama kamu sebelum memulai.' : 'Please enter your name before starting.' });
+        return;
+      }
+    }
+    if (publicForm.require_login) {
+      const token = await getToken();
+      if (!token) {
+        showAlert({ type: 'warning', title: language === 'ID' ? 'Login Diperlukan' : 'Login Required', message: language === 'ID' ? 'Form ini mewajibkan login. Silakan login dulu.' : 'This form requires login. Please login first.' });
+        router.replace('/(tabs)/home' as any);
+        return;
+      }
+    }
+    // Re-check limit once immediately before creating (race: user re-scan after submit)
+    const freshCan = await refreshCanStart();
+    if (freshCan && !freshCan.can_start && freshCan.reason === 'already_submitted') {
+      setAlreadySubmitted(true);
       return;
     }
-    loadPublicForm();
-  }, [shortCode, formId]);
 
-  const loadPublicForm = async () => {
-    setStep('loading');
-    try {
-      let codeToUse = shortCode || formId || '';
-      if (codeToUse.includes('/q/')) {
-        const parts = codeToUse.split('/q/');
-        codeToUse = parts[parts.length - 1].split('/')[0].split('?')[0];
-      }
-      const data = await getPublicForm(codeToUse);
-      setPublicForm(data);
-      setStep('landing');
-    } catch (e: any) {
-      setErrorMessage(
-        e.message ||
-          (language === 'ID' ? 'Quiz / Form tidak ditemukan.' : 'Quiz / Form not found.')
-      );
-      setStep('error');
-    }
-  };
-
-  const handleStartQuiz = async () => {
-    if (!publicForm || !publicForm.id) return;
     setStarting(true);
     try {
-      const res = await createSubmission(publicForm.id);
-      const subId = res.submission_id || res.id;
-      setSubmissionId(subId);
-      submissionIdRef.current = subId;
-
-      if (res.status === 'locked') {
-        setIsLocked(true);
-      }
-
-      let qs = res.questions || [];
-      let secList = res.sections || [];
-      if (!qs || qs.length === 0 || !secList.length) {
-        const detail = await getSubmissionDetail(subId);
-        qs = detail.questions || qs;
-        secList = detail.sections || secList;
-      }
+      const res = await createSubmission(
+        publicForm.id,
+        showIdentityForm ? respondentName.trim() : undefined,
+        showIdentityForm && respondentEmail.trim() ? respondentEmail.trim() : undefined
+      );
+      if (res.access_token) setSubmissionToken(res.access_token);
+      setSubmission(res);
+      const qs = res.questions || [];
       setQuestions(qs);
-      setSections(secList);
-
-      const initialAnswers: Record<number, any> = {};
+      setSections(res.sections || []);
+      setCurrentSectionIdx(0);
+      // Init answers from resumed if any
       if (res.answers) {
+        const init: Record<number, any> = {};
         res.answers.forEach((a: any) => {
-          if (
-            a.question_type === 'short_answer' ||
-            a.question_type === 'essay' ||
-            a.question_type === 'date' ||
-            a.question_type === 'time'
-          ) {
-            initialAnswers[a.question_id] = a.answer_text || '';
+          if (a.question_type === 'short_answer' || a.question_type === 'essay' || a.question_type === 'date' || a.question_type === 'time' || a.question_type === 'datetime' || a.question_type === 'password') {
+            init[a.question_id] = a.answer_text || '';
           } else if (a.question_type === 'file_upload') {
-            initialAnswers[a.question_id] = a.answer_file || '';
+            if (a.answer_file) init[a.question_id] = a.answer_file;
           } else {
-            initialAnswers[a.question_id] = a.selected_option_ids || [];
+            init[a.question_id] = a.selected_option_ids || [];
           }
         });
+        setAnswers(init);
       }
-      setAnswers(initialAnswers);
-
-      // Initialize Timer Countdown right after starting quiz
-      const rawLimit = res.timer_seconds || res.expires_in || publicForm?.timer_seconds || publicForm?.time_limit || publicForm?.settings?.time_limit;
-      if (rawLimit) {
-        const sec = typeof rawLimit === 'number' && rawLimit < 500 ? rawLimit * 60 : Number(rawLimit);
-        setTimeLeft(sec);
-      } else if (res.expires_at) {
-        const diffSec = Math.max(0, Math.floor((new Date(res.expires_at).getTime() - Date.now()) / 1000));
-        setTimeLeft(diffSec);
-      } else {
-        // Default timer if form specifies countdown or default 98 mins
-        setTimeLeft(5877);
-      }
-
-      setStep('answering');
+      answeringRef.current = true;
     } catch (e: any) {
-      showAlert({
-        type: 'error',
-        title: language === 'ID' ? 'Gagal Memulai Kuis' : 'Failed to Start Quiz',
-        message: e.message ||
-          (language === 'ID'
-            ? 'Terjadi kesalahan saat membuat sesi kuis.'
-            : 'An error occurred while creating quiz session.'),
-      });
+      const msg = String(e.message || '');
+      if (msg.toLowerCase().includes('already submitted') || msg.includes('409')) {
+        setAlreadySubmitted(true);
+        setCanStartInfo({ can_start: false, reason: 'already_submitted' });
+      } else {
+        showAlert({ type: 'error', title: language === 'ID' ? 'Gagal memulai' : 'Failed to start', message: e.message });
+      }
     } finally {
       setStarting(false);
     }
   };
 
-  // Timer Countdown Effect
-  useEffect(() => {
-    if (step !== 'answering' || timeLeft === null) return;
-    if (timeLeft <= 0) {
-      handleSubmit();
-      return;
-    }
-    const timerInterval = setInterval(() => {
-      setTimeLeft((prev) => (prev !== null && prev > 0 ? prev - 1 : 0));
-    }, 1000);
-
-    return () => clearInterval(timerInterval);
-  }, [step, timeLeft]);
-
-  const formatTimer = (seconds: number | null) => {
-    if (seconds === null) return null;
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  const handleSelectOption = async (questionId: number, optionId: number, isCheckbox: boolean) => {
+    const q = questions.find((x) => x.id === questionId);
+    if (!q) return;
+    let next: any;
+    setAnswers((prev) => {
+      const cur = prev[questionId];
+      if (q.type === 'multiple_choice' || q.type === 'dropdown') {
+        const curArr: number[] = Array.isArray(cur) ? cur : [];
+        next = curArr[0] === optionId ? [] : [optionId];
+      } else if (q.type === 'checkbox') {
+        const curArr: number[] = Array.isArray(cur) ? cur : [];
+        next = curArr.includes(optionId) ? curArr.filter((id) => id !== optionId) : [...curArr, optionId];
+      } else {
+        next = cur;
+      }
+      return { ...prev, [questionId]: next };
+    });
+    // Autosave debounce
+    const sid = submissionIdRef.current;
+    if (!sid) return;
+    try {
+      await autosaveAnswer(sid, { question_id: questionId, option_ids: next });
+    } catch {}
   };
 
-  const handleSelectOption = useCallback((questionId: number, optionId: number, isCheckbox: boolean) => {
-    if (step === 'submitted') return;
-
-    setAnswers((prev) => {
-      let newOptionIds: number[] = [];
-      const currentAns = prev[questionId];
-
-      if (isCheckbox) {
-        const prevIds: number[] = Array.isArray(currentAns) ? currentAns : [];
-        newOptionIds = prevIds.includes(optionId) ? prevIds.filter((id) => id !== optionId) : [...prevIds, optionId];
-      } else {
-        newOptionIds = [optionId];
-      }
-
-      // Non-blocking autosave API call
-      if (submissionId) {
-        autosaveAnswer(submissionId, { question_id: questionId, option_ids: newOptionIds }).catch((err) =>
-          console.error('Autosave error', err)
-        );
-      }
-
-      return { ...prev, [questionId]: newOptionIds };
-    });
-  }, [step, submissionId]);
-
-  const handleTextChange = useCallback((questionId: number, text: string) => {
-    setAnswers((prev) => {
-      // Non-blocking autosave API call
-      if (submissionId) {
-        const qObj = (questions || []).find((q: any) => q.id === questionId);
-        const qType = qObj?.type || qObj?.question_type;
-        let shouldAutosave = true;
-
-        if (qType === 'date' && text.trim().length > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(text.trim())) {
-          shouldAutosave = false;
-        } else if (qType === 'time' && text.trim().length > 0 && !/^\d{2}:\d{2}$/.test(text.trim())) {
-          shouldAutosave = false;
-        }
-
-        if (shouldAutosave) {
-          autosaveAnswer(submissionId, { question_id: questionId, answer_text: text }).catch((err) =>
-            console.error('Autosave error', err)
-          );
-        }
-      }
-      return { ...prev, [questionId]: text };
-    });
-  }, [submissionId, questions]);
-
-  const handlePickAnswerFile = useCallback(async (questionId: number) => {
-    if (!submissionId) return;
+  const handleTextChange = async (questionId: number, text: string) => {
+    setAnswers((prev) => ({ ...prev, [questionId]: text }));
+    const sid = submissionIdRef.current;
+    if (!sid) return;
     try {
-      const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
-        allowsEditing: false,
-        quality: 0.8,
-      });
+      await autosaveAnswer(sid, { question_id: questionId, answer_text: text });
+    } catch {}
+  };
 
-      if (!res.canceled && res.assets && res.assets.length > 0) {
-        const fileUri = res.assets[0].uri;
-        setFileUploading((prev) => ({ ...prev, [questionId]: true }));
-        const upRes = await uploadAnswerFile(submissionId, questionId, fileUri);
-        const savedUrl = upRes.url || upRes.answer_file || fileUri;
-        setAnswers((prev) => ({ ...prev, [questionId]: savedUrl }));
-      }
+  const handlePickFile = async (questionId: number) => {
+    const sid = submissionIdRef.current;
+    if (!sid) return;
+    setFileUploading((p) => ({ ...p, [questionId]: true }));
+    try {
+      const { default: ImgPicker } = await import('expo-image-picker');
+      const res = await ImgPicker.launchImageLibraryAsync({ mediaTypes: ImgPicker.MediaTypeOptions.All, quality: 0.8 });
+      if (res.canceled) return;
+      const asset = res.assets[0];
+      const uri = asset.uri;
+      const mime = asset.mimeType || 'image/jpeg';
+      await uploadAnswerFile(sid, questionId, uri, mime);
+      setAnswers((p) => ({ ...p, [questionId]: uri }));
+      showAlert({ type: 'success', title: 'File terupload', message: 'File jawaban berhasil diupload.' });
     } catch (e: any) {
-      showAlert({
-        type: 'error',
-        title: language === 'ID' ? 'Gagal Unggah' : 'Upload Failed',
-        message: e.message || (language === 'ID' ? 'Gagal mengunggah file jawaban.' : 'Failed to upload answer file.'),
-      });
+      showAlert({ type: 'error', title: 'Upload gagal', message: e.message });
     } finally {
-      setFileUploading((prev) => ({ ...prev, [questionId]: false }));
+      setFileUploading((p) => ({ ...p, [questionId]: false }));
     }
-  }, [submissionId, language, showAlert]);
+  };
 
-  const handleZoomQuestion = useCallback((questionToZoom: any) => {
-    setZoomQuestionTarget(questionToZoom);
-  }, []);
+  // Password gate helper — untuk quiz & card: semua password wajib benar (OPTIONAL token hahay pun block Next/section)
+  const checkPasswords = async (qs: any[]): Promise<number[]> => {
+    const targets = qs.filter((q) => String(q.type || q.question_type || '').toLowerCase() === 'password');
+    if (!targets.length) return [];
+    const sid = submissionIdRef.current;
+    if (!sid) return targets.map((q: any) => q.id);
+    const { checkPassword } = await import('../services/api_service');
+    const wrong: number[] = [];
+    for (const q of targets) {
+      const ans = String(answers[q.id] ?? '');
+      if (!ans.trim()) { wrong.push(q.id); continue; }
+      try {
+        const r: any = await checkPassword(sid, q.id, ans);
+        if (!r.valid) wrong.push(q.id);
+      } catch { wrong.push(q.id); }
+    }
+    return wrong;
+  };
 
-  const getUnansweredCount = () => {
-    let count = 0;
-    questions.forEach((q) => {
-      if (q.is_required !== false) {
-        const val = answers[q.id];
-        const isFilled = Array.isArray(val) ? val.length > 0 : !!val && String(val).trim().length > 0;
-        if (!isFilled) count++;
-      }
+  // Card: pecah questions per section (mirip web formPages)
+  const cardPages = (() => {
+    if (isQuizStyle || !questions.length) return [];
+    if (!sections.length) return [{ key: 'all', title: null, questions }];
+    const bySec: Record<string, any[]> = {};
+    const noSec: any[] = [];
+    for (const q of questions) {
+      if (q.section_id != null && sections.some((s: any) => s.id === q.section_id)) {
+        const k = String(q.section_id);
+        (bySec[k] ||= []).push(q);
+      } else noSec.push(q);
+    }
+    const pages: any[] = [];
+    for (const sec of sections) {
+      const qs = bySec[String(sec.id)] || [];
+      if (qs.length) pages.push({ key: String(sec.id), title: sec.title, questions: qs });
+    }
+    if (noSec.length) pages.push({ key: 'no-section', title: null, questions: noSec });
+    // fallback jika semua soal tidak terpetakan (mis. section baru)
+    if (!pages.length) return [{ key: 'all', title: null, questions }];
+    return pages;
+  })();
+
+  const currentCardPage = cardPages[currentSectionIdx] || cardPages[0];
+  const isLastCardPage = currentSectionIdx >= cardPages.length - 1;
+
+  const handleNextSection = async () => {
+    if (!currentCardPage) return;
+    setPwChecking(true);
+    const wrong = await checkPasswords(currentCardPage.questions);
+    setPwChecking(false);
+    if (wrong.length) {
+      const errs: Record<number, boolean> = {};
+      wrong.forEach((id) => (errs[id] = true));
+      setPwWrong((p) => ({ ...p, ...errs }));
+      showAlert({
+        type: 'warning',
+        title: language === 'ID' ? 'Password salah' : 'Wrong password',
+        message: language === 'ID' ? 'Password tidak cocok — tidak bisa lanjut ke section berikutnya.' : 'Wrong password — cannot go to next section.',
+      });
+      return;
+    }
+    setPwWrong((p) => {
+      const n = { ...p };
+      currentCardPage.questions.forEach((q: any) => delete n[q.id]);
+      return n;
     });
-    return count;
+    if (currentSectionIdx < cardPages.length - 1) setCurrentSectionIdx((i) => i + 1);
+  };
+
+  const handlePrevSection = () => {
+    if (currentSectionIdx > 0) setCurrentSectionIdx((i) => i - 1);
+  };
+
+  // Reset pwWrong when typing password (card)
+  const handleCardTextChange = async (questionId: number, text: string) => {
+    if (pwWrong[questionId]) setPwWrong((p) => { const n = { ...p }; delete n[questionId]; return n; });
+    await handleTextChange(questionId, text);
+  };
+
+  const handleAutoSubmit = async () => {
+    const sid = submissionIdRef.current;
+    if (!sid) return;
+    answeringRef.current = false;
+    try {
+      await finalizeSubmission(sid);
+    } catch {}
+    setFetching(false);
+    router.replace({ pathname: '/(tabs)/home' } as any);
   };
 
   const handleSubmit = async () => {
-    if (!submissionId) return;
-    const unansweredCount = getUnansweredCount();
-    if (unansweredCount > 0) {
+    const sid = submissionIdRef.current;
+    if (!sid) return;
+    // Validate required
+    for (const q of questions) {
+      const isRequired = q.is_required !== false;
+      if (!isRequired) continue;
+      const val = answers[q.id];
+      const has =
+        q.type === 'file_upload'
+          ? !!val
+          : Array.isArray(val)
+          ? val.length > 0
+          : !!val && String(val).trim().length > 0;
+      if (!has) {
+        showAlert({
+          type: 'warning',
+          title: language === 'ID' ? 'Soal wajib belum diisi' : 'Required missing',
+          message: `${language === 'ID' ? 'Soal' : 'Question'} "${(q.question_text || '').replace(/<[^>]*>/g, '').slice(0, 40)}" ${language === 'ID' ? 'wajib diisi.' : 'is required.'}`,
+        });
+        // arahkan ke section yang mengandung soal kosong (card)
+        if (!isQuizStyle && cardPages.length) {
+          const idx = cardPages.findIndex((p: any) => p.questions.some((qq: any) => qq.id === q.id));
+          if (idx >= 0 && idx !== currentSectionIdx) setCurrentSectionIdx(idx);
+        }
+        return;
+      }
+    }
+    // Gate password on submit: semua password required harus valid (baik quiz maupun card)
+    setPwChecking(true);
+    const wrongAll = await checkPasswords(questions);
+    setPwChecking(false);
+    if (wrongAll.length) {
+      const errs: Record<number, boolean> = {};
+      wrongAll.forEach((id) => (errs[id] = true));
+      setPwWrong((p) => ({ ...p, ...errs }));
       showAlert({
         type: 'warning',
-        title: language === 'ID' ? 'Belum Selesai' : 'Incomplete',
-        message: language === 'ID'
-          ? `Masih ada ${unansweredCount} soal wajib yang belum dijawab.`
-          : `There are still ${unansweredCount} required question(s) unanswered.`,
+        title: language === 'ID' ? 'Password salah' : 'Wrong password',
+        message: language === 'ID' ? 'Password tidak cocok — periksa kembali sebelum submit.' : 'Wrong password — check before submit.',
       });
+      if (!isQuizStyle && cardPages.length) {
+        const idx = cardPages.findIndex((p: any) => p.questions.some((qq: any) => wrongAll.includes(qq.id)));
+        if (idx >= 0) setCurrentSectionIdx(idx);
+      }
       return;
     }
+    setPwWrong({});
     setSubmitting(true);
     try {
-      const res = await finalizeSubmission(submissionId);
-      setResultData(res);
-      setStep('submitted');
+      const res = await finalizeSubmission(sid);
+      answeringRef.current = false;
+      // Show submitted step briefly then go home
+      setSubmission((prev: any) => ({ ...prev, result: res }));
+      // Navigate to success view
+      // Keep answering false, show QuizSubmittedStep
+      setQuestions([]); // trigger submitted view
     } catch (e: any) {
-      showAlert({
-        type: 'error',
-        title: language === 'ID' ? 'Gagal Mengirim' : 'Submission Failed',
-        message: e.message || (language === 'ID' ? 'Terjadi kesalahan saat mengirim jawaban.' : 'An error occurred while submitting answers.'),
-      });
+      if (e.message?.includes('waktu') || e.message?.includes('expired')) {
+        answeringRef.current = false;
+        router.replace({ pathname: '/(tabs)/home' } as any);
+      } else {
+        showAlert({ type: 'error', title: 'Gagal submit', message: e.message });
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Section Pagination States
-  const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
-  const [validationErrors, setValidationErrors] = useState<Record<number, boolean>>({});
-
-  // Group questions into section pages (matching web AnswerQuiz.jsx)
-  const formPages = React.useMemo(() => {
-    if (!questions || questions.length === 0) return [];
-
-    const ordered: any[] = [];
-    const seen = new Set<number>();
-
-    // 1. Order questions by section if sections array exists
-    if (sections && sections.length > 0) {
-      sections.forEach((s) => {
-        questions
-          .filter((q) => q.section_id === s.id && !seen.has(q.id))
-          .forEach((q) => {
-            ordered.push(q);
-            seen.add(q.id);
-          });
-      });
-    }
-
-    // 2. Add remaining questions
-    questions
-      .filter((q) => !seen.has(q.id))
-      .forEach((q) => {
-        ordered.push(q);
-        seen.add(q.id);
-      });
-
-    // 3. Group questions into pages by section_id
-    const pages: { key: any; title: string | null; section: any; questions: any[] }[] = [];
-    ordered.forEach((q) => {
-      const secObj = (sections || []).find((s) => s.id === q.section_id);
-      const title = secObj?.title || null;
-      const key = q.section_id ?? 'none';
-
-      const last = pages[pages.length - 1];
-      if (last && last.key === key) {
-        last.questions.push(q);
-      } else {
-        pages.push({ key, title, section: secObj || null, questions: [q] });
-      }
-    });
-
-    return pages.length > 0 ? pages : [{ key: 'none', title: null, section: null, questions: ordered }];
-  }, [questions, sections]);
-
-  const currentPage = formPages[currentSectionIdx] || formPages[0] || { key: 'none', title: null, section: null, questions: [] };
-
-  const isQuestionAnswered = (q: any, val: any) => {
-    if (q?.type === 'file_upload') return !!val;
-    if (Array.isArray(val)) return val.length > 0;
-    return !!val && String(val).trim().length > 0;
-  };
-
-  const handleNextSection = () => {
-    if (!currentPage) return;
-
-    // Check missing required questions in current section page
-    const missing = (currentPage.questions || []).filter(
-      (q: any) => q.is_required !== false && !isQuestionAnswered(q, answers[q.id])
-    );
-
-    if (missing.length > 0) {
-      const errs: Record<number, boolean> = {};
-      missing.forEach((q: any) => {
-        errs[q.id] = true;
-      });
-      setValidationErrors((prev) => ({ ...prev, ...errs }));
-      showAlert({
-        type: 'warning',
-        title: language === 'ID' ? 'Soal Wajib Belum Diisi' : 'Required Question Missing',
-        message: language === 'ID'
-          ? 'Lengkapi semua soal wajib di bagian ini sebelum berpindah halaman.'
-          : 'Please complete all required questions in this section before proceeding.',
-      });
-      return;
-    }
-
-    setValidationErrors({});
-    if (currentSectionIdx < formPages.length - 1) {
-      setDirection(1);
-      setCurrentSectionIdx((prev) => prev + 1);
-      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-    } else {
-      handleSubmit();
-    }
-  };
-
-  const handlePrevSection = () => {
-    if (currentSectionIdx > 0) {
-      setDirection(-1);
-      setCurrentSectionIdx((prev) => prev - 1);
-      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-    }
-  };
-
-  // Smooth Slide & Fade-in AFTER new section has mounted + Progressive Question Batching
-  useEffect(() => {
-    setVisibleLimit(6);
-
-    translateXAnim.setValue(direction * 40);
-    fadeAnim.setValue(0.3);
-
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateXAnim, {
-        toValue: 0,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Render remaining questions in section after transition starts
-    const timer = setTimeout(() => {
-      setVisibleLimit(999);
-    }, 60);
-
-    return () => clearTimeout(timer);
-  }, [currentSectionIdx, direction, fadeAnim, translateXAnim]);
-
-  // Check unanswered count for current section page
-  const currentSectionUnansweredCount = (currentPage?.questions || []).filter(
-    (q: any) => q.is_required !== false && !isQuestionAnswered(q, answers[q.id])
-  ).length;
-
-  const themeColor = publicForm?.theme_color || publicForm?.color || publicForm?.themeColor || publicForm?.settings?.theme_color;
-  const bannerPath = publicForm?.banner_path || null;
-
-  // ── RENDER STATES ─────────────────────────────────
-
-  if (step === 'loading') {
+  if (loading) {
     return (
-      <SafeAreaView style={[styles.centerScreen, { backgroundColor: colors.bg }]}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
+      <View style={[styles.center, { backgroundColor: colors.bg }]}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, { color: colors.textSub, fontSize: 14 * fontSizeScale }]}>
-          {language === 'ID' ? 'Memuat kuis...' : 'Loading quiz...'}
-        </Text>
-      </SafeAreaView>
+      </View>
     );
   }
 
-  if (step === 'error') {
+  if (!publicForm) {
     return (
-      <SafeAreaView style={[styles.centerScreen, { backgroundColor: colors.bg }]}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-        <View style={[styles.errorCircle, { backgroundColor: isDark ? '#7F1D1D' : '#FEE2E2' }]}>
-          <Ionicons name="alert-circle-outline" size={54} color="#EF4444" />
-        </View>
-        <Text style={[styles.errorTitle, { color: colors.text, fontSize: 20 * fontSizeScale }]}>
-          {language === 'ID' ? 'Kuis Tidak Ditemukan' : 'Quiz Not Found'}
-        </Text>
-        <Text style={[styles.errorDesc, { color: colors.textSub, fontSize: 14 * fontSizeScale }]}>{errorMessage}</Text>
-        <TouchableOpacity style={[styles.backHomeBtn, { backgroundColor: colors.primary }]} onPress={() => router.replace('/(tabs)/home')}>
-          <Ionicons name="arrow-back" size={18} color="#FFF" />
-          <Text style={[styles.backHomeBtnText, { fontSize: 15 * fontSizeScale }]}>
-            {language === 'ID' ? 'Kembali ke Dashboard' : 'Back to Dashboard'}
-          </Text>
+      <SafeAreaView style={[styles.center, { backgroundColor: colors.bg }]}>
+        <StatusBar style="dark" />
+        <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>Form tidak ditemukan</Text>
+        <TouchableOpacity style={[styles.backBtn, { backgroundColor: colors.primary }]} onPress={() => router.replace('/(tabs)/home' as any)}>
+          <Text style={styles.backBtnText}>Kembali</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
-  if (step === 'landing') {
-    return <QuizLandingStep publicForm={publicForm} starting={starting} onStart={handleStartQuiz} />;
+  // Themed blocked screen — for already_submitted use Image 1 design (cyan + check)
+  if (alreadySubmitted || (canStartInfo && !canStartInfo.can_start && !canStartInfo.is_preview)) {
+    const reason = canStartInfo?.reason;
+    // already_submitted gets special themed screen matching web Image 1
+    if (alreadySubmitted || reason === 'already_submitted') {
+      const gradient = getThemeGradientColors(themeColor);
+      return (
+        <View style={{ flex: 1 }}>
+          <LinearGradient colors={gradient} style={StyleSheet.absoluteFill} />
+          <SafeAreaView style={styles.alreadyContainer}>
+            <StatusBar style="light" />
+            <View style={styles.alreadyIconCircle}>
+              <Ionicons name="checkmark-circle-outline" size={36} color="#FFF" />
+            </View>
+            <Text style={styles.alreadyTitle}>You have already submitted this form.</Text>
+            <Text style={styles.alreadySub}>You can only submit this form once.</Text>
+            <TouchableOpacity style={styles.alreadyBack} onPress={() => router.replace('/(tabs)/home' as any)} activeOpacity={0.9}>
+              <Ionicons name="arrow-back" size={18} color={themeColor} />
+              <Text style={[styles.alreadyBackText, { color: themeColor }]}>{language === 'ID' ? 'Kembali' : 'Back to home'}</Text>
+            </TouchableOpacity>
+          </SafeAreaView>
+        </View>
+      );
+    }
+    const map: any = {
+      draft: language === 'ID' ? 'Form masih draft — belum dipublikasikan.' : 'Form is still draft.',
+      closed: language === 'ID' ? 'Form sudah ditutup.' : 'Form is closed.',
+      not_started: language === 'ID' ? 'Form belum dibuka.' : 'Form has not started yet.',
+    };
+    return (
+      <SafeAreaView style={[styles.center, { backgroundColor: colors.bg }]}>
+        <Ionicons name="lock-closed-outline" size={48} color={colors.textMuted} />
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>{map[reason] || 'Tidak dapat memulai'}</Text>
+        <TouchableOpacity style={[styles.backBtn, { backgroundColor: colors.primary }]} onPress={() => router.replace('/(tabs)/home' as any)}>
+          <Text style={styles.backBtnText}>{language === 'ID' ? 'Kembali' : 'Back'}</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
   }
 
-  if (step === 'submitted') {
-    return <QuizSubmittedStep resultData={resultData} />;
+  // Submitted view
+  if (submission?.result) {
+    return <QuizSubmittedStep resultData={submission.result} />;
   }
 
-  const formattedTimerStr = formatTimer(timeLeft);
-  const displayStyle = publicForm?.display_style || 'card';
-
-  if (displayStyle === 'quiz') {
+  // Landing step
+  if (!submission) {
     return (
       <View style={{ flex: 1 }}>
-        {isLocked && (
-          <LockOverlay
-            onRefresh={handleRefreshLockStatus}
-            isChecking={isCheckingLock}
-            reason={lockReason}
-            language={language}
-          />
+        <QuizLandingStep publicForm={publicForm} starting={starting} onStart={handleStart} />
+        {showIdentityForm && (
+          <View style={[styles.identityBar, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+            <Text style={[styles.identityLabel, { color: colors.text }]}>{language === 'ID' ? 'Nama (wajib)' : 'Name (required)'}</Text>
+            <TextInput
+              style={[styles.identityInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+              placeholder={language === 'ID' ? 'Masukkan nama' : 'Enter name'}
+              placeholderTextColor={colors.textMuted}
+              value={respondentName}
+              onChangeText={setRespondentName}
+            />
+            <Text style={[styles.identityLabel, { color: colors.text, marginTop: 10 }]}>Email (opsional)</Text>
+            <TextInput
+              style={[styles.identityInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+              placeholder="email@example.com"
+              placeholderTextColor={colors.textMuted}
+              value={respondentEmail}
+              onChangeText={setRespondentEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
         )}
+      </View>
+    );
+  }
+
+  // Answering
+  const formattedTimer = formatTimer(timeLeft);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: isQuizStyle ? '#0B0F19' : colors.bg }}>
+      <StatusBar style={isQuizStyle ? 'light' : 'dark'} />
+
+      {isQuizStyle ? (
         <QuizStyleAnsweringStep
           publicForm={publicForm}
           questions={questions}
           answers={answers}
           onSelectOption={handleSelectOption}
           onTextChange={handleTextChange}
-          onPickFile={handlePickAnswerFile}
+          onPickFile={handlePickFile}
           fileUploading={fileUploading}
-          formattedTimerStr={formattedTimerStr}
+          formattedTimerStr={formattedTimer}
           submitting={submitting}
           onSubmit={handleSubmit}
-          onOpenZoom={(q) => setZoomQuestionTarget(q)}
-          onCloseQuiz={() => router.replace('/(tabs)/home')}
+          onOpenZoom={setZoomQuestion}
+          onCloseQuiz={() => router.replace('/(tabs)/home' as any)}
+          submissionId={submissionIdRef.current}
         />
-        {zoomQuestionTarget && (
-          <QuestionZoomModal
-            visible={!!zoomQuestionTarget}
-            question={zoomQuestionTarget}
-            index={questions.findIndex((q) => q.id === zoomQuestionTarget.id)}
-            userAnswer={answers[zoomQuestionTarget.id]}
-            isFileUploading={!!fileUploading[zoomQuestionTarget.id]}
-            themeColor={themeColor}
-            onSelectOption={handleSelectOption}
-            onTextChange={handleTextChange}
-            onPickFile={handlePickAnswerFile}
-            onClose={() => setZoomQuestionTarget(null)}
-          />
-        )}
-      </View>
-    );
-  }
-
-  return (
-    <QuizBackground themeColor={themeColor}>
-      <SafeAreaView style={styles.answeringContainer}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
-
-        {/* Lock Overlay ketika terdeteksi keluar aplikasi / swipe bar notifikasi */}
-        {isLocked && (
-          <LockOverlay
-            onRefresh={handleRefreshLockStatus}
-            isChecking={isCheckingLock}
-            reason={lockReason}
-            language={language}
-          />
-        )}
-
-        {/* Top Header Bar */}
-        <View style={[styles.topBar, { backgroundColor: colors.cardBg, borderBottomColor: colors.inputBorder }]}>
-          <TouchableOpacity onPress={() => router.replace('/(tabs)/home')}>
-            <Ionicons name="close-outline" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <View style={{ flex: 1, marginHorizontal: 12 }}>
-            <Text style={[styles.topBarTitle, { color: colors.text, fontSize: 16 * fontSizeScale }]} numberOfLines={1}>
-              {stripHtmlTags(publicForm?.title) || (language === 'ID' ? 'Kuis' : 'Quiz')}
+      ) : (
+        <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+          <View style={[styles.formHeader, { borderBottomColor: colors.inputBorder, backgroundColor: colors.cardBg }]}>
+            <TouchableOpacity onPress={() => router.replace('/(tabs)/home' as any)} style={{ padding: 6 }}>
+              <Ionicons name="close" size={22} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.formHeaderTitle, { color: colors.text }]} numberOfLines={1}>
+              {publicForm.title?.replace(/<[^>]*>/g, '') || 'Form'}
             </Text>
-            <Text style={[styles.topBarSub, { color: colors.textSub, fontSize: 11 * fontSizeScale }]}>
-              {questions.length} {language === 'ID' ? 'SOAL' : 'QUESTIONS'}
-            </Text>
+            <View style={[styles.timerPill, { backgroundColor: timeLeft !== null && timeLeft < 60000 ? '#EF4444' : colors.inputBg }]}>
+              <Ionicons name="timer-outline" size={14} color={timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text} />
+              <Text style={[styles.timerText, { color: timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text }]}>{formattedTimer}</Text>
+            </View>
           </View>
-        </View>
 
-        {/* Scrollable Answering Container with Keyboard Avoidance & Smooth Section Animation */}
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
-        >
-          <ScrollView
-            ref={scrollViewRef}
-            style={{ flex: 1 }}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-          >
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-              <Animated.View style={{ opacity: fadeAnim, transform: [{ translateX: translateXAnim }], width: '100%', maxWidth: 640, alignSelf: 'center' }}>
-                {/* Banner Image (if present) */}
-                {bannerPath && (
-                  <Image source={{ uri: bannerPath }} style={styles.formBannerImg} resizeMode="cover" />
-                )}
-
-                {/* Quiz Title & Header Badges (Matching Web Screenshot) */}
-                <View style={styles.formHeaderRow}>
-                  <Text style={[styles.formTitleText, { color: colors.text }]}>
-                    {stripHtmlTags(publicForm?.title) || 'Quiz'}
-                  </Text>
-                  <View style={styles.formMetaBadgesRow}>
-                    {/* Timer Badge (if active) */}
-                    {formattedTimerStr && (
-                      <View style={[styles.metaPillBadge, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.7)' : '#E2E8F0' }]}>
-                        <Ionicons name="timer-outline" size={14} color={colors.text} />
-                        <Text style={[styles.metaPillText, { color: colors.text }]}>{formattedTimerStr}</Text>
-                      </View>
-                    )}
-
-                    {/* Question Count Badge */}
-                    <View style={[styles.metaPillBadge, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.7)' : '#E2E8F0' }]}>
-                      <Text style={[styles.metaPillText, { color: colors.textSub }]}>{questions.length} QUESTIONS</Text>
-                    </View>
+          <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
+            {currentCardPage && (
+              <>
+                {currentCardPage.title && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <View style={{ width: 4, height: 18, borderRadius: 2, backgroundColor: themeColor }} />
+                    <Text style={{ fontWeight: '800', fontSize: 15, color: colors.text, flex: 1 }}>{currentCardPage.title}</Text>
+                    <Text style={{ fontSize: 12, color: colors.textMuted }}>{currentSectionIdx + 1}/{cardPages.length}</Text>
                   </View>
-                </View>
-
-                {/* Section Indicator Row (Matching Web Screenshot) */}
-                {(() => {
-                  const secTitle = currentPage?.title || currentPage?.section?.title || (formPages.length > 1 ? (language === 'ID' ? `Bagian ${currentSectionIdx + 1}` : `Section ${currentSectionIdx + 1}`) : null);
-                  if (!secTitle && formPages.length <= 1) return null;
-                  return (
-                    <View style={styles.sectionHeaderRow}>
-                      <View style={[styles.sectionPillIndicator, { backgroundColor: themeColor || colors.primary }]} />
-                      <Text style={[styles.sectionTitleText, { color: colors.text }]} numberOfLines={1}>
-                        {secTitle || (language === 'ID' ? `Bagian ${currentSectionIdx + 1}` : `Section ${currentSectionIdx + 1}`)}
-                      </Text>
-                      <Text style={[styles.sectionStepText, { color: colors.textSub }]}>
-                        {currentSectionIdx + 1}/{formPages.length}
-                      </Text>
-                    </View>
-                  );
-                })()}
-
-                {/* Questions of current section page (Progressive rendering for super-fast section switching) */}
-                {(currentPage?.questions || []).slice(0, visibleLimit).map((q: any, idx: number) => {
-                  const globalIdx = questions.findIndex((item) => item.id === q.id);
-                  const qIndex = globalIdx >= 0 ? globalIdx : idx;
-
+                )}
+                {(currentCardPage.questions as any[]).map((q: any) => {
+                  const globalIdx = questions.findIndex((qq) => qq.id === q.id);
                   return (
                     <QuizQuestionCard
-                      key={q.id || idx}
+                      key={q.id}
                       question={q}
-                      index={qIndex}
+                      index={globalIdx >= 0 ? globalIdx : 0}
                       userAnswer={answers[q.id]}
                       isFileUploading={!!fileUploading[q.id]}
                       themeColor={themeColor}
-                      hasError={!!validationErrors[q.id]}
-                      onZoomQuestion={handleZoomQuestion}
+                      hasError={!!pwWrong[q.id]}
                       onSelectOption={handleSelectOption}
-                      onTextChange={handleTextChange}
-                      onPickFile={handlePickAnswerFile}
+                      onTextChange={handleCardTextChange}
+                      onPickFile={handlePickFile}
+                      onZoomQuestion={setZoomQuestion}
                     />
                   );
                 })}
-              </Animated.View>
-            </TouchableWithoutFeedback>
-          </ScrollView>
-        </KeyboardAvoidingView>
-
-        {/* Per-Question Zoom Modal (Mounted only when target is selected) */}
-        {!!zoomQuestionTarget && (
-          <QuestionZoomModal
-            visible={!!zoomQuestionTarget}
-            question={zoomQuestionTarget}
-            index={questions.findIndex((q) => q.id === zoomQuestionTarget?.id)}
-            userAnswer={zoomQuestionTarget ? answers[zoomQuestionTarget.id] : null}
-            isFileUploading={zoomQuestionTarget ? !!fileUploading[zoomQuestionTarget.id] : false}
-            themeColor={themeColor}
-            onClose={() => setZoomQuestionTarget(null)}
-            onSelectOption={handleSelectOption}
-            onTextChange={handleTextChange}
-            onPickFile={handlePickAnswerFile}
-          />
-        )}
-
-        {/* Bottom Navigation & Submit Bar */}
-        <View style={[styles.bottomBarContainer, { backgroundColor: colors.cardBg, borderTopColor: colors.inputBorder }]}>
-          {currentSectionUnansweredCount > 0 && (
-            <View style={styles.unansweredBanner}>
-              <Ionicons name="alert-circle" size={16} color="#F59E0B" />
-              <Text style={[styles.unansweredText, { fontSize: 12 * fontSizeScale }]}>
-                {language === 'ID'
-                  ? `${currentSectionUnansweredCount} soal wajib di bagian ini belum dijawab`
-                  : `${currentSectionUnansweredCount} required question(s) left in this section`}
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.bottomNavRow}>
-            {currentSectionIdx > 0 && (
-              <TouchableOpacity
-                style={[styles.prevButton, { borderColor: colors.inputBorder, backgroundColor: isDark ? 'rgba(30, 41, 59, 0.8)' : '#F1F5F9' }]}
-                onPress={handlePrevSection}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="chevron-back" size={18} color={colors.text} />
-                <Text style={[styles.prevButtonText, { color: colors.text }]}>
-                  {language === 'ID' ? 'Kembali' : 'Previous'}
-                </Text>
-              </TouchableOpacity>
+                {pwChecking && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <ActivityIndicator size="small" color={themeColor} />
+                    <Text style={{ fontSize: 12, color: colors.textMuted }}>Memverifikasi password...</Text>
+                  </View>
+                )}
+              </>
             )}
 
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                { flex: 1, backgroundColor: currentSectionUnansweredCount > 0 && currentSectionIdx === formPages.length - 1 ? '#64748B' : (themeColor || colors.primary) },
-              ]}
-              onPress={handleNextSection}
-              disabled={submitting}
-              activeOpacity={0.85}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={[styles.submitButtonText, { fontSize: 16 * fontSizeScale }]}>
-                    {currentSectionIdx < formPages.length - 1
-                      ? (language === 'ID' ? 'Lanjut' : 'Next')
-                      : (currentSectionUnansweredCount > 0
-                          ? (language === 'ID' ? 'Lengkapi Jawaban' : 'Complete Answers')
-                          : (language === 'ID' ? 'Kirim Jawaban' : 'Submit Answers'))}
-                  </Text>
-                  {currentSectionIdx < formPages.length - 1 && (
-                    <Ionicons name="chevron-forward" size={18} color="#FFF" />
-                  )}
-                </View>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+              {currentSectionIdx > 0 && (
+                <TouchableOpacity
+                  style={[styles.secondaryBtn, { borderColor: colors.cardBorder, backgroundColor: colors.cardBg }]}
+                  onPress={handlePrevSection}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="chevron-back" size={16} color={colors.text} />
+                  <Text style={[styles.secondaryBtnText, { color: colors.text }]}>Sebelumnya</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SafeAreaView>
-    </QuizBackground>
+              {!isLastCardPage ? (
+                <TouchableOpacity
+                  style={[styles.submitBtn, { flex: 1, backgroundColor: themeColor }, pwChecking && { opacity: 0.6 }]}
+                  onPress={handleNextSection}
+                  disabled={pwChecking}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.submitBtnText}>Lanjut</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#FFF" />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.submitBtn, { flex: 1, backgroundColor: themeColor }, (submitting || pwChecking) && { opacity: 0.6 }]}
+                  onPress={handleSubmit}
+                  disabled={submitting || pwChecking}
+                  activeOpacity={0.85}
+                >
+                  {submitting ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitBtnText}>{language === 'ID' ? 'Kirim Jawaban' : 'Submit'}</Text>}
+                </TouchableOpacity>
+              )}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      )}
+
+      {/* Identity was already handled on landing; no extra UI here */}
+
+      {zoomQuestion && (
+        <QuestionZoomModal
+          visible={!!zoomQuestion}
+          question={zoomQuestion}
+          index={questions.findIndex((q) => q.id === zoomQuestion.id)}
+          userAnswer={answers[zoomQuestion.id]}
+          isFileUploading={!!fileUploading[zoomQuestion.id]}
+          themeColor={themeColor}
+          onClose={() => setZoomQuestion(null)}
+          onSelectOption={handleSelectOption}
+          onTextChange={handleTextChange}
+          onPickFile={handlePickFile}
+        />
+      )}
+
+      <RestrictedWarningOverlay visible={warningVisible} countdown={warningCountdown} themeColor={themeColor} onReenter={handleReenter} />
+
+      <ViolatingLockOverlay
+        visible={lockedVisible}
+        cheatReason={cheatReason}
+        lockedAt={lockedAt || undefined}
+        onRefresh={handleCheckLockedStatus}
+        refreshing={refreshingLock}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  centerScreen: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  loadingText: { marginTop: 12, fontWeight: '600' },
-  errorCircle: { width: 90, height: 90, borderRadius: 45, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  errorTitle: { fontWeight: 'bold', marginBottom: 6 },
-  errorDesc: { textAlign: 'center', marginBottom: 24, lineHeight: 20 },
-  backHomeBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 24, borderRadius: 12 },
-  backHomeBtnText: { color: '#FFF', fontWeight: 'bold' },
-
-  answeringContainer: { flex: 1 },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 120 },
-  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
-  topBarTitle: { fontWeight: 'bold' },
-  topBarSub: { fontWeight: '700', letterSpacing: 0.8 },
-
-  formBannerImg: { width: '100%', height: 160, borderRadius: 18, marginBottom: 16 },
-  formHeaderRow: { marginBottom: 16 },
-  formTitleText: { fontSize: 22, fontWeight: 'bold', marginBottom: 8 },
-  formMetaBadgesRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  metaPillBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  timerPillBadge: { paddingHorizontal: 12, paddingVertical: 6 },
-  metaPillText: { fontSize: 12, fontWeight: '700' },
-
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    gap: 10,
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
+  emptyTitle: { fontSize: 16, fontWeight: '700', textAlign: 'center', marginTop: 8 },
+  backBtn: { marginTop: 12, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12 },
+  backBtnText: { color: '#FFF', fontWeight: '700' },
+  alreadyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
+  alreadyIconCircle: { width: 72, height: 72, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center', marginBottom: 22 },
+  alreadyTitle: { color: '#FFF', fontSize: 18, fontWeight: '800', textAlign: 'center', lineHeight: 24 },
+  alreadySub: { color: 'rgba(255,255,255,0.82)', fontSize: 13, textAlign: 'center', marginTop: 8 },
+  alreadyBack: { marginTop: 24, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 24 },
+  alreadyBackText: { fontWeight: '800', fontSize: 14 },
+  identityBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    borderTopWidth: 1,
   },
-  sectionPillIndicator: {
-    width: 4,
-    height: 22,
-    borderRadius: 2,
-  },
-  sectionTitleText: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  sectionStepText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-
-  bottomBarContainer: { padding: 16, borderTopWidth: 1, gap: 10 },
-  bottomNavRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  prevButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 18,
-    paddingVertical: 15,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  prevButtonText: { fontWeight: '700', fontSize: 15 },
-  unansweredBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  unansweredText: { color: '#F59E0B', fontWeight: 'bold' },
-  submitButton: { paddingVertical: 16, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  submitButtonText: { color: '#FFF', fontWeight: 'bold' },
+  identityLabel: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
+  identityInput: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14 },
+  formHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  formHeaderTitle: { flex: 1, fontWeight: '700', fontSize: 14, textAlign: 'center', marginHorizontal: 10 },
+  timerPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  timerText: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] as any },
+  formScroll: { padding: 16, paddingBottom: 32 },
+  submitBtn: { marginTop: 12, paddingVertical: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  submitBtnText: { color: '#FFF', fontWeight: '800', fontSize: 16 },
+  secondaryBtn: { flex: 1, paddingVertical: 16, borderRadius: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderWidth: 1 },
+  secondaryBtnText: { fontWeight: '700', fontSize: 15 },
 });

@@ -423,17 +423,50 @@ export async function autosaveAnswer(
   });
 }
 
+export async function checkPassword(
+  submissionId: string | number,
+  questionId: string | number,
+  answer: string
+) {
+  return fetchWithAuth(`/submissions/${submissionId}/questions/${questionId}/check-password`, {
+    method: 'POST',
+    body: JSON.stringify({ answer }),
+  });
+}
+
 export async function lockSubmission(submissionId: string | number, reason?: string) {
   if (!submissionId || submissionId === 'null' || submissionId === 'undefined') {
     return null;
   }
+  const payload = { reason: reason || 'window-blur' };
+  // 1) coba endpoint /lock terbaru (backend lokal sudah ada)
   try {
     return await fetchWithAuth(`/submissions/${submissionId}/lock`, {
       method: 'POST',
-      body: JSON.stringify({ reason: reason || 'Keluar dari aplikasi (App background/inactive)' }),
+      body: JSON.stringify(payload),
     });
   } catch (err: any) {
-    console.warn('[LOCK] Server lock status:', err?.message || err);
+    const msg = String(err?.message || '');
+    // 2) fallback untuk backend deploy lama yang belum punya /lock: pakai /tab-exit
+    //    tab-exit butuh 3x untuk jadi locked, jadi panggil sampai locked supaya
+    //    management web (Image 3) langsung lihat status locked + cheat_reason window-blur
+    const isNotFound = msg.includes('Not Found') || msg.toLowerCase().includes('not found');
+    if (isNotFound) {
+      try {
+        let last: any = null;
+        for (let i = 0; i < 3; i++) {
+          last = await fetchWithAuth(`/submissions/${submissionId}/tab-exit`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
+          if (last?.status === 'locked' || last?.warnings_left === 0) break;
+        }
+        return last;
+      } catch {
+        return null;
+      }
+    }
+    // error lain (mis. sudah locked 409) -> jangan spam LogBox, silent
     return null;
   }
 }
