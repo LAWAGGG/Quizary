@@ -26,7 +26,7 @@ def distribute_quiz_points(form_id: int, db, fixed_ids: set[int] | None = None) 
             Question.form_id == form_id,
             Question.is_scored.is_(True),
             Question.is_deleted.is_(False),
-            Question.type.notin_([QuestionType.essay, QuestionType.date, QuestionType.time, QuestionType.file_upload]),
+            Question.type.notin_([QuestionType.essay, QuestionType.date, QuestionType.time, QuestionType.datetime, QuestionType.file_upload, QuestionType.dropdown]),
         )
         .order_by(Question.order_index, Question.id)
         .all()

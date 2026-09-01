@@ -83,7 +83,11 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       return false
     })
 
-    const normalize = (html) => (html === '<p><br></p>' ? '' : html)
+    const normalize = (html) => {
+      if (!html || html === '<p><br></p>') return ''
+      // buang chrome <select class="ql-ui"> — bukan konten
+      return html.replace(/<select[^>]*class="ql-ui"[^>]*>[\s\S]*?<\/select>/gi, '')
+    }
 
     if (value) quill.clipboard.dangerouslyPasteHTML(value)
     quill.on('text-change', () => {

@@ -27,17 +27,20 @@ const TYPE_LABELS = {
   password: 'Password',
   date: 'Date',
   time: 'Time',
+  datetime: 'Datetime',
   file_upload: 'File Upload',
 }
 
-const TYPE_OPTIONS = ['multiple_choice', 'checkbox', 'dropdown', 'short_answer', 'essay', 'password', 'date', 'time', 'file_upload']
+const TYPE_OPTIONS = ['multiple_choice', 'checkbox', 'dropdown', 'short_answer', 'essay', 'password', 'date', 'time', 'datetime', 'file_upload']
 const OPTION_TYPES = ['multiple_choice', 'checkbox', 'dropdown']
-const NO_GRADE_TYPES = ['essay', 'date', 'time', 'file_upload']
+const CORRECT_OPTION_TYPES = ['multiple_choice', 'checkbox']
+const NO_GRADE_TYPES = ['essay', 'date', 'time', 'datetime', 'file_upload', 'dropdown']
 
 const TYPE_HINTS = {
-  dropdown: 'Respondent selects one answer from a dropdown list.',
+  dropdown: 'Respondent selects one answer from a dropdown list (no correct answer).',
   date: 'Respondent selects a date (YYYY-MM-DD).',
   time: 'Respondent selects a time (HH:MM).',
+  datetime: 'Respondent selects date and time (YYYY-MM-DD HH:MM).',
   file_upload: 'Respondent uploads a file (pdf, doc, xls, ppt, txt, csv, image, zip).',
 }
 
@@ -154,7 +157,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
 
   const setOption = (i, field, value) => {
     setForm((prev) => {
-      if (field === 'is_correct' && (prev.type === 'multiple_choice' || prev.type === 'dropdown')) {
+      if (field === 'is_correct' && prev.type === 'multiple_choice') {
         return { ...prev, options: prev.options.map((o, idx) => ({ ...o, is_correct: idx === i && value })) }
       }
       const opts = prev.options.map((o, idx) => (idx !== i ? o : { ...o, [field]: value }))
@@ -305,7 +308,9 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                 exit={{ opacity: 0, height: 0 }}
                 className="flex items-center gap-2.5"
               >
-                {form.type === 'checkbox' ? (
+                {form.type === 'dropdown' ? (
+                  <span className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-ink-800 text-gray-500 dark:text-gray-400 flex items-center justify-center text-xs font-bold shrink-0">{i + 1}</span>
+                ) : form.type === 'checkbox' ? (
                   <button
                     type="button"
                     onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
@@ -380,7 +385,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
               </motion.div>
             ))}
           </div>
-          {needsOptions && form.options.length > 0 && !hasCorrect && isQuiz && form.is_scored && (
+          {needsOptions && form.options.length > 0 && !hasCorrect && isQuiz && form.is_scored && CORRECT_OPTION_TYPES.includes(form.type) && (
             <p className="text-xs text-warn mt-2">Mark at least one option as correct.</p>
           )}
           {optionsErr && optionsMsg && (
@@ -454,7 +459,9 @@ function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected,
         <div className="space-y-1.5">
           {question.options.map((opt, i) => (
             <div key={opt.id} className="flex items-center gap-2.5">
-              {question.type === 'checkbox' ? (
+              {question.type === 'dropdown' ? (
+                <span className="w-6 h-6 rounded-md bg-gray-100 dark:bg-ink-800 text-gray-500 dark:text-gray-400 flex items-center justify-center text-[10px] font-bold shrink-0">{i + 1}</span>
+              ) : question.type === 'checkbox' ? (
                 <span className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 ${opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 text-transparent'}`}>
                   {opt.is_correct && <Check className="w-3 h-3" strokeWidth={3.5} />}
                 </span>
@@ -463,7 +470,7 @@ function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected,
                   {opt.is_correct ? <Check className="w-3 h-3" /> : LETTERS[i % LETTERS.length]}
                 </span>
               )}
-              <span className={`text-sm ${opt.is_correct ? 'text-correct font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
+              <span className={`text-sm ${opt.is_correct && question.type !== 'dropdown' ? 'text-correct font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
                 <RichText html={opt.option_text} className="rich-text" />
               </span>
               {opt.image?.path && (
@@ -1020,7 +1027,7 @@ export default function QuestionBuilder() {
         ? data.options.filter((o) => o.option_text.trim()).map((o) => ({
           ...(o.id ? { id: o.id } : {}),
           option_text: o.option_text,
-          is_correct: o.is_correct,
+          is_correct: data.type === 'dropdown' ? false : !!o.is_correct,
         }))
         : [],
     }

@@ -254,13 +254,25 @@ export default function StandaloneQuizScreen() {
     setAnswers((prev) => {
       // Non-blocking autosave API call
       if (submissionId) {
-        autosaveAnswer(submissionId, { question_id: questionId, answer_text: text }).catch((err) =>
-          console.error('Autosave error', err)
-        );
+        const qObj = (questions || []).find((q: any) => q.id === questionId);
+        const qType = qObj?.type || qObj?.question_type;
+        let shouldAutosave = true;
+
+        if (qType === 'date' && text.trim().length > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(text.trim())) {
+          shouldAutosave = false;
+        } else if (qType === 'time' && text.trim().length > 0 && !/^\d{2}:\d{2}$/.test(text.trim())) {
+          shouldAutosave = false;
+        }
+
+        if (shouldAutosave) {
+          autosaveAnswer(submissionId, { question_id: questionId, answer_text: text }).catch((err) =>
+            console.error('Autosave error', err)
+          );
+        }
       }
       return { ...prev, [questionId]: text };
     });
-  }, [submissionId]);
+  }, [submissionId, questions]);
 
   const handlePickAnswerFile = useCallback(async (questionId: number) => {
     if (!submissionId) return;

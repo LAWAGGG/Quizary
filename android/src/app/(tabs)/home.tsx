@@ -33,8 +33,7 @@ export default function HomeScreen() {
       ]);
       if (subRes) {
         const list = Array.isArray(subRes) ? subRes : subRes.data || [];
-        const completedList = list.filter((item: any) => item.status !== 'in_progress');
-        setSubmissions(completedList);
+        setSubmissions(list);
       }
       if (userRes) setUser(userRes);
     } catch (e) {

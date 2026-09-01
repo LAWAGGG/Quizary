@@ -13,15 +13,18 @@ import {
   TouchableWithoutFeedback,
   TextInput,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAppAlert } from '../../context/AlertContext';
 import { RichTextRenderer, stripHtmlTags } from '../RichTextRenderer';
 import { getThemeGradientColors } from './QuizBackground';
+import { extractImgUrl } from './QuizQuestionCard';
 
 interface QuizStyleAnsweringStepProps {
   publicForm: any;
@@ -62,6 +65,78 @@ export function QuizStyleAnsweringStep({
   const [reviewed, setReviewed] = useState<Record<number, boolean>>({});
   const [showMapModal, setShowMapModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+
+  const [showPicker, setShowPicker] = useState<{ qId: number; mode: 'date' | 'time' } | null>(null);
+  const [pickerDate, setPickerDate] = useState<Date>(new Date());
+
+  const openPicker = (qId: number, mode: 'date' | 'time') => {
+    const currentVal = answers[qId];
+    let d = new Date();
+    if (typeof currentVal === 'string' && currentVal.trim().length > 0) {
+      if (mode === 'date') {
+        const parts = currentVal.trim().split('-');
+        if (parts.length === 3) {
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1;
+          const day = parseInt(parts[2], 10);
+          if (!isNaN(y) && !isNaN(m) && !isNaN(day)) {
+            d = new Date(y, m, day);
+          }
+        }
+      } else if (mode === 'time') {
+        const parts = currentVal.trim().split(':');
+        if (parts.length >= 2) {
+          const h = parseInt(parts[0], 10);
+          const min = parseInt(parts[1], 10);
+          if (!isNaN(h) && !isNaN(min)) {
+            d = new Date();
+            d.setHours(h, min, 0, 0);
+          }
+        }
+      }
+    }
+    setPickerDate(d);
+    setShowPicker({ qId, mode });
+  };
+
+  const handlePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    const activePicker = showPicker;
+
+    if (event.type === 'dismissed') {
+      setShowPicker(null);
+      return;
+    }
+
+    if (event.type === 'set' || (Platform.OS === 'ios' && selectedDate)) {
+      setShowPicker(null);
+
+      let dateToSave = selectedDate;
+      if (!dateToSave && (event as any)?.nativeEvent?.timestamp) {
+        const ts = Number((event as any).nativeEvent.timestamp);
+        if (!isNaN(ts)) {
+          dateToSave = new Date(ts);
+        }
+      }
+      if (!dateToSave || isNaN(dateToSave.getTime())) {
+        dateToSave = pickerDate;
+      }
+
+      setPickerDate(dateToSave);
+
+      if (activePicker) {
+        if (activePicker.mode === 'date') {
+          const yyyy = dateToSave.getFullYear();
+          const mm = String(dateToSave.getMonth() + 1).padStart(2, '0');
+          const dd = String(dateToSave.getDate()).padStart(2, '0');
+          onTextChange(activePicker.qId, `${yyyy}-${mm}-${dd}`);
+        } else if (activePicker.mode === 'time') {
+          const hh = String(dateToSave.getHours()).padStart(2, '0');
+          const min = String(dateToSave.getMinutes()).padStart(2, '0');
+          onTextChange(activePicker.qId, `${hh}:${min}`);
+        }
+      }
+    }
+  };
 
   const themeColor =
     publicForm?.theme_color ||
@@ -280,6 +355,29 @@ export function QuizStyleAnsweringStep({
                     </Text>
                   </View>
 
+                  {/* Question Image (if present) */}
+                  {(() => {
+                    const qImgUrl = extractImgUrl(currentQ, currentQ?.question_text);
+                    if (!qImgUrl) return null;
+                    return (
+                      <TouchableOpacity
+                        style={styles.qImageContainer}
+                        onPress={() => onOpenZoom(currentQ)}
+                        activeOpacity={0.85}
+                      >
+                        <Image
+                          source={{ uri: qImgUrl }}
+                          style={styles.qImageStyle}
+                          resizeMode="contain"
+                        />
+                        <View style={styles.zoomBadgeOverlay}>
+                          <Ionicons name="expand-outline" size={12} color="#FFF" />
+                          <Text style={styles.zoomBadgeText}>Ketuk untuk Zoom</Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })()}
+
                   {/* Zoom Button Pill */}
                   <View style={styles.zoomCenterWrapper}>
                     <TouchableOpacity
@@ -311,6 +409,7 @@ export function QuizStyleAnsweringStep({
                           : userAns === opt.id;
                         const bgCol = OPT_COLORS[i % OPT_COLORS.length];
                         const isCheckbox = rawType === 'checkbox';
+                        const optImgUrl = extractImgUrl(opt, opt?.option_text || opt?.text);
 
                         return (
                           <TouchableOpacity
@@ -330,6 +429,14 @@ export function QuizStyleAnsweringStep({
                                 <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
                               )}
                             </View>
+
+                            {optImgUrl && (
+                              <Image
+                                source={{ uri: optImgUrl }}
+                                style={styles.optionImgStyle}
+                                resizeMode="contain"
+                              />
+                            )}
 
                             <Text style={[styles.optionTileText, { fontSize: 16 * fontSizeScale }]}>
                               {stripHtmlTags(opt.option_text || opt.text || '')}
@@ -377,13 +484,22 @@ export function QuizStyleAnsweringStep({
                   {isDateType && (
                     <View style={styles.textInputBox}>
                       <Text style={styles.inputHelperLabel}>Format: YYYY-MM-DD (contoh: 2026-08-25)</Text>
-                      <TextInput
-                        style={[styles.shortAnswerInput, { color: '#FFF', fontSize: 16 * fontSizeScale }]}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor="#64748B"
-                        value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
-                        onChangeText={(text) => onTextChange(currentQ.id, text)}
-                      />
+                      <View style={styles.pickerFieldRow}>
+                        <TextInput
+                          style={[styles.shortAnswerInput, { flex: 1, color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                          placeholder="YYYY-MM-DD"
+                          placeholderTextColor="#64748B"
+                          value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
+                          onChangeText={(text) => onTextChange(currentQ.id, text)}
+                        />
+                        <TouchableOpacity
+                          style={styles.pickerTriggerBtnStyle}
+                          onPress={() => openPicker(currentQ.id, 'date')}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="calendar-outline" size={22} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   )}
 
@@ -391,14 +507,34 @@ export function QuizStyleAnsweringStep({
                   {isTimeType && (
                     <View style={styles.textInputBox}>
                       <Text style={styles.inputHelperLabel}>Format: HH:MM (contoh: 14:30)</Text>
-                      <TextInput
-                        style={[styles.shortAnswerInput, { color: '#FFF', fontSize: 16 * fontSizeScale }]}
-                        placeholder="HH:MM"
-                        placeholderTextColor="#64748B"
-                        value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
-                        onChangeText={(text) => onTextChange(currentQ.id, text)}
-                      />
+                      <View style={styles.pickerFieldRow}>
+                        <TextInput
+                          style={[styles.shortAnswerInput, { flex: 1, color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                          placeholder="HH:MM"
+                          placeholderTextColor="#64748B"
+                          value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
+                          onChangeText={(text) => onTextChange(currentQ.id, text)}
+                        />
+                        <TouchableOpacity
+                          style={styles.pickerTriggerBtnStyle}
+                          onPress={() => openPicker(currentQ.id, 'time')}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="time-outline" size={22} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      </View>
                     </View>
+                  )}
+
+                  {showPicker && (
+                    <DateTimePicker
+                      value={pickerDate}
+                      mode={showPicker.mode}
+                      display="spinner"
+                      is24Hour={true}
+                      onChange={handlePickerChange}
+                      onDismiss={() => setShowPicker(null)}
+                    />
                   )}
 
                   {/* Password Input */}
@@ -612,12 +748,65 @@ const styles = StyleSheet.create({
   qTitleCenterWrapper: { width: '100%', alignItems: 'center', marginVertical: 12, paddingHorizontal: 10 },
   qTitleText: { fontWeight: '800', textAlign: 'center', lineHeight: 32 },
 
+  qImageContainer: {
+    width: '100%',
+    maxHeight: 250,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 16,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  qImageStyle: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+  },
+  zoomBadgeOverlay: {
+    position: 'absolute',
+    bottom: 8,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  zoomBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  optionImgStyle: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+
   zoomCenterWrapper: { width: '100%', alignItems: 'center', marginBottom: 12 },
   zoomPillBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(30, 41, 59, 0.7)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)' },
   zoomPillText: { color: '#94A3B8', fontWeight: '600' },
 
   helperText: { color: '#94A3B8', fontSize: 12, fontWeight: '600', textAlign: 'center', marginBottom: 20 },
   inputHelperLabel: { color: '#94A3B8', fontSize: 12, fontWeight: '600', marginBottom: 8, textAlign: 'center' },
+
+  pickerFieldRow: { flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' },
+  pickerTriggerBtnStyle: {
+    width: 54,
+    height: 54,
+    borderRadius: 16,
+    backgroundColor: 'rgba(59, 130, 246, 0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
 
   /* VIBRANT KAHOOT-STYLE OPTION TILES */
   optionsListContainer: { width: '100%' },

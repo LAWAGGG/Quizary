@@ -12,6 +12,8 @@ import { sessionTokenHeaders } from '../../lib/sessionToken'
 
 const OPT_COLORS = ['#3B82F6', '#EF4444', '#F59E0B', '#10B981']
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+const TEXT_LIMITS = { short_answer: 500, essay: 5000 }
+const getTextLimit = (type) => TEXT_LIMITS[type] || null
 
 function parseDate(str) {
   if (!str) return null
@@ -151,7 +153,7 @@ export default function AnswerQuiz() {
       const ans = {}
       const files = {}
       d.answers.forEach((a) => {
-        if (a.question_type === 'short_answer' || a.question_type === 'essay' || a.question_type === 'date' || a.question_type === 'time') {
+        if (a.question_type === 'short_answer' || a.question_type === 'essay' || a.question_type === 'date' || a.question_type === 'time' || a.question_type === 'datetime') {
           ans[a.question_id] = a.answer_text || ''
         } else if (a.question_type === 'file_upload') {
           if (a.answer_file) files[a.question_id] = { url: a.answer_file, filename: a.answer_file.split('/').pop() }
@@ -600,9 +602,18 @@ export default function AnswerQuiz() {
     }
   }
 
+  const [textLimitErrors, setTextLimitErrors] = useState({})
+
   const handleTextChange = (qId, value) => {
+    const q = data?.questions?.find((x) => x.id === qId)
+    const lim = q ? getTextLimit(q.type) : null
+    if (lim && value.length > lim) {
+      setTextLimitErrors((e) => ({ ...e, [qId]: `Melebihi batas ${lim} karakter (${value.length}/${lim})` }))
+    } else {
+      setTextLimitErrors((e) => { const n = { ...e }; delete n[qId]; return n })
+    }
     setAnswers((a) => ({ ...a, [qId]: value }))
-    save(qId, value)
+    if (!lim || value.length <= lim) save(qId, value)
     // Clear validation error once user starts typing
     if (validationErrors[qId] && value.trim()) {
       setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
@@ -660,37 +671,15 @@ export default function AnswerQuiz() {
 
   const handleNext = async () => {
     if (!data) return
-    // Mode form: satu section = satu halaman. Semua soal required di section
-    // ini wajib dijawab dulu sebelum lanjut. Kalau belum, tandai merah semua
-    // soal yang kosong + scroll ke soal pertama yang belum terjawab.
-    if (!isOneByOne) {
-      const page = formPages[currentIdx]
-      const missing = (page?.questions || []).filter(
-        (q) => q.is_required !== false && !isAnswered(q, answers[q.id])
-      )
-      if (missing.length) {
-        const errs = {}
-        missing.forEach((q) => { errs[q.id] = true })
-        setValidationErrors((e) => ({ ...e, ...errs }))
-        setTimeout(() => {
-          if (questionRefs.current[missing[0].id]) {
-            questionRefs.current[missing[0].id].scrollIntoView({ behavior: 'smooth', block: 'center' })
-          }
-        }, 80)
-        return
-      }
-    } else {
-      // ponytail: quiz 1-per-halaman harus cek required juga — sebelumnya lolos kosong
-      if (current?.is_required !== false && !isAnswered(current, answers[current?.id])) {
-        setValidationErrors((e) => ({ ...e, [current.id]: true }))
-        setTimeout(() => {
-          if (questionRefs.current[current.id]) {
-            questionRefs.current[current.id].scrollIntoView({ behavior: 'smooth', block: 'center' })
-          }
-        }, 80)
-        return
-      }
+    // block kalau ada jawaban melebihi limit
+    if (Object.keys(textLimitErrors).length) {
+      const firstId = Number(Object.keys(textLimitErrors)[0])
+      setValidationErrors((e) => ({ ...e, [firstId]: true }))
+      setSubmitError(Object.values(textLimitErrors)[0])
+      setTimeout(() => questionRefs.current[firstId]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
+      return
     }
+    // required tidak block next — hanya block submit (handleSubmitAll)
     // Gerbang password: hanya di batas section & hanya untuk soal required
     // Quiz 1-per-halaman: password di tengah section tidak blok Next intra-section
     let gateQuestions = []
@@ -734,6 +723,22 @@ export default function AnswerQuiz() {
 
   const handleSubmitAll = async () => {
     if (submitting) return
+    if (Object.keys(textLimitErrors).length) {
+      const firstId = Number(Object.keys(textLimitErrors)[0])
+      setValidationErrors((e) => ({ ...e, [firstId]: true }))
+      setSubmitError(Object.values(textLimitErrors)[0])
+      const idx = (data?.questions || []).findIndex((q) => q.id === firstId)
+      if (idx >= 0) {
+        if (!isOneByOne) {
+          const pi = formPages.findIndex((p) => p.questions.some((x) => x.id === firstId))
+          if (pi >= 0 && pi !== currentIdx) { setDirection(pi > currentIdx ? 1 : -1); setCurrentIdx(pi) }
+        } else {
+          goToQuestion(idx)
+        }
+        setTimeout(() => questionRefs.current[firstId]?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120)
+      }
+      return
+    }
 
     // Frontend validation — cek semua soal required sebelum kirim ke backend
     const isAnsweredCheck = (q, val) => {
@@ -1103,9 +1108,14 @@ export default function AnswerQuiz() {
                     <Input
                       value={answers[current.id] || ''}
                       onChange={(e) => handleTextChange(current.id, e.target.value)}
-                      className="text-center text-lg h-14"
-                      placeholder="Tap to answer"
+                      className={`text-center text-lg h-14 ${textLimitErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                      placeholder="Tap to answer (max 500 char)"
+                      maxLength={TEXT_LIMITS.short_answer + 50}
                     />
+                    <div className="flex justify-between mt-1.5">
+                      {textLimitErrors[current.id] ? <p className="text-xs font-medium text-incorrect">{textLimitErrors[current.id]}</p> : <span />}
+                      <span className={`text-xs ${String(answers[current.id] || '').length > TEXT_LIMITS.short_answer ? 'text-incorrect font-semibold' : 'text-gray-400'}`}>{String(answers[current.id] || '').length}/{TEXT_LIMITS.short_answer}</span>
+                    </div>
                   </div>
                 )}
 
@@ -1121,10 +1131,15 @@ export default function AnswerQuiz() {
                     <Textarea
                       value={answers[current.id] || ''}
                       onChange={(e) => handleTextChange(current.id, e.target.value)}
-                      className="min-h-[180px] text-base leading-relaxed"
-                      placeholder="Write your answer here..."
+                      className={`min-h-[180px] text-base leading-relaxed ${textLimitErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                      placeholder="Write your answer here... (max 5000 char)"
                       rows={6}
+                      maxLength={TEXT_LIMITS.essay + 100}
                     />
+                    <div className="flex justify-between mt-1.5">
+                      {textLimitErrors[current.id] ? <p className="text-xs font-medium text-incorrect">{textLimitErrors[current.id]}</p> : <span />}
+                      <span className={`text-xs ${String(answers[current.id] || '').length > TEXT_LIMITS.essay ? 'text-incorrect font-semibold' : 'text-gray-400'}`}>{String(answers[current.id] || '').length}/{TEXT_LIMITS.essay}</span>
+                    </div>
                   </div>
                 )}
                 {current.type === 'password' && (
@@ -1147,8 +1162,8 @@ export default function AnswerQuiz() {
                       className="text-base h-14"
                     >
                       <option value="">— Select an answer —</option>
-                      {current.options.map((opt, i) => (
-                        <option key={opt.id} value={opt.id}>{LETTERS[i % LETTERS.length]}. {opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
+                      {current.options.map((opt) => (
+                        <option key={opt.id} value={opt.id}>{opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
                       ))}
                     </Select>
                   </div>
@@ -1158,6 +1173,17 @@ export default function AnswerQuiz() {
                   <div className="mt-4">
                     <input
                       type="date"
+                      value={answers[current.id] || ''}
+                      onChange={(e) => handleTextChange(current.id, e.target.value)}
+                      className={`input-field text-center text-base h-14 ${validationErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                    />
+                  </div>
+                )}
+
+                {current.type === 'datetime' && (
+                  <div className="mt-4">
+                    <input
+                      type="datetime-local"
                       value={answers[current.id] || ''}
                       onChange={(e) => handleTextChange(current.id, e.target.value)}
                       className={`input-field text-center text-base h-14 ${validationErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
@@ -1437,21 +1463,36 @@ export default function AnswerQuiz() {
                   )}
 
                   {q.type === 'short_answer' && (
-                    <Input
-                      value={answers[q.id] || ''}
-                      onChange={(e) => handleTextChange(q.id, e.target.value)}
-                      placeholder="Your answer"
-                    />
+                    <div>
+                      <Input
+                        value={answers[q.id] || ''}
+                        onChange={(e) => handleTextChange(q.id, e.target.value)}
+                        placeholder="Your answer (max 500)"
+                        className={textLimitErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}
+                        maxLength={TEXT_LIMITS.short_answer + 50}
+                      />
+                      <div className="flex justify-between mt-1.5">
+                        {textLimitErrors[q.id] ? <p className="text-xs font-medium text-incorrect">{textLimitErrors[q.id]}</p> : <span />}
+                        <span className={`text-xs ${String(answers[q.id] || '').length > TEXT_LIMITS.short_answer ? 'text-incorrect font-semibold' : 'text-gray-400'}`}>{String(answers[q.id] || '').length}/{TEXT_LIMITS.short_answer}</span>
+                      </div>
+                    </div>
                   )}
 
                   {q.type === 'essay' && (
-                    <Textarea
-                      value={answers[q.id] || ''}
-                      onChange={(e) => handleTextChange(q.id, e.target.value)}
-                      className="min-h-[120px]"
-                      rows={4}
-                      placeholder="Write your answer..."
-                    />
+                    <div>
+                      <Textarea
+                        value={answers[q.id] || ''}
+                        onChange={(e) => handleTextChange(q.id, e.target.value)}
+                        className={`min-h-[120px] ${textLimitErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                        rows={4}
+                        placeholder="Write your answer... (max 5000)"
+                        maxLength={TEXT_LIMITS.essay + 100}
+                      />
+                      <div className="flex justify-between mt-1.5">
+                        {textLimitErrors[q.id] ? <p className="text-xs font-medium text-incorrect">{textLimitErrors[q.id]}</p> : <span />}
+                        <span className={`text-xs ${String(answers[q.id] || '').length > TEXT_LIMITS.essay ? 'text-incorrect font-semibold' : 'text-gray-400'}`}>{String(answers[q.id] || '').length}/{TEXT_LIMITS.essay}</span>
+                      </div>
+                    </div>
                   )}
 
                   {q.type === 'password' && (
@@ -1470,8 +1511,8 @@ export default function AnswerQuiz() {
                       error={!!validationErrors[q.id]}
                     >
                       <option value="">— Select an answer —</option>
-                      {q.options.map((opt, i) => (
-                        <option key={opt.id} value={opt.id}>{LETTERS[i % LETTERS.length]}. {opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
+                      {q.options.map((opt) => (
+                        <option key={opt.id} value={opt.id}>{opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
                       ))}
                     </Select>
                   )}
@@ -1479,6 +1520,15 @@ export default function AnswerQuiz() {
                   {q.type === 'date' && (
                     <input
                       type="date"
+                      value={answers[q.id] || ''}
+                      onChange={(e) => handleTextChange(q.id, e.target.value)}
+                      className={`input-field ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
+                    />
+                  )}
+
+                  {q.type === 'datetime' && (
+                    <input
+                      type="datetime-local"
                       value={answers[q.id] || ''}
                       onChange={(e) => handleTextChange(q.id, e.target.value)}
                       className={`input-field ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
