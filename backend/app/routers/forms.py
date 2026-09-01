@@ -360,7 +360,7 @@ def batch_update_points(
         )
 
     from app.models.question import QuestionType
-    _NO_GRADE = (QuestionType.essay, QuestionType.date, QuestionType.time, QuestionType.file_upload)
+    _NO_GRADE = (QuestionType.essay, QuestionType.date, QuestionType.time, QuestionType.datetime, QuestionType.file_upload, QuestionType.dropdown)
     updated = (
         db.query(Question)
         .filter(

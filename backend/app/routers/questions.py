@@ -30,9 +30,9 @@ from app.schemas.question import (
 router = APIRouter(tags=["questions"])
 
 _OPTION_TYPES = ("multiple_choice", "checkbox", "dropdown")
-_TEXT_TYPES = ("short_answer", "essay", "password", "date", "time", "file_upload")
+_TEXT_TYPES = ("short_answer", "essay", "password", "date", "time", "datetime", "file_upload")
 # Types yang tidak pernah dinilai otomatis (tanpa options / tanpa isi teks dinilai)
-_NO_GRADE_TYPES = ("essay", "date", "time", "file_upload")
+_NO_GRADE_TYPES = ("essay", "date", "time", "datetime", "file_upload", "dropdown")
 
 
 def _get_question_or_404(q_id: int, db: Session) -> Question:

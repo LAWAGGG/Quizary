@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LayoutDashboard, ClipboardList, ListChecks, UserRound, X, Sun, Moon } from 'lucide-react'
@@ -28,9 +28,8 @@ function BottomNav({ hidden }) {
               key={link.to}
               to={link.to}
               end={link.end}
-              className={`flex flex-col items-center justify-center gap-0.5 w-full h-full transition-colors ${
-                isActive ? 'text-primary' : 'text-gray-400 dark:text-gray-500'
-              }`}
+              className={`flex flex-col items-center justify-center gap-0.5 w-full h-full transition-colors ${isActive ? 'text-primary' : 'text-gray-400 dark:text-gray-500'
+                }`}
             >
               <link.icon className="w-5 h-5" strokeWidth={isActive ? 2.2 : 1.8} />
               <span className="text-[10px] font-medium leading-none">{link.label}</span>
@@ -59,9 +58,8 @@ function Sidebar({ open, onClose, onLogout, user }) {
       </AnimatePresence>
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-white dark:bg-ink-900 border-r border-gray-200 dark:border-gray-600 transition-transform duration-200 ease-out lg:static lg:translate-x-0 lg:h-full ${
-          open ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-white dark:bg-ink-900 border-r border-gray-200 dark:border-gray-600 transition-transform duration-200 ease-out lg:static lg:translate-x-0 lg:h-full ${open ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         <div className="flex items-center gap-3 px-5 h-16 shrink-0 border-b border-gray-100 dark:border-gray-600">
           <AppMark size="sm" />
@@ -86,10 +84,9 @@ function Sidebar({ open, onClose, onLogout, user }) {
               end={link.end}
               onClick={onClose}
               className={({ isActive }) =>
-                `relative flex items-center gap-3 px-3.5 h-11 rounded-xl text-sm font-medium transition-colors duration-150 ${
-                  isActive
-                    ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-ink-800'
+                `relative flex items-center gap-3 px-3.5 h-11 rounded-xl text-sm font-medium transition-colors duration-150 ${isActive
+                  ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-ink-800'
                 }`
               }
             >
@@ -138,15 +135,16 @@ export default function DashboardLayout() {
   const mainRef = useRef(null)
   const [navHidden, setNavHidden] = useState(false)
 
-  useEffect(() => {
-    function handleClick(e) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setDropdownOpen(false)
-      }
+  const handleClickOutside = useCallback((e) => {
+    if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+      setDropdownOpen(false)
     }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  useEffect(() => {
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [handleClickOutside])
 
   // Scroll-to-hide navbar (mobile only) — hysteresis prevents feedback loop
   useEffect(() => {
@@ -202,8 +200,12 @@ export default function DashboardLayout() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* ── NAVBAR ── */}
         {/* Desktop: static, no collapse. Mobile: max-h collapse on scroll. */}
-        <div className={`shrink-0 overflow-hidden transition-[max-height] duration-200 ease-in-out lg:max-h-none ${navHidden ? 'max-h-0' : 'max-h-16'}`}>
-          <div className="bg-white dark:bg-ink-900 border-b border-gray-200 dark:border-gray-600">
+        {/* ── NAVBAR ── */}
+        {/* Desktop: static, no collapse. Mobile: max-h collapse on scroll. */}
+        <div
+          className={`shrink-0 transition-[max-height] duration-200 ease-in-out lg:max-h-none ${navHidden ? 'max-h-0' : 'max-h-16'
+            } ${dropdownOpen ? 'overflow-visible' : 'overflow-hidden'}`}
+        >          <div className="bg-white dark:bg-ink-900 border-b border-gray-200 dark:border-gray-600">
             <div className="h-14 px-4 flex items-center justify-between sm:h-16 sm:px-8">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                 {/* Mobile: logo */}
@@ -221,7 +223,7 @@ export default function DashboardLayout() {
               </div>
 
               <div className="flex items-center gap-1 ml-auto">
-               
+
                 <button
                   onClick={toggleTheme}
                   className="p-2.5 rounded-xl text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
@@ -230,7 +232,7 @@ export default function DashboardLayout() {
                 >
                   {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                 </button>
-                 <div className="relative" ref={dropdownRef}>
+                <div className="relative" ref={dropdownRef}>
                   <button
                     onClick={() => setDropdownOpen(!dropdownOpen)}
                     className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"

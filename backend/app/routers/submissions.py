@@ -75,6 +75,11 @@ def _validate_option_ids(option_ids: list[int], question: Question) -> None:
             )
 
 
+TEXT_LIMITS = {
+    QuestionType.short_answer: 500,
+    QuestionType.essay: 5000,
+}
+
 def _validate_date_time(question: Question, value: str) -> None:
     """Format ketat untuk tipe date/time — cegah input liar dari responden."""
     if question.type == QuestionType.date and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
@@ -86,6 +91,20 @@ def _validate_date_time(question: Question, value: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Format waktu harus HH:MM",
+        )
+    if question.type == QuestionType.datetime and not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", value):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Format datetime harus YYYY-MM-DDTHH:MM",
+        )
+
+
+def _validate_text_length(question: Question, value: str) -> None:
+    limit = TEXT_LIMITS.get(question.type)
+    if limit and len(value) > limit:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Jawaban melebihi batas {limit} karakter ({len(value)}/{limit})",
         )
 
 
@@ -551,6 +570,7 @@ def autosave(
                 detail="Soal file upload dijawab melalui unggah file",
             )
         _validate_date_time(question, body.answer_text)
+        _validate_text_length(question, body.answer_text)
 
     answer = db.query(Answer).filter(
         Answer.submission_id == sub.id,

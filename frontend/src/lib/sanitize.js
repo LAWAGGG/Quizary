@@ -12,9 +12,9 @@ const CONFIG = {
   ALLOWED_TAGS: [
     'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's',
     'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'blockquote',
-    'pre', 'code', 'a', 'span',
+    'pre', 'code', 'a', 'span', 'div',
   ],
-  ALLOWED_ATTR: ['href', 'class', 'data-list'],
+  ALLOWED_ATTR: ['href', 'class', 'data-list', 'data-language', 'spellcheck'],
   ALLOW_DATA_ATTR: false,
   // Protokol href: http(s) & mailto saja (blokir javascript:, data:, vbscript:, dst.)
   ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
@@ -22,7 +22,9 @@ const CONFIG = {
 
 export function sanitizeHtml(html = '') {
   if (!html) return ''
-  return DOMPurify.sanitize(html, CONFIG)
+  // buang UI chrome Quill (language picker) sebelum sanitasi — dia bukan konten
+  const stripped = String(html).replace(/<select[^>]*class="ql-ui"[^>]*>[\s\S]*?<\/select>/gi, '')
+  return DOMPurify.sanitize(stripped, CONFIG)
 }
 
 /** Buang tag HTML → teks polos (untuk URL param, nama file, teks 1 baris). */

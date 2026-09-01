@@ -14,6 +14,7 @@ class QuestionType(str, enum.Enum):
     password = "password"
     date = "date"
     time = "time"
+    datetime = "datetime"
     file_upload = "file_upload"
 
 

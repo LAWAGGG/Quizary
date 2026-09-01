@@ -20,7 +20,6 @@ from app.models.submission import Submission
 GRADABLE_TYPES = (
     QuestionType.multiple_choice,
     QuestionType.checkbox,
-    QuestionType.dropdown,
     QuestionType.short_answer,
     QuestionType.password,
 )
@@ -55,12 +54,14 @@ def grade_answer(answer: Answer, question: Question):
     if not question.is_scored:
         return None, Decimal("0")
 
-    if question.type in (QuestionType.multiple_choice, QuestionType.checkbox, QuestionType.dropdown):
+    if question.type in (QuestionType.multiple_choice, QuestionType.checkbox):
         correct_ids = {o.id for o in question.options if o.is_correct}
         selected_ids = {ao.option_id for ao in answer.selected_options}
         if correct_ids and selected_ids == correct_ids:
             return True, Decimal(str(question.points or 0))
         return False, Decimal("0")
+    if question.type == QuestionType.dropdown:
+        return None, Decimal("0")
 
     if question.type == QuestionType.short_answer:
         if answer.answer_text and answer.answer_text.strip():

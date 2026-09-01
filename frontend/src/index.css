@@ -438,8 +438,14 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 }
 
 /* ── Code block — IDE-like (editor + render) ────────────────────────────── */
+/* Quill 2: code = div.ql-code-block inside div.ql-code-block-container (bukan pre) */
+.rich-editor .ql-editor .ql-code-block-container,
 .rich-editor .ql-editor pre.ql-code-block,
-.rich-text pre.ql-code-block {
+.rich-editor .ql-editor pre.ql-syntax,
+.rich-text .ql-code-block-container,
+.rich-text pre.ql-code-block,
+.rich-text pre.ql-syntax,
+.rich-text div.ql-code-block {
   @apply bg-ink-950 text-gray-100 border border-gray-800 rounded-lg;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.8125rem;
@@ -452,41 +458,54 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   tab-size: 4;
   position: relative;
 }
+.rich-editor .ql-editor .ql-code-block,
+.rich-text div.ql-code-block {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
+}
+.rich-editor .ql-editor .ql-code-block-container .ql-code-block + .ql-code-block {
+  margin-top: 0;
+}
 
 /* Syntax token colors — monokai-ish, readable on dark bg */
-.rich-editor .ql-editor pre.ql-code-block .hljs-keyword,
-.rich-text pre.ql-code-block .hljs-keyword,
-.rich-editor .ql-editor pre.ql-code-block .hljs-selector-tag,
-.rich-text pre.ql-code-block .hljs-selector-tag,
-.rich-editor .ql-editor pre.ql-code-block .hljs-literal,
-.rich-text pre.ql-code-block .hljs-literal { color: #c678dd; }
+.rich-editor .ql-editor .ql-code-block-container .hljs-keyword, .rich-editor .ql-editor pre.ql-code-block .hljs-keyword, .rich-editor .ql-editor pre.ql-syntax .hljs-keyword,
+.rich-text .ql-code-block-container .hljs-keyword, .rich-text pre.ql-code-block .hljs-keyword, .rich-text pre.ql-syntax .hljs-keyword, .rich-text div.ql-code-block .hljs-keyword,
+.rich-editor .ql-editor .ql-code-block-container .hljs-selector-tag, .rich-editor .ql-editor pre.ql-code-block .hljs-selector-tag, .rich-editor .ql-editor pre.ql-syntax .hljs-selector-tag,
+.rich-text .ql-code-block-container .hljs-selector-tag, .rich-text pre.ql-code-block .hljs-selector-tag, .rich-text pre.ql-syntax .hljs-selector-tag, .rich-text div.ql-code-block .hljs-selector-tag,
+.rich-editor .ql-editor .ql-code-block-container .hljs-literal, .rich-editor .ql-editor pre.ql-code-block .hljs-literal, .rich-editor .ql-editor pre.ql-syntax .hljs-literal,
+.rich-text .ql-code-block-container .hljs-literal, .rich-text pre.ql-code-block .hljs-literal, .rich-text pre.ql-syntax .hljs-literal { color: #c678dd; }
 
-.rich-editor .ql-editor pre.ql-code-block .hljs-string,
-.rich-text pre.ql-code-block .hljs-string,
-.rich-editor .ql-editor pre.ql-code-block .hljs-attr,
-.rich-text pre.ql-code-block .hljs-attr { color: #98c379; }
+.rich-editor .ql-editor .ql-code-block-container .hljs-string, .rich-editor .ql-editor pre.ql-code-block .hljs-string, .rich-editor .ql-editor pre.ql-syntax .hljs-string,
+.rich-text .ql-code-block-container .hljs-string, .rich-text pre.ql-code-block .hljs-string, .rich-text pre.ql-syntax .hljs-string, .rich-text div.ql-code-block .hljs-string,
+.rich-editor .ql-editor .ql-code-block-container .hljs-attr, .rich-editor .ql-editor pre.ql-code-block .hljs-attr, .rich-editor .ql-editor pre.ql-syntax .hljs-attr,
+.rich-text .ql-code-block-container .hljs-attr, .rich-text pre.ql-code-block .hljs-attr, .rich-text pre.ql-syntax .hljs-attr, .rich-text div.ql-code-block .hljs-attr { color: #98c379; }
 
-.rich-editor .ql-editor pre.ql-code-block .hljs-number,
-.rich-text pre.ql-code-block .hljs-number,
-.rich-editor .ql-editor pre.ql-code-block .hljs-title,
-.rich-text pre.ql-code-block .hljs-title { color: #e5c07b; }
+.rich-editor .ql-editor .ql-code-block-container .hljs-number, .rich-editor .ql-editor pre.ql-code-block .hljs-number, .rich-editor .ql-editor pre.ql-syntax .hljs-number,
+.rich-text .ql-code-block-container .hljs-number, .rich-text pre.ql-code-block .hljs-number, .rich-text pre.ql-syntax .hljs-number, .rich-text div.ql-code-block .hljs-number,
+.rich-editor .ql-editor .ql-code-block-container .hljs-title, .rich-editor .ql-editor pre.ql-code-block .hljs-title, .rich-editor .ql-editor pre.ql-syntax .hljs-title,
+.rich-text .ql-code-block-container .hljs-title, .rich-text pre.ql-code-block .hljs-title, .rich-text pre.ql-syntax .hljs-title, .rich-text div.ql-code-block .hljs-title { color: #e5c07b; }
 
-.rich-editor .ql-editor pre.ql-code-block .hljs-comment,
-.rich-text pre.ql-code-block .hljs-comment { color: #5c6370; font-style: italic; }
+.rich-editor .ql-editor .ql-code-block-container .hljs-comment, .rich-editor .ql-editor pre.ql-code-block .hljs-comment, .rich-editor .ql-editor pre.ql-syntax .hljs-comment,
+.rich-text .ql-code-block-container .hljs-comment, .rich-text pre.ql-code-block .hljs-comment, .rich-text pre.ql-syntax .hljs-comment, .rich-text div.ql-code-block .hljs-comment { color: #5c6370; font-style: italic; }
 
-.rich-editor .ql-editor pre.ql-code-block .hljs-built_in,
-.rich-text pre.ql-code-block .hljs-built_in,
-.rich-editor .ql-editor pre.ql-code-block .hljs-type,
-.rich-text pre.ql-code-block .hljs-type { color: #56b6c2; }
+.rich-editor .ql-editor .ql-code-block-container .hljs-built_in, .rich-editor .ql-editor pre.ql-code-block .hljs-built_in, .rich-editor .ql-editor pre.ql-syntax .hljs-built_in,
+.rich-text .ql-code-block-container .hljs-built_in, .rich-text pre.ql-code-block .hljs-built_in, .rich-text pre.ql-syntax .hljs-built_in, .rich-text div.ql-code-block .hljs-built_in,
+.rich-editor .ql-editor .ql-code-block-container .hljs-type, .rich-editor .ql-editor pre.ql-code-block .hljs-type, .rich-editor .ql-editor pre.ql-syntax .hljs-type,
+.rich-text .ql-code-block-container .hljs-type, .rich-text pre.ql-code-block .hljs-type, .rich-text pre.ql-syntax .hljs-type, .rich-text div.ql-code-block .hljs-type { color: #56b6c2; }
 
-/* Language selector yang ditambahkan modul syntax di pojok code block */
-.rich-editor .ql-editor pre.ql-code-block .ql-ui {
-  @apply bg-ink-800 text-gray-300 border border-gray-700 rounded text-[10px] font-sans;
+/* Language selector — jangan pakai bg gelap (nyatu dengan code bg) */
+.rich-editor .ql-editor .ql-code-block-container .ql-ui,
+.rich-editor .ql-editor pre.ql-code-block .ql-ui,
+.rich-editor .ql-editor pre.ql-syntax .ql-ui {
+  @apply bg-white text-ink border border-gray-200 rounded text-[10px] font-sans shadow;
   position: absolute;
   top: 0.4rem;
   right: 0.4rem;
   padding: 0.1rem 0.35rem;
-  opacity: 0.85;
+  opacity: 0.95;
 }
 
 .rich-text ul,

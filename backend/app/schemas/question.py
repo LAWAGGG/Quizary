@@ -3,8 +3,8 @@ from typing import Optional
 from pydantic import BaseModel, Field, model_validator
 
 
-QUESTION_TYPE_PATTERN = r"^(multiple_choice|checkbox|dropdown|short_answer|essay|password|date|time|file_upload)$"
-NO_OPTION_TYPES = ("short_answer", "essay", "password", "date", "time", "file_upload")
+QUESTION_TYPE_PATTERN = r"^(multiple_choice|checkbox|dropdown|short_answer|essay|password|date|time|datetime|file_upload)$"
+NO_OPTION_TYPES = ("short_answer", "essay", "password", "date", "time", "datetime", "file_upload")
 
 
 class OptionCreate(BaseModel):
