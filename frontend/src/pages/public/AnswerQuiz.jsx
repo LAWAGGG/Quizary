@@ -64,7 +64,11 @@ function OptionTile({ letter, color, selected, checkbox, children, onClick, disa
       </div>
 
       {image && (
-        <img src={image.path} alt="" className="max-h-24 w-auto rounded-lg object-contain" />
+        isAudioUrl(image.path) ? (
+          <audio controls src={image.path} preload="metadata" className="w-full max-h-16 rounded-lg" onClick={(e) => e.stopPropagation()} />
+        ) : (
+          <img src={image.path} alt="" className="max-h-24 w-auto rounded-lg object-contain" />
+        )
       )}
 
       {selected && !checkbox && (
@@ -1038,7 +1042,7 @@ export default function AnswerQuiz() {
     const answeredCount = questions.filter((q) => isAnswered(q, answers[q.id])).length
 
     return (
-      <div className="theme-surface h-dvh flex flex-col bg-paper" style={{ '--t': palette.base, ...(kbInset ? { height: `calc(100dvh - ${kbInset}px)` } : {}) }}>
+      <div className="theme-surface h-dvh flex flex-col bg-paper overflow-hidden" style={{ '--t': palette.base, ...(kbInset ? { height: `calc(100dvh - ${kbInset}px)` } : {}) }}>
         {cheatWarn && (
           <motion.div
             initial={{ opacity: 0, y: -12 }}
@@ -1125,7 +1129,7 @@ export default function AnswerQuiz() {
           </motion.div>
         )}
 
-        <div className="flex-1 overflow-y-auto px-4 py-6">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6">
           <AnimatePresence mode="wait" custom={direction}>            <motion.div
             key={current?.id}
             custom={direction}
@@ -1435,7 +1439,7 @@ export default function AnswerQuiz() {
         </motion.div>
       )}
       {isOwnerPreview && <PreviewNotice />}
-      <div className="max-w-2xl mx-auto p-4 pb-28">
+      <div className="max-w-2xl mx-auto p-4 pb-28 overflow-x-hidden">
         {bannerPath && (
           <img src={bannerPath} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
@@ -1548,7 +1552,11 @@ export default function AnswerQuiz() {
                               <span className="text-sm text-ink dark:text-gray-200 flex-1 leading-snug"><RichText html={opt.option_text} className="rich-text" /></span>
                             </div>
                             {opt.image && (
-                              <img src={opt.image.path} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
+                              isAudioUrl(opt.image.path) ? (
+                                <audio controls src={opt.image.path} preload="metadata" className="w-full max-w-xs mx-auto rounded-lg" onClick={(e) => e.stopPropagation()} />
+                              ) : (
+                                <img src={opt.image.path} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
+                              )
                             )}
                           </label>
                         )
@@ -1584,7 +1592,11 @@ export default function AnswerQuiz() {
                               <span className="text-sm text-ink dark:text-gray-200 flex-1 leading-snug"><RichText html={opt.option_text} className="rich-text" /></span>
                             </div>
                             {opt.image && (
-                              <img src={opt.image.path} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
+                              isAudioUrl(opt.image.path) ? (
+                                <audio controls src={opt.image.path} preload="metadata" className="w-full max-w-xs mx-auto rounded-lg" onClick={(e) => e.stopPropagation()} />
+                              ) : (
+                                <img src={opt.image.path} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
+                              )
                             )}
                           </label>
                         )
@@ -2173,7 +2185,11 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                               <RichText html={opt.option_text} className="rich-text" />
                             </span>
                             {opt.image && (
-                              <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                              isAudioUrl(opt.image.path) ? (
+                                <audio controls src={opt.image.path} preload="metadata" className="max-h-20 w-32 rounded-lg shrink-0" onClick={(e) => e.stopPropagation()} />
+                              ) : (
+                                <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                              )
                             )}
                           </div>
                         ))}
@@ -2191,7 +2207,11 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                             </span>
                             <span className="flex-1 leading-snug text-left"><RichText html={opt.option_text} className="rich-text" /></span>
                             {opt.image && (
-                              <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                              isAudioUrl(opt.image.path) ? (
+                                <audio controls src={opt.image.path} preload="metadata" className="max-h-20 w-32 rounded-lg shrink-0" onClick={(e) => e.stopPropagation()} />
+                              ) : (
+                                <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                              )
                             )}
                           </div>
                         ))}

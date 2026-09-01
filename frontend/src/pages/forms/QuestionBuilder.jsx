@@ -373,47 +373,61 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                 exit={{ opacity: 0, y: -6 }}
                 className="flex flex-col gap-2 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-ink-800/30"
               >
-                <div className="space-y-3">
-                  {form.type === 'dropdown' ? (
-                    <span className="w-7 h-7 rounded-lg bg-white dark:bg-ink-900 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center text-xs font-bold mt-1">{i + 1}</span>
-                  ) : form.type === 'checkbox' ? (
-                    <button
-                      type="button"
-                      onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
-                      aria-label={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
-                      title={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
-                      className="shrink-0 rounded-lg transition-transform hover:scale-105 active:scale-95 mt-1"
-                    >
-                      <span className={`flex items-center justify-center w-7 h-7 rounded-lg border-2 transition-colors ${opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 bg-white dark:bg-ink-900 text-transparent hover:border-primary/60'
-                        }`}>
-                        {opt.is_correct && <Check className="w-4 h-4" strokeWidth={3.5} />}
-                      </span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
-                      aria-label={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
-                      title={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
-                      className="shrink-0 transition-transform hover:scale-105 active:scale-95 mt-1"
-                    >
-                      <span className={`bubble ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
-                        {opt.is_correct ? <Check className="w-3.5 h-3.5" /> : LETTERS[i % LETTERS.length]}
-                      </span>
-                    </button>
-                  )}
-                  <RichTextEditor
-                    value={opt.option_text}
-                    onChange={(html) => setOption(i, 'option_text', html)}
-                    placeholder={`Option ${LETTERS[i % LETTERS.length]}`}
-                    compact
-                    minHeight={48}
-                  />
-                  <div className="flex gap-1 shrink-0 pt-1">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-start gap-2">
+                    {form.type === 'dropdown' ? (
+                      <span className="w-7 h-7 rounded-lg bg-white dark:bg-ink-900 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 flex items-center justify-center text-xs font-bold shrink-0 mt-1">{i + 1}</span>
+                    ) : form.type === 'checkbox' ? (
+                      <button
+                        type="button"
+                        onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
+                        aria-label={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
+                        title={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
+                        className="shrink-0 rounded-lg transition-transform hover:scale-105 active:scale-95 mt-1"
+                      >
+                        <span className={`flex items-center justify-center w-7 h-7 rounded-lg border-2 transition-colors ${opt.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 bg-white dark:bg-ink-900 text-transparent hover:border-primary/60'
+                          }`}>
+                          {opt.is_correct && <Check className="w-4 h-4" strokeWidth={3.5} />}
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setOption(i, 'is_correct', !opt.is_correct)}
+                        aria-label={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
+                        title={opt.is_correct ? 'Remove correct answer mark' : 'Mark as correct answer'}
+                        className="shrink-0 transition-transform hover:scale-105 active:scale-95 mt-1"
+                      >
+                        <span className={`bubble ${opt.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
+                          {opt.is_correct ? <Check className="w-3.5 h-3.5" /> : LETTERS[i % LETTERS.length]}
+                        </span>
+                      </button>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <RichTextEditor
+                        value={opt.option_text}
+                        onChange={(html) => setOption(i, 'option_text', html)}
+                        placeholder={`Option ${LETTERS[i % LETTERS.length]}`}
+                        compact
+                        minHeight={48}
+                      />
+                    </div>
+                    {form.options.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeOption(i)}
+                        className="shrink-0 mt-1 w-8 h-8 rounded-lg text-gray-400 dark:text-gray-500 hover:text-incorrect hover:bg-incorrect-soft border border-transparent hover:border-incorrect/20 transition-colors text-lg leading-none flex items-center justify-center"
+                        aria-label="Remove option"
+                      >
+                        &times;
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 ml-9">
                     <input
                       ref={(el) => (optionFileRefs.current[i] = el)}
                       type="file"
-                      accept="image/*"
+                      accept="image/*,audio/*,.mp3,.wav,.m4a,.ogg,.aac,.webm"
                       className="hidden"
                       onChange={() => uploadOptionImage(opt, i)}
                     />
@@ -425,30 +439,25 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                           optionFileRefs.current[i]?.click()
                         }}
                         disabled={!!imgLoading}
-                        title={opt.id ? 'Upload option image' : 'Pilih gambar — akan diupload setelah disimpan'}
-                        className="w-8 h-8 rounded-lg flex items-center justify-center border transition-colors shrink-0 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700 hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20"
+                        title={opt.id ? 'Upload option image/audio' : 'Pilih gambar/audio — akan diupload setelah disimpan'}
+                        className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg text-xs font-medium border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:text-primary hover:border-primary/40 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
                       >
                         {imgLoading === `opt-${i}` ? (
                           <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                         ) : (
-                          <ImageIcon className="w-4 h-4" />
+                          <ImageIcon className="w-3.5 h-3.5" />
                         )}
-                      </button>
-                    )}
-                    {form.options.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeOption(i)}
-                        className="w-8 h-8 rounded-lg text-gray-400 dark:text-gray-500 hover:text-incorrect hover:bg-incorrect-soft border border-transparent hover:border-incorrect/20 transition-colors text-lg leading-none"
-                        aria-label="Remove option"
-                      >
-                        &times;
+                        Add image/audio
                       </button>
                     )}
                   </div>
                   {opt.image?.path && (
                     <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900">
-                      <img src={opt.image.path} alt="" className="w-full max-h-64 object-contain" />
+                      {(opt._pendingFile?.type?.startsWith('audio/') || isAudioUrl(opt.image.path)) ? (
+                        <audio controls src={opt.image.path} preload="metadata" className="w-full p-3" />
+                      ) : (
+                        <img src={opt.image.path} alt="" className="w-full max-h-64 object-contain" />
+                      )}
                       <button
                         type="button"
                         onClick={() => handleRemoveOptionImage(i)}
@@ -553,7 +562,11 @@ function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected,
                 <RichText html={opt.option_text} className="rich-text" />
               </span>
               {opt.image?.path && (
-                <img src={opt.image.path} alt="" className="w-6 h-6 object-cover rounded shrink-0" />
+                isAudioUrl(opt.image.path) ? (
+                  <audio controls src={opt.image.path} preload="metadata" className="w-24 h-7 rounded shrink-0" />
+                ) : (
+                  <img src={opt.image.path} alt="" className="w-6 h-6 object-cover rounded shrink-0" />
+                )
               )}
             </div>
           ))}

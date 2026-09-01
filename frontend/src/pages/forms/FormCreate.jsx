@@ -16,6 +16,7 @@ export default function FormCreate() {
     type: 'form',
     require_login: false,
     submission_limit: 'unlimited',
+    show_in_history: true,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')

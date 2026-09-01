@@ -293,11 +293,6 @@ export default function QuizResult() {
                 </div>
               </div>
 
-              {data.max_score > 0 && (
-                <p className="font-display text-xl font-semibold text-ink dark:text-gray-100 tabular-nums">
-                  {`${percentage}%`}
-                </p>
-              )}
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 {(percentage >= 70
                   ? 'Great job! Solid result.'
