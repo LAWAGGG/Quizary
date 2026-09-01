@@ -70,16 +70,15 @@ export default function StandaloneQuizScreen() {
 
   // Listener deteksi keluar aplikasi / swipe notification bar
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', async (nextAppState) => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (
         step === 'answering' &&
-        appState.current.match(/active/) &&
         (nextAppState === 'inactive' || nextAppState === 'background')
       ) {
         setIsLocked(true);
         const targetSubId = submissionIdRef.current || submissionId;
         if (targetSubId) {
-          await lockSubmission(targetSubId, 'Keluar dari aplikasi (App background/inactive)');
+          lockSubmission(targetSubId, 'Keluar dari aplikasi (App background/inactive)');
         }
       }
       appState.current = nextAppState;
@@ -88,7 +87,16 @@ export default function StandaloneQuizScreen() {
     return () => {
       subscription.remove();
     };
-  }, [step]);
+  }, [step, submissionId]);
+
+  // Auto-poll lock status every 5 seconds when locked (mirroring Web AnswerQuiz.jsx)
+  useEffect(() => {
+    if (!isLocked) return;
+    const interval = setInterval(() => {
+      handleRefreshLockStatus();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isLocked, submissionId]);
 
   const handleRefreshLockStatus = async () => {
     setIsCheckingLock(true);
