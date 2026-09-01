@@ -360,6 +360,11 @@ def create_submission(
     elif ip:
         in_progress_q = in_progress_q.filter(Submission.ip_address == ip)
 
+    sections = [
+        {"id": s.id, "title": s.title}
+        for s in db.query(Section).filter(Section.form_id == form.id).order_by(Section.order_index).all()
+    ]
+
     existing = in_progress_q.order_by(Submission.created_at.asc()).first()
     if existing:
         # Claim session anonim ke user login supaya tidak ter-orphan.
@@ -393,6 +398,7 @@ def create_submission(
             started_at=fmt_dt(existing.started_at),
             expired_at=fmt_dt(display_deadline(existing, form)),
             questions=_build_questions_response(existing.id, request, db),
+            sections=sections,
             resumed=True,
         )
 
@@ -500,6 +506,7 @@ def create_submission(
         started_at=fmt_dt(sub.started_at),
         expired_at=fmt_dt(display_deadline(sub, form)),
         questions=_build_questions_response(sub.id, request, db),
+        sections=sections,
         resumed=False,
     )
 

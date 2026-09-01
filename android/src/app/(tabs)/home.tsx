@@ -32,8 +32,7 @@ export default function HomeScreen() {
       ]);
       if (subRes) {
         const list = Array.isArray(subRes) ? subRes : subRes.data || [];
-        const completedList = list.filter((item: any) => item.status !== 'in_progress');
-        setSubmissions(completedList);
+        setSubmissions(list);
       }
       if (userRes) setUser(userRes);
     } catch (e) {
@@ -109,13 +108,23 @@ export default function HomeScreen() {
         {/* Modular Banner: Scan QR & Quick Join */}
         <QuickJoinBanner />
 
-        {/* Section Title */}
+        {/* Section Title (Matching Web Design with Bilingual Support) */}
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.text, fontSize: 16 * fontSizeScale }]}>
-            {language === 'ID' ? 'Riwayat Pengisian Form' : 'Form Submission History'}
+          <Text style={[styles.eyebrowText, { color: colors.primary, fontSize: 11 * fontSizeScale }]}>
+            {language === 'ID' ? 'AKTIVITAS ANDA' : 'YOUR ACTIVITY'}
           </Text>
-          <Text style={[styles.sectionCount, { color: colors.textMuted, fontSize: 13 * fontSizeScale }]}>
-            {submissions.length} {language === 'ID' ? 'Kuis/Form' : 'Quiz/Form'}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={[styles.sectionTitle, { color: colors.text, fontSize: 22 * fontSizeScale }]}>
+              {language === 'ID' ? 'Jawaban Saya' : 'My Submissions'}
+            </Text>
+            <Text style={[styles.sectionCount, { color: colors.textMuted, fontSize: 13 * fontSizeScale }]}>
+              {submissions.length} {language === 'ID' ? 'Kuis/Form' : 'Quiz/Form'}
+            </Text>
+          </View>
+          <Text style={[styles.sectionSub, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
+            {language === 'ID'
+              ? 'Semua form atau kuis yang telah Anda jawab.'
+              : 'Every form or quiz you\'ve answered.'}
           </Text>
         </View>
 
@@ -167,9 +176,11 @@ const styles = StyleSheet.create({
   greetingTitle: { fontWeight: 'bold' },
   avatarBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontWeight: 'bold' },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  sectionHeader: { marginBottom: 14 },
+  eyebrowText: { fontWeight: '800', letterSpacing: 1.5, marginBottom: 2 },
   sectionTitle: { fontWeight: 'bold' },
   sectionCount: { fontWeight: '600' },
+  sectionSub: { marginTop: 2, fontWeight: '400' },
   centerLoading: { paddingVertical: 40, alignItems: 'center' },
   emptyCard: { borderRadius: 16, padding: 32, borderWidth: 1, alignItems: 'center', gap: 8, marginTop: 10 },
   emptyTitle: { fontWeight: 'bold' },

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   ScrollView,
   RefreshControl,
@@ -14,13 +13,14 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { getMe, updateProfile, apiLogout, removeToken, getStoredUser, saveUser } from '../../services/api_service';
+import { getMe, updateProfile, apiLogout, removeToken, getStoredUser, saveUser, BASE_URL } from '../../services/api_service';
 import { ThemeToggleBtn } from '../../components/ThemeToggleBtn';
 import { useAppTheme } from '../../context/ThemeContext';
-import { BASE_URL } from '@/services/api_service';
+import { useAppAlert } from '../../context/AlertContext';
 
 export default function ProfileScreen() {
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
+  const { showAlert } = useAppAlert();
   const [user, setUser] = useState<any>(null);
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -107,35 +107,39 @@ export default function ProfileScreen() {
               await saveUser(freshData);
             }
           }
-          Alert.alert(
-            language === 'ID' ? 'Sukses 🎉' : 'Success 🎉',
-            language === 'ID' ? 'Avatar berhasil diperbarui' : 'Avatar updated successfully'
-          );
+          showAlert({
+            type: 'success',
+            title: language === 'ID' ? 'Sukses 🎉' : 'Success 🎉',
+            message: language === 'ID' ? 'Avatar berhasil diperbarui' : 'Avatar updated successfully',
+          });
         } catch (e: any) {
           console.log('[DEBUG AVATAR] updateProfile error:', e);
-          Alert.alert(
-            language === 'ID' ? 'Gagal Mengubah Avatar' : 'Failed to Update Avatar',
-            e.message || (language === 'ID' ? 'Terjadi kesalahan saat mengunggah avatar.' : 'An error occurred while uploading avatar.')
-          );
+          showAlert({
+            type: 'error',
+            title: language === 'ID' ? 'Gagal Mengubah Avatar' : 'Failed to Update Avatar',
+            message: e.message || (language === 'ID' ? 'Terjadi kesalahan saat mengunggah avatar.' : 'An error occurred while uploading avatar.'),
+          });
         } finally {
           setUploadingAvatar(false);
         }
       }
     } catch (err: any) {
       console.log('[DEBUG AVATAR] launchImageLibraryAsync error:', err);
-      Alert.alert(
-        language === 'ID' ? 'Error' : 'Error',
-        err.message || (language === 'ID' ? 'Gagal memilih gambar.' : 'Failed to pick image.')
-      );
+      showAlert({
+        type: 'error',
+        title: language === 'ID' ? 'Error' : 'Error',
+        message: err.message || (language === 'ID' ? 'Gagal memilih gambar.' : 'Failed to pick image.'),
+      });
     }
   };
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert(
-        language === 'ID' ? 'Field Wajib' : 'Required Field',
-        language === 'ID' ? 'Nama tidak boleh kosong.' : 'Name cannot be empty.'
-      );
+      showAlert({
+        type: 'warning',
+        title: language === 'ID' ? 'Field Wajib' : 'Required Field',
+        message: language === 'ID' ? 'Nama tidak boleh kosong.' : 'Name cannot be empty.',
+      });
       return;
     }
     setSaving(true);
@@ -159,41 +163,39 @@ export default function ProfileScreen() {
         }
       }
 
-      Alert.alert(
-        language === 'ID' ? 'Profil Diperbarui 🎉' : 'Profile Updated 🎉',
-        language === 'ID' ? 'Profil berhasil disimpan' : 'Profile saved successfully'
-      );
+      showAlert({
+        type: 'success',
+        title: language === 'ID' ? 'Profil Diperbarui 🎉' : 'Profile Updated 🎉',
+        message: language === 'ID' ? 'Profil berhasil disimpan' : 'Profile saved successfully',
+      });
     } catch (err: any) {
       console.log('[DEBUG PROFILE] updateProfile name error:', err);
-      Alert.alert(
-        language === 'ID' ? 'Update Gagal' : 'Update Failed',
-        err.message || (language === 'ID' ? 'Gagal memperbarui profil.' : 'Failed to update profile.')
-      );
+      showAlert({
+        type: 'error',
+        title: language === 'ID' ? 'Update Gagal' : 'Update Failed',
+        message: err.message || (language === 'ID' ? 'Gagal memperbarui profil.' : 'Failed to update profile.'),
+      });
     } finally {
       setSaving(false);
     }
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      language === 'ID' ? 'Konfirmasi Logout' : 'Logout Confirmation',
-      language === 'ID' ? 'Apakah Anda yakin ingin keluar dari akun?' : 'Are you sure you want to log out?',
-      [
-        { text: language === 'ID' ? 'Batal' : 'Cancel', style: 'cancel' },
-        {
-          text: language === 'ID' ? 'Logout' : 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await apiLogout().catch(() => null);
-            } finally {
-              await removeToken();
-              router.replace('/');
-            }
-          },
-        },
-      ]
-    );
+    showAlert({
+      type: 'confirm',
+      title: language === 'ID' ? 'Konfirmasi Logout' : 'Logout Confirmation',
+      message: language === 'ID' ? 'Apakah Anda yakin ingin keluar dari akun?' : 'Are you sure you want to log out?',
+      confirmText: language === 'ID' ? 'Logout' : 'Logout',
+      cancelText: language === 'ID' ? 'Batal' : 'Cancel',
+      onConfirm: async () => {
+        try {
+          await apiLogout().catch(() => null);
+        } finally {
+          await removeToken();
+          router.replace('/');
+        }
+      },
+    });
   };
 
   if (loading) {

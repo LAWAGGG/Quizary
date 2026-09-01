@@ -1,34 +1,48 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { getPublicForm } from '../../services/api_service';
 import { useAppTheme } from '../../context/ThemeContext';
+import { useAppAlert } from '../../context/AlertContext';
 
 export function extractQuizToken(input: string): string {
   let clean = (input || '').trim();
   if (!clean) return '';
 
-  if (clean.includes('/q/')) {
-    const parts = clean.split('/q/');
-    clean = parts[parts.length - 1];
-  } else if (clean.includes('/forms/')) {
-    const parts = clean.split('/forms/');
-    clean = parts[parts.length - 1];
-  } else if (clean.includes('/quiz/')) {
-    const parts = clean.split('/quiz/');
-    clean = parts[parts.length - 1];
-  } else if (clean.includes('/')) {
-    const parts = clean.split('/');
-    clean = parts[parts.length - 1];
+  // Handle trailing slashes first
+  clean = clean.replace(/\/+$/, '');
+
+  // Handle JSON formatted QR codes
+  if (clean.startsWith('{') && clean.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(clean);
+      const val = parsed.shortCode || parsed.code || parsed.token || parsed.short_code;
+      if (val) clean = String(val);
+    } catch {}
   }
 
-  return clean.split('?')[0].split('#')[0].replace(/\/$/, '').toUpperCase();
+  // Strip query string and hash fragment
+  clean = clean.split('?')[0].split('#')[0].trim();
+
+  // Extract token code after /q/, /forms/, /quiz/, or last path segment
+  if (clean.includes('/q/')) {
+    clean = clean.split('/q/').pop() || '';
+  } else if (clean.includes('/forms/')) {
+    clean = clean.split('/forms/').pop() || '';
+  } else if (clean.includes('/quiz/')) {
+    clean = clean.split('/quiz/').pop() || '';
+  } else if (clean.includes('/')) {
+    clean = clean.split('/').pop() || '';
+  }
+
+  return clean.trim().toUpperCase();
 }
 
 export default function JoinScreen() {
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
+  const { showAlert } = useAppAlert();
   const [linkOrCode, setLinkOrCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
@@ -47,10 +61,11 @@ export default function JoinScreen() {
   const handleJoin = async (inputStr: string) => {
     const token = extractQuizToken(inputStr);
     if (!token) {
-      Alert.alert(
-        language === 'ID' ? 'Link / Kode Kosong' : 'Empty Link / Code',
-        language === 'ID' ? 'Silakan tempelkan link kuis atau masukkan kode terlebih dahulu.' : 'Please paste a quiz link or enter a code first.'
-      );
+      showAlert({
+        type: 'warning',
+        title: language === 'ID' ? 'Link / Kode Kosong' : 'Empty Link / Code',
+        message: language === 'ID' ? 'Silakan tempelkan link kuis atau masukkan kode terlebih dahulu.' : 'Please paste a quiz link or enter a code first.',
+      });
       return;
     }
     setLoading(true);
@@ -60,10 +75,11 @@ export default function JoinScreen() {
       setLinkOrCode('');
       router.push({ pathname: '/quiz', params: { shortCode: token, formId: String(quiz.id) } });
     } catch (e: any) {
-      Alert.alert(
-        language === 'ID' ? 'Gagal Gabung' : 'Failed to Join',
-        e.message || (language === 'ID' ? 'Link atau kode kuis tidak valid atau kuis belum dipublikasikan.' : 'Invalid quiz link/code or the quiz has not been published.')
-      );
+      showAlert({
+        type: 'error',
+        title: language === 'ID' ? 'Gagal Gabung' : 'Failed to Join',
+        message: e.message || (language === 'ID' ? 'Link atau kode kuis tidak valid atau kuis belum dipublikasikan.' : 'Invalid quiz link/code or the quiz has not been published.'),
+      });
       setIsScanning(true);
     } finally {
       setLoading(false);
@@ -188,7 +204,7 @@ const styles = StyleSheet.create({
 
   cameraContainer: { height: 260, borderRadius: 20, overflow: 'hidden', borderWidth: 2, marginBottom: 20 },
   cameraPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scannerOverlay: { ...StyleSheet.absoluteFill, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
+  scannerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
   scanTargetBox: { width: 180, height: 180, borderRadius: 16, borderWidth: 2, borderColor: '#10B981', backgroundColor: 'transparent' },
   scannerHintText: { color: '#FFF', fontWeight: 'bold', marginTop: 14, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
 

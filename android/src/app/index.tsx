@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Image } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { apiLogin, saveToken } from '../services/api_service';
 import { useAppTheme } from '../context/ThemeContext'; 
 import { ThemeToggleBtn } from '../components/ThemeToggleBtn';
+import { useAppAlert } from '../context/AlertContext';
 
 export default function LoginScreen() {
-  const { colors } = useAppTheme();
-
+  const { colors, isDark } = useAppTheme();
+  const { showAlert } = useAppAlert();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -16,7 +17,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Lengkapi data', 'Email dan password tidak boleh kosong.');
+      showAlert({ type: 'warning', title: 'Lengkapi data', message: 'Email dan password tidak boleh kosong.' });
       return;
     }
     setLoading(true);
@@ -29,7 +30,8 @@ export default function LoginScreen() {
 
       router.replace('/(tabs)/home');
     } catch (e: any) {
-      Alert.alert('Login gagal', e.message || 'Email atau password salah / server tidak dapat dijangkau.');
+      console.error('[LOGIN ERROR]', e);
+      showAlert({ type: 'error', title: 'Login gagal', message: e.message || 'Email atau password salah.' });
     } finally {
       setLoading(false);
     }
@@ -42,10 +44,11 @@ export default function LoginScreen() {
       </View>
       
       <View style={styles.header}>
-        <View style={[styles.logoBox, { backgroundColor: colors.primary, shadowColor: colors.primary }]}>
-          <Text style={styles.logoText}>Q</Text>
-        </View>
-        <Text style={[styles.title, { color: colors.text }]}>Quizary</Text>
+        <Image
+          source={isDark ? require('../../assets/images/Quizary_Logo_White.png') : require('../../assets/images/Quizary_Logo_Original.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
         <Text style={[styles.subtitle, { color: colors.textSub }]}>Platform Ujian & Kuis Modern</Text>
       </View>
 
@@ -117,14 +120,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   header: { alignItems: 'center', marginBottom: 36 },
-  logoBox: {
-    width: 86, height: 86, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12,
-    elevation: 8,
-  },
-  logoText: { fontSize: 44, fontWeight: 'bold', color: '#FFF' },
-  title: { fontSize: 30, fontWeight: 'bold', marginBottom: 4 },
+  logoImage: { width: 220, height: 75, marginBottom: 8 },
   subtitle: { fontSize: 14 },
   form: { gap: 8 },
   label: { fontSize: 13, fontWeight: '600', marginTop: 8 },
