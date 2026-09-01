@@ -424,6 +424,10 @@ export async function autosaveAnswer(
 }
 
 export async function lockSubmission(submissionId: string | number, reason?: string) {
+  if (!submissionId || submissionId === 'null' || submissionId === 'undefined') {
+    console.warn('[LOCK] Skipped lockSubmission due to invalid submissionId:', submissionId);
+    return;
+  }
   return fetchWithAuth(`/submissions/${submissionId}/lock`, {
     method: 'POST',
     body: JSON.stringify({ reason: reason || 'Keluar dari aplikasi (App background/inactive)' }),

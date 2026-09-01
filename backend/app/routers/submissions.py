@@ -695,10 +695,12 @@ def report_tab_exit(
 # ── POST /submissions/{id}/lock ───────────────────────────────────────────────
 
 @router.post("/submissions/{submission_id}/lock")
+@router.post("/forms/{form_id}/submissions/{submission_id}/lock")
 def lock_submission(
     submission_id: int,
     request: Request,
-    body: dict | None = None,
+    body: TabExitRequest | None = None,
+    form_id: int | None = None,
     x_submission_token: str | None = Header(None, alias="X-Submission-Token"),
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
@@ -709,8 +711,7 @@ def lock_submission(
     if sub.status == SubmissionStatus.in_progress:
         sub.status = SubmissionStatus.locked
         sub.tab_exit_count = (sub.tab_exit_count or 0) + 1
-        reason = body.get("reason") if body else None
-        sub.cheat_reason = reason or "Keluar dari aplikasi (App background/inactive)"
+        sub.cheat_reason = (body.reason if body else None) or "Keluar dari aplikasi (App background/inactive)"
         sub.updated_at = _now()
         db.commit()
 
