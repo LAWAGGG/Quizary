@@ -81,6 +81,12 @@ function extractErrorMessage(err: any, defaultMsg: string): string {
   return defaultMsg;
 }
 
+let activeSubmissionToken: string | null = null;
+
+export function setSubmissionToken(token: string | null) {
+  activeSubmissionToken = token;
+}
+
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
   const token = await getToken();
   const headers: Record<string, string> = {
@@ -88,6 +94,7 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
     ...(options.headers as any),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (activeSubmissionToken) headers['X-Submission-Token'] = activeSubmissionToken;
   try {
     const response = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
     if (!response.ok) {
@@ -112,6 +119,7 @@ async function fetchMultipart(endpoint: string, method: string, formData: FormDa
   const token = await getToken();
   const headers: Record<string, string> = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (activeSubmissionToken) headers['X-Submission-Token'] = activeSubmissionToken;
 
   const response = await fetch(`${BASE_URL}${endpoint}`, { method, headers, body: formData });
 
@@ -398,7 +406,11 @@ export async function createSubmission(
   const body: any = { form_id: Number(formId) };
   if (name) body.respondent_name = name;
   if (email) body.respondent_email = email;
-  return fetchWithAuth('/submissions', { method: 'POST', body: JSON.stringify(body) });
+  const res = await fetchWithAuth('/submissions', { method: 'POST', body: JSON.stringify(body) });
+  if (res && res.access_token) {
+    setSubmissionToken(res.access_token);
+  }
+  return res;
 }
 
 export async function autosaveAnswer(
@@ -409,6 +421,54 @@ export async function autosaveAnswer(
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
+}
+
+export async function checkPassword(
+  submissionId: string | number,
+  questionId: string | number,
+  answer: string
+) {
+  return fetchWithAuth(`/submissions/${submissionId}/questions/${questionId}/check-password`, {
+    method: 'POST',
+    body: JSON.stringify({ answer }),
+  });
+}
+
+export async function lockSubmission(submissionId: string | number, reason?: string) {
+  if (!submissionId || submissionId === 'null' || submissionId === 'undefined') {
+    return null;
+  }
+  const payload = { reason: reason || 'window-blur' };
+  // 1) coba endpoint /lock terbaru (backend lokal sudah ada)
+  try {
+    return await fetchWithAuth(`/submissions/${submissionId}/lock`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  } catch (err: any) {
+    const msg = String(err?.message || '');
+    // 2) fallback untuk backend deploy lama yang belum punya /lock: pakai /tab-exit
+    //    tab-exit butuh 3x untuk jadi locked, jadi panggil sampai locked supaya
+    //    management web (Image 3) langsung lihat status locked + cheat_reason window-blur
+    const isNotFound = msg.includes('Not Found') || msg.toLowerCase().includes('not found');
+    if (isNotFound) {
+      try {
+        let last: any = null;
+        for (let i = 0; i < 3; i++) {
+          last = await fetchWithAuth(`/submissions/${submissionId}/tab-exit`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
+          if (last?.status === 'locked' || last?.warnings_left === 0) break;
+        }
+        return last;
+      } catch {
+        return null;
+      }
+    }
+    // error lain (mis. sudah locked 409) -> jangan spam LogBox, silent
+    return null;
+  }
 }
 
 export async function finalizeSubmission(submissionId: string | number) {

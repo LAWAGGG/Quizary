@@ -68,7 +68,7 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
         {isQuizDesign ? (
           /* DESIGN QUIZ: Fullscreen Hero matching Web Screenshot 1 */
           <View style={styles.quizHeroWrapper}>
-            <ScrollView contentContainerStyle={styles.quizHeroScrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView style={styles.quizHeroScroll} contentContainerStyle={styles.quizHeroScrollContent} showsVerticalScrollIndicator={false}>
               {/* Banner Image with subtle border */}
               {bannerUri ? (
                 <Image source={{ uri: bannerUri }} style={styles.heroBannerQuizStyle} resizeMode="cover" />
@@ -219,8 +219,9 @@ const styles = StyleSheet.create({
   brandTitleText: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
 
   /* QUIZ STYLE (Full Match with Web Screenshot 1) */
-  quizHeroWrapper: { flex: 1, justifyContent: 'space-between' },
-  quizHeroScrollContent: { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 20, alignItems: 'center', justifyContent: 'center' },
+  quizHeroWrapper: { flex: 1 },
+  quizHeroScroll: { flex: 1 },
+  quizHeroScrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24, alignItems: 'center', justifyContent: 'center', minHeight: '100%' as any },
   heroBannerQuizStyle: { width: '100%', height: 180, borderRadius: 20, marginBottom: 20, borderWidth: 3, borderColor: 'rgba(255, 255, 255, 0.25)' },
   quizTitleQuizStyle: { color: '#FFF', fontWeight: '900', textAlign: 'center', marginBottom: 8 },
   

@@ -5,6 +5,8 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { useAppTheme } from '../../context/ThemeContext';
 import { RichTextRenderer } from '../RichTextRenderer';
 import { ImageZoomModal } from '../ImageZoomModal';
+import { AudioPlayer } from '../AudioPlayer';
+import { isAudioUrl } from '../../utils/media';
 import { BASE_URL } from '../../services/api_service';
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
@@ -167,7 +169,9 @@ function QuizQuestionCardComponent({
         <View style={styles.errorWarningBanner}>
           <Ionicons name="warning-outline" size={14} color="#EF4444" />
           <Text style={styles.errorWarningText}>
-            {language === 'ID' ? 'Soal ini wajib diisi' : 'This question is required'}
+            {q.type === 'password'
+              ? (language === 'ID' ? 'Password salah — tidak bisa lanjut' : 'Wrong password — cannot proceed')
+              : (language === 'ID' ? 'Soal ini wajib diisi' : 'This question is required')}
           </Text>
         </View>
       )}
@@ -186,45 +190,58 @@ function QuizQuestionCardComponent({
         </TouchableOpacity>
       )}
 
-      {/* Image if present with Tap-to-Zoom */}
-      {imgUri && (
-        <TouchableOpacity activeOpacity={0.85} onPress={() => setZoomUri(imgUri)} style={styles.imageContainer}>
-          <Image source={{ uri: imgUri }} style={styles.qImage} resizeMode="contain" />
-          <View style={styles.zoomBadge}>
-            <Ionicons name="expand-outline" size={14} color="#FFF" />
-            <Text style={styles.zoomBadgeText}>Ketuk untuk Zoom</Text>
-          </View>
-        </TouchableOpacity>
-      )}
+      {/* Media: image with zoom OR audio player for listening */}
+      {imgUri &&
+        (isAudioUrl(imgUri) ? (
+          <AudioPlayer uri={imgUri} themeColor={activeColor} />
+        ) : (
+          <TouchableOpacity activeOpacity={0.85} onPress={() => setZoomUri(imgUri)} style={styles.imageContainer}>
+            <Image source={{ uri: imgUri }} style={styles.qImage} resizeMode="contain" />
+            <View style={styles.zoomBadge}>
+              <Ionicons name="expand-outline" size={14} color="#FFF" />
+              <Text style={styles.zoomBadgeText}>Ketuk untuk Zoom</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
 
-      {/* Multiple Choice / Checkbox Options */}
+      {/* Multiple Choice / Checkbox Options — support audio per option */}
       {(q.type === 'multiple_choice' || q.type === 'checkbox') && (
         <View style={styles.optionsList}>
           {(q.options || []).map((opt: any, i: number) => {
             const selectedIds: number[] = Array.isArray(userAnswer) ? userAnswer : [];
             const isSelected = selectedIds.includes(opt.id);
             const letter = LETTERS[i % LETTERS.length];
+            const optMedia = extractImgUrl(opt, opt.option_text || '');
+            const optIsAudio = isAudioUrl(optMedia);
 
             return (
               <TouchableOpacity
                 key={opt.id || i}
                 style={[
                   styles.optionCard,
-                  { backgroundColor: colors.inputBg, borderColor: colors.inputBorder },
+                  { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, flexDirection: 'column', alignItems: 'stretch' },
                   isSelected && { backgroundColor: isDark ? 'rgba(79, 70, 229, 0.15)' : '#EEF2FF', borderColor: activeColor },
                 ]}
                 onPress={() => onSelectOption(q.id, opt.id, q.type === 'checkbox')}
                 activeOpacity={0.7}
               >
-                <View style={[styles.letterBubble, { backgroundColor: isDark ? '#334155' : '#E2E8F0' }, isSelected && { backgroundColor: activeColor }]}>
-                  <Text style={[styles.letterText, { color: colors.text }, isSelected && { color: '#FFF' }]}>{letter}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
+                  <View style={[styles.letterBubble, { backgroundColor: isDark ? '#334155' : '#E2E8F0' }, isSelected && { backgroundColor: activeColor }]}>
+                    <Text style={[styles.letterText, { color: colors.text }, isSelected && { color: '#FFF' }]}>{letter}</Text>
+                  </View>
+                  <View style={{ flex: 1, flexShrink: 1, paddingRight: 4 }}>
+                    <RichTextRenderer html={opt.option_text || ''} style={{ fontSize: 14, color: isSelected ? activeColor : colors.text }} />
+                  </View>
+                  {isSelected && <Ionicons name="checkmark-circle" size={20} color={activeColor} />}
                 </View>
-
-                <View style={{ flex: 1, flexShrink: 1, paddingRight: 4 }}>
-                  <RichTextRenderer html={opt.option_text || ''} style={{ fontSize: 14, color: isSelected ? activeColor : colors.text }} />
-                </View>
-
-                {isSelected && <Ionicons name="checkmark-circle" size={20} color={activeColor} />}
+                {optIsAudio && optMedia && (
+                  <View style={{ marginTop: 10 }} onTouchEnd={(e: any) => e.stopPropagation?.()}>
+                    <AudioPlayer uri={optMedia} themeColor={activeColor} compact />
+                  </View>
+                )}
+                {!optIsAudio && optMedia && (
+                  <Image source={{ uri: optMedia }} style={{ width: '100%', height: 80, borderRadius: 10, marginTop: 10 }} resizeMode="contain" />
+                )}
               </TouchableOpacity>
             );
           })}
@@ -415,7 +432,11 @@ function QuizQuestionCardComponent({
       {/* Password Input */}
       {q.type === 'password' && (
         <TextInput
-          style={[styles.textInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
+          style={[
+            styles.textInput,
+            { backgroundColor: colors.inputBg, color: colors.text, borderColor: hasError ? '#EF4444' : colors.inputBorder },
+            hasError && { borderWidth: 2 },
+          ]}
           placeholder="Enter password"
           placeholderTextColor={colors.textMuted}
           secureTextEntry

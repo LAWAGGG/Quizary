@@ -6,6 +6,7 @@ interface LockOverlayProps {
   isChecking: boolean;
 }
 
+// Kept for backward compat — new flows use ViolatingLockOverlay / RestrictedWarningOverlay
 export default function LockOverlay({ onRefresh, isChecking }: LockOverlayProps) {
   return (
     <View style={styles.overlay}>

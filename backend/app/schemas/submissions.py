@@ -33,6 +33,7 @@ class SubmissionCreateResponse(BaseModel):
     # Token kepemilikan sesi — kirim balik via header X-Submission-Token
     # pada endpoint autosave/submit/tab-exit/upload/get detail.
     access_token: Optional[str] = None
+    status: Optional[str] = "in_progress"
     started_at: Optional[str] = None    # "d-m-Y H:i:s"
     expired_at: Optional[str] = None
     questions: list[QuestionWithOptions]
