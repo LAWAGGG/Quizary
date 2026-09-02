@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, FolderPlus } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { stripTags } from '../../lib/sanitize'
-import { Button, Input, Toggle, Select, Card, PageHeader, RichTextEditor } from '../../components/ui'
+import { Button, Toggle, Select, Card, PageHeader, RichTextEditor, CategoryManager } from '../../components/ui'
 
 export default function FormCreate() {
   const navigate = useNavigate()
@@ -17,9 +17,15 @@ export default function FormCreate() {
     require_login: false,
     submission_limit: 'unlimited',
     show_in_history: true,
+    category_id: null,
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [categories, setCategories] = useState([])
+  const [showCatMgr, setShowCatMgr] = useState(false)
+
+  const fetchCats = () => api.get('/categories').then((r) => setCategories(r.data)).catch(()=>{})
+  useEffect(() => { fetchCats() }, [])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -33,7 +39,9 @@ export default function FormCreate() {
     setLoading(true)
     setError('')
     try {
-      const res = await api.post('/forms', form)
+      const payload = { ...form }
+      if (!payload.category_id) delete payload.category_id
+      const res = await api.post('/forms', payload)
       toast.success('Form created')
       navigate(`/forms/${res.data.id}`)
     } catch (err) {
@@ -107,6 +115,27 @@ export default function FormCreate() {
                   ))}
                 </div>
               </div>
+
+              <div>
+                <span className="field-label">Kategori</span>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Select
+                      value={form.category_id || ''}
+                      onChange={(e) => setForm((p) => ({ ...p, category_id: e.target.value ? Number(e.target.value) : null }))}
+                    >
+                      <option value="">Tanpa kategori</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name} ({c.form_count})</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <Button type="button" variant="secondary" onClick={() => setShowCatMgr(true)} icon={<FolderPlus className="w-4 h-4" />}>
+                    Buat
+                  </Button>
+                </div>
+                <p className="field-hint mt-1">Kategori milik akun kamu — mis. Matematika, IPA, Survey Kepuasan.</p>
+              </div>
             </Card>
 
             <Card className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -132,6 +161,7 @@ export default function FormCreate() {
               </Button>
             </div>
           </form>
+          <CategoryManager open={showCatMgr} onClose={() => setShowCatMgr(false)} categories={categories} onChanged={(created, deletedId) => { fetchCats(); if (created) setForm((p)=>({ ...p, category_id: created.id })); if (deletedId) setForm((p)=> p.category_id===deletedId ? { ...p, category_id: null } : p) }} />
       </motion.div>
     </div>
   )

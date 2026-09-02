@@ -69,9 +69,17 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   const optionFileRefs = useRef([])
   const [imgLoading, setImgLoading] = useState(null)
 
+  const MAX_Q_MEDIA = 10 * 1024 * 1024
+  const fmtMB = (b) => (b / (1024 * 1024)).toFixed(1)
+
   const uploadOptionImage = async (opt, i) => {
     const file = optionFileRefs.current[i]?.files?.[0]
     if (!file) return
+    if (file.size > MAX_Q_MEDIA) {
+      toast.error(`File terlalu besar (${fmtMB(file.size)}MB). Maksimal 10MB untuk gambar/audio soal`)
+      if (optionFileRefs.current[i]) optionFileRefs.current[i].value = ''
+      return
+    }
     // ponytail: new question/option has no ID — queue file, upload after create
     if (!opt.id || !questionId) {
       const preview = URL.createObjectURL(file)
@@ -96,7 +104,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         options: prev.options.map((o, idx) => (idx !== i ? o : { ...o, image: { path: res.data.image.path } })),
       }))
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to upload')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to upload')
     } finally {
       setImgLoading(null)
       if (optionFileRefs.current[i]) optionFileRefs.current[i].value = ''
@@ -109,6 +117,11 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   const handleQuestionFileChange = async () => {
     const file = questionFileRef.current?.files?.[0]
     if (!file) return
+    if (file.size > MAX_Q_MEDIA) {
+      toast.error(`File terlalu besar (${fmtMB(file.size)}MB). Maksimal 10MB untuk gambar/audio soal`)
+      if (questionFileRef.current) questionFileRef.current.value = ''
+      return
+    }
     // ponytail: new question has no ID yet — queue file, upload after create
     if (!questionId) {
       const preview = URL.createObjectURL(file)
@@ -127,7 +140,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
       toast.success('Media uploaded')
       setForm((prev) => ({ ...prev, image: { path: res.data.image.path } }))
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to upload')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to upload')
     } finally {
       setQImgLoading(false)
       if (questionFileRef.current) questionFileRef.current.value = ''
@@ -1140,7 +1153,7 @@ export default function QuestionBuilder() {
             const fd = new FormData()
             fd.append('file', data._pendingFile)
             await api.post(`/questions/${newQ.id}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-          } catch (e) { toast.error(e.response?.data?.detail || 'Gagal upload media pertanyaan') }
+          } catch (e) { toast.error(e.response?.data?.message || e.response?.data?.detail || 'Gagal upload media pertanyaan') }
         }
         const sentOpts = data.options.filter((o) => o.option_text.trim())
         for (let i = 0; i < sentOpts.length; i++) {
@@ -1152,7 +1165,7 @@ export default function QuestionBuilder() {
                 const fd = new FormData()
                 fd.append('file', opt._pendingFile)
                 await api.post(`/questions/${newQ.id}/option/${optId}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-              } catch (e) { toast.error(e.response?.data?.detail || 'Gagal upload media opsi') }
+              } catch (e) { toast.error(e.response?.data?.message || e.response?.data?.detail || 'Gagal upload media opsi') }
             }
           }
         }

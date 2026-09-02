@@ -194,17 +194,31 @@ export default function Results() {
 
   const handleExport = async () => {
     try {
-      const res = await api.get(`/forms/${formId}/export/excel`, { responseType: 'blob' })
+      const params = {}
+      if (status) params.status = status
+      if (sort) params.sort = sort
+      const res = await api.get(`/forms/${formId}/export/excel`, { responseType: 'blob', params })
+      const disposition = res.headers['content-disposition']
+      let filename = ''
+      if (disposition) {
+        const m = disposition.match(/filename="?([^"]+)"?/)
+        if (m) filename = m[1]
+      }
+      if (!filename) {
+        const safeTitle = (stripTags(formTitle) || 'form').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '')
+        const today = new Date().toISOString().slice(0, 10)
+        filename = `${safeTitle}_${today}.xlsx`
+      }
       const url = URL.createObjectURL(res.data)
-      const safeTitle = (stripTags(formTitle) || 'form').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '')
-      const today = new Date().toISOString().slice(0, 10)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${safeTitle}_${today}.xlsx`
+      a.download = filename
       a.click()
       URL.revokeObjectURL(url)
+      toast.success('Excel diekspor sesuai filter & urutan saat ini')
     } catch (err) {
       console.error(err)
+      toast.error(err.response?.data?.message || 'Gagal mengekspor Excel')
     }
   }
 
@@ -254,8 +268,7 @@ export default function Results() {
         description={`${meta.total} submission${meta.total !== 1 ? 's' : ''}`}
         actions={
           <>
-           
-            <Button variant="secondary" icon={<Download className="w-4 h-4" />} onClick={handleExport}>Excel</Button>
+            <Button variant="secondary" icon={<Download className="w-4 h-4" />} onClick={handleExport} title="Export Excel mengikuti filter status & urutan skor yang aktif">Excel</Button>
           </>
         }
       />
@@ -276,6 +289,11 @@ export default function Results() {
           </div>
         )}
       </div>
+      {(status || sort) && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-4 -mt-2">
+          Export Excel akan mengikuti filter & urutan yang aktif{status ? ` · status: ${status}` : ''}{sort ? ` · sort: ${sort === 'score_desc' ? 'Highest score' : sort === 'score_asc' ? 'Lowest score' : sort}` : ''}.
+        </p>
+      )}
 
       {selected.size > 0 && (
         <div className="sticky top-2 z-30 mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-white dark:bg-ink-900 px-4 py-3 shadow-lift">

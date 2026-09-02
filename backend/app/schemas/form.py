@@ -63,6 +63,7 @@ class FormCreate(BaseModel):
     reveal_answers: bool = True
     scoring_mode: str = "auto"
     timer_seconds: Optional[int] = Field(None, ge=30, le=86400)
+    category_id: Optional[int] = Field(None, ge=1)
 
     @model_validator(mode="after")
     def validate_title(self):
@@ -103,6 +104,7 @@ class FormUpdate(BaseModel):
     reveal_answers: Optional[bool] = None
     scoring_mode: Optional[str] = None
     status: Optional[str] = None
+    category_id: Optional[int] = Field(None, ge=1)
 
     @model_validator(mode="after")
     def validate_title(self):
@@ -151,6 +153,14 @@ class MessageResponse(BaseModel):
     id: int | None = None
 
 
+class CategoryBrief(BaseModel):
+    id: int
+    name: str
+    color: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 class FormListItem(BaseModel):
     id: int
     title: str
@@ -161,6 +171,8 @@ class FormListItem(BaseModel):
     theme_color: Optional[str] = None
     banner_path: Optional[str] = None
     question_count: int = 0
+    category_id: Optional[int] = None
+    category: Optional[CategoryBrief] = None
 
     model_config = {"from_attributes": True}
 

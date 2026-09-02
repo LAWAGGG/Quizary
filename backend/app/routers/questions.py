@@ -15,7 +15,7 @@ from app.models.question_option import QuestionOption
 from app.models.submission import Submission, SubmissionStatus
 from app.models.user import User
 from app.services.points import distribute_quiz_points
-from app.utils import file_url, now_wib, write_limited, MAX_IMAGE_BYTES, _delete_file, UPLOAD_DIR
+from app.utils import file_url, now_wib, write_limited, MAX_QUESTION_MEDIA_BYTES, _delete_file, UPLOAD_DIR
 from app.schemas.question import (
     GroupAddRequest,
     QuestionCreate,
@@ -706,10 +706,13 @@ def _store_image(file: UploadFile, subdir: str) -> str:
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in _ALLOWED_EXT:
         raise HTTPException(status_code=422, detail="Unsupported file format, use image (JPG/PNG/GIF/WEBP) or audio (MP3/WAV/M4A/OGG/AAC/WEBM)")
+    # ponytail: early reject jika size diketahui — hindari upload lama sebelum ditolak
+    if getattr(file, "size", None) is not None and file.size > MAX_QUESTION_MEDIA_BYTES:
+        raise HTTPException(status_code=413, detail=f"Ukuran file terlalu besar ({file.size / (1024*1024):.1f}MB). Maksimal 10MB untuk gambar/audio soal")
     filename = f"{uuid.uuid4().hex}{ext}"
     dest = os.path.join(UPLOAD_DIR, subdir, filename)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
-    write_limited(file.file, dest, MAX_IMAGE_BYTES)
+    write_limited(file.file, dest, MAX_QUESTION_MEDIA_BYTES)
     return f"{subdir}/{filename}"
 
 

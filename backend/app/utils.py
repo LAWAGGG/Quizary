@@ -9,12 +9,16 @@ UPLOAD_DIR = "uploads"
 # Batas ukuran upload — streaming per-chunk supaya file besar tidak
 # dimuat utuh ke memori sebelum ditolak.
 CHUNK_SIZE = 1024 * 1024  # 1 MB
-MAX_IMAGE_BYTES = 5 * CHUNK_SIZE        # banner / avatar / media soal & opsi
+MAX_IMAGE_BYTES = 5 * CHUNK_SIZE        # banner / avatar
+MAX_QUESTION_MEDIA_BYTES = 10 * CHUNK_SIZE  # media soal & opsi (image/audio khusus question)
 MAX_ANSWER_FILE_BYTES = 25 * CHUNK_SIZE # jawaban file_upload responden
 MAX_DOCX_BYTES = 10 * CHUNK_SIZE        # import soal .docx
 
 
-def _reject_too_large():
+def _reject_too_large(max_bytes: int | None = None):
+    if max_bytes:
+        mb = max_bytes // (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"Ukuran file terlalu besar. Maksimal {mb}MB")
     raise HTTPException(status_code=413, detail="Ukuran file terlalu besar")
 
 
@@ -27,7 +31,7 @@ def read_limited(fileobj, max_bytes: int) -> bytes:
             break
         buf.extend(chunk)
         if len(buf) > max_bytes:
-            _reject_too_large()
+            _reject_too_large(max_bytes)
     return bytes(buf)
 
 
@@ -42,7 +46,7 @@ def write_limited(fileobj, dest: str, max_bytes: int) -> int:
                     break
                 written += len(chunk)
                 if written > max_bytes:
-                    _reject_too_large()
+                    _reject_too_large(max_bytes)
                 out.write(chunk)
     except Exception:
         if os.path.isfile(dest):

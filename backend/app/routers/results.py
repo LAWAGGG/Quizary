@@ -503,20 +503,49 @@ def _export_columns(form: Form, subs: list[Submission], db: Session):
 
 
 @router.get("/forms/{form_id}/export/excel")
-def export_excel(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
+def export_excel(
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+    status: str | None = Query(None, alias="status"),
+    sort: str | None = Query(None, alias="sort"),
+):
     # Sesi kedaluwarsa dikonversi dulu jadi auto_submitted supaya datanya ikut
     # terekspor. Submission in_progress yang masih aktif tetap turut diekspor
     # (skor kosong) agar pengerjaan yang belum selesai ikut terlihat.
     auto_submit_expired_for_form(db, form)
-    subs = db.query(Submission).filter(
-        Submission.form_id == form.id,
-        Submission.status.in_([
+    q = db.query(Submission).filter(Submission.form_id == form.id)
+
+    # Filter by status — same as GET /results, includes locked when asked
+    if status:
+        if status not in SubmissionStatus.__members__:
+            raise HTTPException(status_code=422, detail="status must be in_progress, submitted, auto_submitted, cheating or locked")
+        q = q.filter(Submission.status == SubmissionStatus[status])
+    else:
+        q = q.filter(Submission.status.in_([
             SubmissionStatus.in_progress,
             SubmissionStatus.submitted,
             SubmissionStatus.auto_submitted,
             SubmissionStatus.cheating,
-        ]),
-    ).order_by(Submission.created_at.desc()).all()
+            SubmissionStatus.locked,
+        ]))
+
+    # Sort — mirror list_results so export matches what user sees
+    if sort == "score_desc":
+        q = q.order_by(Submission.score.desc(), Submission.submitted_at.asc(), Submission.id.asc())
+    elif sort == "score_asc":
+        q = q.order_by(Submission.score.asc(), Submission.submitted_at.asc(), Submission.id.asc())
+    elif sort == "newest":
+        q = q.order_by(Submission.created_at.desc())
+    elif sort == "oldest":
+        q = q.order_by(Submission.created_at.asc())
+    elif sort == "status":
+        q = q.order_by(Submission.status.asc(), Submission.created_at.desc())
+    elif sort:
+        raise HTTPException(status_code=422, detail="sort must be score_desc, score_asc, newest, oldest or status")
+    else:
+        q = q.order_by(Submission.created_at.desc())
+
+    subs = q.all()
 
     _, headers, rows = _export_columns(form, subs, db)
 

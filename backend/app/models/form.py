@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, Enum as SAEnum, ForeignKey, Index
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, DateTime, Enum as SAEnum, ForeignKey, Index
 from sqlalchemy.orm import relationship
 import enum
 
@@ -66,10 +66,14 @@ class Form(Base):
     created_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=True)
 
+    category_id = Column(BigInteger, ForeignKey("form_categories.id", ondelete="SET NULL"), nullable=True)
+
     user = relationship("User", back_populates="forms")
+    category = relationship("FormCategory", back_populates="forms")
     questions = relationship("Question", back_populates="form", cascade="all, delete-orphan")
     submissions = relationship("Submission", back_populates="form", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("idx_forms_user", "user_id"),
+        Index("idx_forms_category", "category_id"),
     )

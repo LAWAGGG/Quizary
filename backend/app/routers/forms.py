@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user, verify_form_owner
 from app.models.form import Form, FormStatus, FormType, SubmissionLimit, ScoringMode
+from app.models.form_category import FormCategory
 from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
 from app.models.image import Image
@@ -75,8 +76,38 @@ def _ensure_publishable(form: Form, db: Session) -> None:
         )
 
 
-def _form_dict(form: Form, request: Request) -> dict:
+def _verify_category(db: Session, category_id: int | None, user_id: int) -> FormCategory | None:
+    if category_id is None:
+        return None
+    cat = db.get(FormCategory, category_id)
+    if not cat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Kategori tidak ditemukan")
+    if cat.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Anda bukan pemilik kategori ini")
+    return cat
+
+
+def _form_dict(form: Form, request: Request, db: Session | None = None) -> dict:
     """Serialize a Form ORM object to a dict with datetime strings and full banner URL."""
+    cat = None
+    if form.category_id:
+        try:
+            # try relationship if session still open
+            if hasattr(form, "category") and form.category:
+                cat = {"id": form.category.id, "name": form.category.name, "color": form.category.color}
+            elif db is not None:
+                c = db.get(FormCategory, form.category_id)
+                if c:
+                    cat = {"id": c.id, "name": c.name, "color": c.color}
+            else:
+                cat = {"id": form.category_id, "name": None, "color": None}
+        except Exception:
+            cat = {"id": form.category_id, "name": None, "color": None}
+        # ensure we never return name=None if we could fetch
+        if cat and cat.get("name") is None and db is not None:
+            c = db.get(FormCategory, form.category_id)
+            if c:
+                cat = {"id": c.id, "name": c.name, "color": c.color}
     return {
         "id": form.id,
         "title": form.title,
@@ -101,6 +132,8 @@ def _form_dict(form: Form, request: Request) -> dict:
         "reveal_score": form.reveal_score,
         "reveal_answers": form.reveal_answers,
         "scoring_mode": form.scoring_mode.value if form.scoring_mode else "auto",
+        "category_id": form.category_id,
+        "category": cat,
         "created_at": fmt_dt(form.created_at),
         "updated_at": fmt_dt(form.updated_at),
     }
@@ -113,6 +146,7 @@ def list_forms(
     request: Request,
     status_filter: str | None = Query(None, alias="status"),
     type_filter: str | None = Query(None, alias="type"),
+    category_id: int | None = Query(None, ge=0),
     page: int = Query(1, ge=1),
     per_page: int = Query(10, ge=1, le=100),
     user: User = Depends(get_current_user),
@@ -127,12 +161,24 @@ def list_forms(
         if type_filter not in FormType.__members__:
             raise HTTPException(status_code=422, detail="type must be form or quiz")
         q = q.filter(Form.type == FormType[type_filter])
+    if category_id is not None:
+        # 0 means uncategorized (category_id IS NULL) — optional support via -1
+        if category_id == 0:
+            q = q.filter(Form.category_id.is_(None))
+        else:
+            # validate category belongs to user (404 if alien, but filter hides)
+            cat = db.get(FormCategory, category_id)
+            if not cat or cat.user_id != user.id:
+                # return empty而不是 404, so filtering doesn't leak existence
+                return FormListResponse(data=[], meta={"total": 0, "page": page, "per_page": per_page})
+            q = q.filter(Form.category_id == category_id)
 
     total = q.count()
     forms = q.order_by(Form.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
 
     # Hitungan soal per form — satu query GROUP BY, dipetakan ke card list.
     counts: dict[int, int] = {}
+    cat_map: dict[int, FormCategory] = {}
     if forms:
         rows = (
             db.query(Question.form_id, func.count(Question.id))
@@ -141,12 +187,17 @@ def list_forms(
             .all()
         )
         counts = {fid: n for fid, n in rows}
+        cat_ids = {f.category_id for f in forms if f.category_id}
+        if cat_ids:
+            cats = db.query(FormCategory).filter(FormCategory.id.in_(cat_ids)).all()
+            cat_map = {c.id: c for c in cats}
 
     return FormListResponse(
         data=[
             FormListItem.model_validate(f).model_copy(update={
                 "question_count": counts.get(f.id, 0),
                 "banner_path": file_url(request, f.banner_path),
+                "category": {"id": cat_map[f.category_id].id, "name": cat_map[f.category_id].name, "color": cat_map[f.category_id].color} if f.category_id and f.category_id in cat_map else None,
             })
             for f in forms
         ],
@@ -164,6 +215,8 @@ def create_form(
     db: Session = Depends(get_db),
 ):
     now = now_wib()
+    if body.category_id is not None:
+        _verify_category(db, body.category_id, user.id)
     settings = _apply_setting_chain(
         {"is_restricted": body.is_restricted, "submission_limit": body.submission_limit, "require_login": body.require_login},
         Form(is_restricted=body.is_restricted, submission_limit=body.submission_limit),
@@ -182,6 +235,7 @@ def create_form(
         reveal_answers=body.reveal_answers,
         scoring_mode=_parse_enum(body.scoring_mode, ScoringMode, "scoring_mode"),
         timer_seconds=body.timer_seconds,
+        category_id=body.category_id,
         short_code=_generate_short_code(db),
         created_at=now,
         updated_at=now,
@@ -192,14 +246,14 @@ def create_form(
     db.add(Section(form_id=form.id, title="Bagian 1", order_index=0, created_at=now))
     db.commit()
     db.refresh(form)
-    return _form_dict(form, request)
+    return _form_dict(form, request, db)
 
 
 # ── GET /forms/{form_id} ──────────────────────────────────────────────────────
 
 @router.get("/forms/{form_id}")
-def get_form(request: Request, form: Form = Depends(verify_form_owner)):
-    return _form_dict(form, request)
+def get_form(request: Request, form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
+    return _form_dict(form, request, db)
 
 
 # ── PUT /forms/{form_id} ──────────────────────────────────────────────────────
@@ -237,6 +291,11 @@ def update_form(
                 if "is_restricted" not in update_data:
                     update_data["is_restricted"] = False
 
+    # category validation
+    if "category_id" in update_data:
+        if update_data["category_id"] is not None:
+            _verify_category(db, update_data["category_id"], form.user_id)
+
     for field, value in update_data.items():
         if field == "type":
             value = _parse_enum(value, FormType, "type")
@@ -246,6 +305,9 @@ def update_form(
             value = _parse_enum(value, SubmissionLimit, "submission_limit")
         elif field == "scoring_mode":
             value = _parse_enum(value, ScoringMode, "scoring_mode")
+        elif field == "category_id":
+            # None allowed to unset
+            pass
         setattr(form, field, value)
 
     # Switching back to automatic allocation immediately restores the 100
@@ -262,7 +324,7 @@ def update_form(
     form.updated_at = now_wib()
     db.commit()
     db.refresh(form)
-    return _form_dict(form, request)
+    return _form_dict(form, request, db)
 
 
 def _prepare_quiz_after_form_conversion(form_id: int, db: Session) -> None:

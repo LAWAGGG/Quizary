@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, forms, questions, profile, public_access, submissions, results, import_questions
+from app.routers import auth, categories, forms, questions, profile, public_access, submissions, results, import_questions
 
 app = FastAPI(title="Quizary API")
 
@@ -120,6 +120,7 @@ async def catch_all_handler(request: Request, exc: Exception):
 
 
 app.include_router(auth.router, prefix="/api")
+app.include_router(categories.router, prefix="/api")
 app.include_router(forms.router, prefix="/api")
 app.include_router(questions.router, prefix="/api")
 app.include_router(profile.router, prefix="/api")
