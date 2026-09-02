@@ -148,6 +148,17 @@
     "cancel": "Cancel",
     "name": "Name",
     "namePlaceholder": "Your name",
-    "email": "Email"
+    "email": "Email",
+    "password": {
+      "title": "Change Password",
+      "desc": "Update your account password",
+      "old": "Current Password",
+      "new": "New Password",
+      "confirm": "Confirm New Password",
+      "update": "Update Password",
+      "success": "Password updated successfully",
+      "oldIncorrect": "Current password is incorrect",
+      "mismatch": "Passwords do not match"
+    }
   }
 }

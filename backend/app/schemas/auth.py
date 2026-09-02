@@ -40,3 +40,17 @@ class TokenResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class PasswordUpdateRequest(BaseModel):
+    old_password: str = Field(..., min_length=1, max_length=72)
+    new_password: str = Field(min_length=8, max_length=72)
+    new_password_confirmation: str
+
+    @model_validator(mode="after")
+    def passwords_match_and_different(self):
+        if self.new_password != self.new_password_confirmation:
+            raise ValueError("new_password_confirmation does not match new_password")
+        if self.old_password == self.new_password:
+            raise ValueError("New password must be different from old password")
+        return self

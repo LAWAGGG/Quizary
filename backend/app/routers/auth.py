@@ -7,7 +7,7 @@ from app.database import get_db
 from app.auth import hash_password, verify_password, create_access_token, revoke_token
 from app.models.user import User
 from app.ratelimit import limit_login, limit_register
-from app.schemas.auth import RegisterRequest, LoginRequest, UserResponse, TokenResponse, MessageResponse
+from app.schemas.auth import RegisterRequest, LoginRequest, UserResponse, TokenResponse, MessageResponse, PasswordUpdateRequest
 from app.dependencies import get_current_user, security
 from app.utils import file_url
 
@@ -66,3 +66,16 @@ def logout(
 def me(request: Request, user: User = Depends(get_current_user)):
     # Fix #1 — avatar returned as full URL
     return _user_response(user, request)
+
+
+@router.put("/me/password", status_code=200, response_model=MessageResponse)
+def update_password(
+    body: PasswordUpdateRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(body.old_password, user.password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Old password is incorrect")
+    user.password = hash_password(body.new_password)
+    db.commit()
+    return MessageResponse(message="Password updated successfully")

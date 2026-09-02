@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Camera } from 'lucide-react'
+import { Camera, Eye, EyeOff } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
@@ -9,12 +10,75 @@ import { Card, Button, Input, Badge, PageHeader } from '../../components/ui'
 export default function Profile() {
   const { user, updateUser } = useAuth()
   const toast = useToast()
+  const { t } = useTranslation()
   const [name, setName] = useState('')
   const [avatar, setAvatar] = useState(null)
   const [avatarPreview, setAvatarPreview] = useState(null)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef(null)
+  const [showPassword, setShowPassword] = useState({ old: false, new: false, confirm: false })
+  const [passwords, setPasswords] = useState({ old: '', new: '', confirm: '' })
+  const [passwordErrors, setPasswordErrors] = useState({ old: '', new: '', confirm: '' })
+  const [changing, setChanging] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+
+  const togglePassword = (field) => setShowPassword(prev => ({ ...prev, [field]: !prev[field] }))
+
+  const handlePasswordChange = async () => {
+    if (passwords.new !== passwords.confirm) {
+      setPasswordErrors(prev => ({ ...prev, confirm: t('profile.password.mismatch') }))
+      return
+    }
+    setChanging(true)
+    setPasswordErrors({ old: '', new: '', confirm: '' })
+    try {
+      await api.put('/me/password', {
+        old_password: passwords.old,
+        new_password: passwords.new,
+        new_password_confirmation: passwords.confirm,
+      })
+      toast.success(t('profile.password.success'))
+      setPasswords({ old: '', new: '', confirm: '' })
+      setExpanded(false)
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.response?.data?.message || ''
+      if (msg.toLowerCase().includes('old') || msg.toLowerCase().includes('incorrect')) {
+        setPasswordErrors(prev => ({ ...prev, old: t('profile.password.oldIncorrect') }))
+      } else if (msg.toLowerCase().includes('confirmation') || msg.toLowerCase().includes('match')) {
+        setPasswordErrors(prev => ({ ...prev, confirm: msg || t('profile.password.mismatch') }))
+      } else if (msg) {
+        setPasswordErrors(prev => ({ ...prev, new: msg }))
+      }
+    } finally {
+      setChanging(false)
+    }
+  }
+
+  function PasswordField({ id, label, value, onChange, error, show, onToggle }) {
+    return (
+      <div className="relative">
+        <Input
+          id={id}
+          type={show ? 'text' : 'password'}
+          label={label}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          error={error}
+          className="pr-10"
+          autoComplete="new-password"
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          tabIndex={-1}
+        >
+          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      </div>
+    )
+  }
 
   useEffect(() => {
     if (user) {
@@ -136,6 +200,64 @@ export default function Profile() {
               Save Changes
             </Button>
           </div>
+        </Card>
+
+        <Card className="p-5 mt-4">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <div className="flex items-center gap-3">
+              <span className="w-9 h-9 rounded-xl bg-primary-50 dark:bg-primary-900/30 text-primary flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-ink dark:text-gray-100">{t('profile.password.title')}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">{t('profile.password.desc')}</p>
+              </div>
+            </div>
+            <svg
+              className={`w-5 h-5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {expanded && (
+            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-4">
+              <PasswordField
+                id="old-password"
+                label={t('profile.password.old')}
+                value={passwords.old}
+                onChange={(v) => setPasswords(prev => ({ ...prev, old: v }))}
+                error={passwordErrors.old}
+                show={showPassword.old}
+                onToggle={() => togglePassword('old')}
+              />
+              <PasswordField
+                id="new-password"
+                label={t('profile.password.new')}
+                value={passwords.new}
+                onChange={(v) => setPasswords(prev => ({ ...prev, new: v }))}
+                error={passwordErrors.new}
+                show={showPassword.new}
+                onToggle={() => togglePassword('new')}
+              />
+              <PasswordField
+                id="confirm-password"
+                label={t('profile.password.confirm')}
+                value={passwords.confirm}
+                onChange={(v) => setPasswords(prev => ({ ...prev, confirm: v }))}
+                error={passwordErrors.confirm}
+                show={showPassword.confirm}
+                onToggle={() => togglePassword('confirm')}
+              />
+              <Button onClick={handlePasswordChange} loading={changing} className="w-full" size="lg">
+                {t('profile.password.update')}
+              </Button>
+            </div>
+          )}
         </Card>
       </motion.div>
     </div>

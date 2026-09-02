@@ -148,6 +148,17 @@
     "cancel": "Batal",
     "name": "Nama",
     "namePlaceholder": "Nama Anda",
-    "email": "Email"
+    "email": "Email",
+    "password": {
+      "title": "Ubah Password",
+      "desc": "Perbarui password akun Anda",
+      "old": "Password Saat Ini",
+      "new": "Password Baru",
+      "confirm": "Konfirmasi Password Baru",
+      "update": "Perbarui Password",
+      "success": "Password berhasil diperbarui",
+      "oldIncorrect": "Password saat ini salah",
+      "mismatch": "Password tidak cocok"
+    }
   }
 }
