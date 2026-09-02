@@ -969,7 +969,7 @@ const styles = StyleSheet.create({
   mapSelectorText: { color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
 
   /* QUESTION CONTAINER */
-  scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 30 },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 30 },
   questionCardWrapper: { width: '100%', alignItems: 'center' },
   questionInnerContainer: { width: '100%', maxWidth: 600 },
 
