@@ -142,23 +142,35 @@
   "profile": {
     "eyebrow": "Account",
     "title": "My Profile",
-    "description": "Update your name and avatar.",
+    "description": "Update your name, avatar, and password.",
     "changeAvatar": "Change avatar",
     "saveAvatar": "Save Avatar",
     "cancel": "Cancel",
     "name": "Name",
     "namePlaceholder": "Your name",
     "email": "Email",
+    "saveProfile": "Save Changes",
+    "saved": "Profile updated successfully",
+    "saveFailed": "Failed to update profile",
+    "avatarSaved": "Avatar uploaded successfully",
+    "avatarFailed": "Failed to upload avatar",
     "password": {
-      "title": "Change Password",
-      "desc": "Update your account password",
-      "old": "Current Password",
-      "new": "New Password",
-      "confirm": "Confirm New Password",
-      "update": "Update Password",
+      "open": "Change password",
+      "title": "Change password",
+      "desc": "Enter your current password to verify your identity, then set a new one.",
+      "old": "Current password",
+      "new": "New password",
+      "confirm": "Repeat new password",
+      "newHint": "At least 8 characters. Don't reuse your current password.",
+      "update": "Update password",
       "success": "Password updated successfully",
+      "oldRequired": "Current password is required",
       "oldIncorrect": "Current password is incorrect",
-      "mismatch": "Passwords do not match"
+      "tooShort": "Password must be at least 8 characters",
+      "confirmRequired": "Password confirmation is required",
+      "mismatch": "Passwords do not match",
+      "sameAsOld": "New password must be different from your current password",
+      "genericError": "Failed to update password. Please try again."
     }
   }
 }

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Camera, Eye, EyeOff } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Camera, Lock } from 'lucide-react'
 import api from '../../api/client'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
-import { Card, Button, Input, Badge, PageHeader } from '../../components/ui'
+import { Card, Button, Input, PageHeader } from '../../components/ui'
+import ChangePasswordModal from './ChangePasswordModal'
 
 export default function Profile() {
   const { user, updateUser } = useAuth()
@@ -16,69 +17,8 @@ export default function Profile() {
   const [avatarPreview, setAvatarPreview] = useState(null)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [openPassword, setOpenPassword] = useState(false)
   const fileRef = useRef(null)
-  const [showPassword, setShowPassword] = useState({ old: false, new: false, confirm: false })
-  const [passwords, setPasswords] = useState({ old: '', new: '', confirm: '' })
-  const [passwordErrors, setPasswordErrors] = useState({ old: '', new: '', confirm: '' })
-  const [changing, setChanging] = useState(false)
-  const [expanded, setExpanded] = useState(false)
-
-  const togglePassword = (field) => setShowPassword(prev => ({ ...prev, [field]: !prev[field] }))
-
-  const handlePasswordChange = async () => {
-    if (passwords.new !== passwords.confirm) {
-      setPasswordErrors(prev => ({ ...prev, confirm: t('profile.password.mismatch') }))
-      return
-    }
-    setChanging(true)
-    setPasswordErrors({ old: '', new: '', confirm: '' })
-    try {
-      await api.put('/me/password', {
-        old_password: passwords.old,
-        new_password: passwords.new,
-        new_password_confirmation: passwords.confirm,
-      })
-      toast.success(t('profile.password.success'))
-      setPasswords({ old: '', new: '', confirm: '' })
-      setExpanded(false)
-    } catch (err) {
-      const msg = err.response?.data?.detail || err.response?.data?.message || ''
-      if (msg.toLowerCase().includes('old') || msg.toLowerCase().includes('incorrect')) {
-        setPasswordErrors(prev => ({ ...prev, old: t('profile.password.oldIncorrect') }))
-      } else if (msg.toLowerCase().includes('confirmation') || msg.toLowerCase().includes('match')) {
-        setPasswordErrors(prev => ({ ...prev, confirm: msg || t('profile.password.mismatch') }))
-      } else if (msg) {
-        setPasswordErrors(prev => ({ ...prev, new: msg }))
-      }
-    } finally {
-      setChanging(false)
-    }
-  }
-
-  function PasswordField({ id, label, value, onChange, error, show, onToggle }) {
-    return (
-      <div className="relative">
-        <Input
-          id={id}
-          type={show ? 'text' : 'password'}
-          label={label}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          error={error}
-          className="pr-10"
-          autoComplete="new-password"
-        />
-        <button
-          type="button"
-          onClick={onToggle}
-          className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          tabIndex={-1}
-        >
-          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </button>
-      </div>
-    )
-  }
 
   useEffect(() => {
     if (user) {
@@ -96,9 +36,9 @@ export default function Profile() {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       updateUser(res.data)
-      toast.success('Profile updated successfully')
+      toast.success(t('profile.saved'))
     } catch (err) {
-      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to update profile')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || t('profile.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -123,9 +63,9 @@ export default function Profile() {
       updateUser(res.data)
       setAvatarPreview(res.data.avatar)
       setAvatar(null)
-      toast.success('Avatar uploaded successfully')
+      toast.success(t('profile.avatarSaved'))
     } catch (err) {
-      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to upload avatar')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || t('profile.avatarFailed'))
     } finally {
       setUploading(false)
     }
@@ -134,9 +74,9 @@ export default function Profile() {
   return (
     <div className="max-w-2xl mx-auto">
       <PageHeader
-        eyebrow="Account"
-        title="My Profile"
-        description="Update your name and avatar."
+        eyebrow={t('profile.eyebrow')}
+        title={t('profile.title')}
+        description={t('profile.description')}
       />
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mt-6">
@@ -145,7 +85,7 @@ export default function Profile() {
             <div className="relative mb-4">
               <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 dark:bg-ink-800 border-4 border-white dark:border-ink-800 shadow-lift">
                 {avatarPreview ? (
-                  <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
+                  <img src={avatarPreview} alt={t('profile.changeAvatar')} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center font-display text-3xl font-bold text-gray-400 dark:text-gray-300 bg-primary-50 dark:bg-primary-900/30">
                     {(user?.name || 'U')[0].toUpperCase()}
@@ -154,7 +94,7 @@ export default function Profile() {
               </div>
               <button
                 onClick={() => fileRef.current?.click()}
-                aria-label="Change avatar"
+                aria-label={t('profile.changeAvatar')}
                 className="absolute -bottom-1 -right-1 w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center shadow-chip hover:bg-primary-600 active:scale-95 transition-all"
               >
                 <Camera className="w-4 h-4" />
@@ -163,103 +103,52 @@ export default function Profile() {
             </div>
             {avatar && (
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleUploadAvatar} loading={uploading}>Save Avatar</Button>
-                <Button variant="ghost" size="sm" onClick={() => { setAvatar(null); setAvatarPreview(user?.avatar || null) }}>Cancel</Button>
+                <Button size="sm" onClick={handleUploadAvatar} loading={uploading}>{t('profile.saveAvatar')}</Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setAvatar(null); setAvatarPreview(user?.avatar || null) }}
+                >
+                  {t('profile.cancel')}
+                </Button>
               </div>
             )}
           </div>
 
           <div className="space-y-5">
             <Input
-              label="Name"
+              label={t('profile.name')}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
+              placeholder={t('profile.namePlaceholder')}
             />
 
-            <div>
-              <Input
-                label="Email"
-                value={user?.email || ''}
-                readOnly
-                className="bg-gray-50 dark:bg-ink-800 text-gray-500 cursor-not-allowed"
-              />
-            </div>
-
-            {/* <div className="flex items-center justify-between">
-              <div>
-                <p className="field-label !mb-1">Role</p>
-                <p className="text-xs text-gray-400">Permissions granted to your account.</p>
-              </div>
-              <Badge scheme={user?.role === 'admin' ? 'primary' : 'blue'}>
-                {(user?.role || 'user').toUpperCase()}
-              </Badge>
-            </div> */}
+            <Input
+              label={t('profile.email')}
+              value={user?.email || ''}
+              readOnly
+              className="bg-gray-50 dark:bg-ink-800 text-gray-500 cursor-not-allowed"
+            />
 
             <Button onClick={handleSave} loading={saving} className="w-full" size="lg">
-              Save Changes
+              {t('profile.saveProfile')}
             </Button>
-          </div>
-        </Card>
 
-        <Card className="p-5 mt-4">
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="w-full flex items-center justify-between text-left"
-          >
-            <div className="flex items-center gap-3">
-              <span className="w-9 h-9 rounded-xl bg-primary-50 dark:bg-primary-900/30 text-primary flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-ink dark:text-gray-100">{t('profile.password.title')}</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500">{t('profile.password.desc')}</p>
-              </div>
-            </div>
-            <svg
-              className={`w-5 h-5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
-              fill="none" viewBox="0 0 24 24" stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {expanded && (
-            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-4">
-              <PasswordField
-                id="old-password"
-                label={t('profile.password.old')}
-                value={passwords.old}
-                onChange={(v) => setPasswords(prev => ({ ...prev, old: v }))}
-                error={passwordErrors.old}
-                show={showPassword.old}
-                onToggle={() => togglePassword('old')}
-              />
-              <PasswordField
-                id="new-password"
-                label={t('profile.password.new')}
-                value={passwords.new}
-                onChange={(v) => setPasswords(prev => ({ ...prev, new: v }))}
-                error={passwordErrors.new}
-                show={showPassword.new}
-                onToggle={() => togglePassword('new')}
-              />
-              <PasswordField
-                id="confirm-password"
-                label={t('profile.password.confirm')}
-                value={passwords.confirm}
-                onChange={(v) => setPasswords(prev => ({ ...prev, confirm: v }))}
-                error={passwordErrors.confirm}
-                show={showPassword.confirm}
-                onToggle={() => togglePassword('confirm')}
-              />
-              <Button onClick={handlePasswordChange} loading={changing} className="w-full" size="lg">
-                {t('profile.password.update')}
+            <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+              <Button
+                variant="ghost"
+                className="w-full"
+                icon={<Lock className="w-4 h-4" />}
+                onClick={() => setOpenPassword(true)}
+              >
+                {t('profile.password.open')}
               </Button>
             </div>
-          )}
+          </div>
         </Card>
       </motion.div>
+
+      <ChangePasswordModal show={openPassword} onClose={() => setOpenPassword(false)} />
     </div>
   )
 }
