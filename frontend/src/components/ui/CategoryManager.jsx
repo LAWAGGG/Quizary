@@ -1,18 +1,22 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plus, Trash2, Edit2, Check, Folder, Palette } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
-import { Button, Input } from './index'
+import { Button, Input, ConfirmModal } from './index'
 
 const PRESETS = ['#6C5CE7', '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#EC4899', '#8B5CF6', '#06B6D4']
 
 export function CategoryManager({ open, onClose, categories, onChanged }) {
+  const { t } = useTranslation()
   const toast = useToast()
   const [name, setName] = useState('')
   const [color, setColor] = useState(PRESETS[0])
   const [editing, setEditing] = useState(null) // {id, name, color}
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const reset = () => { setName(''); setColor(PRESETS[0]); setEditing(null) }
 
@@ -44,21 +48,26 @@ export function CategoryManager({ open, onClose, categories, onChanged }) {
     setColor(cat.color || PRESETS[0])
   }
 
-  const handleDelete = async (cat) => {
-    if (!confirm(`Hapus kategori "${cat.name}"? Form di dalamnya jadi Tanpa kategori.`)) return
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      await api.delete(`/categories/${cat.id}`)
+      await api.delete(`/categories/${deleteTarget.id}`)
       toast.success('Kategori dihapus')
-      onChanged?.(null, cat.id)
-      if (editing?.id === cat.id) reset()
+      onChanged?.(null, deleteTarget.id)
+      if (editing?.id === deleteTarget.id) reset()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Gagal menghapus')
+    } finally {
+      setDeleting(false)
+      setDeleteTarget(null)
     }
   }
 
   if (!open) return null
 
   return (
+    <>
     <AnimatePresence>
       {open && (
         <motion.div
@@ -154,7 +163,7 @@ export function CategoryManager({ open, onClose, categories, onChanged }) {
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(cat)}
+                        onClick={() => setDeleteTarget(cat)}
                         className="p-2 rounded-lg text-gray-400 hover:text-incorrect hover:bg-incorrect-soft"
                         aria-label={`Hapus ${cat.name}`}
                       >
@@ -165,13 +174,21 @@ export function CategoryManager({ open, onClose, categories, onChanged }) {
                 )}
               </div>
             </div>
-
-            <div className="px-6 py-4 border-t border-gray-100 dark:border-gray-800">
-              <Button variant="secondary" className="w-full" onClick={onClose}>Selesai</Button>
-            </div>
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
+
+    <ConfirmModal
+      show={!!deleteTarget}
+      title={t('forms.confirmDeleteCategoryTitle')}
+      message={deleteTarget ? t('forms.confirmDeleteCategoryMessage', { name: deleteTarget.name }) : ''}
+      confirmText={t('forms.delete')}
+      variant="danger"
+      loading={deleting}
+      onConfirm={handleDelete}
+      onCancel={() => setDeleteTarget(null)}
+    />
+    </>
   )
 }

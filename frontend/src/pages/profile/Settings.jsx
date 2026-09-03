@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Monitor, Sun, Type, Languages, Sparkles, Trash2, Settings as SettingsIcon, LogOut } from 'lucide-react'
+import { Monitor, Sun, Type, Languages, Trash2, Settings as SettingsIcon, LogOut } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Card, PageHeader, Select, Toggle, Button } from '../../components/ui'
 import { usePrefs } from '../../context/PreferencesContext'
@@ -43,7 +43,7 @@ function Row({ icon: Icon, title, desc, children, stackOnMobile }) {
 
 export default function Settings() {
   const { t, i18n } = useTranslation()
-  const { theme, fontSize, reduceMotion, setPref } = usePrefs()
+  const { theme, fontSize, setPref } = usePrefs()
   const toast = useToast()
   const { logout } = useAuth()
   const navigate = useNavigate()
@@ -101,13 +101,6 @@ export default function Settings() {
               <option value="md">{t('settings.normal')}</option>
               <option value="lg">{t('settings.large')}</option>
             </Select>
-          </Row>
-          <Row icon={Sparkles} title={t('settings.reduceMotion')} desc={t('settings.reduceMotionDesc')}>
-            <Toggle
-              label={t('settings.reduceMotion')}
-              checked={reduceMotion}
-              onChange={(v) => setPref('reduceMotion', v)}
-            />
           </Row>
         </Card>
 

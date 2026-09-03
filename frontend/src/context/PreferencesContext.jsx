@@ -5,7 +5,6 @@ const KEY = 'quizary-prefs'
 const DEFAULTS = {
   theme: 'system',        // light | dark | system
   fontSize: 'md',         // sm | md | lg
-  reduceMotion: false,
 }
 
 function load() {
@@ -29,7 +28,6 @@ export function PreferencesProvider({ children }) {
     setDark(isDark)
     root.classList.toggle('dark', isDark)
     root.style.fontSize = { sm: '87.5%', md: '100%', lg: '112.5%' }[prefs.fontSize] || '100%'
-    root.classList.toggle('reduce-motion', prefs.reduceMotion)
     localStorage.setItem(KEY, JSON.stringify(prefs))
   }, [prefs])
 

@@ -156,7 +156,7 @@ export default function FormCreate() {
 
             <div className="flex gap-3 pt-2">
               <Button type="submit" loading={loading} className="flex-1" size="lg">
-                {loading ? t('common.loading') : t('formCreate.created')}
+                {loading ? t('common.loading') : t('formCreate.create')}
               </Button>
               <Button type="button" variant="secondary" onClick={() => navigate('/forms')} size="lg">
                 {t('common.cancel')}
