@@ -98,7 +98,7 @@ export default function FormEdit() {
   const titleRef = useRef(null)
   const timerRef = useRef(null)
   const designRef = useRef(null)
-  const [basicOpen, setBasicOpen] = useState(false)
+  const [basicOpen, setBasicOpen] = useState(true)
   const [behaviorOpen, setBehaviorOpen] = useState(false)
   const [designOpen, setDesignOpen] = useState(false)
 
@@ -118,7 +118,7 @@ export default function FormEdit() {
         setTimerMinutes(minutes)
         setInitialTimerMinutes(minutes)
         if (res.data.type === 'quiz') {
-          api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => {})
+          api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => { })
         }
       })
       .catch(() => navigate('/forms'))
@@ -365,7 +365,7 @@ export default function FormEdit() {
       setForm((prev) => ({ ...prev, ...res.data }))
       setBase((prev) => ({ ...prev, ...res.data }))
       if (mode === 'auto') {
-        api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => {})
+        api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => { })
       }
       toast.success(mode === 'auto' ? t('formEdit.scoringAutoOn') : t('formEdit.scoringManualOn'))
     } catch (err) {
@@ -409,20 +409,6 @@ export default function FormEdit() {
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-6">
-          <CollapsibleCard title={t('formEdit.share')} icon={<Link2 className="w-4 h-4" />} defaultOpen>
-            <ShareLink value={`${window.location.origin}/q/${form.short_code}`} />
-            <div className="mt-4">
-              <Button
-                variant="secondary"
-                className="w-full"
-                icon={<QrCode className="w-4 h-4" />}
-                onClick={() => setShowQr(true)}
-              >
-                {t('formEdit.showQr')}
-              </Button>
-            </div>
-          </CollapsibleCard>
-
           <CollapsibleCard title={t('formEdit.basicInfo')} icon={<Info className="w-4 h-4" />} open={basicOpen} onToggle={setBasicOpen}>
             <div className="space-y-5">
               <div ref={titleRef}>
@@ -457,27 +443,24 @@ export default function FormEdit() {
                     <button
                       type="button"
                       onClick={() => setForm((prev) => ({ ...prev, status: 'published' }))}
-                      className={`flex-1 text-sm font-semibold transition-colors ${
-                        form.status === 'published' ? 'bg-correct text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
-                      }`}
+                      className={`flex-1 text-sm font-semibold transition-colors ${form.status === 'published' ? 'bg-correct text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
+                        }`}
                     >
                       {t('formEdit.statusPublic')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setForm((prev) => ({ ...prev, status: 'draft' }))}
-                      className={`flex-1 text-sm font-semibold transition-colors ${
-                        form.status !== 'published' && form.status !== 'closed' ? 'bg-gray-700 text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
-                      }`}
+                      className={`flex-1 text-sm font-semibold transition-colors ${form.status !== 'published' && form.status !== 'closed' ? 'bg-gray-700 text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
+                        }`}
                     >
                       {t('formEdit.statusDraft')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setForm((prev) => ({ ...prev, status: 'closed' }))}
-                      className={`flex-1 text-sm font-semibold transition-colors ${
-                        form.status === 'closed' ? 'bg-incorrect text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
-                      }`}
+                      className={`flex-1 text-sm font-semibold transition-colors ${form.status === 'closed' ? 'bg-incorrect text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
+                        }`}
                     >
                       {t('formEdit.statusClosed')}
                     </button>
@@ -511,11 +494,10 @@ export default function FormEdit() {
                   <button
                     type="button"
                     onClick={() => setForm((prev) => ({ ...prev, display_style: 'card' }))}
-                    className={`relative rounded-xl border-2 overflow-hidden transition-all ${
-                      (form.display_style || 'card') === 'card'
+                    className={`relative rounded-xl border-2 overflow-hidden transition-all ${(form.display_style || 'card') === 'card'
                         ? 'border-primary ring-2 ring-primary/20'
                         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
+                      }`}
                   >
                     <img src="/preview-form.png" alt="Card style" className="w-full h-32 object-cover" />
                     <span className="block text-sm font-medium py-2 text-ink dark:text-gray-100">{t('formEdit.designCard')}</span>
@@ -528,11 +510,10 @@ export default function FormEdit() {
                   <button
                     type="button"
                     onClick={() => setForm((prev) => ({ ...prev, display_style: 'quiz' }))}
-                    className={`relative rounded-xl border-2 overflow-hidden transition-all ${
-                      form.display_style === 'quiz'
+                    className={`relative rounded-xl border-2 overflow-hidden transition-all ${form.display_style === 'quiz'
                         ? 'border-primary ring-2 ring-primary/20'
                         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
+                      }`}
                   >
                     <img src="/preview-quiz.png" alt="Quiz style" className="w-full h-32 object-cover" />
                     <span className="block text-sm font-medium py-2 text-ink dark:text-gray-100">{t('formEdit.designQuiz')}</span>
@@ -708,8 +689,21 @@ export default function FormEdit() {
           </CollapsibleCard>
         </div>
 
-        <div className="space-y-6">
-          <CollapsibleCard title={t('formEdit.banner')} icon={<ImageUp className="w-4 h-4" />}>
+        <div className="space-y-6 lg:sticky lg:top-6 self-start">
+          <CollapsibleCard title={t('formEdit.share')} icon={<Link2 className="w-4 h-4" />} defaultOpen>
+            <ShareLink value={`${window.location.origin}/q/${form.short_code}`} />
+            <div className="mt-4">
+              <Button
+                variant="secondary"
+                className="w-full"
+                icon={<QrCode className="w-4 h-4" />}
+                onClick={() => setShowQr(true)}
+              >
+                {t('formEdit.showQr')}
+              </Button>
+            </div>
+          </CollapsibleCard>
+          <CollapsibleCard title={t('formEdit.banner')} icon={<ImageUp className="w-4 h-4" />} defaultOpen>
             {form.banner_path ? (
               <img src={form.banner_path} alt="Banner" className="w-full h-36 object-cover rounded-xl mb-4" />
             ) : (
