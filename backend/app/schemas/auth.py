@@ -22,6 +22,15 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=72)
 
 
+class OtpVerifyRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=150, pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class OtpResendRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=150, pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+
+
 class UserResponse(BaseModel):
     id: int
     name: str

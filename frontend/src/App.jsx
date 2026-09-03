@@ -7,6 +7,7 @@ import { ToastProvider } from './context/ToastContext.jsx'
 import DashboardLayout from './components/layout/DashboardLayout'
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
+import VerifyOtp from './pages/auth/VerifyOtp'
 import Dashboard from './pages/dashboard/Dashboard'
 import FormList from './pages/forms/FormList'
 import FormCreate from './pages/forms/FormCreate'
@@ -48,6 +49,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+      <Route path="/otp" element={<VerifyOtp />} />
       <Route path="/q/:shortCode" element={<FormLanding />} />
       <Route path="/s/:submissionId" element={<AnswerQuiz />} />
       <Route path="/s/:submissionId/result" element={<QuizResult />} />

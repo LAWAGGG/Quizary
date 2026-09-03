@@ -19,15 +19,63 @@ Auth: -
 }
 ```
 ```json
-// Response 201
+// Response 201 — akun dibuat, kode OTP dikirim ke email. BELUM ada token.
+// Client harus lanjut ke POST /otp/verify untuk auto-login.
+{
+  "message": "A verification code has been sent to your email.",
+  "email": "faqih@sekolah.sch.id"
+}
+```
+```json
+// Response 409 (email sudah terdaftar)
+{ "message": "Email already registered" }
+```
+```json
+// Response 500 (email gagal terkirim — akun tetap ada, gunakan /otp/resend)
+{ "message": "Failed to send the verification email. Please request a new code." }
+```
+
+### `POST /otp/verify`
+Auth: - (verify kode dari email → berhasil langsung auto-login)
+```json
+// Request
+{ "email": "faqih@sekolah.sch.id", "code": "483920" }
+```
+```json
+// Response 200
 {
   "token": "eyJhbGciOiJIUzI1NiIs...",
   "user": { "id": 1, "name": "Ahmad Faqih", "email": "faqih@sekolah.sch.id", "role": "user", "avatar": null }
 }
 ```
 ```json
-// Response 409 (email sudah terdaftar)
-{ "message": "Email already registered" }
+// Response 400 (kode salah / percobaan habis)
+{ "message": "Invalid verification code." }
+// Response 404 (user tidak ditemukan)
+{ "message": "User not found" }
+// Response 409 (sudah verified sebelumnya)
+{ "message": "Email is already verified" }
+// Response 410 (kode tidak ada / expired)
+{ "message": "Verification code has expired. Request a new one." }
+```
+
+### `POST /otp/resend`
+Auth: - (buat kode baru + kirim ulang; cooldown 60 detik)
+```json
+// Request
+{ "email": "faqih@sekolah.sch.id" }
+```
+```json
+// Response 200
+{ "message": "A new verification code has been sent to your email." }
+```
+```json
+// Response 404 (user tidak ditemukan)
+{ "message": "User not found" }
+// Response 409 (sudah verified)
+{ "message": "Email is already verified" }
+// Response 429 (masih dalam cooldown)
+{ "message": "Please wait before requesting a new code." }
 ```
 
 ### `POST /login`
@@ -46,6 +94,8 @@ Auth: -
 ```json
 // Response 401
 { "message": "Invalid email or password" }
+// Response 403 (akun belum verifikasi OTP — arahkan ke halaman OTP)
+{ "message": "Email is not verified. Please verify with the OTP code sent to your email." }
 ```
 
 ### `POST /logout`
@@ -1001,8 +1051,10 @@ Auth: Bearer Token
 
 | Method | Path | Auth | Keterangan |
 |--------|------|------|------------|
-| POST | `/api/register` | - | Daftar akun baru |
-| POST | `/api/login` | - | Login |
+| POST | `/api/register` | - | Daftar akun baru (kirim OTP email, tanpa token) |
+| POST | `/api/otp/verify` | - | Verifikasi kode OTP → auto-login |
+| POST | `/api/otp/resend` | - | Kirim ulang kode OTP (cooldown 60s) |
+| POST | `/api/login` | - | Login (403 bila email belum verifikasi) |
 | POST | `/api/logout` | Bearer | Logout (revoke token) |
 | GET | `/api/me` | Bearer | Profil user |
 | PUT | `/api/me` | Bearer | Update profil (multipart/form-data) |

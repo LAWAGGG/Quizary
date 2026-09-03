@@ -60,6 +60,24 @@ def create_handler(body: MyRequest, user: User = Depends(get_current_user), db: 
 | `password_confirmation` | `string` | Harus sama dengan `password` |
 
 **Source:** `schemas/auth.py:RegisterRequest`
+**Behavior:** akun dibuat + OTP email dikirim → response `201 {message, email}` **tanpa token**. Client lanjut ke `/otp/verify`. OTP: 6 digit, TTL 10 menit, 5x salah → kode invalid.
+
+#### `POST /api/otp/verify`
+| Field | Rule | Keterangan |
+|---|---|---|
+| `email` | `string(5-150)`, format email valid | Wajib |
+| `code` | `string(6)`, format `^\d{6}$` | Wajib |
+
+**Source:** `schemas/auth.py:OtpVerifyRequest`
+**Behavior:** kode benar → `email_verified_at` terisi, OTP dibersihkan, return `{token, user}` (auto-login). Status: `400` kode salah/attempt habis, `404` user tak ada, `409` sudah verified, `410` expired/tak ada kode.
+
+#### `POST /api/otp/resend`
+| Field | Rule | Keterangan |
+|---|---|---|
+| `email` | `string(5-150)`, format email valid | Wajib |
+
+**Source:** `schemas/auth.py:OtpResendRequest`
+**Behavior:** buat kode baru + kirim ulang. Cooldown 60 detik per email → `429`. `404` user tak ada, `409` sudah verified.
 
 #### `POST /api/login`
 | Field | Rule | Keterangan |
@@ -68,6 +86,7 @@ def create_handler(body: MyRequest, user: User = Depends(get_current_user), db: 
 | `password` | `string(min=1)` | Wajib |
 
 **Source:** `schemas/auth.py:LoginRequest`
+**Behavior:** akun `email_verified_at` NULL → `403` (harus verifikasi OTP dulu).
 
 ### 2.2 Forms
 

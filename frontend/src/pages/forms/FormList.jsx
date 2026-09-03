@@ -290,11 +290,10 @@ export default function FormList() {
           </div>
         </div>
 
-        {/* kategori pills - kreatif, tidak kaku,呼吸 spacing */}
         <div className="rounded-2xl bg-gradient-to-br from-primary-50/70 via-white to-white dark:from-ink-800/40 dark:via-ink-900 dark:to-ink-900 border border-primary-100/60 dark:border-gray-800 p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-3">
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide text-primary-700 dark:text-primary-300">
-              <Sparkles className="w-3.5 h-3.5" /> {t('forms.categoryLabel')}
+               <FolderOpen className={`w-4 h-4 ${activeCategory===null ? 'text-dark dark:text-primary' : 'text-gray-400 group-hover:text-primary'}`} />{t('forms.categoryLabel')}
             </span>
             <span className="h-3 w-px bg-primary-100 dark:bg-gray-700" />
             <span className="text-xs text-gray-400 dark:text-gray-500">{t('forms.categoryCount', { count: categories.length })}</span>
@@ -308,7 +307,6 @@ export default function FormList() {
               onClick={() => { setActiveCategory(null); setMeta((m) => ({ ...m, page: 1 })) }}
               className={`group inline-flex items-center gap-2 px-4 h-9 rounded-full text-sm font-medium border transition-all duration-200 ${activeCategory === null ? 'bg-ink text-white border-ink shadow-md dark:bg-white dark:text-ink scale-[1.02]' : 'bg-white dark:bg-ink-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-primary-200 hover:bg-primary-50/50 dark:hover:bg-ink-700 hover:shadow-sm hover:-translate-y-0.5'}`}
             >
-              <FolderOpen className={`w-4 h-4 ${activeCategory===null ? 'text-white dark:text-ink' : 'text-gray-400 group-hover:text-primary'}`} />
               {t('forms.allCategories')}
               <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold ${activeCategory===null ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-ink-700 text-gray-500'}`}>{meta.total}</span>
             </button>

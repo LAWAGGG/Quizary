@@ -57,7 +57,10 @@ export default function Register() {
         form.password,
         form.password_confirmation
       )
-      navigate(from, { replace: true })
+      // Registrasi sukses → akun dibuat + OTP terkirim. Lanjut ke halaman
+      // verifikasi kode; sukses verify = auto-login.
+      const qs = new URLSearchParams({ email: form.email, next: from })
+      navigate(`/otp?${qs.toString()}`, { replace: true })
     } catch (err) {
       const status = err.response?.status
       const msg = err.response?.data?.message

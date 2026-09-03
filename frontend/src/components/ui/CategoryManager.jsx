@@ -85,7 +85,7 @@ export function CategoryManager({ open, onClose, categories, onChanged }) {
                 <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 flex items-center gap-2">
                   <Folder className="w-5 h-5 text-primary" /> Kategori Form
                 </h3>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Kelompokkan form seperti folder — mis. Matematika, IPA, Survey.</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Kelompokkan form dalam folder</p>
               </div>
               <button onClick={onClose} className="p-2 -mr-2 rounded-xl text-gray-400 hover:text-ink hover:bg-gray-100 dark:hover:bg-ink-800">
                 <X className="w-5 h-5" />

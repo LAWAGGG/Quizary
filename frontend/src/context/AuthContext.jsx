@@ -26,7 +26,18 @@ export function AuthProvider({ children }) {
   const register = useCallback(async (name, email, password, password_confirmation) => {
     setLoading(true)
     try {
+      // Register kini hanya membuat akun + mengirim OTP ke email — TIDAK auto-login.
       const res = await api.post('/register', { name, email, password, password_confirmation })
+      return res.data
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const verifyOtp = useCallback(async (email, code) => {
+    setLoading(true)
+    try {
+      const res = await api.post('/otp/verify', { email, code })
       const data = res.data
       localStorage.setItem('token', data.token)
       localStorage.setItem('user', JSON.stringify(data.user))
@@ -35,6 +46,11 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  const resendOtp = useCallback(async (email) => {
+    const res = await api.post('/otp/resend', { email })
+    return res.data
   }, [])
 
   const logout = useCallback(async () => {
@@ -52,7 +68,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, verifyOtp, resendOtp, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   )
