@@ -612,6 +612,10 @@ export default function AnswerQuiz() {
     const isLast = currentIdx === qs.length - 1
 
     const handler = (e) => {
+      // Fokus di kolom isian (textarea/input/select) → biarkan perilaku normal
+      // (Enter = baris baru, angka/panah = kursor).
+      const el = e.target
+      if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.tagName === 'SELECT' || el.isContentEditable)) return
       if (e.key === 'ArrowRight') { e.preventDefault(); if (!isLast) handleNext() }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); handlePrev() }
       else if (e.key === 'Enter') {
@@ -1114,22 +1118,15 @@ export default function AnswerQuiz() {
           </div>
         </header>
 
-        {showMap && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white dark:bg-ink-900 border-b border-gray-200 dark:border-gray-800 px-4 py-4"
-          >
-            <div className="max-w-lg mx-auto">
-              <QuestionMap total={totalQ} current={currentIdx} answered={answeredMap} reviewed={reviewedMap} onSelect={goToQuestion} />
-              <div className="flex flex-wrap items-center gap-4 mt-3 text-[11px] text-gray-400">
-                <Legend dot="bg-correct" label={t('answerQuiz.legendAnswered')} />
-                <Legend dot="bg-warn" label={t('answerQuiz.legendMarked')} />
-                <Legend dot="bg-white dark:bg-ink-800 border border-gray-300 dark:border-gray-600" label={t('answerQuiz.legendUnanswered')} />
-              </div>
-            </div>
-          </motion.div>
-        )}
+        <QuestionMapDrawer
+          show={showMap}
+          onClose={() => setShowMap(false)}
+          total={totalQ}
+          current={currentIdx}
+          answered={answeredMap}
+          reviewed={reviewedMap}
+          onSelect={(idx) => { setShowMap(false); goToQuestion(idx) }}
+        />
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6">
           <AnimatePresence mode="wait" custom={direction}>            <motion.div
@@ -1158,7 +1155,7 @@ export default function AnswerQuiz() {
                     {reviewed[current.id] ? t('answerQuiz.marked') : t('answerQuiz.markReview')}
                   </button>
                 </div>
-                <h2 className="font-display text-xl font-bold text-ink dark:text-gray-100 text-center mb-3 flex items-start justify-center gap-0.5">
+                <h2 className="font-display text-xl font-medium text-ink dark:text-gray-100 text-center mb-3 flex items-start justify-center gap-0.5">
                   <span className="[&>p]:mb-0"><RichText html={current.question_text} className="rich-text" /></span>
                   {current.is_required !== false && (
                     <span className="text-incorrect font-bold shrink-0" title="Required">*</span>
@@ -1494,7 +1491,7 @@ export default function AnswerQuiz() {
                   <div className="mb-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-0.5 flex-1 min-w-0">
-                        <p className="font-semibold text-ink dark:text-gray-100 leading-snug flex-1 [&>p]:mb-0"><RichText html={q.question_text} className="rich-text" /></p>
+                        <p className="font-medium text-ink dark:text-gray-100 leading-snug flex-1 [&>p]:mb-0"><RichText html={q.question_text} className="rich-text" /></p>
                         {q.is_required !== false && (
                           <span className="text-incorrect font-bold leading-snug shrink-0" title="Required">*</span>
                         )}
@@ -1804,6 +1801,55 @@ function Legend({ dot, label }) {
   )
 }
 
+function QuestionMapDrawer({ show, onClose, total, current, answered, reviewed, onSelect }) {
+  const { t } = useTranslation()
+  return (
+    <AnimatePresence>
+      {show && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        >
+          <div
+            className="absolute inset-0 bg-ink/50 backdrop-blur-sm"
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ x: 0, scale: 0.96, opacity: 0, y: 8 }}
+            animate={{ x: 0, scale: 1, opacity: 1, y: 0 }}
+            exit={{ x: 0, scale: 0.96, opacity: 0, y: 8 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="relative z-10 bg-white dark:bg-ink-900 rounded-2xl p-6 w-full max-w-md shadow-lift max-h-[85vh] flex flex-col"
+            role="dialog"
+            aria-label={t('answerQuiz.questionMap')}
+          >
+            <div className="flex items-center justify-between shrink-0">
+              <h3 className="font-display font-bold text-ink dark:text-gray-100">{t('answerQuiz.questionMap')}</h3>
+              <button
+                onClick={onClose}
+                className="p-2 -mr-2 rounded-xl text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto pt-4">
+              <QuestionMap total={total} current={current} answered={answered} reviewed={reviewed} onSelect={onSelect} />
+              <div className="flex flex-wrap items-center gap-4 mt-4 text-[11px] text-gray-400">
+                <Legend dot="bg-correct" label={t('answerQuiz.legendAnswered')} />
+                <Legend dot="bg-warn" label={t('answerQuiz.legendMarked')} />
+                <Legend dot="bg-white dark:bg-ink-800 border border-gray-300 dark:border-gray-600" label={t('answerQuiz.legendUnanswered')} />
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
 function FileAnswer({ value, uploading, onFile, onRemove, error }) {
   const { t } = useTranslation()
   const inputRef = useRef(null)
@@ -1879,9 +1925,9 @@ function CheatLockOverlay({ info, onRefresh, refreshing }) {
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="text-center text-white max-w-sm w-full"
+            className="text-center flex flex-col items-center text-white max-w-sm w-full"
           >
-            <span className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-incorrect/20 mb-6">
+            <span className="flex items-center justify-center w-16 h-16 rounded-2xl bg-incorrect/20 mb-6">
               <AlertTriangle className="w-8 h-8 text-incorrect" />
             </span>
             <p className="font-display text-2xl font-bold">{t('answerQuiz.violatingRules')}</p>
@@ -1892,7 +1938,7 @@ function CheatLockOverlay({ info, onRefresh, refreshing }) {
               {t('answerQuiz.temporarilyLocked')}
             </p>
 
-            <div className="mt-6 inline-flex flex-col items-center gap-1.5 px-6 py-4 rounded-2xl bg-white/5 border border-white/10">
+            <div className="mt-6 flex inline-flex flex-col items-center gap-1.5 px-6 py-4 rounded-2xl bg-white/5 border border-white/10">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">
                 {expired ? t('answerQuiz.finalizing') : t('answerQuiz.autoFinalizeIn')}
               </span>
@@ -2166,7 +2212,7 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                   }}
                 >
                   <div className="flex flex-col items-center gap-5">
-                    <h3 className="font-display text-xl sm:text-2xl font-bold text-ink dark:text-gray-100 text-center leading-snug">
+                      <h3 className="font-display text-xl sm:text-2xl font-medium text-ink dark:text-gray-100 text-center leading-snug">
                       <RichText html={target.question_text} className="rich-text" />
                     </h3>
                     {target.image && (
