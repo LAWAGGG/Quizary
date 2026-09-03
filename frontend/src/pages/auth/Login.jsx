@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { Button, Input, Card } from '../../components/ui'
@@ -18,7 +18,6 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
-  const [unverifiedEmail, setUnverifiedEmail] = useState('')
   const [loading, setLoading] = useState(false)
 
   function validate() {
@@ -36,7 +35,6 @@ export default function Login() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    setUnverifiedEmail('')
     if (!validate()) return
     setLoading(true)
     try {
@@ -61,8 +59,15 @@ export default function Login() {
       } else if (status === 401) {
         setError(t('auth.invalidCredentials'))
       } else if (status === 403) {
-        setUnverifiedEmail(form.email)
-        setError(t('auth.otpNotVerified'))
+        // Email belum verifikasi → langsung lempar ke halaman OTP, tanpa alert di login.
+        const qs = new URLSearchParams({ email: form.email })
+        if (from && from !== '/') qs.set('next', from)
+        qs.set('reason', 'unverified')
+        navigate(`/otp?${qs.toString()}`, {
+          replace: true,
+          state: { reason: 'unverified', email: form.email, next: from },
+        })
+        return
       } else {
         setError(msg || t('auth.somethingWrong'))
       }
@@ -100,17 +105,6 @@ export default function Login() {
               <AlertCircle className="w-4 h-4 shrink-0" />
               {error}
             </motion.div>
-          )}
-          {unverifiedEmail && (
-            <div className="text-center mb-5">
-              <Link
-                to={`/otp?email=${encodeURIComponent(unverifiedEmail)}`}
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary-600 transition-colors"
-              >
-                {t('auth.otpVerifyLink')}
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">

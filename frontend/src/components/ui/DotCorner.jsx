@@ -6,10 +6,10 @@ const POSITIONS = {
 }
 
 const FLIPS = {
-  'top-left': '',
+  'top-left': '-scale-y-100',
   'top-right': '-scale-x-100',
   'bottom-left': '-scale-y-100',
-  'bottom-right': '-scale-x-100 -scale-y-100',
+  'bottom-right': '-scale-x-100',
 }
 
 export function DotCorner({ side = 4, filled = 4, color = '#6C5CE7', position = 'top-left', className = '' }) {
