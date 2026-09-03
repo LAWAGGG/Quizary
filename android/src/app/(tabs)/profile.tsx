@@ -9,11 +9,12 @@ import {
   ScrollView,
   RefreshControl,
   Image,
+  Modal,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { getMe, updateProfile, apiLogout, removeToken, getStoredUser, saveUser, BASE_URL } from '../../services/api_service';
+import { getMe, updateProfile, changePassword, apiLogout, removeToken, getStoredUser, saveUser, BASE_URL } from '../../services/api_service';
 import { ThemeToggleBtn } from '../../components/ThemeToggleBtn';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAppAlert } from '../../context/AlertContext';
@@ -27,6 +28,15 @@ export default function ProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   // Preview avatar yang BARU DIPILIH tapi belum di-upload ke server
   const [pendingAvatarUri, setPendingAvatarUri] = useState<string | null>(null);
@@ -96,12 +106,12 @@ export default function ProfileScreen() {
     }
   };
 
-  // Batal — buang preview, balik ke avatar lama
+  // Batal - buang preview, balik ke avatar lama
   const handleCancelAvatar = () => {
     setPendingAvatarUri(null);
   };
 
-  // Baru di titik INI request upload beneran dikirim ke server
+  // request upload beneran dikirim ke server
   const handleSaveAvatar = async () => {
     if (!pendingAvatarUri) return;
     setUploadingAvatar(true);
@@ -178,6 +188,94 @@ export default function ProfileScreen() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const resetPasswordForm = () => {
+    setOldPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowOldPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
+  };
+
+  const handleChangePassword = async () => {
+    if (!oldPassword.trim()) {
+      showAlert({
+        type: 'warning',
+        title: language === 'ID' ? 'Validasi Gagal' : 'Validation Failed',
+        message: language === 'ID' ? 'Kata sandi saat ini wajib diisi.' : 'Current password is required.',
+      });
+      return;
+    }
+    if (newPassword.length < 8) {
+      showAlert({
+        type: 'warning',
+        title: language === 'ID' ? 'Validasi Gagal' : 'Validation Failed',
+        message: language === 'ID' ? 'Kata sandi baru minimal 8 karakter.' : 'New password must be at least 8 characters.',
+      });
+      return;
+    }
+    if (newPassword === oldPassword) {
+      showAlert({
+        type: 'warning',
+        title: language === 'ID' ? 'Validasi Gagal' : 'Validation Failed',
+        message: language === 'ID' ? 'Kata sandi baru tidak boleh sama dengan kata sandi saat ini.' : 'New password must be different from current password.',
+      });
+      return;
+    }
+    if (!confirmPassword.trim()) {
+      showAlert({
+        type: 'warning',
+        title: language === 'ID' ? 'Validasi Gagal' : 'Validation Failed',
+        message: language === 'ID' ? 'Ulangi kata sandi baru wajib diisi.' : 'Confirm new password is required.',
+      });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showAlert({
+        type: 'warning',
+        title: language === 'ID' ? 'Validasi Gagal' : 'Validation Failed',
+        message: language === 'ID' ? 'Ulangi kata sandi baru harus sama persis dengan kata sandi baru.' : 'Password confirmation does not match new password.',
+      });
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await changePassword({
+        old_password: oldPassword,
+        new_password: newPassword,
+        new_password_confirmation: confirmPassword,
+      });
+
+      setShowPasswordModal(false);
+      resetPasswordForm();
+
+      showAlert({
+        type: 'success',
+        title: language === 'ID' ? 'Sukses ✔️' : 'Success ✔️',
+        message: language === 'ID' ? 'Kata sandi berhasil diperbarui.' : 'Password updated successfully.',
+      });
+    } catch (err: any) {
+      let errMsg = err.message || (language === 'ID' ? 'Gagal memperbarui kata sandi.' : 'Failed to update password.');
+      const lower = errMsg.toLowerCase();
+      if (lower.includes('old password is incorrect') || lower.includes('old password')) {
+        errMsg = language === 'ID' ? 'Kata sandi saat ini salah.' : 'Current password is incorrect.';
+      } else if (lower.includes('different from old')) {
+        errMsg = language === 'ID' ? 'Kata sandi baru tidak boleh sama dengan kata sandi saat ini.' : 'New password must be different from current password.';
+      } else if (lower.includes('match')) {
+        errMsg = language === 'ID' ? 'Ulangi kata sandi baru harus sama dengan kata sandi baru.' : 'Password confirmation does not match.';
+      }
+
+      showAlert({
+        type: 'error',
+        title: language === 'ID' ? 'Gagal Mengubah Kata Sandi' : 'Failed to Update Password',
+        message: errMsg,
+      });
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -348,6 +446,21 @@ export default function ProfileScreen() {
           {language === 'ID' ? 'Email tidak dapat diubah.' : 'Email cannot be changed.'}
         </Text>
 
+        {/* Link Ubah Kata Sandi */}
+        <TouchableOpacity
+          style={styles.changePasswordLink}
+          onPress={() => {
+            resetPasswordForm();
+            setShowPasswordModal(true);
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="lock-closed-outline" size={15} color={colors.textSub} />
+          <Text style={[styles.changePasswordLinkText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
+            {language === 'ID' ? 'Ubah kata sandi' : 'Change password'}
+          </Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={[styles.btnSave, { backgroundColor: colors.primary }, saving && styles.btnDisabled]}
           onPress={handleSave}
@@ -375,6 +488,211 @@ export default function ProfileScreen() {
           {language === 'ID' ? 'Keluar' : 'Logout'}
         </Text>
       </TouchableOpacity>
+
+      {/* Modal Ubah Kata Sandi */}
+      <Modal
+        visible={showPasswordModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!passwordLoading) {
+            setShowPasswordModal(false);
+            resetPasswordForm();
+          }
+        }}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => {
+            if (!passwordLoading) {
+              setShowPasswordModal(false);
+              resetPasswordForm();
+            }
+          }}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[
+              styles.modalCard,
+              {
+                backgroundColor: colors.cardBg,
+                borderColor: colors.cardBorder,
+              },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View style={[styles.modalLockIconBox, { backgroundColor: colors.primarySoft }]}>
+                <Ionicons name="lock-closed-outline" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.modalHeaderTextContainer}>
+                <Text style={[styles.modalTitle, { color: colors.text, fontSize: 17 * fontSizeScale }]}>
+                  {language === 'ID' ? 'Ubah kata sandi' : 'Change password'}
+                </Text>
+                <Text style={[styles.modalSubtitle, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
+                  {language === 'ID'
+                    ? 'Masukkan kata sandi saat ini untuk verifikasi, lalu tetapkan kata sandi baru.'
+                    : 'Enter current password for verification, then set a new password.'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Modal Fields */}
+            <View style={styles.modalForm}>
+              {/* Field: Kata Sandi Saat Ini */}
+              <View>
+                <Text style={[styles.modalLabel, { color: colors.text, fontSize: 13 * fontSizeScale }]}>
+                  {language === 'ID' ? 'Kata sandi saat ini' : 'Current password'}
+                </Text>
+                <View
+                  style={[
+                    styles.modalPasswordContainer,
+                    { backgroundColor: colors.inputBg, borderColor: colors.inputBorder },
+                  ]}
+                >
+                  <TextInput
+                    style={[styles.modalPasswordInput, { color: colors.text, fontSize: 14 * fontSizeScale }]}
+                    placeholder={language === 'ID' ? 'Kata sandi saat ini' : 'Current password'}
+                    placeholderTextColor={colors.textMuted}
+                    secureTextEntry={!showOldPassword}
+                    value={oldPassword}
+                    onChangeText={setOldPassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    style={styles.modalEyeBtn}
+                    onPress={() => setShowOldPassword(!showOldPassword)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons
+                      name={showOldPassword ? 'eye-outline' : 'eye-off-outline'}
+                      size={18}
+                      color={colors.textMuted}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Field: Kata Sandi Baru */}
+              <View>
+                <Text style={[styles.modalLabel, { color: colors.text, fontSize: 13 * fontSizeScale }]}>
+                  {language === 'ID' ? 'Kata sandi baru' : 'New password'}
+                </Text>
+                <View
+                  style={[
+                    styles.modalPasswordContainer,
+                    { backgroundColor: colors.inputBg, borderColor: colors.inputBorder },
+                  ]}
+                >
+                  <TextInput
+                    style={[styles.modalPasswordInput, { color: colors.text, fontSize: 14 * fontSizeScale }]}
+                    placeholder={language === 'ID' ? 'Kata sandi baru' : 'New password'}
+                    placeholderTextColor={colors.textMuted}
+                    secureTextEntry={!showNewPassword}
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    style={styles.modalEyeBtn}
+                    onPress={() => setShowNewPassword(!showNewPassword)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons
+                      name={showNewPassword ? 'eye-outline' : 'eye-off-outline'}
+                      size={18}
+                      color={colors.textMuted}
+                    />
+                  </TouchableOpacity>
+                </View>
+                <Text style={[styles.modalHintText, { color: colors.textMuted, fontSize: 11.5 * fontSizeScale }]}>
+                  {language === 'ID'
+                    ? 'Minimal 8 karakter. Jangan gunakan yang sama dengan kata sandi saat ini.'
+                    : 'At least 8 characters. Do not use the same as current password.'}
+                </Text>
+              </View>
+
+              {/* Field: Ulangi Kata Sandi Baru */}
+              <View>
+                <Text style={[styles.modalLabel, { color: colors.text, fontSize: 13 * fontSizeScale }]}>
+                  {language === 'ID' ? 'Ulangi kata sandi baru' : 'Confirm new password'}
+                </Text>
+                <View
+                  style={[
+                    styles.modalPasswordContainer,
+                    { backgroundColor: colors.inputBg, borderColor: colors.inputBorder },
+                  ]}
+                >
+                  <TextInput
+                    style={[styles.modalPasswordInput, { color: colors.text, fontSize: 14 * fontSizeScale }]}
+                    placeholder={language === 'ID' ? 'Ulangi kata sandi baru' : 'Confirm new password'}
+                    placeholderTextColor={colors.textMuted}
+                    secureTextEntry={!showConfirmPassword}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    style={styles.modalEyeBtn}
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons
+                      name={showConfirmPassword ? 'eye-outline' : 'eye-off-outline'}
+                      size={18}
+                      color={colors.textMuted}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            {/* Modal Actions */}
+            <View style={styles.modalActionRow}>
+              <TouchableOpacity
+                style={[
+                  styles.modalCancelBtn,
+                  {
+                    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9',
+                    borderColor: colors.inputBorder,
+                  },
+                ]}
+                onPress={() => {
+                  setShowPasswordModal(false);
+                  resetPasswordForm();
+                }}
+                disabled={passwordLoading}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalCancelBtnText, { color: colors.text, fontSize: 14 * fontSizeScale }]}>
+                  {language === 'ID' ? 'Batal' : 'Cancel'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalSubmitBtn,
+                  { backgroundColor: colors.primary },
+                  passwordLoading && styles.btnDisabled,
+                ]}
+                onPress={handleChangePassword}
+                disabled={passwordLoading}
+                activeOpacity={0.85}
+              >
+                {passwordLoading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={[styles.modalSubmitBtnText, { fontSize: 14 * fontSizeScale }]}>
+                    {language === 'ID' ? 'Perbarui kata sandi' : 'Update password'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   );
 }
@@ -450,7 +768,18 @@ const styles = StyleSheet.create({
     padding: 14, borderRadius: 10, borderWidth: 1,
   },
   disabledInput: {},
-  fieldHint: { marginTop: 4, marginBottom: 16 },
+  fieldHint: { marginTop: 4, marginBottom: 8 },
+  changePasswordLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    marginBottom: 14,
+  },
+  changePasswordLinkText: {
+    fontWeight: '600',
+  },
   btnSave: {
     paddingVertical: 14, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center', elevation: 1,
@@ -462,4 +791,105 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
   btnLogoutText: { fontWeight: '600' },
+
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 440,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 22,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 18,
+  },
+  modalLockIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalHeaderTextContainer: {
+    flex: 1,
+  },
+  modalTitle: {
+    fontWeight: 'bold',
+  },
+  modalSubtitle: {
+    marginTop: 3,
+    lineHeight: 18,
+  },
+  modalForm: {
+    gap: 14,
+    marginBottom: 20,
+  },
+  modalLabel: {
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  modalPasswordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  modalPasswordInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  modalEyeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalHintText: {
+    marginTop: 4,
+  },
+  modalActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 10,
+  },
+  modalCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelBtnText: {
+    fontWeight: '600',
+  },
+  modalSubmitBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 140,
+  },
+  modalSubmitBtnText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
 });

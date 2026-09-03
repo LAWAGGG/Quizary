@@ -259,6 +259,17 @@ export async function updateProfile(body: { name?: string; avatar?: string }) {
   return res;
 }
 
+export async function changePassword(body: {
+  old_password: string;
+  new_password: string;
+  new_password_confirmation: string;
+}) {
+  return fetchWithAuth('/me/password', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
 export async function getDashboardSummary() {
   return fetchWithAuth('/dashboard/summary');
 }
