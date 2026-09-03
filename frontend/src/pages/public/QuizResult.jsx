@@ -419,15 +419,6 @@ export default function QuizResult() {
                                     : <span className="text-gray-400 italic">{t('quizResult.notAnswered')}</span>)
                                   : (answer.answer_text || <span className="text-gray-400 italic">{t('quizResult.notAnswered')}</span>)}
                             </div>
-
-                            <div className="flex items-center gap-2">
-                              {answer.is_correct === true && <Badge scheme="green">{t('quizResult.badgeCorrect')}</Badge>}
-                              {answer.is_correct === false && <Badge scheme="red">{t('quizResult.badgeIncorrect')}</Badge>}
-                              {answer.is_correct === null && <Badge scheme="gray">{t('quizResult.badgeNotGraded')}</Badge>}
-                              {revealScore && answer.points_earned != null && answer.points_earned > 0 && (
-                                <span className="text-xs text-gray-400 tabular-nums">+{answer.points_earned} pts</span>
-                              )}
-                            </div>
                           </div>
                         </div>
                       </Card>
