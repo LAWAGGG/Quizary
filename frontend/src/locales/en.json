@@ -72,7 +72,18 @@
     "otpNoCode": "Didn't get a code?",
     "otpCodeHint": "Check inbox & spam. Codes expire in a few minutes.",
     "otpVerifyLink": "Verify email",
-    "otpNotVerified": "Your email is not verified yet. Please check the code we sent to your email."
+    "otpNotVerified": "Your email is not verified yet. Please check the code we sent to your email.",
+    "promoEyebrow": "Quizary Studio",
+    "promoTitle": "Make questionnaire people love to finish.",
+    "promoSub": "Timers, anti-cheat, and auto-grading. Respondents just open the link.",
+    "promoTag": "Math · 10 questions",
+    "promoTagUpload": "Assignment · File",
+    "promoUploadQ": "Upload your answer (PDF, max 10 MB)",
+    "promoSubmitted": "Submitted",
+    "promoTagEssay": "Essay · Media",
+    "featTimer": "Timer",
+    "featAnti": "Anti-cheat",
+    "featAuto": "Auto-grading"
   },
   "dashboard": {
     "greeting": "Welcome back, {{name}}",

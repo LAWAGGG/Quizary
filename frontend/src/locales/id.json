@@ -72,7 +72,18 @@
     "otpNoCode": "Tidak menerima kode?",
     "otpCodeHint": "Cek inbox & spam. Kode kedaluwarsa dalam beberapa menit.",
     "otpVerifyLink": "Verifikasi email",
-    "otpNotVerified": "Email kamu belum diverifikasi. Masukkan kode yang kami kirim ke email kamu."
+    "otpNotVerified": "Email kamu belum diverifikasi. Masukkan kode yang kami kirim ke email kamu.",
+    "promoEyebrow": "Quizary Studio",
+    "promoTitle": "Buat kuisioner yang mudah dikerjakan.",
+    "promoSub": "Timer, anti-cheat, dan nilai otomatis. Responden cukup klik tautan.",
+    "promoTag": "Matematika · 10 soal",
+    "promoTagUpload": "Tugas · File",
+    "promoUploadQ": "Unggah jawaban kamu (PDF, maks. 10 MB)",
+    "promoSubmitted": "Terkirim",
+    "promoTagEssay": "Esai · Media",
+    "featTimer": "Timer",
+    "featAnti": "Anti-cheat",
+    "featAuto": "Nilai otomatis"
   },
   "dashboard": {
     "greeting": "Selamat datang kembali, {{name}}",
