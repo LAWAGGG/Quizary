@@ -16,7 +16,7 @@ function load() {
   }
 }
 
-const PrefsContext = createContext(null)
+export const PrefsContext = createContext(null)
 
 export function PreferencesProvider({ children }) {
   const [prefs, setPrefs] = useState(load)
@@ -51,5 +51,7 @@ export function PreferencesProvider({ children }) {
 }
 
 export function usePrefs() {
-  return useContext(PrefsContext)
+  const ctx = useContext(PrefsContext)
+  if (!ctx) return { ...DEFAULTS, dark: false, setPref: () => {} }
+  return ctx
 }

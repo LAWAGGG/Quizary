@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { motion } from 'framer-motion'
 import { ArrowLeft, FolderPlus } from 'lucide-react'
 import api from '../../api/client'
@@ -8,6 +9,7 @@ import { stripTags } from '../../lib/sanitize'
 import { Button, Toggle, Select, Card, PageHeader, RichTextEditor, CategoryManager } from '../../components/ui'
 
 export default function FormCreate() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const toast = useToast()
   const [form, setForm] = useState({
@@ -34,18 +36,18 @@ export default function FormCreate() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!stripTags(form.title)) { setError('Title is required'); return }
-    if (form.title.length > 1000) { setError('Title max 1000 characters'); return }
+    if (!stripTags(form.title)) { setError(t('formCreate.titleRequired')); return }
+    if (form.title.length > 1000) { setError(t('formCreate.titleMax')); return }
     setLoading(true)
     setError('')
     try {
       const payload = { ...form }
       if (!payload.category_id) delete payload.category_id
       const res = await api.post('/forms', payload)
-      toast.success('Form created')
+      toast.success(t('formCreate.created'))
       navigate(`/forms/${res.data.id}`)
     } catch (err) {
-      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to create form')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || t('formCreate.createFailed'))
     } finally {
       setLoading(false)
     }
@@ -57,107 +59,107 @@ export default function FormCreate() {
         onClick={() => navigate('/forms')}
         className="inline-flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 transition-colors mb-4"
       >
-        <ArrowLeft className="w-4 h-4" /> Back to forms
+        <ArrowLeft className="w-4 h-4" /> {t('formCreate.back')}
       </button>
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl">
           <PageHeader
-            eyebrow="New form"
-            title="Create a new form"
-            description="Start with the basics — you can add questions next."
+            eyebrow={t('formCreate.eyebrow')}
+            title={t('formCreate.title')}
+            description={t('formCreate.description')}
           />
 
           <form onSubmit={handleSubmit} className="space-y-5 mt-6">
             <Card className="space-y-5">
               <div>
-                <span className="field-label">Title</span>
+                <span className="field-label">{t('formCreate.titleLabel')}</span>
                 <RichTextEditor
                   value={form.title || ''}
                   onChange={(html) => { setForm((prev) => ({ ...prev, title: html })); setError('') }}
-                  placeholder="e.g. Weekly Pop Quiz"
+                  placeholder={t('formCreate.titlePlaceholder')}
                   minHeight={60}
                 />
                 {error && <p className="field-error mt-1">{error}</p>}
               </div>
 
               <div>
-                <span className="field-label">Description</span>
+                <span className="field-label">{t('formCreate.descLabel')}</span>
                 <RichTextEditor
                   value={form.description || ''}
                   onChange={(html) => setForm((prev) => ({ ...prev, description: html }))}
-                  placeholder="What is this form about?"
+                  placeholder={t('formCreate.descPlaceholder')}
                   minHeight={120}
                 />
               </div>
 
               <div>
-                <span className="field-label">Type</span>
+                <span className="field-label">{t('formCreate.typeLabel')}</span>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { value: 'form', label: 'Form', desc: 'Collect responses' },
-                    { value: 'quiz', label: 'Quiz', desc: 'Auto-grade answers' },
-                  ].map((t) => (
+                    { value: 'form', label: t('formCreate.typeForm'), desc: t('formCreate.typeFormDesc') },
+                    { value: 'quiz', label: t('formCreate.typeQuiz'), desc: t('formCreate.typeQuizDesc') },
+                  ].map((t_) => (
                     <button
-                      key={t.value}
+                      key={t_.value}
                       type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, type: t.value }))}
+                      onClick={() => setForm((prev) => ({ ...prev, type: t_.value }))}
                       className={`text-left px-4 py-3.5 rounded-xl border-2 transition-all ${
-                        form.type === t.value
+                        form.type === t_.value
                           ? 'border-primary bg-primary-50 shadow-chip'
                           : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 hover:border-gray-300 dark:hover:border-gray-600'
                       }`}
                     >
-                      <span className={`block text-sm font-semibold ${form.type === t.value ? 'text-primary-700' : 'text-ink dark:text-gray-100'}`}>
-                        {t.label}
+                      <span className={`block text-sm font-semibold ${form.type === t_.value ? 'text-primary-700' : 'text-ink dark:text-gray-100'}`}>
+                        {t_.label}
                       </span>
-                      <span className="block text-xs text-gray-400 dark:text-gray-500 mt-0.5">{t.desc}</span>
+                      <span className="block text-xs text-gray-400 dark:text-gray-500 mt-0.5">{t_.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
               <div>
-                <span className="field-label">Kategori</span>
+                <span className="field-label">{t('formCreate.categoryLabel')}</span>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <Select
                       value={form.category_id || ''}
                       onChange={(e) => setForm((p) => ({ ...p, category_id: e.target.value ? Number(e.target.value) : null }))}
                     >
-                      <option value="">Tanpa kategori</option>
+                      <option value="">{t('formCreate.noCategory')}</option>
                       {categories.map((c) => (
                         <option key={c.id} value={c.id}>{c.name} ({c.form_count})</option>
                       ))}
                     </Select>
                   </div>
                   <Button type="button" variant="secondary" onClick={() => setShowCatMgr(true)} icon={<FolderPlus className="w-4 h-4" />}>
-                    Buat
+                    {t('formCreate.createCategory')}
                   </Button>
                 </div>
-                <p className="field-hint mt-1">Kategori milik akun kamu — mis. Matematika, IPA, Survey Kepuasan.</p>
+                <p className="field-hint mt-1">{t('formCreate.categoryHint')}</p>
               </div>
             </Card>
 
             <Card className="divide-y divide-gray-100 dark:divide-gray-800">
               <SettingRow
-                title="Require login"
-                desc="Respondents must sign in first."
-                control={<Toggle label="Require login" checked={form.require_login} onChange={(v) => setForm((prev) => ({ ...prev, require_login: v }))} />}
+                title={t('formCreate.requireLogin')}
+                desc={t('formCreate.requireLoginDesc')}
+                control={<Toggle label={t('formCreate.requireLogin')} checked={form.require_login} onChange={(v) => setForm((prev) => ({ ...prev, require_login: v }))} />}
               />
               <div className="py-4">
-                <Select label="Submission limit" name="submission_limit" value={form.submission_limit} onChange={handleChange}>
-                  <option value="unlimited">Unlimited</option>
-                  <option value="once">Once per person</option>
+                <Select label={t('formCreate.submissionLimit')} name="submission_limit" value={form.submission_limit} onChange={handleChange}>
+                  <option value="unlimited">{t('formCreate.limitUnlimited')}</option>
+                  <option value="once">{t('formCreate.limitOnce')}</option>
                 </Select>
               </div>
             </Card>
 
             <div className="flex gap-3 pt-2">
               <Button type="submit" loading={loading} className="flex-1" size="lg">
-                {loading ? 'Creating...' : 'Create Form'}
+                {loading ? t('common.loading') : t('formCreate.created')}
               </Button>
               <Button type="button" variant="secondary" onClick={() => navigate('/forms')} size="lg">
-                Cancel
+                {t('common.cancel')}
               </Button>
             </div>
           </form>

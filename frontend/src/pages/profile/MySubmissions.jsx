@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ExternalLink, ClipboardList } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { Card, Button, StatusBadge, PageHeader, EmptyState, CardSkeleton, RichText } from '../../components/ui'
 
 export default function MySubmissions() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
@@ -20,9 +22,9 @@ export default function MySubmissions() {
   return (
     <div className="max-w-3xl mx-auto">
       <PageHeader
-        eyebrow="Your activity"
-        title="My Submissions"
-        description="Every form or quiz you've answered."
+        eyebrow={t('mySubs.eyebrow')}
+        title={t('mySubs.title')}
+        description={t('mySubs.description')}
       />
 
       {loading ? (
@@ -33,11 +35,11 @@ export default function MySubmissions() {
         <Card className="mt-6">
           <EmptyState
             icon={<ClipboardList className="w-6 h-6" />}
-            title="No submissions yet"
-            description="You haven't filled out any forms or quizzes yet."
+            title={t('mySubs.empty')}
+            description={t('mySubs.emptyDesc')}
             action={
               <Button onClick={() => navigate('/')} variant="secondary">
-                Back to Dashboard
+                {t('mySubs.backToDashboard')}
               </Button>
             }
           />
@@ -66,11 +68,11 @@ export default function MySubmissions() {
                     </div>
                     {sub.type !== 'quiz' && sub.reveal_score && sub.score !== null && sub.score !== undefined && (
                       <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
-                        Score: <span className="font-semibold text-ink dark:text-gray-100 tabular-nums">{sub.score}</span>
+                        {t('mySubs.scoreLabel', { score: sub.score })}
                       </p>
                     )}
                     <p className="text-xs text-gray-400 dark:text-gray-500">
-                      {sub.submitted_at ? `Submitted: ${sub.submitted_at}` : 'Not submitted yet'}
+                      {sub.submitted_at ? t('mySubs.submittedAt', { date: sub.submitted_at }) : t('mySubs.notSubmitted')}
                     </p>
                   </div>
                   <StatusBadge status={sub.status} />

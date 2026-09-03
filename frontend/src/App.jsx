@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { MotionConfig } from 'framer-motion'
-import { ThemeProvider } from './context/ThemeContext.jsx'
+import { PreferencesProvider } from './context/PreferencesContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { useAuth } from './hooks/useAuth'
 import { ToastProvider } from './context/ToastContext.jsx'
@@ -19,6 +19,7 @@ import Results from './pages/results/Results'
 import Analytics from './pages/results/Analytics'
 import Profile from './pages/profile/Profile'
 import MySubmissions from './pages/profile/MySubmissions'
+import Settings from './pages/profile/Settings'
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
@@ -60,6 +61,7 @@ function AppRoutes() {
         <Route path="/forms/:formId/analytics" element={<Analytics />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/my-submissions" element={<MySubmissions />} />
+        <Route path="/settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -70,13 +72,13 @@ export default function App() {
   return (
     <BrowserRouter>
       <MotionConfig reducedMotion="user">
-        <ThemeProvider>
+        <PreferencesProvider>
           <AuthProvider>
             <ToastProvider>
               <AppRoutes />
             </ToastProvider>
           </AuthProvider>
-        </ThemeProvider>
+        </PreferencesProvider>
       </MotionConfig>
     </BrowserRouter>
   )

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, X, Minus, Eye, EyeOff, ArrowRight, ClipboardList, Trophy, AlertTriangle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button, Card, Badge, FallbackPage, DotCorner, AuroraBg, RichText } from '../../components/ui'
 import { sanitizeHtml } from '../../lib/sanitize'
 import { isAudioUrl } from '../../lib/media'
@@ -21,6 +22,7 @@ function formatSubmitted(str) {
 }
 
 export default function QuizResult() {
+  const { t } = useTranslation()
   const { submissionId } = useParams()
   const navigate = useNavigate()
   const { theme } = useTheme()
@@ -41,12 +43,12 @@ export default function QuizResult() {
   useEffect(() => {
     const sub = api.get(`/submissions/${submissionId}`, { headers: sessionTokenHeaders(submissionId) })
       .then((res) => setData(res.data))
-      .catch((err) => setError(err.response?.data?.message || 'Failed to load results'))
+      .catch((err) => setError(err.response?.data?.message || t('quizResult.loadFailed')))
     const pub = formCode
       ? api.get(`/q/${formCode}`).then((res) => setPublicForm(res.data)).catch(() => setPublicForm(null))
       : Promise.resolve()
     Promise.all([sub, pub]).finally(() => setLoading(false))
-  }, [submissionId, formCode])
+  }, [submissionId, formCode, t])
 
   useEffect(() => {
     if (!data || data.score == null) return
@@ -88,9 +90,9 @@ export default function QuizResult() {
   if (error) {
     return (
       <FallbackPage
-        title="Something went wrong"
+        title={t('quizResult.loadFailed')}
         message={error}
-        action={<Button variant="secondary" onClick={() => navigate('/')} className="w-full">Go home</Button>}
+        action={<Button variant="secondary" onClick={() => navigate('/')} className="w-full">{t('quizResult.goHome')}</Button>}
       />
     )
   }
@@ -109,7 +111,7 @@ export default function QuizResult() {
   // Pesan terima kasih (atau fallback nama form) — dipakai untuk form & quiz.
   const rawThanks = publicForm?.thank_you_message || ''
   const hasThanks = rawThanks.replace(/<[^>]*>/g, '').trim().length > 0
-  const thankYou = hasThanks ? rawThanks : `Form ${stripTags(publicForm?.title) || formTitle} submitted successfully!`
+  const thankYou = hasThanks ? rawThanks : t('quizResult.submittedFallback', { title: stripTags(publicForm?.title) || formTitle })
 
   if (!isQuiz) {
     return (
@@ -157,22 +159,22 @@ export default function QuizResult() {
             </div>
 
             <div className="text-center">
-              <p className="eyebrow justify-center" style={{ color: palette.base }}>Submitted</p>
+              <p className="eyebrow justify-center" style={{ color: palette.base }}>{t('quizResult.submitted')}</p>
               <h1 className="font-display text-2xl md:text-[26px] font-bold text-ink dark:text-gray-100 mt-3 leading-snug">
                 <RichText html={thankYou} className="rich-text" />
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
                 {formTitle ? (
-                  <>Your response to <span className="font-semibold text-ink dark:text-gray-100">"<RichText html={formTitle} className="rich-text" />"</span> has been recorded.</>
+                  <>{t('quizResult.recordedWithTitle', { title: formTitle })}</>
                 ) : (
-                  'Your response has been recorded.'
+                  t('quizResult.recorded')
                 )}
               </p>
             </div>
 
             <div className="grid grid-cols-3 gap-2.5 mt-8">
-              <MetaChip label="Questions" value={String(totalQ)} />
-              <MetaChip label="Submitted" value={formatSubmitted(data.submitted_at)} />
+              <MetaChip label={t('quizResult.questionsCount')} value={String(totalQ)} />
+              <MetaChip label={t('quizResult.submittedAt')} value={formatSubmitted(data.submitted_at)} />
             </div>
 
             <div className="border-t border-gray-100 dark:border-gray-800 mt-7 pt-6">
@@ -184,10 +186,10 @@ export default function QuizResult() {
                   style={{ background: palette.cta, color: palette.onBase }}
                   icon={<ArrowRight className="w-4 h-4" />}
                 >
-                  Fill Again
+                  {t('quizResult.fillAgain')}
                 </Button>
               ) : (
-                <p className="text-center text-sm text-gray-400">You can close this page.</p>
+                <p className="text-center text-sm text-gray-400">{t('quizResult.closePage')}</p>
               )}
             </div>
           </Card>
@@ -253,7 +255,7 @@ export default function QuizResult() {
           {data.status === 'cheating' && (
             <div className="inline-flex items-center gap-2 text-sm font-semibold text-incorrect bg-incorrect-soft px-4 py-2.5 rounded-xl mt-2">
               <AlertTriangle className="w-4 h-4 shrink-0" />
-              Quiz auto-submitted due to leaving too often (score 0).
+              {t('quizResult.cheatingNotice')}
             </div>
           )}
 
@@ -295,17 +297,17 @@ export default function QuizResult() {
 
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 {(percentage >= 70
-                  ? 'Great job! Solid result.'
+                  ? t('quizResult.greatJob')
                   : percentage >= 40
-                    ? 'Good effort — keep practicing.'
-                    : 'Keep practicing — you’ll get there.')}
+                    ? t('quizResult.goodEffort')
+                    : t('quizResult.keepPracticing'))}
               </p>
 
               {totalQ > 0 && (
                 <div className="grid grid-cols-3 gap-2.5 mt-6 max-w-sm mx-auto">
-                  <MetaChip label="Correct" value={String(correctCount)} />
-                  <MetaChip label="Wrong" value={String(wrongCount)} />
-                  <MetaChip label="Skipped" value={String(unansweredCount)} />
+                  <MetaChip label={t('quizResult.correct')} value={String(correctCount)} />
+                  <MetaChip label={t('quizResult.wrong')} value={String(wrongCount)} />
+                  <MetaChip label={t('quizResult.skipped')} value={String(unansweredCount)} />
                 </div>
               )}
             </>
@@ -324,8 +326,8 @@ export default function QuizResult() {
                   <Trophy className="w-4 h-4" />
                 </span>
                 <div>
-                  <h3 className="font-display font-semibold text-ink dark:text-gray-100">Leaderboard</h3>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">{leaderboard.total} participant{leaderboard.total !== 1 ? 's' : ''}</p>
+                  <h3 className="font-display font-semibold text-ink dark:text-gray-100">{t('quizResult.leaderboard')}</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">{t('quizResult.participants', { count: leaderboard.total })}</p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -343,7 +345,7 @@ export default function QuizResult() {
                       </span>
                       <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink dark:text-gray-100">
                         {row.respondent_name}
-                        {isMe && <span className="text-primary text-xs font-semibold ml-1.5">(You)</span>}
+                        {isMe && <span className="text-primary text-xs font-semibold ml-1.5">{t('quizResult.youBadge')}</span>}
                       </span>
                       <span className="text-sm font-semibold tabular-nums text-ink dark:text-gray-100">{row.score}</span>
                     </div>
@@ -356,7 +358,7 @@ export default function QuizResult() {
                     {leaderboard.own.rank}
                   </span>
                   <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink dark:text-gray-100">
-                    {leaderboard.own.respondent_name} <span className="text-primary text-xs font-semibold">(You)</span>
+                    {leaderboard.own.respondent_name} <span className="text-primary text-xs font-semibold">{t('quizResult.youBadge')}</span>
                   </span>
                   <span className="text-sm font-semibold tabular-nums text-ink dark:text-gray-100">{leaderboard.own.score}</span>
                 </div>
@@ -373,7 +375,7 @@ export default function QuizResult() {
               className="w-full mb-4"
               icon={showReview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             >
-              {showReview ? 'Hide Review' : 'View Answer Review'}
+              {showReview ? t('quizResult.hideReview') : t('quizResult.viewReview')}
             </Button>
 
             <AnimatePresence>
@@ -391,7 +393,7 @@ export default function QuizResult() {
                         <div className="flex items-start gap-3">
                           {statusIcon(answer.is_correct)}
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Question {i + 1}</p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">{t('quizResult.questionLabel', { n: i + 1 })}</p>
                             <p className="font-medium text-ink dark:text-gray-100 mb-2 leading-snug"><RichText html={answer.question_text} className="rich-text" /></p>
 
                             {/* Gambar soal — ditampilkan jika ada */}
@@ -405,23 +407,23 @@ export default function QuizResult() {
                               />
                             ))}
 
-                            <p className="text-xs text-gray-400">Your answer</p>
+                            <p className="text-xs text-gray-400">{t('quizResult.yourAnswer')}</p>
                             <div className="text-sm font-medium text-ink dark:text-gray-200 mb-3">
                               {(answer.question_type === 'multiple_choice' || answer.question_type === 'checkbox' || answer.question_type === 'dropdown')
                                 ? (answer.selected_options?.length > 0
                                   ? answer.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(', ')
-                                  : <span className="text-gray-400 italic">(not answered)</span>)
+                                  : <span className="text-gray-400 italic">{t('quizResult.notAnswered')}</span>)
                                 : answer.question_type === 'file_upload'
                                   ? (answer.answer_file
-                                    ? <a href={answer.answer_file} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-primary dark:text-primary-300 underline">View answer file</a>
-                                    : <span className="text-gray-400 italic">(not answered)</span>)
-                                  : (answer.answer_text || <span className="text-gray-400 italic">(not answered)</span>)}
+                                    ? <a href={answer.answer_file} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-primary dark:text-primary-300 underline">{t('quizResult.viewAnswerFile')}</a>
+                                    : <span className="text-gray-400 italic">{t('quizResult.notAnswered')}</span>)
+                                  : (answer.answer_text || <span className="text-gray-400 italic">{t('quizResult.notAnswered')}</span>)}
                             </div>
 
                             <div className="flex items-center gap-2">
-                              {answer.is_correct === true && <Badge scheme="green">Correct</Badge>}
-                              {answer.is_correct === false && <Badge scheme="red">Incorrect</Badge>}
-                              {answer.is_correct === null && <Badge scheme="gray">Not graded</Badge>}
+                              {answer.is_correct === true && <Badge scheme="green">{t('quizResult.badgeCorrect')}</Badge>}
+                              {answer.is_correct === false && <Badge scheme="red">{t('quizResult.badgeIncorrect')}</Badge>}
+                              {answer.is_correct === null && <Badge scheme="gray">{t('quizResult.badgeNotGraded')}</Badge>}
                               {revealScore && answer.points_earned != null && answer.points_earned > 0 && (
                                 <span className="text-xs text-gray-400 tabular-nums">+{answer.points_earned} pts</span>
                               )}
@@ -451,7 +453,7 @@ export default function QuizResult() {
               style={{ background: palette.cta, color: palette.onBase }}
               icon={<ArrowRight className="w-4 h-4" />}
             >
-              Fill Again
+              {t('quizResult.fillAgain')}
             </Button>
           </motion.div>
         )}
@@ -459,7 +461,7 @@ export default function QuizResult() {
         {!canRefill && (
           <div className="mt-8 flex items-center justify-center gap-1.5 text-xs text-gray-400">
             <ClipboardList className="w-3.5 h-3.5" />
-            You can close this page.
+            {t('quizResult.closePage')}
           </div>
         )}
       </div>

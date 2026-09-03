@@ -13,6 +13,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
+import { useTranslation } from 'react-i18next'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { isAudioUrl } from '../../lib/media'
 import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText } from '../../components/ui'
@@ -48,6 +49,26 @@ const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
 function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, questionId, sections, sectionsAllowed, scoringMode }) {
   const toast = useToast()
+  const { t } = useTranslation()
+  const typeLabels = {
+    multiple_choice: t('questionBuilder.typeMultipleChoice'),
+    checkbox: t('questionBuilder.typeCheckbox'),
+    dropdown: t('questionBuilder.typeDropdown'),
+    short_answer: t('questionBuilder.typeShortAnswer'),
+    essay: t('questionBuilder.typeEssay'),
+    password: t('questionBuilder.typePassword'),
+    date: t('questionBuilder.typeDate'),
+    time: t('questionBuilder.typeTime'),
+    datetime: t('questionBuilder.typeDatetime'),
+    file_upload: t('questionBuilder.typeFileUpload'),
+  }
+  const typeHints = {
+    dropdown: t('questionBuilder.hintDropdown'),
+    date: t('questionBuilder.hintDate'),
+    time: t('questionBuilder.hintTime'),
+    datetime: t('questionBuilder.hintDatetime'),
+    file_upload: t('questionBuilder.hintFileUpload'),
+  }
   // Satu-satunya section = default tujuan soal baru; select section tak perlu tampil.
   const singleSectionId = sectionsAllowed && sections?.length === 1 ? sections[0].id : null
   const [form, setForm] = useState({
@@ -76,7 +97,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     const file = optionFileRefs.current[i]?.files?.[0]
     if (!file) return
     if (file.size > MAX_Q_MEDIA) {
-      toast.error(`File terlalu besar (${fmtMB(file.size)}MB). Maksimal 10MB untuk gambar/audio soal`)
+      toast.error(t('questionBuilder.fileTooLarge', { size: fmtMB(file.size) }))
       if (optionFileRefs.current[i]) optionFileRefs.current[i].value = ''
       return
     }
@@ -88,7 +109,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         options: prev.options.map((o, idx) => (idx !== i ? o : { ...o, image: { path: preview }, _pendingFile: file })),
       }))
       if (optionFileRefs.current[i]) optionFileRefs.current[i].value = ''
-      toast.success('Option media dipilih — akan diupload setelah disimpan')
+      toast.success(t('questionBuilder.optionMediaQueued'))
       return
     }
     const fd = new FormData()
@@ -118,7 +139,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     const file = questionFileRef.current?.files?.[0]
     if (!file) return
     if (file.size > MAX_Q_MEDIA) {
-      toast.error(`File terlalu besar (${fmtMB(file.size)}MB). Maksimal 10MB untuk gambar/audio soal`)
+      toast.error(t('questionBuilder.fileTooLarge', { size: fmtMB(file.size) }))
       if (questionFileRef.current) questionFileRef.current.value = ''
       return
     }
@@ -127,7 +148,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
       const preview = URL.createObjectURL(file)
       setForm((prev) => ({ ...prev, image: { path: preview }, _pendingFile: file }))
       if (questionFileRef.current) questionFileRef.current.value = ''
-      toast.success('Media dipilih — akan diupload setelah pertanyaan disimpan')
+      toast.success(t('questionBuilder.optionMediaQueued'))
       return
     }
     const fd = new FormData()
@@ -236,48 +257,48 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
 
   return (
     <div className="space-y-5">
-      <Select label="Question Type" value={form.type} onChange={(e) => handleTypeChange(e.target.value)} error={ferr('type')}>
-        {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
+      <Select label={t('questionBuilder.questionType')} value={form.type} onChange={(e) => handleTypeChange(e.target.value)} error={ferr('type')}>
+        {TYPE_OPTIONS.map((optType) => <option key={optType} value={optType}>{typeLabels[optType]}</option>)}
       </Select>
-      {TYPE_HINTS[form.type] && (
-        <p className="text-xs text-gray-400 dark:text-gray-500 -mt-3">{TYPE_HINTS[form.type]}</p>
+      {typeHints[form.type] && (
+        <p className="text-xs text-gray-400 dark:text-gray-500 -mt-3">{typeHints[form.type]}</p>
       )}
 
       {isPassword && (
         <div>
-          <label className="field-label">Password Key</label>
+          <label className="field-label">{t('questionBuilder.passwordKey')}</label>
           <input
             value={form.password_keyword || ''}
             onChange={(e) => setForm((p) => ({ ...p, password_keyword: e.target.value }))}
-            placeholder="e.g. Rahasia2026"
+            placeholder={t('questionBuilder.passwordPlaceholder')}
             className={`input-field font-mono ${ferr('password_keyword') ? 'border-incorrect focus:border-incorrect' : ''}`}
             maxLength={255}
             spellCheck={false}
           />
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Answer must match exactly to proceed to the next section.</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('questionBuilder.passwordHint')}</p>
           {ferr('password_keyword') && <p className="field-error">{ferr('password_keyword')}</p>}
         </div>
       )}
 
       {sectionsAllowed && sections?.length > 1 && (
         <div>
-          <label className="field-label">Section</label>
+          <label className="field-label">{t('questionBuilder.sectionLabel')}</label>
           <Select
             value={form.section_id || ''}
             onChange={(e) => setForm((p) => ({ ...p, section_id: e.target.value ? parseInt(e.target.value) : null }))}
           >
-            <option value="">— No section —</option>
+            <option value="">{t('questionBuilder.noSection')}</option>
             {sections.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
           </Select>
         </div>
       )}
 
       <div>
-        <label className="field-label">Question</label>
+        <label className="field-label">{t('questionBuilder.questionLabel')}</label>
         <RichTextEditor
           value={form.question_text}
           onChange={(html) => setForm((p) => ({ ...p, question_text: html }))}
-          placeholder="Enter question text..."
+          placeholder={t('questionBuilder.questionPlaceholder')}
         />
         {ferr('question_text') && <p className="field-error">{ferr('question_text')}</p>}
       </div>
@@ -301,8 +322,8 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         type="button"
         onClick={handleRemoveQuestionImage}
         className="absolute top-2 right-2 w-7 h-7 rounded-full bg-ink/70 hover:bg-incorrect text-white flex items-center justify-center backdrop-blur-sm transition-colors"
-        aria-label="Remove image"
-        title="Hapus gambar"
+        aria-label={t('questionBuilder.removeImage')}
+        title={t('questionBuilder.removeImage')}
       >
         <X className="w-3.5 h-3.5" />
       </button>
@@ -321,7 +342,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         ) : (
           <ImageIcon className="w-4 h-4" />
         )}
-        {qImgLoading ? 'Uploading...' : 'Tambah gambar / audio'}
+        {qImgLoading ? t('questionBuilder.uploading') : t('questionBuilder.addMedia')}
       </button>
     </div>
   )}
@@ -332,7 +353,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
           <div className="flex-1">
             {isEditing ? (
               <Input
-                label="Points"
+                label={t('questionBuilder.points')}
                 type="number"
                 value={form.points}
                 onChange={(e) => setForm((p) => ({ ...p, points: parseInt(e.target.value) || 0 }))}
@@ -343,9 +364,9 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
               />
             ) : (
               <div>
-                <label className="field-label">Points</label>
+                <label className="field-label">{t('questionBuilder.points')}</label>
                 <p className="text-sm text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-ink-800/50 border border-gray-200 dark:border-gray-700 rounded-xl px-4 h-11 flex items-center">
-                  {scoringMode === 'auto' ? `${form.points} pts (auto)` : 'Auto-assigned by system'}
+                  {scoringMode === 'auto' ? t('questionBuilder.pointsAuto', { points: form.points }) : t('questionBuilder.pointsAuto', { points: form.points })}
                 </p>
               </div>
             )}
@@ -354,16 +375,16 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         <div className="flex items-center gap-2.5 h-11 pb-[1px]">
           {isQuiz && isEditing && !noGrade && (
             <>
-              <span className="text-sm text-gray-600 dark:text-gray-400">Count points</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">{t('questionBuilder.countPoints')}</span>
               <Toggle
-                label="Count points"
+                label={t('questionBuilder.countPoints')}
                 checked={form.is_scored}
                 onChange={(v) => setForm((p) => ({ ...p, is_scored: v, points: v ? p.points : 0 }))}
               />
             </>
           )}
-          <span className="text-sm text-gray-600 dark:text-gray-400">Required</span>
-          <Toggle label="Required" checked={form.is_required} onChange={(v) => setForm((p) => ({ ...p, is_required: v }))} />
+          <span className="text-sm text-gray-600 dark:text-gray-400">{t('questionBuilder.required')}</span>
+          <Toggle label={t('questionBuilder.required')} checked={form.is_required} onChange={(v) => setForm((p) => ({ ...p, is_required: v }))} />
         </div>
       </div>
 
@@ -371,10 +392,10 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         <div className={`${optionsErr ? 'border border-incorrect rounded-xl p-3' : ''}`}>
           <div className="flex items-center justify-between mb-2.5">
             <label className="field-label !mb-0">
-              Answer options
+              {t('questionBuilder.answerOptions')}
             </label>
             <button type="button" onClick={addOption} className="text-sm font-medium text-primary hover:underline">
-              + Add option
+              {t('questionBuilder.addOption')}
             </button>
           </div>
           <div className="space-y-3">
@@ -420,7 +441,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                       <RichTextEditor
                         value={opt.option_text}
                         onChange={(html) => setOption(i, 'option_text', html)}
-                        placeholder={`Option ${LETTERS[i % LETTERS.length]}`}
+                        placeholder={t('questionBuilder.optionPlaceholder', { letter: LETTERS[i % LETTERS.length] })}
                         compact
                         minHeight={48}
                       />
@@ -460,7 +481,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                         ) : (
                           <ImageIcon className="w-3.5 h-3.5" />
                         )}
-                        Add image/audio
+                        {t('questionBuilder.addImageAudio')}
                       </button>
                     )}
                   </div>
@@ -476,7 +497,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                         onClick={() => handleRemoveOptionImage(i)}
                         className="absolute top-2 right-2 w-7 h-7 rounded-full bg-ink/70 hover:bg-incorrect text-white flex items-center justify-center backdrop-blur-sm transition-colors"
                         aria-label="Remove option image"
-                        title="Hapus gambar opsi"
+                        title={t('questionBuilder.removeImage')}
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -487,7 +508,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
             ))}
           </div>
           {needsOptions && form.options.length > 0 && !hasCorrect && isQuiz && form.is_scored && CORRECT_OPTION_TYPES.includes(form.type) && (
-            <p className="text-xs text-warn mt-2">Mark at least one option as correct.</p>
+            <p className="text-xs text-warn mt-2">{t('questionBuilder.markCorrectWarning')}</p>
           )}
           {optionsErr && optionsMsg && (
             <p className="text-xs font-medium text-incorrect mt-2">{optionsMsg}</p>
@@ -497,15 +518,28 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
 
       <div className="flex gap-3 pt-2">
         <Button onClick={() => onSave({ ...form, options: form.options })} disabled={!canSave || loading} loading={loading} className="flex-1" size="md">
-          {loading ? 'Saving...' : 'Save'}
+          {loading ? t('questionBuilder.save') : t('questionBuilder.save')}
         </Button>
-        <Button onClick={onCancel} variant="secondary" size="md">Cancel</Button>
+        <Button onClick={onCancel} variant="secondary" size="md">{t('questionBuilder.cancel')}</Button>
       </div>
     </div>
   )
 }
 
 function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected, onToggleSelect, groupId, groupIndex, _groupSize, moveButtons }) {
+  const { t } = useTranslation()
+  const typeLabels = {
+    multiple_choice: t('questionBuilder.typeMultipleChoice'),
+    checkbox: t('questionBuilder.typeCheckbox'),
+    dropdown: t('questionBuilder.typeDropdown'),
+    short_answer: t('questionBuilder.typeShortAnswer'),
+    essay: t('questionBuilder.typeEssay'),
+    password: t('questionBuilder.typePassword'),
+    date: t('questionBuilder.typeDate'),
+    time: t('questionBuilder.typeTime'),
+    datetime: t('questionBuilder.typeDatetime'),
+    file_upload: t('questionBuilder.typeFileUpload'),
+  }
   return (
     <Card className={`transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? '!border-primary ring-2 ring-primary/30 bg-primary-50/40 dark:bg-primary-900/15' : 'hover:border-gray-300 dark:hover:border-gray-700'} ${groupId ? 'border-l-4 !border-l-primary/50' : ''}`}>
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -517,10 +551,10 @@ function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected,
           >
             {selected ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : index + 1}
           </span>
-          <Badge scheme="gray">{TYPE_LABELS[question.type]}</Badge>
+          <Badge scheme="gray">{typeLabels[question.type]}</Badge>
           {groupId && (
             <Badge scheme="primary" title="Story group questions always appear in sequence even with shuffle active. Select question(s) then click Ungroup to remove.">
-              <span className="hidden sm:inline">Group {groupIndex}</span>
+              <span className="hidden sm:inline">{t('questionBuilder.groupLabel', { n: groupIndex })}</span>
               <span className="sm:hidden">G{groupIndex}</span>
             </Badge>
           )}
@@ -548,7 +582,7 @@ function QuestionCard({ question, index, onDelete, isDragging, isQuiz, selected,
       <div className="mb-3 flex items-start gap-1">
         <RichText html={question.question_text} className="rich-text block text-[15px] font-medium text-ink dark:text-gray-100" />
         {question.is_required !== false && (
-          <span className="text-incorrect text-lg font-bold leading-none mt-0.5 shrink-0" title="Required">*</span>
+          <span className="text-incorrect text-lg font-bold leading-none mt-0.5 shrink-0" title={t('questionBuilder.required')}>*</span>
         )}
       </div>
       {question.image && (isAudioUrl(question.image.path) ? (
@@ -713,6 +747,7 @@ function GroupInnerRow({ q, globalIndex, isQuiz, selected, onToggleSelect, onEdi
 }
 
 function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, onToggle, isQuiz, selectedIds, onToggleSelect, onToggleGroupSelect, onEdit, onDelete, onUngroup, onMove, isFirst, isLast, selectCount, idToIndex, editing, showForm, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, scoringMode, allQuestions, onAddToGroup }) {
+  const { t } = useTranslation()
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: `g-${groupId}`,
     data: { type: 'group', groupId },
@@ -758,8 +793,8 @@ function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, 
             </button>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-display font-bold text-sm text-ink dark:text-gray-100">Group {groupIndex}</span>
-                <Badge scheme="primary" className="text-[11px]">{members.length} questions</Badge>
+                <span className="font-display font-bold text-sm text-ink dark:text-gray-100">{t('questionBuilder.groupLabel', { n: groupIndex })}</span>
+                <Badge scheme="primary" className="text-[11px]">{t('questionBuilder.questionCount', { count: members.length })}</Badge>
                 {isQuiz && <span className="text-xs text-gray-500 hidden sm:inline">{totalPts} pts</span>}
               </div>
             </div>
@@ -770,8 +805,8 @@ function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, 
                   <button onClick={(e) => { e.stopPropagation(); onMove(1) }} disabled={isLast} aria-label="Move group down" className="w-7 h-7 rounded-lg bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-gray-500 flex items-center justify-center disabled:opacity-30 md:hidden"><ChevronDown className="w-4 h-4" /></button>
                 </>
               )}
-              <button onClick={(e) => { e.stopPropagation(); onUngroup(groupId) }} title="Ungroup" className="w-6 h-6 rounded-xl text-gray-500 hover:text-primary hover:bg-primary-50 flex items-center justify-center transition-colors"><Unlink className="w-3.5 h-3.5" /></button>
-              <input type="checkbox" checked={allSel} ref={(el) => { if (el) el.indeterminate = someSel }} onChange={() => onToggleGroupSelect(groupId)} onClick={(e) => e.stopPropagation()} className="w-4 h-4 rounded accent-primary hidden md:block" title={allSel ? 'Deselect all' : 'Select all in group'} />
+              <button onClick={(e) => { e.stopPropagation(); onUngroup(groupId) }} title={t('questionBuilder.bulkUngroup')} className="w-6 h-6 rounded-xl text-gray-500 hover:text-primary hover:bg-primary-50 flex items-center justify-center transition-colors"><Unlink className="w-3.5 h-3.5" /></button>
+              <input type="checkbox" checked={allSel} ref={(el) => { if (el) el.indeterminate = someSel }} onChange={() => onToggleGroupSelect(groupId)} onClick={(e) => e.stopPropagation()} className="w-4 h-4 rounded accent-primary hidden md:block" title={allSel ? t('questionBuilder.bulkCancel') : t('questionBuilder.bulkGroup')} />
             </div>
           </div>
           {/* body */}
@@ -810,8 +845,8 @@ function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, 
                   <div ref={setAddRef} className={`rounded-xl border-2 border-dashed p-3 transition-colors ${isAddOver ? 'border-primary bg-primary-50 dark:bg-primary-900/20' : 'border-gray-200 dark:border-gray-700 bg-white/60 dark:bg-ink-900/40'}`}>
                     {!showPicker ? (
                       <button onClick={() => setShowPicker(true)} className="w-full flex items-center justify-center gap-2 text-sm font-medium text-gray-500 hover:text-primary transition-colors">
-                        <Plus className="w-4 h-4" /> Add questions
-                        {isAddOver && <span className="text-xs text-primary ml-2">Drop here to add</span>}
+                        <Plus className="w-4 h-4" /> {t('questionBuilder.addQuestion')}
+                        {isAddOver && <span className="text-xs text-primary ml-2">{t('questionBuilder.dropHereToAdd')}</span>}
                       </button>
                     ) : (
                       <div className="space-y-3">
@@ -829,10 +864,10 @@ function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, 
                                 <Badge scheme="gray" className="text-[10px] shrink-0">{q.type.replace('_',' ')}</Badge>
                               </label>
                             )
-                          }) : <p className="text-xs text-gray-400 text-center py-2">No eligible questions in this section</p>}
+                          }) : <p className="text-xs text-gray-400 text-center py-2">{t('questionBuilder.emptySection')}</p>}
                         </div>
                         <div className="flex gap-2 justify-end">
-                          <Button size="sm" variant="ghost" onClick={() => { setShowPicker(false); setPickIds([]) }}>Cancel</Button>
+                          <Button size="sm" variant="ghost" onClick={() => { setShowPicker(false); setPickIds([]) }}>{t('questionBuilder.cancel')}</Button>
                           <Button size="sm" onClick={handleAdd} disabled={!pickIds.length || adding} loading={adding}>Add {pickIds.length ? `(${pickIds.length})` : ''}</Button>
                         </div>
                       </div>
@@ -858,6 +893,7 @@ function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, 
 }
 
 function QuestionItem({ q, index, onEdit, onDelete, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupIndex, groupSize, onMove, totalCount, selectCount, scoringMode }) {
+  const { t } = useTranslation()
   if (editOpen) {
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="md:pl-7">
@@ -872,7 +908,7 @@ function QuestionItem({ q, index, onEdit, onDelete, isQuiz, selected, onToggleSe
             <button
               onClick={onCancel}
               className="p-1.5 -mr-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
-              aria-label="Cancel edit"
+              aria-label={t('questionBuilder.cancel')}
             >
               <X className="w-4 h-4" />
             </button>
@@ -927,6 +963,7 @@ function QuestionItem({ q, index, onEdit, onDelete, isQuiz, selected, onToggleSe
 }
 
 function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSave, onCancel, onDelete, collapsible, collapsed, onToggle }) {
+  const { t } = useTranslation()
   return (
     <div className="rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800/50 border-l-4 border-primary -mx-3 px-3 sm:px-4 py-3 mb-3">
       {editing ? (
@@ -937,13 +974,13 @@ function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSav
             onKeyDown={(e) => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel() }}
             className="input-field h-9 text-sm flex-1"
             autoFocus
-            placeholder="Section name"
+            placeholder={t('questionBuilder.sectionPlaceholder')}
           />
           <Button size="sm" onClick={onSave} icon={<Check className="w-3.5 h-3.5" />}>
-            <span className="hidden sm:inline">Save</span>
+            <span className="hidden sm:inline">{t('questionBuilder.save')}</span>
           </Button>
           <Button size="sm" variant="ghost" onClick={onCancel} icon={<X className="w-3.5 h-3.5" />}>
-            <span className="hidden sm:inline">Cancel</span>
+            <span className="hidden sm:inline">{t('questionBuilder.cancel')}</span>
           </Button>
         </div>
       ) : (
@@ -960,10 +997,10 @@ function SectionHeader({ section, count, editing, draft, setDraft, onEdit, onSav
             </button>
           )}
           <h3 className="font-display font-semibold text-ink dark:text-gray-100 flex-1 truncate text-sm sm:text-base">
-            {section ? section.title : 'General'}
+            {section ? section.title : t('questionBuilder.sectionGeneral')}
           </h3>
-          <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0 hidden sm:inline">{count} question{count !== 1 ? 's' : ''}</span>
-          <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0 sm:hidden">{count}Q</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0 hidden sm:inline">{t('questionBuilder.questionCount', { count })}</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0 sm:hidden">{t('questionBuilder.questionCount', { count })}</span>
           {section && (
             <div className="flex items-center gap-1">
               <button onClick={onEdit} title="Rename section" className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors shrink-0">
@@ -991,6 +1028,19 @@ export default function QuestionBuilder() {
   const { formId } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const { t } = useTranslation()
+  const typeLabels = {
+    multiple_choice: t('questionBuilder.typeMultipleChoice'),
+    checkbox: t('questionBuilder.typeCheckbox'),
+    dropdown: t('questionBuilder.typeDropdown'),
+    short_answer: t('questionBuilder.typeShortAnswer'),
+    essay: t('questionBuilder.typeEssay'),
+    password: t('questionBuilder.typePassword'),
+    date: t('questionBuilder.typeDate'),
+    time: t('questionBuilder.typeTime'),
+    datetime: t('questionBuilder.typeDatetime'),
+    file_upload: t('questionBuilder.typeFileUpload'),
+  }
   const docxRef = useRef(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -1143,7 +1193,7 @@ export default function QuestionBuilder() {
     try {
       if (editing) {
         await api.put(`/questions/${editing.id}`, payload)
-        toast.success('Question updated')
+        toast.success(t('questionBuilder.updated'))
       } else {
         const res = await api.post(`/forms/${formId}/questions`, payload)
         // ponytail: upload pending media queued before save (no ID at that time)
@@ -1169,7 +1219,7 @@ export default function QuestionBuilder() {
             }
           }
         }
-        toast.success('Question added')
+        toast.success(t('questionBuilder.added'))
       }
       load()
       setShowForm(false)
@@ -1203,7 +1253,7 @@ export default function QuestionBuilder() {
     try {
       await api.delete(`/questions/${deleteTarget.id}`)
       setDeleteTarget(null)
-      toast.success('Question deleted')
+      toast.success(t('questionBuilder.deleted'))
       load()
     } catch {
       toast.error('Failed to delete question')
@@ -1362,7 +1412,7 @@ export default function QuestionBuilder() {
     setBulkDeleting(true)
     try {
       await api.post(`/forms/${formId}/questions/bulk-delete`, { question_ids: selectedIds })
-      toast.success(`${selectedIds.length} question(s) deleted`)
+      toast.success(t('questionBuilder.deleted'))
       setSelectedIds([])
       load()
     } catch {
@@ -1539,7 +1589,7 @@ export default function QuestionBuilder() {
     e.target.value = ''
     // Section >1: tujuan import wajib dipilih (divalidasi juga di backend).
     if (importNeedsSection && !importSectionId) {
-      toast.error('Select target section first')
+      toast.error(t('questionBuilder.importNeedSection'))
       return
     }
     setImporting(true)
@@ -1552,10 +1602,10 @@ export default function QuestionBuilder() {
       })
       setShowImportModal(false)
       setImportSectionId('')
-      toast.success('Questions imported')
+      toast.success(t('questionBuilder.importSuccess', { count: 0 }))
       load()
     } catch (err) {
-      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to import DOCX')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || t('questionBuilder.importFailed'))
     } finally {
       setImporting(false)
     }
@@ -1628,26 +1678,26 @@ export default function QuestionBuilder() {
         onClick={() => navigate(`/forms/${formId}`)}
         className="inline-flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 transition-colors mb-4"
       >
-        <ArrowLeft className="w-4 h-4" /> Back to settings
+        <ArrowLeft className="w-4 h-4" /> {t('questionBuilder.backToSettings')}
       </button>
 
       <PageHeader
-        eyebrow={form.type === 'quiz' ? 'Quiz builder' : 'Form builder'}
+        eyebrow={form.type === 'quiz' ? t('questionBuilder.quizBuilder') : t('questionBuilder.formBuilder')}
         title={<RichText html={form.title} />}
-        description={`${questions.length} question${questions.length !== 1 ? 's' : ''}`}
+        description={t('questionBuilder.questionCount', { count: questions.length })}
         actions={
           <>
             <input ref={docxRef} type="file" accept=".docx" onChange={handleDocxImport} className="hidden" />
             <Button variant="secondary" onClick={() => { if (docxRef.current) docxRef.current.value = ''; setShowImportModal(true) }} icon={<Upload className="w-4 h-4" />}>
-              <span className="hidden sm:inline">Import DOCX</span>
+              <span className="hidden sm:inline">{t('questionBuilder.importDocx')}</span>
             </Button>
             {sectionsAllowed && (
               <Button variant="secondary" onClick={() => setShowSectionManager(true)} icon={<Layers className="w-4 h-4" />}>
-                <span className="hidden sm:inline">Manage Sections</span>
+                <span className="hidden sm:inline">{t('questionBuilder.manageSections')}</span>
               </Button>
             )}
             <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />}>
-              <span className="hidden sm:inline">Add Question</span>
+              <span className="hidden sm:inline">{t('questionBuilder.addQuestion')}</span>
             </Button>
           </>
         }
@@ -1671,18 +1721,18 @@ export default function QuestionBuilder() {
             onChange={(e) => setNewSectionTitle(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') createSection() }}
             className="input-field flex-1"
-            placeholder="Section name, e.g. Section A"
+            placeholder={t('questionBuilder.sectionPlaceholder')}
             autoFocus
           />
-          <Button onClick={createSection} loading={sectionSaving} disabled={!newSectionTitle.trim()}>Add</Button>
-          <Button variant="ghost" onClick={() => setNewSectionOpen(false)}>Cancel</Button>
+          <Button onClick={createSection} loading={sectionSaving} disabled={!newSectionTitle.trim()}>{t('questionBuilder.addOption')}</Button>
+          <Button variant="ghost" onClick={() => setNewSectionOpen(false)}>{t('questionBuilder.cancel')}</Button>
         </div>
       )}
 
       {reorderSaving && (
         <div className="bg-blue-50 text-blue-700 px-4 py-2 rounded-xl mt-4 text-sm flex items-center gap-2">
           <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-          Saving order...
+          {t('questionBuilder.savingOrder')}
         </div>
       )}
 
@@ -1699,7 +1749,7 @@ export default function QuestionBuilder() {
                 <span className="w-6 h-6 rounded-full bg-primary-50 text-primary text-xs font-bold flex items-center justify-center">
                   <Plus className="w-3.5 h-3.5" />
                 </span>
-                <h3 className="font-display font-semibold text-ink dark:text-gray-100">Add New Question</h3>
+                <h3 className="font-display font-semibold text-ink dark:text-gray-100">{t('questionBuilder.addNewQuestion')}</h3>
               </div>
               <QuestionForm
                 onSave={(data) => handleSaveQuestion(data)}
@@ -1723,11 +1773,11 @@ export default function QuestionBuilder() {
         <Card className="mt-6">
           <EmptyState
             icon={<HelpCircle className="w-6 h-6" />}
-            title="No questions yet"
-            description="Add your first question, or import one from a DOCX file."
+            title={t('questionBuilder.emptyTitle')}
+            description={t('questionBuilder.emptyDesc')}
             action={
               <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />}>
-                Add Question
+                {t('questionBuilder.addQuestion')}
               </Button>
             }
           />
@@ -1748,8 +1798,8 @@ export default function QuestionBuilder() {
                   onChange={toggleSelectAll}
                   className="w-4 h-4 rounded accent-primary"
                 />
-                <span className="hidden sm:inline">Select all ({selectedIds.length}/{questions.length})</span>
-                <span className="sm:hidden">{selectedIds.length}/{questions.length}</span>
+                <span className="hidden sm:inline">{t('questionBuilder.selectAll', { selected: selectedIds.length, total: questions.length })}</span>
+                <span className="sm:hidden">{t('questionBuilder.selectAll', { selected: selectedIds.length, total: questions.length })}</span>
               </label>
               <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
                 <button
@@ -1758,7 +1808,7 @@ export default function QuestionBuilder() {
                   title="Cancel selection"
                 >
                   <X className="w-4 h-4" />
-                  <span className="hidden sm:inline text-sm font-medium">Cancel</span>
+                  <span className="hidden sm:inline text-sm font-medium">{t('questionBuilder.bulkCancel')}</span>
                 </button>
                 {canAddMixed ? (
                   <button
@@ -1768,7 +1818,7 @@ export default function QuestionBuilder() {
                     className="flex items-center gap-1.5 p-2 rounded-lg text-primary hover:bg-primary-50 transition-colors"
                   >
                     {grouping ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <TextQuote className="w-4 h-4" />}
-                    <span className="hidden sm:inline text-sm font-medium">Group</span>
+                    <span className="hidden sm:inline text-sm font-medium">{t('questionBuilder.bulkGroup')}</span>
                   </button>
                 ) : selectionGrouped ? (
                   <button
@@ -1782,7 +1832,7 @@ export default function QuestionBuilder() {
                     className="flex items-center gap-1.5 p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary-soft transition-colors disabled:opacity-40"
                   >
                     {ungrouping ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Unlink className="w-4 h-4" />}
-                    <span className="hidden sm:inline text-sm font-medium">Ungroup</span>
+                    <span className="hidden sm:inline text-sm font-medium">{t('questionBuilder.bulkUngroup')}</span>
                   </button>
                 ) : (
                   <button
@@ -1792,7 +1842,7 @@ export default function QuestionBuilder() {
                     className="flex items-center gap-1.5 p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:text-primary hover:bg-primary-soft transition-colors disabled:opacity-40"
                   >
                     {grouping ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <TextQuote className="w-4 h-4" />}
-                    <span className="hidden sm:inline text-sm font-medium">Group</span>
+                    <span className="hidden sm:inline text-sm font-medium">{t('questionBuilder.bulkGroup')}</span>
                   </button>
                 )}
                 <button
@@ -1801,7 +1851,7 @@ export default function QuestionBuilder() {
                   className="flex items-center gap-1.5 p-2 rounded-lg text-incorrect hover:bg-incorrect-soft transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
-                  <span className="hidden sm:inline text-sm font-medium">Delete ({selectedIds.length})</span>
+                  <span className="hidden sm:inline text-sm font-medium">{t('questionBuilder.bulkDelete', { count: selectedIds.length })}</span>
                 </button>
               </div>
             </motion.div>
@@ -1908,7 +1958,7 @@ export default function QuestionBuilder() {
                             </div>
                           ) : (
                             <p className="mt-3 text-xs text-gray-400 dark:text-gray-500 italic">
-                              No questions yet in this section.
+                              {t('questionBuilder.emptySection')}
                             </p>
                           ))}
                         </SectionDropZone>
@@ -2009,7 +2059,7 @@ export default function QuestionBuilder() {
                   <Card className="shadow-lift border-primary/40 bg-white dark:bg-ink-900 w-[640px] max-w-[90vw] opacity-95">
                     <div className="flex items-center gap-3">
                       <GripVertical className="w-5 h-5 text-primary shrink-0" />
-                      <Badge scheme="gray" className="shrink-0">{TYPE_LABELS[q.type]}</Badge>
+                      <Badge scheme="gray" className="shrink-0">{typeLabels[q.type]}</Badge>
                       <span className="text-sm text-gray-600 dark:text-gray-400 truncate flex-1">
                         {(q.question_text || '').replace(/<[^>]*>/g, '').trim().slice(0, 80)}
                       </span>
@@ -2024,8 +2074,8 @@ export default function QuestionBuilder() {
 
       <ConfirmModal
         show={!!sectionDeleteTarget}
-        title="Delete Section?"
-        message={`Section "${sectionDeleteTarget?.title || ''}" will be deleted. Questions inside will remain, just unlinked from any section.`}
+        title={t('questionBuilder.confirmDeleteSectionTitle')}
+        message={t('questionBuilder.confirmDeleteSectionMessage', { title: sectionDeleteTarget?.title || '' })}
         onConfirm={deleteSection}
         onCancel={() => setSectionDeleteTarget(null)}
         loading={confirmLoading}
@@ -2035,10 +2085,10 @@ export default function QuestionBuilder() {
 
       <ConfirmModal
         show={showBulkDelete}
-        title={`Delete ${selectedIds.length} question(s)?`}
+        title={t('questionBuilder.confirmDeleteQuestionsTitle', { count: selectedIds.length })}
         message={
           <div>
-            <p>This will permanently delete the selected questions. Review the list below:</p>
+            <p>{t('questionBuilder.confirmDeleteQuestionsMessage', { count: selectedIds.length })}</p>
             <ul className="mt-2 space-y-1 max-h-44 overflow-y-auto pr-1">
               {questions.filter((q) => selectedIds.includes(q.id)).map((q) => (
                 <li key={q.id} className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400 leading-snug">
@@ -2058,13 +2108,13 @@ export default function QuestionBuilder() {
 
       <ConfirmModal
         show={!!deleteWarning}
-        title="Ada submission aktif"
+        title={t('questionBuilder.activeSubmissionsWarning')}
         message={
           <div>
             <p>
               {deleteWarning?.isBulk
-                ? `${deleteWarning?.questionIds.length} soal ini masih punya ${deleteWarning?.activeCount} submission aktif.`
-                : `Soal "${deleteWarning?.questionName}..." masih punya ${deleteWarning?.activeCount} submission aktif.`
+                ? t('questionBuilder.activeSubmissionsMessage', { title: '', count: deleteWarning?.activeCount })
+                : t('questionBuilder.activeSubmissionsMessage', { title: deleteWarning?.questionName || '', count: deleteWarning?.activeCount })
               }
             </p>
             <p className="mt-2 text-sm">Menghapus soal ini akan membuat submission yang sedang berjalan kehilangan data ini. Tetap hapus?</p>
@@ -2085,8 +2135,8 @@ export default function QuestionBuilder() {
 
       <ConfirmModal
         show={!!deleteTarget}
-        title="Delete Question?"
-        message={`Delete question "${(deleteTarget?.question_text || '').replace(/<[^>]*>/g, '').slice(0, 50)}..."?`}
+        title={t('questionBuilder.confirmDeleteQuestionTitle')}
+        message={t('questionBuilder.confirmDeleteQuestionMessage', { title: (deleteTarget?.question_text || '').replace(/<[^>]*>/g, '').slice(0, 50) })}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
         loading={confirmLoading}
@@ -2096,7 +2146,7 @@ export default function QuestionBuilder() {
 
       <ConfirmModal
         show={!!ungroupConfirm}
-        title={ungroupConfirm?.mode === 'group' ? `Ungroup Group ${ungroupConfirm.groupIndex}?` : `Ungroup ${ungroupConfirm?.count || ''} question(s)?`}
+        title={ungroupConfirm?.mode === 'group' ? t('questionBuilder.confirmUngroupTitle', { n: ungroupConfirm.groupIndex }) : t('questionBuilder.confirmDeleteQuestionsTitle', { count: ungroupConfirm?.count || 0 })}
         message={
           ungroupConfirm?.mode === 'group'
             ? `Group ${ungroupConfirm.groupIndex} with ${ungroupConfirm.count} questions will be dissolved. The questions will remain as separate items in the same section.`
@@ -2114,7 +2164,7 @@ export default function QuestionBuilder() {
         }}
         onCancel={() => setUngroupConfirm(null)}
         loading={ungrouping}
-        confirmText="Ungroup"
+        confirmText={t('questionBuilder.bulkUngroup')}
         variant="secondary"
       />
 
@@ -2141,8 +2191,8 @@ export default function QuestionBuilder() {
                     <Upload className="w-4 h-4 sm:w-5 sm:h-5" />
                   </span>
                   <div>
-                    <h3 className="font-display text-base sm:text-lg font-bold text-ink dark:text-gray-100">Import from Word</h3>
-                    <p className="text-[11px] sm:text-xs text-gray-400 dark:text-gray-500">Follow the format below</p>
+                    <h3 className="font-display text-base sm:text-lg font-bold text-ink dark:text-gray-100">{t('questionBuilder.importTitle')}</h3>
+                    <p className="text-[11px] sm:text-xs text-gray-400 dark:text-gray-500">{t('questionBuilder.importSubtitle')}</p>
                   </div>
                 </div>
                 <button
@@ -2163,7 +2213,7 @@ export default function QuestionBuilder() {
                       value={importSectionId}
                       onChange={(e) => setImportSectionId(e.target.value)}
                     >
-                      <option value="">— Select section —</option>
+                      <option value="">{t('questionBuilder.noSection')}</option>
                       {sections.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
                     </Select>
                   </section>
@@ -2171,7 +2221,7 @@ export default function QuestionBuilder() {
 
                 {/* Format rules */}
                 <section>
-                  <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">Format rules</h4>
+                  <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">{t('questionBuilder.formatRules')}</h4>
                   <ul className="space-y-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                     <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>Start each question with a number, e.g. <strong>1.</strong> or <strong>1)</strong></span></li>
                     <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>List choices with letters: <strong>A.</strong>, <strong>B.</strong>, etc.</span></li>
@@ -2182,7 +2232,7 @@ export default function QuestionBuilder() {
 
                 {/* Example */}
                 <section>
-                  <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">Example</h4>
+                  <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">{t('questionBuilder.example')}</h4>
                   <div className="rounded-xl bg-gray-50 dark:bg-ink-800/60 border border-gray-200 dark:border-gray-700 p-3 sm:p-4 font-mono text-[11px] sm:text-[13px] leading-relaxed text-gray-700 dark:text-gray-300 overflow-auto max-h-48 whitespace-pre">{`1. What is the capital of France?
    A. London
    B. Paris
@@ -2202,7 +2252,7 @@ export default function QuestionBuilder() {
 
                 {/* Notes */}
                 <section>
-                  <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">Notes</h4>
+                  <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">{t('questionBuilder.notes')}</h4>
                   <ul className="space-y-1 text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 list-disc pl-4">
                     <li>Only .docx files are accepted.</li>
                     <li>Imported questions are appended at the end.</li>
@@ -2219,14 +2269,14 @@ export default function QuestionBuilder() {
                   className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-primary hover:text-primary-700 dark:hover:text-primary-300 transition-colors shrink-0"
                 >
                   <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span className="hidden sm:inline">Download Template</span>
-                  <span className="sm:hidden">Template</span>
+                  <span className="hidden sm:inline">{t('questionBuilder.downloadTemplate')}</span>
+                  <span className="sm:hidden">{t('questionBuilder.template')}</span>
                 </a>
                 <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => setShowImportModal(false)} disabled={importing} size="sm">Cancel</Button>
+                  <Button variant="secondary" onClick={() => setShowImportModal(false)} disabled={importing} size="sm">{t('questionBuilder.cancel')}</Button>
                   <Button
                     onClick={() => {
-                      if (importNeedsSection && !importSectionId) { toast.error('Select target section first'); return }
+                      if (importNeedsSection && !importSectionId) { toast.error(t('questionBuilder.importNeedSection')); return }
                       docxRef.current?.click()
                     }}
                     loading={importing}

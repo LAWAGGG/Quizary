@@ -8,28 +8,9 @@ import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { stripTags } from '../../lib/sanitize'
 import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichText, ConfirmModal, sanitizeHtml } from '../../components/ui'
 import { isAudioUrl } from '../../lib/media'
+import { useTranslation } from 'react-i18next'
 
-const statusOptions = [
-  { value: '', label: 'All statuses' },
-  { value: 'submitted', label: 'Submitted' },
-  { value: 'auto_submitted', label: 'Auto Submitted' },
-  { value: 'cheating', label: 'Cheating' },
-  { value: 'locked', label: 'Locked' },
-]
 
-const statusTargets = [
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'submitted', label: 'Submitted' },
-  { value: 'cheating', label: 'Cheating' },
-]
-
-const STATUS_LABELS = {
-  in_progress: 'In Progress',
-  submitted: 'Submitted',
-  auto_submitted: 'Auto Submitted',
-  cheating: 'Cheating',
-  locked: 'Locked',
-}
 
 // Kartu mobile dengan hold-to-select (haptic). Hook dipanggil di sini — satu
 // komponen per kartu, aman Rules of Hooks.
@@ -45,15 +26,40 @@ function HoldSelectCard({ selectedCount, selected, onToggle, onTap, className = 
   )
 }
 
-const sortOptions = [
-  { value: '', label: 'Newest' },
-  { value: 'score_desc', label: 'Highest score' },
-  { value: 'score_asc', label: 'Lowest score' },
-]
+
 
 export default function Results() {
   const { formId } = useParams()
   const toast = useToast()
+  const { t } = useTranslation()
+
+  const statusOptions = [
+    { value: '', label: t('results.filterAll') },
+    { value: 'submitted', label: t('results.statusSubmitted') },
+    { value: 'auto_submitted', label: t('results.statusAuto') },
+    { value: 'cheating', label: t('results.statusCheating') },
+    { value: 'locked', label: t('results.statusLocked') },
+  ]
+
+  const statusTargets = [
+    { value: 'in_progress', label: t('results.statusInProgress') },
+    { value: 'submitted', label: t('results.statusSubmitted') },
+    { value: 'cheating', label: t('results.statusCheating') },
+  ]
+
+  const STATUS_LABELS = {
+    in_progress: t('results.statusInProgress'),
+    submitted: t('results.statusSubmitted'),
+    auto_submitted: t('results.statusAutoSubmitted'),
+    cheating: t('results.statusCheating'),
+    locked: t('results.statusLocked'),
+  }
+
+  const sortOptions = [
+    { value: '', label: t('results.sortNewest') },
+    { value: 'score_desc', label: t('results.sortHighest') },
+    { value: 'score_asc', label: t('results.sortLowest') },
+  ]
   const [data, setData] = useState([])
   const [meta, setMeta] = useState({ total: 0, page: 1, per_page: 20 })
   const [formTitle, setFormTitle] = useState('')
@@ -86,12 +92,12 @@ export default function Results() {
     setDeleting(true)
     try {
       const res = await api.delete(`/forms/${formId}/results`, { data: { submission_ids: [...selected] } })
-      toast.success(res.data.message || `${res.data.deleted} result(s) deleted`)
+      toast.success(res.data.message || t('results.deleted', { count: res.data.deleted }))
       setShowDelete(false)
       setSelected(new Set())
       fetchResults()
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to delete results')
+      toast.error(err.response?.data?.message || t('results.deleteFailed'))
     } finally {
       setDeleting(false)
     }
@@ -106,12 +112,12 @@ export default function Results() {
     setStatusSaving(true)
     try {
       const res = await api.patch(`/forms/${formId}/results/${id}/status`, { status })
-      toast.success(res.data.message || 'Status updated')
+      toast.success(res.data.message || t('results.statusUpdated'))
       setStatusTarget(null)
       setDetail((prev) => (prev && prev.id === id ? { ...prev, status: res.data.status, score: res.data.score } : prev))
       fetchResults()
     } catch (err) {
-      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to change status')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || t('results.deleteFailed'))
     } finally {
       setStatusSaving(false)
     }
@@ -133,12 +139,12 @@ export default function Results() {
         submission_ids: [...selected], 
         status 
       })
-      toast.success(res.data.message || 'Status updated')
+      toast.success(res.data.message || t('results.statusUpdated'))
       setBulkStatusTarget(null)
       setSelected(new Set())
       fetchResults()
     } catch (err) {
-      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to change status')
+      toast.error(err.response?.data?.message || err.response?.data?.detail || t('results.deleteFailed'))
     } finally {
       setBulkStatusSaving(false)
     }
@@ -155,12 +161,12 @@ export default function Results() {
       value={row.status}
       onClick={(e)=>e.stopPropagation()}
       onChange={(e) => requestStatus({ id: row.submission_id, status: e.target.value, current: row.status })}
-      aria-label={`Change status #${row.submission_id}`}
+      aria-label={t('results.changeStatusAria', { id: row.submission_id })}
       className="!h-8 !text-xs w-36"
     >
       <option value={row.status} disabled>{STATUS_LABELS[row.status] || row.status}</option>
-      {statusTargets.filter((t) => t.value !== row.status).map((t) => (
-        <option key={t.value} value={t.value}>{t.label}</option>
+      {statusTargets.filter((opt) => opt.value !== row.status).map((opt) => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
       ))}
     </Select>
   )
@@ -215,10 +221,10 @@ export default function Results() {
       a.download = filename
       a.click()
       URL.revokeObjectURL(url)
-      toast.success('Excel diekspor sesuai filter & urutan saat ini')
+      toast.success(t('results.exportSuccess'))
     } catch (err) {
       console.error(err)
-      toast.error(err.response?.data?.message || 'Gagal mengekspor Excel')
+      toast.error(err.response?.data?.message || t('results.exportFailed'))
     }
   }
 
@@ -263,12 +269,12 @@ export default function Results() {
   return (
     <div>
       <PageHeader
-        eyebrow="Responses"
-        title={formTitle ? <RichText html={formTitle} /> : 'Results'}
-        description={`${meta.total} submission${meta.total !== 1 ? 's' : ''}`}
+        eyebrow={t('results.eyebrow')}
+        title={formTitle ? <RichText html={formTitle} /> : t('results.eyebrow')}
+        description={t('results.submissionCount', { total: meta.total })}
         actions={
           <>
-            <Button variant="secondary" icon={<Download className="w-4 h-4" />} onClick={handleExport} title="Export Excel mengikuti filter status & urutan skor yang aktif">Excel</Button>
+            <Button variant="secondary" icon={<Download className="w-4 h-4" />} onClick={handleExport} title={t('results.exportHint')}>{t('results.exportExcel')}</Button>
           </>
         }
       />
@@ -291,15 +297,15 @@ export default function Results() {
       </div>
       {(status || sort) && (
         <p className="text-xs text-gray-400 dark:text-gray-500 mb-4 -mt-2">
-          Export Excel akan mengikuti filter & urutan yang aktif{status ? ` · status: ${status}` : ''}{sort ? ` · sort: ${sort === 'score_desc' ? 'Highest score' : sort === 'score_asc' ? 'Lowest score' : sort}` : ''}.
+          {t('results.exportHintActive')}
         </p>
       )}
 
       {selected.size > 0 && (
         <div className="sticky top-2 z-30 mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-white dark:bg-ink-900 px-4 py-3 shadow-lift">
-          <span className="text-sm font-semibold text-ink dark:text-gray-100 shrink-0">{selected.size} <span className="hidden sm:inline">result(s)</span> selected</span>
+          <span className="text-sm font-semibold text-ink dark:text-gray-100 shrink-0">{t('results.selectedCount', { count: selected.size })}</span>
           <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())} className="hidden sm:inline-flex">Cancel</Button>
+                        <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())} className="hidden sm:inline-flex">{t('results.cancelSelection')}</Button>
 
             <Select 
               value="" 
@@ -307,13 +313,13 @@ export default function Results() {
               className="!h-8 !text-xs w-[115px] sm:w-[140px]"
               aria-label="Change status in bulk"
             >
-              <option value="" disabled>Change status</option>
-              {statusTargets.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+              <option value="" disabled>{t('results.changeStatus')}</option>
+              {statusTargets.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </Select>
             <Button variant="danger" size="sm" icon={<Trash2 className="w-4 h-4" />} onClick={() => setShowDelete(true)}>
-              <span className="hidden sm:inline">Delete</span>
+              <span className="hidden sm:inline">{t('results.deleteSelected')}</span>
             </Button>
           </div>
         </div>
@@ -327,8 +333,8 @@ export default function Results() {
         <Card>
           <EmptyState
             icon={<ClipboardList className="w-6 h-6" />}
-            title="No submissions yet"
-            description="Share your form link to start receiving responses."
+            title={t('results.emptyTitle')}
+            description={t('results.emptyDesc')}
           />
         </Card>
       ) : (
@@ -341,11 +347,11 @@ export default function Results() {
                     <th className="px-5 py-3.5 w-10">
                       <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all" className="accent-primary w-4 h-4 cursor-pointer" />
                     </th>
-                    {isQuiz && <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Rank</th>}
-                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Respondent</th>
-                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{isQuiz ? 'Score / Max' : 'Answers'}</th>
-                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Submitted</th>
+                    {isQuiz && <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{t('results.rank')}</th>}
+                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{t('results.respondent')}</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{isQuiz ? t('results.score') : t('results.answers')}</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{t('results.status')}</th>
+                    <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{t('results.submittedAt')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -362,7 +368,7 @@ export default function Results() {
                         <input type="checkbox" checked={selected.has(row.submission_id)} onChange={() => toggleSelect(row.submission_id)} aria-label={`Select #${row.submission_id}`} className="accent-primary w-4 h-4 cursor-pointer" />
                       </td>
                       {isQuiz && <td className="px-5 py-3.5 text-sm font-semibold tabular-nums text-gray-500 dark:text-gray-400">{row.rank ?? '-'}</td>}
-                      <td className="px-5 py-3.5 text-sm font-medium text-ink dark:text-gray-100">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">(you)</span>}</td>
+                      <td className="px-5 py-3.5 text-sm font-medium text-ink dark:text-gray-100">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">{t('results.youSuffix')}</span>}</td>
                       <td className="px-5 py-3.5 text-sm tabular-nums">
                         {isQuiz ? (
                           <span className="inline-flex items-center gap-1.5">
@@ -406,7 +412,7 @@ export default function Results() {
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start mb-3 gap-2">
                         <div className="min-w-0">
-                          <span className="font-medium text-sm text-ink dark:text-gray-100 truncate block">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">(you)</span>}</span>
+                          <span className="font-medium text-sm text-ink dark:text-gray-100 truncate block">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">{t('results.youSuffix')}</span>}</span>
                           <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">#{row.submission_id}{isQuiz && row.rank != null ? ` · #${row.rank}` : ''}</p>
                         </div>
                         <StatusBadge status={row.status} />
@@ -443,11 +449,11 @@ export default function Results() {
 
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-6">
-              <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
+              <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>{t('common.previous')}</Button>
               <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
-                Page {page} of {totalPages}
+                {t('forms.page', { page, total: totalPages })}
               </span>
-              <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
+              <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>{t('common.next')}</Button>
             </div>
           )}
         </>
@@ -482,7 +488,7 @@ export default function Results() {
                   <button
                     onClick={() => setDetail(null)}
                     className="p-2 -mr-2 rounded-xl text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
-                    aria-label="Close"
+                    aria-label={t('common.close')}
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -490,17 +496,17 @@ export default function Results() {
 
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-3 text-xs">
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="text-gray-400 dark:text-gray-500">Status</span>
+                    <span className="text-gray-400 dark:text-gray-500">{t('results.detailStatus')}</span>
                     <StatusSelect row={{ submission_id: detail.id, status: detail.status }} />
                   </span>
                   {isQuiz && (
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="text-gray-400 dark:text-gray-500">Score</span>
+                      <span className="text-gray-400 dark:text-gray-500">{t('results.detailScore')}</span>
                       <span className="font-semibold tabular-nums text-primary">{detail.score ?? '-'} / {detail.max_score ?? '-'}</span>
                     </span>
                   )}
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="text-gray-400 dark:text-gray-500">Submitted</span>
+                    <span className="text-gray-400 dark:text-gray-500">{t('results.detailSubmitted')}</span>
                     <span className="font-medium text-ink dark:text-gray-100">{detail.submitted_at || '-'}</span>
                   </span>
                 </div>
@@ -512,13 +518,13 @@ export default function Results() {
                     <p className={`text-xs font-semibold flex items-center gap-1.5 ${detail.status === 'cheating' ? 'text-incorrect' : 'text-warn'}`}>
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                       {detail.status === 'cheating'
-                        ? 'Detected cheating — tab exit/fullscreen'
-                        : 'Violation recorded (tab exit/fullscreen)'}
+                        ? t('results.cheatingDetected')
+                        : t('results.violationRecorded')}
                       {' '}{detail.tab_exit_count || 0}x
                     </p>
                     {detail.cheat_reason && (
                       <p className={`text-[11px] mt-1 ${detail.status === 'cheating' ? 'text-incorrect/80' : 'text-warn/80'}`}>
-                        Last recorded: {detail.cheat_reason}
+                        {t('results.lastRecorded', { reason: detail.cheat_reason })}
                       </p>
                     )}
                   </div>
@@ -527,15 +533,15 @@ export default function Results() {
 
               <div className="flex-1 overflow-y-auto px-6 py-5">
                 {detailLoading ? (
-                  <div className="text-sm text-gray-400 text-center py-8">Loading...</div>
+                  <div className="text-sm text-gray-400 text-center py-8">{t('results.loading')}</div>
                 ) : questionGroups.length === 0 ? (
-                  <div className="text-sm text-gray-400 text-center py-8">No questions yet.</div>
+                  <div className="text-sm text-gray-400 text-center py-8">{t('results.noQuestions')}</div>
                 ) : (
                   <>
                     <div className="flex items-center gap-2 mb-4">
                       <span className="w-1 h-4 rounded-full bg-primary" />
                       <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                        Respondent answers · {detail.questions?.length ?? 0} question(s)
+                        {t('results.respondentAnswers', { count: detail.questions?.length ?? 0 })}
                       </span>
                     </div>
                     {questionGroups.map((group) => (
@@ -563,7 +569,7 @@ export default function Results() {
                                     ))}
                                     <div className="mt-3">
                                       <div className="flex items-center gap-2 mb-1.5">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Answers</span>
+                                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t('results.answersLabel')}</span>
                                         <div className="flex-1 border-t border-dashed border-gray-200 dark:border-gray-700" />
                                       </div>
                                       <div className="flex items-center gap-3 bg-white dark:bg-ink-900 border border-gray-100 dark:border-gray-800 rounded-lg px-3 py-2.5">
@@ -571,7 +577,7 @@ export default function Results() {
                                           {!a || (!a.answer_text && !a.answer_file && !(a.selected_options || []).length) ? (
                                             <span className="text-gray-400 dark:text-gray-500">-</span>
                                           ) : a.question_type === 'file_upload' ? (
-                                            <a href={a.answer_file} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">View answer file</a>
+                                            <a href={a.answer_file} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">{t('results.viewAnswerFile')}</a>
                                           ) : ['multiple_choice', 'checkbox', 'dropdown'].includes(a.question_type) ? (
                                             <RichText html={a.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(' · ')} className="rich-text" />
                                           ) : (
@@ -608,9 +614,9 @@ export default function Results() {
 
       <ConfirmModal
         show={showDelete}
-        title="Delete results?"
-        message={`${selected.size} selected result(s) will be permanently deleted along with all their answers.`}
-        confirmText="Delete"
+        title={t('results.confirmDeleteTitle')}
+        message={t('results.confirmDeleteMessage', { count: selected.size })}
+        confirmText={t('results.deleteSelected')}
         loading={deleting}
         onConfirm={handleDeleteSelected}
         onCancel={() => setShowDelete(false)}
@@ -618,9 +624,9 @@ export default function Results() {
 
       <ConfirmModal
         show={!!statusTarget}
-        title="Cheating status?"
-        message={`Submission #${statusTarget?.id} will be marked as Cheating with score 0.`}
-        confirmText="Yes, score 0"
+        title={t('results.confirmCheating')}
+        message={t('results.confirmCheatingMessage', { id: statusTarget?.id })}
+        confirmText={t('results.confirmCheatingAction')}
         loading={statusSaving}
         onConfirm={() => applyStatus(statusTarget)}
         onCancel={() => setStatusTarget(null)}
@@ -628,9 +634,9 @@ export default function Results() {
 
       <ConfirmModal
         show={!!bulkStatusTarget}
-        title="Change Status to Cheating?"
-        message={`${selected.size} selected result(s) will be marked as Cheating with score 0.`}
-        confirmText="Yes, score 0"
+        title={t('results.confirmCheating')}
+        message={t('results.confirmCheatingMessage', { id: selected.size })}
+        confirmText={t('results.confirmCheatingAction')}
         loading={bulkStatusSaving}
         onConfirm={() => applyBulkStatus(bulkStatusTarget)}
         onCancel={() => setBulkStatusTarget(null)}

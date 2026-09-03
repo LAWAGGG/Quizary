@@ -2,22 +2,24 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Plus, Eye, ClipboardList, HelpCircle, Send, Users, TrendingUp } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { useAuth } from '../../hooks/useAuth'
 import { Card, Button, StatusBadge, CardSkeleton, SpotlightCard, AuroraBg, RichText } from '../../components/ui'
 
-const STATS = [
-  { key: 'total_forms', label: 'Total Forms', icon: ClipboardList, tint: 'bg-primary-50 text-primary' },
-  { key: 'total_quiz', label: 'Quiz', icon: HelpCircle, tint: 'bg-blue-50 text-blue-700' },
-  { key: 'total_submissions', label: 'Submissions', icon: Send, tint: 'bg-correct-soft text-correct' },
-  { key: 'total_respondents', label: 'Respondents', icon: Users, tint: 'bg-warn-soft text-warn' },
-]
-
 export default function Dashboard() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { user } = useAuth()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  const STATS = [
+    { key: 'total_forms', label: t('dashboard.totalForms'), icon: ClipboardList, tint: 'bg-primary-50 text-primary' },
+    { key: 'total_quiz', label: t('dashboard.totalQuizzes'), icon: HelpCircle, tint: 'bg-blue-50 text-blue-700' },
+    { key: 'total_submissions', label: t('dashboard.totalSubmissions'), icon: Send, tint: 'bg-correct-soft text-correct' },
+    { key: 'total_respondents', label: t('dashboard.totalRespondents'), icon: Users, tint: 'bg-warn-soft text-warn' },
+  ]
 
   useEffect(() => {
     api.get('/dashboard/summary')
@@ -48,7 +50,7 @@ export default function Dashboard() {
     )
   }
 
-  const maxTrend = data?.submission_trend?.length ? Math.max(...data.submission_trend.map((t) => t.count)) : 1
+  const maxTrend = data?.submission_trend?.length ? Math.max(...data.submission_trend.map((e) => e.count)) : 1
   const firstName = (user?.name || 'User').split(' ')[0]
 
   return (
@@ -63,16 +65,16 @@ export default function Dashboard() {
         <div className="relative flex flex-col sm:flex-row sm:items-center gap-6">
           <div className="flex-1 min-w-0">
             <h1 className="font-display text-2xl md:text-3xl font-bold mt-2">
-              Welcome back, {firstName}
+              {t('dashboard.greeting', { name: firstName })}
             </h1>
-            <p className="text-white/75 text-sm mt-1.5">Your forms and answers.</p>
+            <p className="text-white/75 text-sm mt-1.5">{t('dashboard.subtitle')}</p>
           </div>
           <div className="flex gap-2 shrink-0">
             <Button variant="secondary" onClick={() => navigate('/forms')} icon={<Eye className="w-4 h-4" />}>
-              All Forms
+              {t('dashboard.allForms')}
             </Button>
             <Button onClick={() => navigate('/forms/new')} style={{ backgroundImage: 'none', backgroundColor: '#fff', color: '#6C5CE7' }} className="hover:bg-white/90" icon={<Plus className="w-4 h-4" />}>
-              New Form
+              {t('dashboard.newForm')}
             </Button>
           </div>
         </div>
@@ -109,16 +111,16 @@ export default function Dashboard() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
           <Card className="h-full">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="font-display font-semibold text-ink dark:text-gray-100">Recent Forms</h2>
+              <h2 className="font-display font-semibold text-ink dark:text-gray-100">{t('dashboard.recentForms')}</h2>
               <Link to="/forms" className="text-sm font-medium text-primary hover:text-primary-600 transition-colors">
-                View all
+                {t('dashboard.viewAll')}
               </Link>
             </div>
             {!data?.recent_forms?.length ? (
               <div className="text-center py-10">
-                <p className="text-gray-400 dark:text-gray-500 text-sm mb-4">No forms yet — create one to start collecting answers.</p>
+                <p className="text-gray-400 dark:text-gray-500 text-sm mb-4">{t('dashboard.noFormsDesc')}</p>
                 <Button size="sm" onClick={() => navigate('/forms/new')} icon={<Plus className="w-4 h-4" />}>
-                  Create a Form
+                  {t('dashboard.newForm')}
                 </Button>
               </div>
             ) : (
@@ -126,9 +128,9 @@ export default function Dashboard() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-100 dark:border-gray-700">
-                      <th className="text-left pb-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Title</th>
-                      <th className="text-left pb-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Status</th>
-                      <th className="text-right pb-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Answers</th>
+                      <th className="text-left pb-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{t('dashboard.tableTitle')}</th>
+                      <th className="text-left pb-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{t('dashboard.tableStatus')}</th>
+                      <th className="text-right pb-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{t('dashboard.tableAnswers')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -156,38 +158,38 @@ export default function Dashboard() {
           <Card className="h-full">
             <div className="flex items-center gap-2 mb-5">
               <TrendingUp className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold text-ink dark:text-gray-100">Submission Trend</h2>
+              <h2 className="font-display font-semibold text-ink dark:text-gray-100">{t('dashboard.submissionTrend')}</h2>
             </div>
             {!data?.submission_trend?.length ? (
               <div className="flex flex-col items-center justify-center h-48 text-center">
                 <p className="text-gray-300 dark:text-gray-600 text-4xl font-display font-bold">0</p>
-                <p className="text-gray-400 dark:text-gray-500 text-sm mt-2">Answers will show up here as they come in.</p>
+                <p className="text-gray-400 dark:text-gray-500 text-sm mt-2">{t('dashboard.trendEmpty')}</p>
               </div>
             ) : (
               <>
                 <div className="flex items-end gap-2 h-40">
-                  {data?.submission_trend?.map((t, i) => {
-                    const height = Math.max((t.count / maxTrend) * 100, 4)
+                  {data?.submission_trend?.map((e, i) => {
+                    const height = Math.max((e.count / maxTrend) * 100, 4)
                     return (
                       <motion.div
-                        key={t.form_id}
+                        key={e.form_id}
                         initial={{ height: 0 }}
                         animate={{ height: `${height}%` }}
                         transition={{ duration: 0.5, delay: 0.5 + i * 0.05 }}
                         className="flex-1 bg-primary rounded-t-lg min-h-[4px] relative group"
-                        title={`${t.title}: ${t.count}`}
+                        title={`${e.title}: ${e.count}`}
                       >
                         <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                          {t.count}
+                          {e.count}
                         </div>
                       </motion.div>
                     )
                   })}
                 </div>
                 <div className="flex gap-2 mt-2">
-                  {data?.submission_trend?.map((t) => (
-                    <span key={t.form_id} className="flex-1 min-w-0 text-center" title={`${t.title} — ${t.count} answer${t.count !== 1 ? 's' : ''}`}>
-                      <span className="block text-[10px] text-gray-400 dark:text-gray-500 truncate"><RichText html={t.title} /></span>
+                  {data?.submission_trend?.map((st) => (
+                    <span key={st.form_id} className="flex-1 min-w-0 text-center" title={`${st.title} — ${st.count} answer${st.count !== 1 ? 's' : ''}`}>
+                      <span className="block text-[10px] text-gray-400 dark:text-gray-500 truncate"><RichText html={st.title} /></span>
                     </span>
                   ))}
                 </div>

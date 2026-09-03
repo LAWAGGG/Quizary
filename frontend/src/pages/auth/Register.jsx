@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Mail, Lock, User, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { Button, Input, Card } from '../../components/ui'
 import { AuthShell } from '../../components/auth/AuthShell'
 
 export default function Register() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const { register } = useAuth()
@@ -26,19 +28,19 @@ export default function Register() {
 
   function validate() {
     const errors = {}
-    if (!form.name) errors.name = 'Name is required'
+    if (!form.name) errors.name = t('auth.nameRequired')
     else if (form.name.length < 3)
-      errors.name = 'Name must be at least 3 characters'
-    if (!form.email) errors.email = 'Email is required'
+      errors.name = t('auth.nameMin')
+    if (!form.email) errors.email = t('auth.emailRequired')
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      errors.email = 'Invalid email format'
-    if (!form.password) errors.password = 'Password is required'
+      errors.email = t('auth.emailInvalid')
+    if (!form.password) errors.password = t('auth.passwordRequired')
     else if (form.password.length < 8)
-      errors.password = 'Password must be at least 8 characters'
+      errors.password = t('auth.passwordMin')
     if (!form.password_confirmation)
-      errors.password_confirmation = 'Password confirmation is required'
+      errors.password_confirmation = t('auth.confirmRequired')
     else if (form.password !== form.password_confirmation)
-      errors.password_confirmation = 'Passwords do not match'
+      errors.password_confirmation = t('auth.confirmMismatch')
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -71,11 +73,11 @@ export default function Register() {
         })
         if (schemaMsg) setError(schemaMsg)
         else if (Object.keys(errors).length) setFieldErrors(errors)
-        else setError(msg || 'Validation failed')
+        else setError(msg || t('auth.validationFailed'))
       } else if (status === 409) {
-        setError('Email is already registered')
+        setError(t('auth.emailExists') !== 'auth.emailExists' ? t('auth.emailExists') : 'Email is already registered')
       } else {
-        setError(msg || 'Something went wrong. Please try again.')
+        setError(msg || t('auth.somethingWrong'))
       }
     } finally {
       setLoading(false)
@@ -89,14 +91,14 @@ export default function Register() {
 
   return (
     <AuthShell
-      eyebrow="Get started"
-      title="Create your account"
-      subtitle="Forms and quizzes with auto-grading."
+      eyebrow={t('auth.getStarted')}
+      title={t('auth.createTitle')}
+      subtitle={t('auth.tagline')}
       footer={
         <>
-          Already have an account?{' '}
+          {t('auth.haveAccount')}{' '}
           <Link to={from !== '/' ? `/login?next=${encodeURIComponent(from)}` : '/login'} state={from !== '/' ? { from } : undefined} className="font-semibold text-primary hover:text-primary-600 transition-colors">
-            Sign in
+            {t('auth.signInLink')}
           </Link>
         </>
       }
@@ -117,9 +119,9 @@ export default function Register() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="relative">
               <Input
-                label="Name"
+                label={t('auth.name')}
                 type="text"
-                placeholder="Full name"
+                placeholder={t('auth.name')}
                 value={form.name}
                 onChange={(e) => update('name', e.target.value)}
                 error={fieldErrors.name}
@@ -130,9 +132,9 @@ export default function Register() {
 
             <div className="relative">
               <Input
-                label="Email"
+                label={t('auth.email')}
                 type="email"
-                placeholder="email@example.com"
+                placeholder={t('auth.emailPlaceholder') !== 'auth.emailPlaceholder' ? t('auth.emailPlaceholder') : 'email@example.com'}
                 value={form.email}
                 onChange={(e) => update('email', e.target.value)}
                 error={fieldErrors.email}
@@ -143,9 +145,9 @@ export default function Register() {
 
             <div className="relative">
               <Input
-                label="Password"
+                label={t('auth.password')}
                 type={showPassword ? 'text' : 'password'}
-                placeholder="At least 8 characters"
+                placeholder={t('auth.passwordHint')}
                 value={form.password}
                 onChange={(e) => update('password', e.target.value)}
                 error={fieldErrors.password}
@@ -156,7 +158,7 @@ export default function Register() {
                 type="button"
                 onClick={() => setShowPassword((p) => !p)}
                 className="absolute right-3.5 top-12 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-colors"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
               >
                 {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
               </button>
@@ -164,9 +166,9 @@ export default function Register() {
 
             <div className="relative">
               <Input
-                label="Confirm password"
+                label={t('auth.confirmPassword')}
                 type={showConfirm ? 'text' : 'password'}
-                placeholder="Repeat password"
+                placeholder={t('auth.confirmPassword')}
                 value={form.password_confirmation}
                 onChange={(e) => update('password_confirmation', e.target.value)}
                 error={fieldErrors.password_confirmation}
@@ -177,14 +179,14 @@ export default function Register() {
                 type="button"
                 onClick={() => setShowConfirm((p) => !p)}
                 className="absolute right-3.5 top-12 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-colors"
-                aria-label={showConfirm ? 'Hide confirm password' : 'Show confirm password'}
+                aria-label={showConfirm ? t('auth.hidePassword') : t('auth.showPassword')}
               >
                 {showConfirm ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
               </button>
             </div>
 
             <Button type="submit" loading={loading} className="w-full" size="lg">
-              Create Account
+              {t('auth.getStarted')}
             </Button>
           </form>
         </Card>

@@ -1,11 +1,30 @@
 import { useTranslation } from 'react-i18next'
-import { Monitor, Sun, Moon, Type, Languages, Sparkles, Trash2, Settings as SettingsIcon } from 'lucide-react'
-import { Card, PageHeader, Select, Toggle } from '../../components/ui'
+import { Monitor, Sun, Type, Languages, Sparkles, Trash2, Settings as SettingsIcon, LogOut } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Card, PageHeader, Select, Toggle, Button } from '../../components/ui'
 import { usePrefs } from '../../context/PreferencesContext'
 import { useToast } from '../../hooks/useToast'
+import { useAuth } from '../../hooks/useAuth'
 import { persistLang } from '../../lib/i18n.js'
 
-function Row({ icon: Icon, title, desc, children }) {
+function Row({ icon: Icon, title, desc, children, stackOnMobile }) {
+  if (stackOnMobile) {
+    return (
+      <div className="flex flex-col gap-3 py-4 border-b border-gray-100 dark:border-gray-800 last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="w-9 h-9 rounded-xl bg-primary-50 dark:bg-primary-900/30 text-primary flex items-center justify-center shrink-0 mt-0.5">
+            <Icon className="w-4 h-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-ink dark:text-gray-100">{title}</p>
+            {desc && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 sm:hidden">{desc}</p>}
+            {desc && <p className="hidden sm:block text-xs text-gray-400 dark:text-gray-500 mt-0.5">{desc}</p>}
+          </div>
+        </div>
+        <div className="ml-12 sm:ml-0 shrink-0">{children}</div>
+      </div>
+    )
+  }
   return (
     <div className="flex items-center justify-between gap-4 py-4 border-b border-gray-100 dark:border-gray-800 last:border-0">
       <div className="flex items-start gap-3 min-w-0">
@@ -26,6 +45,8 @@ export default function Settings() {
   const { t, i18n } = useTranslation()
   const { theme, fontSize, reduceMotion, setPref } = usePrefs()
   const toast = useToast()
+  const { logout } = useAuth()
+  const navigate = useNavigate()
 
   const changeLang = (lng) => {
     i18n.changeLanguage(lng)
@@ -36,6 +57,11 @@ export default function Settings() {
   const clearSessions = () => {
     localStorage.removeItem('quizary_session_tokens')
     toast.success(t('settings.sessionsCleared'))
+  }
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login')
   }
 
   return (
@@ -52,7 +78,7 @@ export default function Settings() {
             <SettingsIcon className="w-4 h-4 text-primary" />
             {t('settings.appearance')}
           </h2>
-          <Row icon={Monitor} title={t('settings.theme')} desc={t('settings.themeDesc')}>
+          <Row stackOnMobile icon={Monitor} title={t('settings.theme')} desc={t('settings.themeDesc')}>
             <Select
               value={theme}
               onChange={(e) => setPref('theme', e.target.value)}
@@ -64,7 +90,7 @@ export default function Settings() {
               <option value="system">{t('settings.system')}</option>
             </Select>
           </Row>
-          <Row icon={Type} title={t('settings.fontSize')} desc={t('settings.fontSizeDesc')}>
+          <Row stackOnMobile icon={Type} title={t('settings.fontSize')} desc={t('settings.fontSizeDesc')}>
             <Select
               value={fontSize}
               onChange={(e) => setPref('fontSize', e.target.value)}
@@ -90,7 +116,7 @@ export default function Settings() {
             <Languages className="w-4 h-4 text-primary" />
             {t('settings.languageRegion')}
           </h2>
-          <Row icon={Languages} title={t('settings.language')} desc={t('settings.languageDesc')}>
+          <Row stackOnMobile icon={Languages} title={t('settings.language')} desc={t('settings.languageDesc')}>
             <Select
               value={i18n.language?.startsWith('en') ? 'en' : 'id'}
               onChange={(e) => changeLang(e.target.value)}
@@ -117,10 +143,18 @@ export default function Settings() {
         </Card>
       </div>
 
-      <p className="text-xs text-gray-400 dark:text-gray-500 mt-4 flex items-center gap-1.5">
-        <Sun className="w-3.5 h-3.5" />
-        {t('settings.savedHint')}
-      </p>
+      <div className="mt-6 lg:hidden">
+        <Card className="p-5">
+          <Button
+            variant="ghost-danger"
+            className="w-full"
+            icon={<LogOut className="w-4 h-4" />}
+            onClick={handleLogout}
+          >
+            {t('auth.logout')}
+          </Button>
+        </Card>
+      </div>
     </div>
   )
 }

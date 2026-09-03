@@ -1,20 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, ClipboardList, ListChecks, UserRound, X, Sun, Moon } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, ListChecks, UserRound, Settings, X, Sun, Moon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
 import { AppMark } from '../ui'
 
-const nav = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/forms', label: 'Forms', icon: ClipboardList, end: false },
-  { to: '/my-submissions', label: 'Submissions', icon: ListChecks, end: false },
-  { to: '/profile', label: 'Profile', icon: UserRound, end: false },
-]
-
 /* ── Mobile bottom nav ────────────────────────────────────── */
 function BottomNav({ hidden }) {
+  const { t } = useTranslation()
+  const nav = [
+    { to: '/', label: t('nav.dashboard'), icon: LayoutDashboard, end: true },
+    { to: '/forms', label: t('nav.forms'), icon: ClipboardList, end: false },
+    { to: '/my-submissions', label: t('nav.mySubmissions'), icon: ListChecks, end: false },
+    { to: '/profile', label: t('nav.profile'), icon: UserRound, end: false },
+  ]
   const location = useLocation()
   return (
     <nav className={`fixed bottom-0 inset-x-0 z-40 lg:hidden overflow-hidden transition-[max-height] duration-200 ease-in-out ${hidden ? 'max-h-0' : 'max-h-14'}`}>
@@ -43,6 +44,14 @@ function BottomNav({ hidden }) {
 
 /* ── Desktop sidebar ──────────────────────────────────────── */
 function Sidebar({ open, onClose, onLogout, user }) {
+  const { t } = useTranslation()
+  const nav = [
+    { to: '/', label: t('nav.dashboard'), icon: LayoutDashboard, end: true },
+    { to: '/forms', label: t('nav.forms'), icon: ClipboardList, end: false },
+    { to: '/my-submissions', label: t('nav.mySubmissions'), icon: ListChecks, end: false },
+    { to: '/profile', label: t('nav.profile'), icon: UserRound, end: false },
+    { to: '/settings', label: t('nav.settings'), icon: Settings, end: false },
+  ]
   return (
     <>
       <AnimatePresence>
@@ -69,14 +78,14 @@ function Sidebar({ open, onClose, onLogout, user }) {
           <button
             onClick={onClose}
             className="ml-auto p-2 -mr-2 rounded-xl text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors lg:hidden"
-            aria-label="Close menu"
+            aria-label={t('nav.closeMenu')}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500">Menu</p>
+          <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400 dark:text-gray-500">{t('nav.menu')}</p>
           {nav.map((link) => (
             <NavLink
               key={link.to}
@@ -108,14 +117,14 @@ function Sidebar({ open, onClose, onLogout, user }) {
 
         <div className="p-3 border-t border-gray-100 dark:border-gray-600">
           <div className="px-3.5 py-3 rounded-xl bg-gray-50 dark:bg-ink-800/50">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">Logged in as</p>
-            <p className="text-sm font-medium text-ink dark:text-gray-100 truncate mt-1">{user?.name || 'User'}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">{t('nav.loggedInAs')}</p>
+            <p className="text-sm font-medium text-ink dark:text-gray-100 truncate mt-1">{user?.name || t('nav.userFallback')}</p>
             <button
               onClick={() => { onClose(); onLogout() }}
               className="mt-3 w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-lg text-incorrect text-xs font-semibold hover:bg-incorrect-soft transition-colors"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" /></svg>
-              Logout
+              {t('auth.logout')}
             </button>
           </div>
         </div>
@@ -126,6 +135,7 @@ function Sidebar({ open, onClose, onLogout, user }) {
 
 /* ── Layout ───────────────────────────────────────────────── */
 export default function DashboardLayout() {
+  const { t } = useTranslation()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
@@ -214,11 +224,11 @@ export default function DashboardLayout() {
                 </div>
                 {/* Desktop: workspace name */}
                 <span className="hidden lg:inline text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                  {user?.name ? `${user.name.split(' ')[0]}'s workspace` : 'Workspace'}
+                  {user?.name ? t('nav.workspace', { name: user.name.split(' ')[0] }) : t('nav.workspaceFallback')}
                 </span>
                 {/* Mobile: page title */}
                 <span className="lg:hidden text-sm font-semibold text-ink dark:text-gray-100 truncate">
-                  {user?.name ? `${user.name.split(' ')[0]}'s workspace` : 'Workspace'}
+                  {user?.name ? t('nav.workspace', { name: user.name.split(' ')[0] }) : t('nav.workspaceFallback')}
                 </span>
               </div>
 
@@ -227,8 +237,8 @@ export default function DashboardLayout() {
                 <button
                   onClick={toggleTheme}
                   className="p-2.5 rounded-xl text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
-                  aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                  title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+                  aria-label={t('nav.toggleTheme')}
+                  title={t('nav.toggleTheme')}
                 >
                   {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                 </button>
@@ -236,7 +246,7 @@ export default function DashboardLayout() {
                   <button
                     onClick={() => setDropdownOpen(!dropdownOpen)}
                     className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
-                    aria-label="User menu"
+                    aria-label={t('nav.userMenu')}
                     aria-expanded={dropdownOpen}
                   >
                     <span className="w-8 h-8 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary dark:text-primary-300 flex items-center justify-center text-sm font-bold overflow-hidden">
@@ -257,27 +267,33 @@ export default function DashboardLayout() {
                         className="absolute right-0 top-full mt-2 w-52 bg-white dark:bg-ink-900 rounded-2xl border border-gray-100 dark:border-gray-600 shadow-lift py-1.5 z-50"
                       >
                         <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-600 mb-1">
-                          <p className="text-sm font-semibold text-ink dark:text-gray-100 truncate">{user?.name || 'User'}</p>
+                          <p className="text-sm font-semibold text-ink dark:text-gray-100 truncate">{user?.name || t('nav.userFallback')}</p>
                           <p className="text-xs text-gray-400 dark:text-gray-500 truncate mt-0.5">{user?.email || ''}</p>
                         </div>
                         <button
                           onClick={() => { setDropdownOpen(false); navigate('/profile') }}
                           className="w-full text-left px-4 py-2.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800 transition-colors"
                         >
-                          Profile
+                          {t('nav.profile')}
                         </button>
                         <button
                           onClick={() => { setDropdownOpen(false); navigate('/my-submissions') }}
                           className="w-full text-left px-4 py-2.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800 transition-colors"
                         >
-                          My Submissions
+                          {t('nav.mySubmissions')}
+                        </button>
+                        <button
+                          onClick={() => { setDropdownOpen(false); navigate('/settings') }}
+                          className="w-full text-left px-4 py-2.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800 transition-colors"
+                        >
+                          {t('nav.settings')}
                         </button>
                         <hr className="my-1 border-gray-100 dark:border-gray-600" />
                         <button
                           onClick={handleLogout}
                           className="w-full text-left px-4 py-2.5 text-sm text-incorrect hover:bg-incorrect-soft transition-colors"
                         >
-                          Logout
+                          {t('auth.logout')}
                         </button>
                       </motion.div>
                     )}

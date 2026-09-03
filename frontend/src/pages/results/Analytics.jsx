@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { Users, Trophy, TrendingUp, TrendingDown, ArrowLeft, BarChart3, ClipboardList, ChevronDown, CheckCircle2, Clock, Zap, AlertCircle, Timer } from 'lucide-react'
 import api from '../../api/client'
 import { Card, Button, PageHeader, FormSubNav, CardSkeleton, RichText } from '../../components/ui'
+import { useTranslation } from 'react-i18next'
 
 function formatDuration(seconds) {
   if (seconds == null || seconds < 0) return '-'
@@ -34,10 +35,13 @@ function StatCard({ label, value, icon: Icon, tint, delay }) {
 }
 
 function EmptyData() {
-  return <p className="text-gray-400 dark:text-gray-500 text-sm py-8 text-center">No data yet</p>
+  const { t } = useTranslation()
+  return <p className="text-gray-400 dark:text-gray-500 text-sm py-8 text-center">{t('analytics.noData')}</p>
 }
 
-function Donut({ pct, label = 'completion', size = 176, inset = 16 }) {
+function Donut({ pct, label, size = 176, inset = 16 }) {
+  const { t } = useTranslation()
+  const displayLabel = label || t('analytics.completion')
   const p = Math.max(0, Math.min(100, Math.round(pct)))
   return (
     <div className="relative shrink-0 text-primary" style={{ width: size, height: size }}>
@@ -50,7 +54,7 @@ function Donut({ pct, label = 'completion', size = 176, inset = 16 }) {
         style={{ inset }}
       >
         <span className="font-display text-4xl font-bold tabular-nums text-ink dark:text-gray-100">{p}%</span>
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mt-1">{label}</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 mt-1">{displayLabel}</span>
       </div>
     </div>
   )
@@ -61,6 +65,7 @@ function stripHtml(str) {
 }
 
 function QuestionRow({ q, i, total, open, onToggle }) {
+  const { t } = useTranslation()
   const answeredPct = total ? Math.round((q.answered / total) * 100) : 0
   const text = stripHtml(q.question_text) || `Question ${i + 1}`
   const isChoice = (q.option_breakdown || []).length > 0
@@ -128,11 +133,11 @@ function QuestionRow({ q, i, total, open, onToggle }) {
                 <p key={j} className="text-sm text-gray-600 dark:text-gray-300 leading-snug">"{a}"</p>
               ))}
               {q.answered > q.sample_answers.length && (
-                <p className="text-xs text-gray-400">+{q.answered - q.sample_answers.length} more</p>
+                <p className="text-xs text-gray-400">{t('analytics.moreResponses', { count: q.answered - q.sample_answers.length })}</p>
               )}
             </div>
           ) : (
-            <p className="text-sm text-gray-400 dark:text-gray-500">No responses</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500">{t('analytics.noResponses')}</p>
           )}
         </div>
       )}
@@ -141,14 +146,15 @@ function QuestionRow({ q, i, total, open, onToggle }) {
 }
 
 function FormAnalytics({ data }) {
+  const { t } = useTranslation()
   const [openIds, setOpenIds] = useState({})
   const total = data.total_participants
   const toggle = (id) => setOpenIds((o) => ({ ...o, [id]: !o[id] }))
 
   const stats = [
-    { label: 'Participants', value: total, icon: Users, tint: 'bg-primary-50 text-primary' },
-    { label: 'Total Answers', value: data.total_answers, icon: ClipboardList, tint: 'bg-correct-soft text-correct' },
-    { label: 'Avg / Participant', value: data.avg_answers, icon: TrendingDown, tint: 'bg-warn-soft text-warn' },
+    { label: t('analytics.participants'), value: total, icon: Users, tint: 'bg-primary-50 text-primary' },
+    { label: t('analytics.totalAnswers'), value: data.total_answers, icon: ClipboardList, tint: 'bg-correct-soft text-correct' },
+    { label: t('analytics.avgPerParticipant'), value: data.avg_answers, icon: TrendingDown, tint: 'bg-warn-soft text-warn' },
   ]
 
   return (
@@ -172,9 +178,9 @@ function FormAnalytics({ data }) {
         <Card className="overflow-hidden" padding={false}>
           <div className="flex items-center justify-between gap-4 px-6 py-5">
             <div>
-              <h2 className="font-display font-semibold text-ink dark:text-gray-100">Question Breakdown</h2>
+              <h2 className="font-display font-semibold text-ink dark:text-gray-100">{t('analytics.questionBreakdown')}</h2>
               <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">
-                {data.question_stats.length} question{data.question_stats.length !== 1 ? 's' : ''} · tap to expand
+                {t('analytics.tapToExpand', { count: data.question_stats.length })}
               </p>
             </div>
           </div>
@@ -203,11 +209,12 @@ function FormAnalytics({ data }) {
 }
 
 function QuizAnalytics({ data }) {
+  const { t } = useTranslation()
   const stats = [
-    { label: 'Participants', value: data.total_participants, icon: Users, tint: 'bg-primary-50 text-primary' },
-    { label: 'Average Score', value: data.average_score, icon: TrendingUp, tint: 'bg-correct-soft text-correct' },
-    { label: 'Highest', value: data.highest_score, icon: Trophy, tint: 'bg-blue-50 text-blue-700' },
-    { label: 'Lowest', value: data.lowest_score, icon: TrendingDown, tint: 'bg-warn-soft text-warn' },
+    { label: t('analytics.participants'), value: data.total_participants, icon: Users, tint: 'bg-primary-50 text-primary' },
+    { label: t('analytics.averageScore'), value: data.average_score, icon: TrendingUp, tint: 'bg-correct-soft text-correct' },
+    { label: t('analytics.highest'), value: data.highest_score, icon: Trophy, tint: 'bg-blue-50 text-blue-700' },
+    { label: t('analytics.lowest'), value: data.lowest_score, icon: TrendingDown, tint: 'bg-warn-soft text-warn' },
   ]
 
   return (
@@ -221,17 +228,17 @@ function QuizAnalytics({ data }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <Card className="h-full">
-            <h2 className="font-display font-semibold text-ink dark:text-gray-100 mb-5">Correct / Wrong Rate</h2>
+            <h2 className="font-display font-semibold text-ink dark:text-gray-100 mb-5">{t('analytics.correctWrongRate')}</h2>
             <div className="space-y-4">
               <RateRow
-                label="Correct"
+                label={t('analytics.correctRate')}
                 pct={Math.round(data.correct_rate * 100)}
                 count={data.per_question_stats.reduce((s, q) => s + q.correct_count, 0)}
                 barClass="bg-correct"
                 textClass="text-correct"
               />
               <RateRow
-                label="Wrong"
+                label={t('analytics.wrongRate')}
                 pct={Math.round(data.wrong_rate * 100)}
                 count={data.per_question_stats.reduce((s, q) => s + q.wrong_count, 0)}
                 barClass="bg-incorrect"
@@ -245,29 +252,29 @@ function QuizAnalytics({ data }) {
           <Card className="h-full">
             <div className="flex items-center gap-2 mb-5">
               <Timer className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold text-ink dark:text-gray-100">Pace & Question Diagnostics</h2>
+              <h2 className="font-display font-semibold text-ink dark:text-gray-100">{t('analytics.paceDiagnostics')}</h2>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="rounded-xl bg-gray-50 dark:bg-ink-800/50 border border-gray-100 dark:border-gray-800 p-4">
                 <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1">
                   <Clock className="w-3.5 h-3.5 text-primary" />
-                  <span className="font-medium truncate">Avg Completion</span>
+                  <span className="font-medium truncate">{t('analytics.avgCompletion')}</span>
                 </div>
                 <p className="font-display text-2xl font-bold tabular-nums text-ink dark:text-gray-100">
                   {formatDuration(data.avg_duration_seconds)}
                 </p>
-                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 truncate">Average completion time</p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 truncate">{t('analytics.avgCompletionDesc')}</p>
               </div>
 
               <div className="rounded-xl bg-gray-50 dark:bg-ink-800/50 border border-gray-100 dark:border-gray-800 p-4">
                 <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1">
                   <Zap className="w-3.5 h-3.5 text-amber-500" />
-                  <span className="font-medium truncate">Fastest Time</span>
+                  <span className="font-medium truncate">{t('analytics.fastestTime')}</span>
                 </div>
                 <p className="font-display text-2xl font-bold tabular-nums text-ink dark:text-gray-100">
                   {formatDuration(data.fastest_duration_seconds)}
                 </p>
-                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 truncate">Fastest completion</p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 truncate">{t('analytics.fastestCompletionDesc')}</p>
               </div>
 
               <div className="rounded-xl bg-correct-soft border border-correct/20 p-4 flex flex-col justify-between">
@@ -275,7 +282,7 @@ function QuizAnalytics({ data }) {
                   <div className="flex items-center justify-between gap-1 mb-1">
                     <span className="text-xs font-semibold text-correct flex items-center gap-1 truncate">
                       <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Easiest Question</span>
+                      <span className="truncate">{t('analytics.easiest')}</span>
                     </span>
                     {data.easiest_question && (
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-correct/10 text-correct tabular-nums shrink-0">
@@ -288,7 +295,7 @@ function QuizAnalytics({ data }) {
                   </p>
                 </div>
                 <p className="text-[11px] text-correct/80 mt-1 truncate" title={stripHtml(data.easiest_question?.question_text)}>
-                  {data.easiest_question ? stripHtml(data.easiest_question.question_text) : 'No data yet'}
+                  {data.easiest_question ? stripHtml(data.easiest_question.question_text) : t('analytics.noQuestionData')}
                 </p>
               </div>
 
@@ -297,7 +304,7 @@ function QuizAnalytics({ data }) {
                   <div className="flex items-center justify-between gap-1 mb-1">
                     <span className="text-xs font-semibold text-warn flex items-center gap-1 truncate">
                       <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Hardest Question</span>
+                      <span className="truncate">{t('analytics.hardest')}</span>
                     </span>
                     {data.hardest_question && (
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-warn/10 text-warn tabular-nums shrink-0">
@@ -310,7 +317,7 @@ function QuizAnalytics({ data }) {
                   </p>
                 </div>
                 <p className="text-[11px] text-warn/80 mt-1 truncate" title={stripHtml(data.hardest_question?.question_text)}>
-                  {data.hardest_question ? stripHtml(data.hardest_question.question_text) : 'No data yet'}
+                  {data.hardest_question ? stripHtml(data.hardest_question.question_text) : t('analytics.noQuestionData')}
                 </p>
               </div>
             </div>
@@ -321,21 +328,21 @@ function QuizAnalytics({ data }) {
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mt-6">
         <Card className="overflow-hidden" padding={false}>
           <div className="p-6 pb-4">
-            <h2 className="font-display font-semibold text-ink dark:text-gray-100">Per-Question Stats</h2>
+            <h2 className="font-display font-semibold text-ink dark:text-gray-100">{t('analytics.perQuestion')}</h2>
           </div>
           {data.per_question_stats.length === 0 ? (
             <div className="p-6 pt-0">
-              <p className="text-gray-400 dark:text-gray-500 text-sm">No data yet</p>
+              <p className="text-gray-400 dark:text-gray-500 text-sm">{t('analytics.noQuestionData')}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-t border-gray-100 bg-gray-50/70 dark:border-gray-800 dark:bg-ink-800/50">
-                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Question</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-correct uppercase tracking-wider">Correct</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-incorrect uppercase tracking-wider">Wrong</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Accuracy</th>
+                    <th className="text-left px-6 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{t('analytics.tableQuestion')}</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-correct uppercase tracking-wider">{t('analytics.tableCorrect')}</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-incorrect uppercase tracking-wider">{t('analytics.tableWrong')}</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{t('analytics.tableAccuracy')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -370,6 +377,7 @@ function QuizAnalytics({ data }) {
 
 export default function Analytics() {
   const { formId } = useParams()
+  const { t } = useTranslation()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -403,18 +411,18 @@ export default function Analytics() {
     )
   }
 
-  if (!data) return <div className="text-center py-12 text-gray-400 dark:text-gray-500">Failed to load data</div>
+  if (!data) return <div className="text-center py-12 text-gray-400 dark:text-gray-500">{t('analytics.loadFailed')}</div>
 
   const isQuiz = data.type !== 'form'
   const description = isQuiz
-    ? 'How respondents performed on this quiz.'
-    : 'What respondents answered across this form.'
+    ? t('analytics.quizDesc')
+    : t('analytics.formDesc')
 
   return (
     <div>
       <PageHeader
-        eyebrow="Insights"
-        title="Analytics"
+        eyebrow={t('analytics.insights')}
+        title={t('analytics.title')}
         description={description}
       />
 

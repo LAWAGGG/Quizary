@@ -7,8 +7,10 @@ import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { Button, Input, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, PageSkeleton, RichTextEditor, RichText, ScoringSettings } from '../../components/ui'
 import { stripTags } from '../../lib/sanitize'
+import { useTranslation } from 'react-i18next'
 
 function ShareLink({ value }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   const handleCopy = () => {
     navigator.clipboard.writeText(value)
@@ -22,7 +24,7 @@ function ShareLink({ value }) {
         href={value}
         target="_blank"
         rel="noopener noreferrer"
-        title="Buka halaman publik"
+        title={t('formEdit.openPublic')}
         className="flex-1 min-w-0 font-mono text-sm text-gray-600 dark:text-gray-300 truncate hover:text-primary dark:hover:text-primary-300 transition-colors"
       >
         {value}
@@ -34,7 +36,7 @@ function ShareLink({ value }) {
         className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100 shrink-0 transition-colors"
       >
         {copied ? <Check className="w-4 h-4 text-correct" /> : <Copy className="w-4 h-4" />}
-        <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
+        <span className="hidden sm:inline">{copied ? t('formEdit.copied') : t('formEdit.copy')}</span>
       </button>
     </div>
   )
@@ -77,6 +79,7 @@ export default function FormEdit() {
   const { formId: id } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const { t } = useTranslation()
   const fileRef = useRef(null)
   const qrRef = useRef(null)
   const [form, setForm] = useState(null)
@@ -246,22 +249,22 @@ export default function FormEdit() {
       if (mapped.display_style || mapped.theme_color) revealError(setDesignOpen, designRef)
       const unresolved = data.errors.filter((entry) => Object.keys(entry)[0] === '_schema')
       if (unresolved.length || data.message) {
-        toast.error(data.message || 'Invalid fields')
+        toast.error(data.message || t('formEdit.invalidFields'))
       }
     } else {
-      toast.error(data?.message || data?.detail || 'Failed to save changes')
+      toast.error(data?.message || data?.detail || t('formEdit.saveFailed'))
     }
   }
 
   const handleSave = async () => {
     if (!stripTags(form.title)) {
-      setErrors({ title: 'Title is required' })
+      setErrors({ title: t('formEdit.titleRequired') })
       revealError(setBasicOpen, titleRef)
       return
     }
     // Quiz wajib punya timer (per menit) — dicek juga di backend saat publish.
     if (isQuiz && !timerMinutes) {
-      setErrors({ timer_seconds: 'Quiz must have a time limit (minutes)' })
+      setErrors({ timer_seconds: t('formEdit.timerRequired') })
       revealError(setBehaviorOpen, timerRef)
       return
     }
@@ -274,7 +277,7 @@ export default function FormEdit() {
       setTimerMinutes(minutes)
       setInitialTimerMinutes(minutes)
       setErrors({})
-      toast.success('Changes saved successfully')
+      toast.success(t('formEdit.saved'))
     } catch (err) {
       applyFieldErrors(err)
     } finally {
@@ -297,7 +300,7 @@ export default function FormEdit() {
       navigate('/forms')
     } catch {
       setDeleting(false); setShowDelete(false)
-      toast.error('Failed to delete form')
+      toast.error(t('formEdit.deleteFailed'))
     }
   }
 
@@ -323,7 +326,7 @@ export default function FormEdit() {
       const bannerPath = res.data.banner_path
       setForm((prev) => ({ ...prev, banner_path: bannerPath }))
       setBase((prev) => ({ ...prev, banner_path: bannerPath }))
-      toast.success('Banner uploaded successfully')
+      toast.success(t('formEdit.bannerUploaded'))
     } catch (err) {
       toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to upload banner')
     }
@@ -345,7 +348,7 @@ export default function FormEdit() {
       await api.patch(`/forms/${id}/questions/points`, { points })
       const qRes = await api.get(`/forms/${id}/questions`)
       setQuestions(qRes.data.data)
-      toast.success(`Semua soal dinilai diatur ke ${points} poin`)
+      toast.success(t('formEdit.batchPointsSet', { points }))
     } catch (err) {
       toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to update points')
       throw err
@@ -364,7 +367,7 @@ export default function FormEdit() {
       if (mode === 'auto') {
         api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => {})
       }
-      toast.success(mode === 'auto' ? 'Auto scoring activated' : 'Manual scoring activated')
+      toast.success(mode === 'auto' ? t('formEdit.scoringAutoOn') : t('formEdit.scoringManualOn'))
     } catch (err) {
       setScoringMode(previous)
       toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to change scoring method')
@@ -388,12 +391,12 @@ export default function FormEdit() {
         onClick={() => navigate('/forms')}
         className="inline-flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 transition-colors mb-4"
       >
-        <ArrowLeft className="w-4 h-4" /> Back to forms
+        <ArrowLeft className="w-4 h-4" /> {t('formEdit.backToForms')}
       </button>
 
       <PageHeader
-        eyebrow="Form workspace"
-        title={form.title ? <RichText html={form.title} /> : 'Form Settings'}
+        eyebrow={t('formEdit.workspace')}
+        title={form.title ? <RichText html={form.title} /> : t('formEdit.formSettings')}
         description={
           <span className="inline-flex items-center gap-2">
             <StatusBadge status={form.status} />
@@ -406,7 +409,7 @@ export default function FormEdit() {
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-6">
-          <CollapsibleCard title="Share" icon={<Link2 className="w-4 h-4" />} defaultOpen>
+          <CollapsibleCard title={t('formEdit.share')} icon={<Link2 className="w-4 h-4" />} defaultOpen>
             <ShareLink value={`${window.location.origin}/q/${form.short_code}`} />
             <div className="mt-4">
               <Button
@@ -415,41 +418,41 @@ export default function FormEdit() {
                 icon={<QrCode className="w-4 h-4" />}
                 onClick={() => setShowQr(true)}
               >
-                Show QR Code
+                {t('formEdit.showQr')}
               </Button>
             </div>
           </CollapsibleCard>
 
-          <CollapsibleCard title="Basic Information" icon={<Info className="w-4 h-4" />} open={basicOpen} onToggle={setBasicOpen}>
+          <CollapsibleCard title={t('formEdit.basicInfo')} icon={<Info className="w-4 h-4" />} open={basicOpen} onToggle={setBasicOpen}>
             <div className="space-y-5">
               <div ref={titleRef}>
-                <span className="field-label">Title</span>
+                <span className="field-label">{t('formEdit.titleLabel')}</span>
                 <RichTextEditor
                   value={form.title || ''}
                   onChange={(html) => setForm((prev) => ({ ...prev, title: html }))}
-                  placeholder="Judul form"
+                  placeholder={t('formEdit.titlePlaceholder')}
                   minHeight={60}
                 />
                 {errors.title && <p className="field-error mt-1">{errors.title}</p>}
               </div>
               <div>
-                <span className="field-label">Description</span>
+                <span className="field-label">{t('formEdit.descLabel')}</span>
                 <RichTextEditor
                   value={form.description || ''}
                   onChange={(html) => setForm((prev) => ({ ...prev, description: html }))}
-                  placeholder="Describe this form or quiz"
+                  placeholder={t('formEdit.descPlaceholder')}
                   minHeight={120}
                 />
                 {errors.description && <p className="field-error">{errors.description}</p>}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <Select label="Type" name="type" value={form.type} onChange={handleChange} error={errors.type}>
-                  <option value="form">Form</option>
-                  <option value="quiz">Quiz</option>
+                <Select label={t('formEdit.typeLabel')} name="type" value={form.type} onChange={handleChange} error={errors.type}>
+                  <option value="form">{t('formEdit.typeForm')}</option>
+                  <option value="quiz">{t('formEdit.typeQuiz')}</option>
                 </Select>
                 <div>
-                  <label className="field-label !mb-1.5">Public status</label>
+                  <label className="field-label !mb-1.5">{t('formEdit.publicStatus')}</label>
                   <div className="flex h-11 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                     <button
                       type="button"
@@ -458,7 +461,7 @@ export default function FormEdit() {
                         form.status === 'published' ? 'bg-correct text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
                       }`}
                     >
-                      Public
+                      {t('formEdit.statusPublic')}
                     </button>
                     <button
                       type="button"
@@ -467,7 +470,7 @@ export default function FormEdit() {
                         form.status !== 'published' && form.status !== 'closed' ? 'bg-gray-700 text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
                       }`}
                     >
-                      Draft
+                      {t('formEdit.statusDraft')}
                     </button>
                     <button
                       type="button"
@@ -476,7 +479,7 @@ export default function FormEdit() {
                         form.status === 'closed' ? 'bg-incorrect text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
                       }`}
                     >
-                      Closed
+                      {t('formEdit.statusClosed')}
                     </button>
                   </div>
                   {errors.status && (
@@ -486,24 +489,24 @@ export default function FormEdit() {
               </div>
 
               <Select
-                label="Submission limit"
+                label={t('formEdit.submissionLimit')}
                 name="submission_limit"
                 value={isRestricted ? 'once' : form.submission_limit}
                 onChange={(e) => { handleChange(e); toggleSetting('submission_limit', e.target.value) }}
                 disabled={isRestricted}
                 error={errors.submission_limit}
-                helper={isRestricted ? 'Locked to Once while fullscreen mode is on.' : undefined}
+                helper={isRestricted ? t('formEdit.lockedOnceHint') : undefined}
               >
-                <option value="unlimited">Unlimited</option>
-                <option value="once">Once per person</option>
+                <option value="unlimited">{t('formEdit.limitUnlimited')}</option>
+                <option value="once">{t('formEdit.limitOnce')}</option>
               </Select>
             </div>
           </CollapsibleCard>
 
-          <CollapsibleCard title="Design" icon={<Palette className="w-4 h-4" />} open={designOpen} onToggle={setDesignOpen}>
+          <CollapsibleCard title={t('formEdit.design')} icon={<Palette className="w-4 h-4" />} open={designOpen} onToggle={setDesignOpen}>
             <div ref={designRef} className="space-y-5">
               <div>
-                <label className="field-label">Design type</label>
+                <label className="field-label">{t('formEdit.designType')}</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -515,7 +518,7 @@ export default function FormEdit() {
                     }`}
                   >
                     <img src="/preview-form.png" alt="Card style" className="w-full h-32 object-cover" />
-                    <span className="block text-sm font-medium py-2 text-ink dark:text-gray-100">Card</span>
+                    <span className="block text-sm font-medium py-2 text-ink dark:text-gray-100">{t('formEdit.designCard')}</span>
                     {(form.display_style || 'card') === 'card' && (
                       <span className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
                         <Check className="w-3 h-3 text-white" />
@@ -532,7 +535,7 @@ export default function FormEdit() {
                     }`}
                   >
                     <img src="/preview-quiz.png" alt="Quiz style" className="w-full h-32 object-cover" />
-                    <span className="block text-sm font-medium py-2 text-ink dark:text-gray-100">Quiz</span>
+                    <span className="block text-sm font-medium py-2 text-ink dark:text-gray-100">{t('formEdit.designQuiz')}</span>
                     {form.display_style === 'quiz' && (
                       <span className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
                         <Check className="w-3 h-3 text-white" />
@@ -544,7 +547,7 @@ export default function FormEdit() {
               </div>
 
               <div>
-                <label className="field-label">Theme color</label>
+                <label className="field-label">{t('formEdit.themeColor')}</label>
                 <div className="flex gap-2 items-center">
                   <input
                     type="color"
@@ -567,14 +570,14 @@ export default function FormEdit() {
             </div>
           </CollapsibleCard>
 
-          <CollapsibleCard title="Access" icon={<Lock className="w-4 h-4" />}>
+          <CollapsibleCard title={t('formEdit.access')} icon={<Lock className="w-4 h-4" />}>
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               <SettingRow
-                title="Require login"
-                desc={onceLocked ? 'Automatically required because submission is limited to once.' : 'Respondents must sign in first.'}
+                title={t('formEdit.requireLogin')}
+                desc={onceLocked ? t('formEdit.requireLoginDescLocked') : t('formEdit.requireLoginDesc')}
                 control={
                   <Toggle
-                    label="Require login"
+                    label={t('formEdit.requireLogin')}
                     checked={form.require_login}
                     disabled={onceLocked}
                     onChange={(v) => toggleSetting('require_login', v)}
@@ -582,11 +585,11 @@ export default function FormEdit() {
                 }
               />
               <SettingRow
-                title="Show in submission history"
-                desc={form.show_in_history === false ? 'Hidden from respondents\u2019 My Submissions page.' : 'Appears in respondents\u2019 My Submissions page.'}
+                title={t('formEdit.showInHistory')}
+                desc={form.show_in_history === false ? t('formEdit.showInHistoryDescOff') : t('formEdit.showInHistoryDescOn')}
                 control={
                   <Toggle
-                    label="Show in history"
+                    label={t('formEdit.showInHistory')}
                     checked={form.show_in_history !== false}
                     onChange={(v) => setForm((prev) => ({ ...prev, show_in_history: v }))}
                   />
@@ -595,23 +598,23 @@ export default function FormEdit() {
             </div>
           </CollapsibleCard>
 
-          <CollapsibleCard title="Behavior" icon={<Settings2 className="w-4 h-4" />} open={behaviorOpen} onToggle={setBehaviorOpen}>
+          <CollapsibleCard title={t('formEdit.behavior')} icon={<Settings2 className="w-4 h-4" />} open={behaviorOpen} onToggle={setBehaviorOpen}>
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               <SettingRow
-                title="Shuffle questions"
-                desc="Randomize the order for each respondent. Questions in a story group always stay together as one block."
+                title={t('formEdit.shuffleQuestions')}
+                desc={t('formEdit.shuffleQuestionsDesc')}
                 control={<Toggle label="Shuffle questions" checked={form.shuffle_questions} onChange={(v) => setForm((prev) => ({ ...prev, shuffle_questions: v }))} />}
               />
               <SettingRow
-                title="Shuffle options"
-                desc="Randomize answer order for each respondent."
+                title={t('formEdit.shuffleOptions')}
+                desc={t('formEdit.shuffleOptionsDesc')}
                 control={<Toggle label="Shuffle options" checked={form.shuffle_options} onChange={(v) => setForm((prev) => ({ ...prev, shuffle_options: v }))} />}
               />
               {isQuiz && (
                 <>
                   <div className="py-3">
-                    <p className="text-sm font-medium text-ink dark:text-gray-100">Scoring mode</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Auto distributes 100 points evenly. Manual lets you set each question's weight.</p>
+                    <p className="text-sm font-medium text-ink dark:text-gray-100">{t('formEdit.scoringMode')}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{t('formEdit.scoringAutoDesc')}</p>
                     <div className="mt-3">
                       <ScoringSettings
                         mode={scoringMode}
@@ -623,37 +626,37 @@ export default function FormEdit() {
                     </div>
                   </div>
                   <SettingRow
-                    title="Show leaderboard"
-                    desc="Show a read-only ranking to respondents after they submit."
+                    title={t('formEdit.showLeaderboard')}
+                    desc={t('formEdit.showLeaderboardDesc')}
                     control={<Toggle label="Show leaderboard" checked={!!form.show_leaderboard} onChange={(v) => toggleSetting('show_leaderboard', v)} />}
                   />
                   <SettingRow
-                    title="Show final score"
-                    desc="If off, respondents finish the quiz without seeing their score."
-                    control={<Toggle label="Show final score" checked={form.reveal_score !== false} onChange={(v) => setForm((prev) => ({ ...prev, reveal_score: v }))} />}
+                    title={t('formEdit.showFinalScore')}
+                    desc={t('formEdit.showFinalScoreDesc')}
+                    control={<Toggle label={t('formEdit.showFinalScore')} checked={form.reveal_score !== false} onChange={(v) => setForm((prev) => ({ ...prev, reveal_score: v }))} />}
                   />
                   <SettingRow
-                    title="Show answer review"
-                    desc="If off, respondents can't view which answers were correct/wrong."
-                    control={<Toggle label="Show answer review" checked={form.reveal_answers !== false} onChange={(v) => setForm((prev) => ({ ...prev, reveal_answers: v }))} />}
+                    title={t('formEdit.showAnswerReview')}
+                    desc={t('formEdit.showAnswerReviewDesc')}
+                    control={<Toggle label={t('formEdit.showAnswerReview')} checked={form.reveal_answers !== false} onChange={(v) => setForm((prev) => ({ ...prev, reveal_answers: v }))} />}
                   />
                   <SettingRow
-                    title="Restrict mode"
-                    desc="Respondents must stay on the quiz tab. 3 exits marked as cheating"
+                    title={t('formEdit.restrictMode')}
+                    desc={t('formEdit.restrictModeDesc')}
                     control={<Toggle label="Restrict mode" checked={isRestricted} onChange={(v) => toggleSetting('is_restricted', v)} />}
                   />
                 </>
               )}
               <div className="py-4">
                 <Input
-                  label={isQuiz ? 'Time limit (minutes) *' : 'Time limit (minutes)'}
+                  label={t('formEdit.timeLimit') + (isQuiz ? ' *' : '')}
                   type="number"
                   value={timerMinutes}
                   onChange={(e) => { setTimerMinutes(e.target.value); setErrors((p) => ({ ...p, timer_seconds: undefined })) }}
                   placeholder="e.g. 10"
                   min={1}
                   max={1440}
-                  helper={isQuiz ? 'Required for quiz. Submissions are auto-collected when time runs out.' : 'Leave empty for no time limit.'}
+                  helper={isQuiz ? t('formEdit.timeLimitHintQuiz') : t('formEdit.timeLimitHintForm')}
                   error={errors.timer_seconds}
                   ref={timerRef}
                 />
@@ -661,7 +664,7 @@ export default function FormEdit() {
               <div className="py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="field-label">Opens at</label>
+                    <label className="field-label">{t('formEdit.opensAt')}</label>
                     <input
                       type="datetime-local"
                       name="starts_at"
@@ -672,7 +675,7 @@ export default function FormEdit() {
                     {errors.starts_at && <p className="field-error">{errors.starts_at}</p>}
                   </div>
                   <div>
-                    <label className="field-label">Closes at</label>
+                    <label className="field-label">{t('formEdit.closesAt')}</label>
                     <input
                       type="datetime-local"
                       name="ends_at"
@@ -686,11 +689,11 @@ export default function FormEdit() {
               </div>
               <div className="py-4">
                 <div>
-                  <span className="field-label">Thank you message</span>
+                  <span className="field-label">{t('formEdit.thankYou')}</span>
                   <RichTextEditor
                     value={form.thank_you_message || ''}
                     onChange={(html) => setForm((prev) => ({ ...prev, thank_you_message: html }))}
-                    placeholder="Thank you for filling out this form"
+                    placeholder={t('formEdit.thankYouPlaceholder')}
                     minHeight={90}
                   />
                   {errors.thank_you_message && <p className="field-error">{errors.thank_you_message}</p>}
@@ -698,7 +701,7 @@ export default function FormEdit() {
               </div>
               <div className="pt-3 mt-1 border-t border-gray-100 dark:border-gray-800">
                 <Button onClick={() => setShowDelete(true)} variant="ghost-danger" size="sm" icon={<Trash2 className="w-4 h-4" />}>
-                  Delete form
+                  {t('formEdit.delete')}
                 </Button>
               </div>
             </div>
@@ -706,7 +709,7 @@ export default function FormEdit() {
         </div>
 
         <div className="space-y-6">
-          <CollapsibleCard title="Banner" icon={<ImageUp className="w-4 h-4" />}>
+          <CollapsibleCard title={t('formEdit.banner')} icon={<ImageUp className="w-4 h-4" />}>
             {form.banner_path ? (
               <img src={form.banner_path} alt="Banner" className="w-full h-36 object-cover rounded-xl mb-4" />
             ) : (
@@ -716,17 +719,17 @@ export default function FormEdit() {
                 className="w-full h-36 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-2 text-gray-400 dark:text-gray-500 hover:text-primary"
               >
                 <ImageUp className="w-6 h-6" />
-                <span className="text-sm font-medium">Upload a banner</span>
+                <span className="text-sm font-medium">{t('formEdit.uploadBanner')}</span>
               </button>
             )}
             <input ref={fileRef} type="file" accept="image/*" onChange={handleBanner} className="hidden" />
             {form.banner_path && (
               <div className="flex gap-2">
                 <Button type="button" variant="secondary" size="sm" className="flex-1" onClick={() => fileRef.current?.click()} icon={<ImageUp className="w-4 h-4" />}>
-                  Change Banner
+                  {t('formEdit.changeBanner')}
                 </Button>
                 <Button type="button" variant="ghost-danger" size="sm" className="flex-1" onClick={handleRemoveBanner} icon={<Trash2 className="w-4 h-4" />}>
-                  Remove
+                  {t('formEdit.removeBanner')}
                 </Button>
               </div>
             )}
@@ -744,10 +747,10 @@ export default function FormEdit() {
             className="fixed bottom-4 inset-x-4 z-50 flex justify-center pointer-events-none"
           >
             <div className="pointer-events-auto flex items-center gap-3 bg-white dark:bg-ink-900 border border-gray-200 dark:border-gray-700 shadow-lift rounded-2xl px-4 py-3 w-full max-w-md">
-              <p className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">Unsaved changes</p>
-              <Button variant="ghost" size="sm" onClick={handleDiscard}>Discard</Button>
+              <p className="text-sm text-gray-500 dark:text-gray-400 flex-1 truncate">{t('formEdit.unsavedChanges')}</p>
+              <Button variant="ghost" size="sm" onClick={handleDiscard}>{t('formEdit.discard')}</Button>
               <Button size="sm" onClick={handleSave} loading={saving} icon={<Save className="w-4 h-4" />}>
-                {saving ? 'Saving...' : 'Save Changes'}
+                {saving ? t('formEdit.saving') : t('formEdit.saveChanges')}
               </Button>
             </div>
           </motion.div>
@@ -756,12 +759,12 @@ export default function FormEdit() {
 
       <ConfirmModal
         show={showDelete}
-        title="Delete Form?"
-        message="All data including questions and answers will be permanently deleted."
+        title={t('formEdit.deleteConfirm')}
+        message={t('formEdit.deleteMsg')}
         onConfirm={handleDelete}
         onCancel={() => setShowDelete(false)}
         loading={deleting}
-        confirmText="Delete"
+        confirmText={t('formEdit.delete')}
         variant="danger"
       />
 
@@ -788,8 +791,8 @@ export default function FormEdit() {
               >
                 <X className="w-5 h-5" />
               </button>
-              <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 mb-1">Scan to open</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Scan QR code to open <RichText html={form.title} className="rich-text" />.</p>
+              <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 mb-1">{t('formEdit.scanToOpen')}</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">{t('formEdit.qrHint', { title: stripTags(form.title) })}</p>
               <div className="flex justify-center p-4 border border-gray-100 dark:border-gray-800 rounded-2xl">
                 <QRCodeCanvas
                   ref={qrRef}
@@ -807,7 +810,7 @@ export default function FormEdit() {
                 onClick={downloadQr}
                 icon={<Download className="w-4 h-4" />}
               >
-                Download QR
+                {t('formEdit.downloadQr')}
               </Button>
             </motion.div>
           </motion.div>

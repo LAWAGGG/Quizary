@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Lock, Clock, ArrowRight, CheckCircle2, HelpCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button, Input, Card, AppMark, FallbackPage, DotCorner, SpotlightCard, AuroraBg, RichText } from '../../components/ui'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
@@ -30,6 +31,7 @@ function BlockedState({ background, icon, title, children }) {
 }
 
 export default function FormLanding() {
+  const { t } = useTranslation()
   const { shortCode } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -109,7 +111,7 @@ export default function FormLanding() {
       <FallbackPage
         title="404"
         message={error}
-        action={<Button onClick={() => navigate('/')} className="w-full">Go home</Button>}
+        action={<Button onClick={() => navigate('/')} className="w-full">{t('common.goHome')}</Button>}
       />
     )
   }
@@ -126,9 +128,9 @@ export default function FormLanding() {
   let blocked = null
   if (!isPreview) {
     if (form.status === 'closed') {
-      blocked = { title: 'Form is closed', desc: 'The response period for this form has ended.' }
+      blocked = { title: t('landing.closedTitle'), desc: t('landing.closedDesc') }
     } else if (form.status === 'draft') {
-      blocked = { title: 'This form is not published yet.', desc: 'The creator hasn\u2019t published this form. Check back later.' }
+      blocked = { title: t('landing.notPublishedTitle'), desc: t('landing.notPublishedDesc') }
     }
   }
 
@@ -150,13 +152,13 @@ export default function FormLanding() {
         <BlockedState
           background={palette.gradient}
           icon={<Clock className="w-6 h-6 text-white" />}
-          title="Your previous session ended"
+          title={t('landing.sessionExpiredTitle')}
         >
           <p className="text-white/70 text-sm mt-2 mb-6">
-            Your previous time expired and answers were auto-submitted. You can start a new session if available.
+            {t('landing.sessionExpiredDesc')}
           </p>
           <Button variant="secondary" size="xl" onClick={handleStart}>
-            Start New Session
+            {t('landing.startNewSession')}
           </Button>
         </BlockedState>
       )
@@ -169,15 +171,15 @@ export default function FormLanding() {
         <BlockedState
           background={palette.gradient}
           icon={<Lock className="w-6 h-6 text-white" />}
-          title="Sign in required"
+          title={t('landing.signInRequired')}
         >
-          <p className="text-white/70 text-sm mt-2 mb-6">You need to sign in to access <RichText html={form.title} className="rich-text" />.</p>
+          <p className="text-white/70 text-sm mt-2 mb-6">{t('landing.signInDesc', { title: stripTags(form.title) })}</p>
           <div className="flex flex-col gap-3">
             <Button variant="secondary" size="xl" onClick={() => navigate(`/login?next=${next}`, { state: { from } })}>
-              Login
+              {t('landing.login')}
             </Button>
             <Button variant="secondary" size="xl" className="bg-white/10 border-white/20 text-white hover:bg-white/20" onClick={() => navigate(`/register?next=${next}`, { state: { from } })}>
-              Register
+              {t('landing.register')}
             </Button>
           </div>
         </BlockedState>
@@ -186,10 +188,10 @@ export default function FormLanding() {
 
     if (!startState.can_start) {
       const msgs = {
-        not_started: 'Form is not opened',
-        closed: 'Form is closed',
-        draft: 'This form is not published yet.',
-        already_submitted: 'You have already submitted this form.',
+        not_started: t('landing.notStarted'),
+        closed: t('landing.closedTitle'),
+        draft: t('landing.notPublishedTitle'),
+        already_submitted: t('landing.alreadySubmitted'),
       }
       const icons = {
         not_started: <Clock className="w-6 h-6 text-white" />,
@@ -201,13 +203,14 @@ export default function FormLanding() {
         <BlockedState
           background={palette.gradient}
           icon={icons[startState.reason] || <Lock className="w-6 h-6 text-white" />}
-          title={msgs[startState.reason] || 'Access denied'}
+          title={msgs[startState.reason] || t('landing.accessDenied')}
         >
           <p className="text-white/70 text-sm mt-2 mb-6">
-            {startState.reason === 'not_started' && 'This form hasn\u2019t opened yet. Please check back later.'}
-            {startState.reason === 'closed' && 'The response period for this form has ended.'}
-            {startState.reason === 'draft' && 'The creator hasn\u2019t published this form. Check back later.'}
-            {startState.reason === 'already_submitted' && 'You can only submit this form once.'}
+            {startState.reason === 'not_started' && t('landing.notStarted')}
+            {startState.reason === 'closed' && t('landing.closedDesc')}
+            {startState.reason === 'draft' && t('landing.notPublishedDesc')}
+            {startState.reason === 'already_submitted' && t('landing.alreadySubmitted')}
+            {!['not_started', 'closed', 'draft', 'already_submitted'].includes(startState.reason) && t('landing.accessDenied')}
           </p>
         </BlockedState>
       )
@@ -229,24 +232,24 @@ export default function FormLanding() {
           </div>
           <Card className="p-6 md:p-7" style={{ borderColor: palette.border }}>
             <h2 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={form.title} /></h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-6">Enter your details to begin</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-6">{t('landing.enterDetails')}</p>
             <form onSubmit={handleSubmitIdentity} className="space-y-4">
               <Input
-                label="Name"
+                label={t('landing.nameLabel')}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
+                placeholder={t('landing.namePlaceholder')}
                 required
               />
               <Input
-                label="Email (optional)"
+                label={t('landing.emailOptional')}
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="email@example.com"
               />
               <Button type="submit" disabled={submitting || !name.trim()} loading={submitting} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }}>
-                Start
+                {t('landing.start')}
               </Button>
             </form>
           </Card>
@@ -303,9 +306,9 @@ export default function FormLanding() {
             transition={{ delay: 0.25 }}
             className="mt-6 flex items-center gap-3"
           >
-            <InfoChip icon={<HelpCircle className="w-3.5 h-3.5" />} text={`${form.question_count ?? 0} question${(form.question_count ?? 0) !== 1 ? 's' : ''}`} />
+            <InfoChip icon={<HelpCircle className="w-3.5 h-3.5" />} text={t('landing.questionCount', { count: form.question_count ?? 0 })} />
             {form.timer_seconds > 0 && (
-              <InfoChip icon={<Clock className="w-3.5 h-3.5" />} text={`${Math.ceil(form.timer_seconds / 60)} min`} />
+              <InfoChip icon={<Clock className="w-3.5 h-3.5" />} text={t('landing.timeMin', { minutes: Math.ceil(form.timer_seconds / 60) })} />
             )}
           </motion.div>
 
@@ -319,7 +322,7 @@ export default function FormLanding() {
               onClick={handleStart}
               className="inline-flex items-center gap-2 h-14 px-10 rounded-full bg-white text-base font-bold text-[var(--color-primary)] hover:scale-[1.03] active:scale-95 transition-transform shadow-lift"
             >
-              Start
+              {t('landing.start')}
               <ArrowRight className="w-5 h-5" />
             </button>
           </motion.div>
@@ -355,14 +358,14 @@ export default function FormLanding() {
             <h1 className="font-display text-2xl font-bold text-ink dark:text-gray-100 mb-2"><RichText html={form.title} /></h1>
             {form.description && <p className="text-gray-600 dark:text-gray-400 mb-6"><RichText html={form.description} className="rich-text" /></p>}
             <Button onClick={handleStart} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }} icon={<ArrowRight className="w-4 h-4" />}>
-              Start
+              {t('landing.start')}
             </Button>
           </Card>
         </SpotlightCard>
         <div className="flex items-center justify-center gap-3 mt-6">
-          <InfoChip icon={<HelpCircle className="w-3.5 h-3.5" />} text={`${form.question_count ?? 0} question${(form.question_count ?? 0) !== 1 ? 's' : ''}`} />
+          <InfoChip icon={<HelpCircle className="w-3.5 h-3.5" />} text={t('landing.questionCount', { count: form.question_count ?? 0 })} />
           {form.timer_seconds > 0 && (
-            <InfoChip icon={<Clock className="w-3.5 h-3.5" />} text={`${Math.ceil(form.timer_seconds / 60)} min`} />
+            <InfoChip icon={<Clock className="w-3.5 h-3.5" />} text={t('landing.timeMin', { minutes: Math.ceil(form.timer_seconds / 60) })} />
           )}
         </div>
       </div>
@@ -380,12 +383,13 @@ function InfoChip({ icon, text }) {
 }
 
 function PreviewNotice() {
+  const { t } = useTranslation()
   return (
     <div className="fixed bottom-4 left-4 z-50 max-w-[calc(100%-32px)]">
       <div className="inline-flex items-center gap-2 bg-ink text-white px-3.5 py-2 rounded-full shadow-lift text-xs">
         <Lock className="w-3.5 h-3.5 shrink-0" />
         <span>
-          <span className="font-semibold">Preview mode</span> — not yet published
+          {t('landing.previewMode')}
         </span>
       </div>
     </div>

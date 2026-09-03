@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, ClipboardList, Search, Trophy, HelpCircle, FolderOpen, Settings2, MoreVertical, Pencil, FolderInput, Trash2, Sparkles } from 'lucide-react'
 import api from '../../api/client'
@@ -55,6 +56,7 @@ function FormTypeCluster({ form }) {
 
 // Card visual with overlay category + menu button
 function FormVisual({ form, onMenu, menuOpen }) {
+  const { t } = useTranslation()
   const visual = form.banner_path ? (
     <img
       src={form.banner_path}
@@ -94,7 +96,7 @@ function FormVisual({ form, onMenu, menuOpen }) {
       <div className="absolute top-2.5 right-2.5 z-20">
         <button
           onClick={onMenu}
-          aria-label="Aksi cepat"
+          aria-label={t('forms.quickActions')}
           className={`w-8 h-8 rounded-full backdrop-blur-xl border shadow-sm flex items-center justify-center transition-all ${menuOpen ? 'bg-ink text-white border-ink dark:bg-white dark:text-ink' : 'bg-white/90 dark:bg-ink-900/80 border-white/60 dark:border-gray-700/60 text-gray-600 dark:text-gray-300 hover:bg-white hover:scale-105'}`}
         >
           <MoreVertical className="w-4 h-4" />
@@ -105,6 +107,7 @@ function FormVisual({ form, onMenu, menuOpen }) {
 }
 
 function CategoryMoveModal({ open, onClose, form, categories, onMoved }) {
+  const { t } = useTranslation()
   const toast = useToast()
   const [saving, setSaving] = useState(false)
   const [selected, setSelected] = useState(null)
@@ -120,11 +123,11 @@ function CategoryMoveModal({ open, onClose, form, categories, onMoved }) {
     setSaving(true)
     try {
       const res = await api.put(`/forms/${form.id}`, { category_id: selected })
-      toast.success(selected ? `Dipindah ke ${categories.find(c=>c.id===selected)?.name}` : 'Dikeluarkan dari kategori')
+      toast.success(selected ? t('forms.movedTo', { category: categories.find(c=>c.id===selected)?.name }) : t('forms.removedFromCategory'))
       onMoved?.(res.data)
       onClose()
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Gagal memindahkan kategori')
+      toast.error(err.response?.data?.message || t('forms.moveFailed'))
     } finally { setSaving(false) }
   }
 
@@ -135,7 +138,7 @@ function CategoryMoveModal({ open, onClose, form, categories, onMoved }) {
           <motion.div initial={{ scale: 0.96, y: 8, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.96, y: 8, opacity: 0 }} className="bg-white dark:bg-ink-900 rounded-2xl w-full max-w-md shadow-lift overflow-hidden" onClick={(e)=>e.stopPropagation()}>
             <div className="px-6 pt-5 pb-4">
               <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 flex items-center gap-2">
-                <FolderInput className="w-5 h-5 text-primary" /> Ganti Kategori
+                <FolderInput className="w-5 h-5 text-primary" /> {t('forms.changeCategoryTitle')}
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 truncate">“{stripTags(form.title)}”</p>
             </div>
@@ -146,8 +149,8 @@ function CategoryMoveModal({ open, onClose, form, categories, onMoved }) {
               >
                 <span className="w-8 h-8 rounded-full bg-gray-200 dark:bg-ink-700 flex items-center justify-center shrink-0"><FolderOpen className="w-4 h-4 text-gray-500" /></span>
                 <span className="flex-1">
-                  <span className="block text-sm font-medium text-ink dark:text-gray-100">Tanpa kategori</span>
-                  <span className="block text-xs text-gray-400">Tidak dikelompokkan</span>
+                  <span className="block text-sm font-medium text-ink dark:text-gray-100">{t('forms.noCategory')}</span>
+                  <span className="block text-xs text-gray-400">{t('forms.noCategoryDesc')}</span>
                 </span>
                 {selected===null && <span className="w-5 h-5 rounded-full bg-primary flex items-center justify-center shrink-0"><span className="w-2 h-2 rounded-full bg-white" /></span>}
               </button>
@@ -169,8 +172,8 @@ function CategoryMoveModal({ open, onClose, form, categories, onMoved }) {
               ))}
             </div>
             <div className="px-6 py-4 flex gap-3 border-t border-gray-100 dark:border-gray-800">
-              <Button variant="ghost" className="flex-1" onClick={onClose}>Batal</Button>
-              <Button className="flex-1" onClick={handleSave} loading={saving}>Simpan</Button>
+              <Button variant="ghost" className="flex-1" onClick={onClose}>{t('forms.cancel')}</Button>
+              <Button className="flex-1" onClick={handleSave} loading={saving}>{t('forms.save')}</Button>
             </div>
           </motion.div>
         </motion.div>
@@ -180,6 +183,7 @@ function CategoryMoveModal({ open, onClose, form, categories, onMoved }) {
 }
 
 export default function FormList() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const toast = useToast()
   const [forms, setForms] = useState([])
@@ -225,12 +229,12 @@ export default function FormList() {
     setDeleting(true)
     try {
       await api.delete(`/forms/${deleteTarget.id}`)
-      toast.success('Form dihapus')
+      toast.success(t('forms.deleted'))
       setDeleteTarget(null)
       fetchForms()
       fetchCategories()
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Gagal menghapus')
+      toast.error(err.response?.data?.message || t('forms.deleteFailed'))
     } finally { setDeleting(false) }
   }
 
@@ -250,12 +254,12 @@ export default function FormList() {
   return (
     <div>
       <PageHeader
-        eyebrow="Your forms"
-        title="Forms"
-        description="Create, manage, and share your forms and quizzes."
+        eyebrow={t('forms.eyebrow')}
+        title={t('forms.title')}
+        description={t('forms.description')}
         actions={
           <Button onClick={() => navigate('/forms/new')} icon={<Plus className="w-4 h-4" />}>
-            Create New Form
+            {t('forms.createNew')}
           </Button>
         }
       />
@@ -265,7 +269,7 @@ export default function FormList() {
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="relative w-full sm:max-w-xs">
             <Input
-              placeholder="Search forms..."
+              placeholder={t('forms.search')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10 h-10 rounded-full"
@@ -280,7 +284,7 @@ export default function FormList() {
                 onClick={() => { setActiveTab(tab); setMeta((m) => ({ ...m, page: 1 })) }}
                 className={`px-4 h-8 rounded-full text-sm font-medium transition-all ${activeTab === tab ? 'bg-white dark:bg-ink-800 shadow-sm text-primary font-semibold' : 'text-gray-500 dark:text-gray-400 hover:text-ink dark:hover:text-gray-100'}`}
               >
-                {tab}
+                {{ All: t('forms.tabAll'), Draft: t('forms.tabDraft'), Published: t('forms.tabPublished'), Closed: t('forms.tabClosed') }[tab]}
               </button>
             ))}
           </div>
@@ -290,12 +294,12 @@ export default function FormList() {
         <div className="rounded-2xl bg-gradient-to-br from-primary-50/70 via-white to-white dark:from-ink-800/40 dark:via-ink-900 dark:to-ink-900 border border-primary-100/60 dark:border-gray-800 p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-3">
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-wide text-primary-700 dark:text-primary-300">
-              <Sparkles className="w-3.5 h-3.5" /> Kategori
+              <Sparkles className="w-3.5 h-3.5" /> {t('forms.categoryLabel')}
             </span>
             <span className="h-3 w-px bg-primary-100 dark:bg-gray-700" />
-            <span className="text-xs text-gray-400 dark:text-gray-500">{categories.length} kelompok</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">{t('forms.categoryCount', { count: categories.length })}</span>
             <button onClick={() => setShowCatMgr(true)} className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary-700 dark:text-primary-300">
-              <Settings2 className="w-3.5 h-3.5" /> Kelola
+              <Settings2 className="w-3.5 h-3.5" /> {t('forms.manageCategories')}
             </button>
           </div>
 
@@ -305,7 +309,7 @@ export default function FormList() {
               className={`group inline-flex items-center gap-2 px-4 h-9 rounded-full text-sm font-medium border transition-all duration-200 ${activeCategory === null ? 'bg-ink text-white border-ink shadow-md dark:bg-white dark:text-ink scale-[1.02]' : 'bg-white dark:bg-ink-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-primary-200 hover:bg-primary-50/50 dark:hover:bg-ink-700 hover:shadow-sm hover:-translate-y-0.5'}`}
             >
               <FolderOpen className={`w-4 h-4 ${activeCategory===null ? 'text-white dark:text-ink' : 'text-gray-400 group-hover:text-primary'}`} />
-              Semua
+              {t('forms.allCategories')}
               <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold ${activeCategory===null ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-ink-700 text-gray-500'}`}>{meta.total}</span>
             </button>
 
@@ -326,7 +330,7 @@ export default function FormList() {
 
             {categories.length === 0 && (
               <span className="inline-flex items-center gap-2 px-4 h-9 rounded-full border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-ink-800/40 text-sm text-gray-400">
-                Belum ada kategori — buat “Matematika” biar form tidak berantakan
+                {t('forms.emptyCategoriesHint')}
               </span>
             )}
           </div>
@@ -337,9 +341,9 @@ export default function FormList() {
       <CategoryMoveModal open={!!moveTarget} onClose={()=>setMoveTarget(null)} form={moveTarget} categories={categories} onMoved={handleMoved} />
       <ConfirmModal
         show={!!deleteTarget}
-        title="Hapus form?"
-        message={`“${stripTags(deleteTarget?.title || '')}” dan semua soal/jawaban akan hilang permanen.`}
-        confirmText="Hapus"
+        title={t('forms.deleteTitle')}
+        message={t('forms.deleteMessage', { title: stripTags(deleteTarget?.title || '') })}
+        confirmText={t('forms.deleteConfirm')}
         variant="danger"
         loading={deleting}
         onConfirm={handleDelete}
@@ -354,12 +358,12 @@ export default function FormList() {
         <Card>
           <EmptyState
             icon={<ClipboardList className="w-6 h-6" />}
-            title={search.trim() ? 'No matching forms' : activeCategory ? 'Kosong di kategori ini' : 'No forms yet'}
-            description={search.trim() ? 'Try a different search or filter.' : activeCategory ? 'Pindah kategori atau buat form baru di kategori ini.' : 'Create a form or quiz and share it with anyone.'}
+            title={search.trim() ? t('forms.noMatch') : activeCategory ? t('forms.emptyCategory') : t('forms.noForms')}
+            description={search.trim() ? t('forms.noMatchDesc') : activeCategory ? t('forms.emptyCategoryDesc') : t('forms.noFormsDesc')}
             action={
               !search.trim() && (
                 <Button onClick={() => navigate('/forms/new')} icon={<Plus className="w-4 h-4" />}>
-                  Create New Form
+                  {t('forms.createNew')}
                 </Button>
               )
             }
@@ -402,14 +406,14 @@ export default function FormList() {
                           >
                             <div className="p-1.5">
                               <button onClick={(e)=>{ e.stopPropagation(); setMenuOpen(null); navigate(`/forms/${form.id}`)}} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-ink dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-ink-700 transition-colors">
-                                <Pencil className="w-4 h-4 text-gray-400" /> Edit form
+                                <Pencil className="w-4 h-4 text-gray-400" /> {t('forms.menuEdit')}
                               </button>
                               <button onClick={(e)=>{ e.stopPropagation(); setMenuOpen(null); setMoveTarget(form)}} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-ink dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-ink-700 transition-colors">
-                                <FolderInput className="w-4 h-4 text-primary" /> Ganti kategori
+                                <FolderInput className="w-4 h-4 text-primary" /> {t('forms.menuMoveCategory')}
                               </button>
                               <div className="my-1 h-px bg-gray-100 dark:bg-gray-700" />
                               <button onClick={(e)=>{ e.stopPropagation(); setMenuOpen(null); setDeleteTarget(form)}} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-incorrect hover:bg-incorrect-soft transition-colors">
-                                <Trash2 className="w-4 h-4" /> Hapus form
+                                <Trash2 className="w-4 h-4" /> {t('forms.menuDelete')}
                               </button>
                             </div>
                           </motion.div>
@@ -427,9 +431,9 @@ export default function FormList() {
           </div>
           {totalPages > 1 && (
             <div className="flex justify-center gap-2 mt-8">
-              <Button variant="ghost" size="sm" disabled={meta.page <= 1} onClick={() => setMeta((m) => ({ ...m, page: m.page - 1 }))}>Previous</Button>
-              <span className="flex items-center text-sm text-gray-500 dark:text-gray-400 px-2">Page {meta.page} of {totalPages}</span>
-              <Button variant="ghost" size="sm" disabled={meta.page >= totalPages} onClick={() => setMeta((m) => ({ ...m, page: m.page + 1 }))}>Next</Button>
+              <Button variant="ghost" size="sm" disabled={meta.page <= 1} onClick={() => setMeta((m) => ({ ...m, page: m.page - 1 }))}>{t('forms.previous')}</Button>
+              <span className="flex items-center text-sm text-gray-500 dark:text-gray-400 px-2">{t('forms.page', { page: meta.page, total: totalPages })}</span>
+              <Button variant="ghost" size="sm" disabled={meta.page >= totalPages} onClick={() => setMeta((m) => ({ ...m, page: m.page + 1 }))}>{t('forms.next')}</Button>
             </div>
           )}
         </>

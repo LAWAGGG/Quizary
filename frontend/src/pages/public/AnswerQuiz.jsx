@@ -7,6 +7,7 @@ import { useAutosave, loadDraft, clearDraft } from '../../hooks/useAutosave'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import { isAudioUrl } from '../../lib/media'
+import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { sessionTokenHeaders } from '../../lib/sessionToken'
 
@@ -81,6 +82,7 @@ function OptionTile({ letter, color, selected, checkbox, children, onClick, disa
 }
 
 export default function AnswerQuiz() {
+  const { t } = useTranslation()
   const { submissionId } = useParams()
   const navigate = useNavigate()
   const { theme } = useTheme()
@@ -193,9 +195,9 @@ export default function AnswerQuiz() {
       // satu-satunya owner-nya, dan hanya jalan kalau form memang ber-timer.
     } catch (err) {
       if (err.response?.status === 403) {
-        setError('Access denied')
+        setError(t('answerQuiz.accessDenied'))
       } else {
-        setError(err.response?.data?.message || 'Failed to load')
+        setError(err.response?.data?.message || t('answerQuiz.loadFailed'))
       }
     } finally {
       setLoading(false)
@@ -593,8 +595,8 @@ export default function AnswerQuiz() {
   // Auto-dismiss the cheat warning banner after a few seconds.
   useEffect(() => {
     if (!cheatWarn) return
-    const t = setTimeout(() => setCheatWarn(null), 5000)
-    return () => clearTimeout(t)
+    const tid = setTimeout(() => setCheatWarn(null), 5000)
+    return () => clearTimeout(tid)
   }, [cheatWarn])
 
   // Keyboard navigation (quiz mode): 1-4 pilih opsi, ←/→ ganti soal, Enter next/submit
@@ -656,7 +658,7 @@ export default function AnswerQuiz() {
     const q = data?.questions?.find((x) => x.id === qId)
     const lim = q ? getTextLimit(q.type) : null
     if (lim && value.length > lim) {
-      setTextLimitErrors((e) => ({ ...e, [qId]: `Melebihi batas ${lim} karakter (${value.length}/${lim})` }))
+      setTextLimitErrors((e) => ({ ...e, [qId]: t('answerQuiz.charLimit', { limit: lim, current: value.length }) }))
     } else {
       setTextLimitErrors((e) => { const n = { ...e }; delete n[qId]; return n })
     }
@@ -681,7 +683,7 @@ export default function AnswerQuiz() {
       setFileAnswers((f) => ({ ...f, [qId]: { url: res.data.answer_file, filename: res.data.filename || file.name } }))
       setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
     } catch (err) {
-      setSubmitError(err.response?.data?.detail || err.response?.data?.message || 'File upload failed')
+      setSubmitError(err.response?.data?.detail || err.response?.data?.message || t('answerQuiz.submitFailed'))
     } finally {
       setUploading((u) => ({ ...u, [qId]: false }))
     }
@@ -930,7 +932,7 @@ export default function AnswerQuiz() {
       if (err.response?.status === 410) {
         goToResult()
       } else {
-        const msg = err.response?.data?.message || err.response?.data?.detail || 'Failed to submit your answers'
+        const msg = err.response?.data?.message || err.response?.data?.detail || t('answerQuiz.submitFailed')
         setShowConfirm(false)
         // Submit error ditampilkan inline, BUKAN redirect ke FallbackPage
         setSubmitError(msg)
@@ -959,9 +961,9 @@ export default function AnswerQuiz() {
   if (error) {
     return (
       <FallbackPage
-        title="Something went wrong"
+        title={t('answerQuiz.loadFailed')}
         message={error}
-        action={<Button variant="secondary" onClick={() => navigate('/')} className="w-full">Go home</Button>}
+        action={<Button variant="secondary" onClick={() => navigate('/')} className="w-full">{t('common.goHome')}</Button>}
       />
     )
   }
@@ -1052,9 +1054,9 @@ export default function AnswerQuiz() {
             <div className="flex items-start gap-3 bg-incorrect text-white px-4 py-3.5 rounded-2xl shadow-lift">
               <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-semibold">Suspicious activity detected ({cheatWarn.reason || 'leaving page'}).</p>
+                <p className="font-semibold">{t('answerQuiz.cheatWarningTitle', { reason: cheatWarn.reason || 'leaving page' })}</p>
                 <p className="text-white/85 mt-0.5">
-                  Warning {3 - cheatWarn.left}/2. Continuing will auto-submit your answers with score 0.
+                  {t('answerQuiz.cheatWarningDesc', { current: 3 - cheatWarn.left })}
                 </p>
               </div>
             </div>
@@ -1121,9 +1123,9 @@ export default function AnswerQuiz() {
             <div className="max-w-lg mx-auto">
               <QuestionMap total={totalQ} current={currentIdx} answered={answeredMap} reviewed={reviewedMap} onSelect={goToQuestion} />
               <div className="flex flex-wrap items-center gap-4 mt-3 text-[11px] text-gray-400">
-                <Legend dot="bg-correct" label="Answered" />
-                <Legend dot="bg-warn" label="Marked" />
-                <Legend dot="bg-white dark:bg-ink-800 border border-gray-300 dark:border-gray-600" label="Unanswered" />
+                <Legend dot="bg-correct" label={t('answerQuiz.legendAnswered')} />
+                <Legend dot="bg-warn" label={t('answerQuiz.legendMarked')} />
+                <Legend dot="bg-white dark:bg-ink-800 border border-gray-300 dark:border-gray-600" label={t('answerQuiz.legendUnanswered')} />
               </div>
             </div>
           </motion.div>
@@ -1143,7 +1145,7 @@ export default function AnswerQuiz() {
                 <div className="flex items-start justify-between gap-3 mb-1">
                   <div className="flex items-center gap-2">
                     {current.is_required === false && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-ink-800 px-2 py-0.5 rounded-full">Optional</span>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-ink-800 px-2 py-0.5 rounded-full">{t('answerQuiz.optional')}</span>
                     )}
                   </div>
                   <button
@@ -1153,7 +1155,7 @@ export default function AnswerQuiz() {
                     aria-pressed={!!reviewed[current.id]}
                   >
                     <Flag className="w-3.5 h-3.5" />
-                    {reviewed[current.id] ? 'Marked' : 'Mark for review'}
+                    {reviewed[current.id] ? t('answerQuiz.marked') : t('answerQuiz.markReview')}
                   </button>
                 </div>
                 <h2 className="font-display text-xl font-bold text-ink dark:text-gray-100 text-center mb-3 flex items-start justify-center gap-0.5">
@@ -1182,15 +1184,15 @@ export default function AnswerQuiz() {
                   <button
                     onClick={() => { setZoomTarget(current); setZoomScale(1) }}
                     className="inline-flex items-center gap-2 text-xs font-semibold px-4 h-9 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-600 dark:text-gray-300 hover:text-[var(--t)] hover:border-[var(--t-border)] hover:bg-[var(--t-soft)] transition-colors shadow-chip"
-                    aria-label="Zoom in on question"
+                    aria-label={t('answerQuiz.zoomIn')}
                   >
                     <ZoomIn className="w-4 h-4" />
-                    Zoom in on question
+                    {t('answerQuiz.zoomIn')}
                   </button>
                 </div>
                 {current.type === 'multiple_choice' && (
                   <div className="space-y-4">
-                    <p className="text-xs text-gray-400 text-center mb-2">Pick one answer</p>
+                    <p className="text-xs text-gray-400 text-center mb-2">{t('answerQuiz.pickOne')}</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {current.options.map((opt, i) => {
                         const selected = (answers[current.id] || []).includes(opt.id)
@@ -1213,7 +1215,7 @@ export default function AnswerQuiz() {
 
                 {current.type === 'checkbox' && (
                   <div className="space-y-4">
-                    <p className="text-xs text-gray-400 text-center mb-2">Pick all that apply</p>
+                    <p className="text-xs text-gray-400 text-center mb-2">{t('answerQuiz.pickMultiple')}</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {current.options.map((opt, i) => {
                         const selected = (answers[current.id] || []).includes(opt.id)
@@ -1241,18 +1243,18 @@ export default function AnswerQuiz() {
                       value={answers[current.id] || ''}
                       onChange={(e) => handleTextChange(current.id, e.target.value)}
                       className={`text-center text-lg h-14 ${(textLimitErrors[current.id] || validationErrors[current.id]) ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
-                      placeholder="Tap to answer"
+                      placeholder={t('answerQuiz.tapToAnswer')}
                       maxLength={TEXT_LIMITS.short_answer + 50}
                     />
                     {textLimitErrors[current.id] && <p className="text-xs font-medium text-incorrect mt-1.5 text-center">{textLimitErrors[current.id]}</p>}
-                    {validationErrors[current.id] && !textLimitErrors[current.id] && <p className="text-xs font-medium text-incorrect mt-1.5 text-center">This question is required</p>}
+                    {validationErrors[current.id] && !textLimitErrors[current.id] && <p className="text-xs font-medium text-incorrect mt-1.5 text-center">{t('answerQuiz.required')}</p>}
                   </div>
                 )}
 
                 {pwWrong[current.id] && (
                   <p className="mt-3 text-sm font-semibold text-red-500 flex items-center justify-center gap-1.5">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
-                    Wrong password
+                    {t('answerQuiz.wrongPassword')}
                   </p>
                 )}
 
@@ -1262,12 +1264,12 @@ export default function AnswerQuiz() {
                       value={answers[current.id] || ''}
                       onChange={(e) => handleTextChange(current.id, e.target.value)}
                       className={`min-h-[180px] text-base leading-relaxed ${(textLimitErrors[current.id] || validationErrors[current.id]) ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
-                      placeholder="Write your answer here..."
+                      placeholder={t('answerQuiz.essayPlaceholder')}
                       rows={6}
                       maxLength={TEXT_LIMITS.essay + 100}
                     />
                     {textLimitErrors[current.id] && <p className="text-xs font-medium text-incorrect mt-1.5">{textLimitErrors[current.id]}</p>}
-                    {validationErrors[current.id] && !textLimitErrors[current.id] && <p className="text-xs font-medium text-incorrect mt-1.5">This question is required</p>}
+                    {validationErrors[current.id] && !textLimitErrors[current.id] && <p className="text-xs font-medium text-incorrect mt-1.5">{t('answerQuiz.required')}</p>}
                   </div>
                 )}
                 {current.type === 'password' && (
@@ -1276,8 +1278,8 @@ export default function AnswerQuiz() {
                       value={answers[current.id] || ''}
                       onChange={(e) => handleTextChange(current.id, e.target.value)}
                       className={`text-center text-lg h-14 font-mono ${validationErrors[current.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
-                      placeholder="Enter password"
-                      error={pwWrong[current.id] ? 'Wrong password' : undefined}
+                      placeholder={t('answerQuiz.passwordPlaceholder')}
+                      error={pwWrong[current.id] ? t('answerQuiz.wrongPassword') : undefined}
                     />
                   </div>
                 )}
@@ -1289,7 +1291,7 @@ export default function AnswerQuiz() {
                       error={!!validationErrors[current.id]}
                       className="text-base h-14"
                     >
-                      <option value="">— Select an answer —</option>
+                      <option value="">{t('answerQuiz.selectAnswer')}</option>
                       {current.options.map((opt) => (
                         <option key={opt.id} value={opt.id}>{opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
                       ))}
@@ -1351,7 +1353,7 @@ export default function AnswerQuiz() {
           <div className="max-w-lg mx-auto flex gap-3">
             {currentIdx > 0 && (
               <Button variant="secondary" onClick={handlePrev} className="flex-1" icon={<ChevronLeft className="w-4 h-4" />}>
-                Previous
+                {t('answerQuiz.previous')}
               </Button>
             )}
             {isLast ? (
@@ -1363,11 +1365,11 @@ export default function AnswerQuiz() {
                 style={{ background: palette.cta, color: palette.onBase }}
                 icon={!submitting && <Check className="w-4 h-4" />}
               >
-                {canProceed ? 'Submit' : 'Answer to submit'}
+                {canProceed ? t('answerQuiz.submit') : t('answerQuiz.answerToSubmit')}
               </Button>
             ) : (
               <Button onClick={handleNext} className="flex-1" style={{ background: palette.cta, color: palette.onBase }}>
-                Next
+                {t('answerQuiz.next')}
                 <ChevronRight className="w-4 h-4" />
               </Button>
             )}
@@ -1388,7 +1390,7 @@ export default function AnswerQuiz() {
 
         <ConfirmSubmitModal
           show={showConfirm}
-          title="Submit your answers?"
+          title={t('answerQuiz.confirmTitle')}
           answeredCount={answeredCount}
           totalCount={totalQ}
           missing={missingRequired}
@@ -1396,7 +1398,7 @@ export default function AnswerQuiz() {
           onConfirm={handleSubmitAll}
           onCancel={() => setShowConfirm(false)}
           loading={submitting}
-          confirmText="Submit Now"
+          confirmText={t('answerQuiz.confirmSubmit')}
         />
 
         <KioskLockOverlay
@@ -1430,9 +1432,9 @@ export default function AnswerQuiz() {
           <div className="flex items-start gap-3 bg-incorrect text-white px-4 py-3.5 rounded-2xl shadow-lift">
             <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
             <div className="text-sm">
-              <p className="font-semibold">Suspicious activity detected ({cheatWarn.reason || 'leaving page'}).</p>
+              <p className="font-semibold">{t('answerQuiz.cheatWarningTitle', { reason: cheatWarn.reason || 'leaving page' })}</p>
               <p className="text-white/85 mt-0.5">
-                Warning {3 - cheatWarn.left}/2. Continuing will auto-submit your answers with score 0.
+                {t('answerQuiz.cheatWarningDesc', { current: 3 - cheatWarn.left })}
               </p>
             </div>
           </div>
@@ -1501,16 +1503,16 @@ export default function AnswerQuiz() {
                     <button
                       onClick={() => { setZoomTarget(q); setZoomScale(1) }}
                       className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold px-3 h-8 rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 text-gray-500 dark:text-gray-400 hover:text-[var(--t)] hover:border-[var(--t-border)] hover:bg-[var(--t-soft)] transition-colors"
-                      aria-label="Zoom in on question"
+                      aria-label={t('answerQuiz.zoomIn')}
                     >
                       <ZoomIn className="w-4 h-4" />
-                      Zoom in on question
+                      {t('answerQuiz.zoomIn')}
                     </button>
                   </div>
                   {(validationErrors[q.id] && !textLimitErrors[q.id]) && (
                     <p className="text-xs font-semibold text-red-500 flex items-center gap-1 mb-3">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      {q.type === 'password' && pwWrong[q.id] ? 'Wrong password, please try again' : 'This question is required'}
+                      {q.type === 'password' && pwWrong[q.id] ? t('answerQuiz.wrongPassword') : t('answerQuiz.required')}
                     </p>
                   )}
                   {q.image && (isAudioUrl(q.image.path) ? (
@@ -1609,7 +1611,7 @@ export default function AnswerQuiz() {
                       <Input
                         value={answers[q.id] || ''}
                         onChange={(e) => handleTextChange(q.id, e.target.value)}
-                        placeholder="Your answer"
+                        placeholder={t('answerQuiz.answerLabel')}
                         className={(textLimitErrors[q.id] || validationErrors[q.id]) ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}
                         maxLength={TEXT_LIMITS.short_answer + 50}
                       />
@@ -1624,7 +1626,7 @@ export default function AnswerQuiz() {
                         onChange={(e) => handleTextChange(q.id, e.target.value)}
                         className={`min-h-[120px] ${(textLimitErrors[q.id] || validationErrors[q.id]) ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
                         rows={4}
-                        placeholder="Write your answer..."
+                        placeholder={t('answerQuiz.essayPlaceholder')}
                         maxLength={TEXT_LIMITS.essay + 100}
                       />
                       {textLimitErrors[q.id] && <p className="text-xs font-medium text-incorrect mt-1.5">{textLimitErrors[q.id]}</p>}
@@ -1636,7 +1638,7 @@ export default function AnswerQuiz() {
                       value={answers[q.id] || ''}
                       onChange={(e) => handleTextChange(q.id, e.target.value)}
                       className={`font-mono ${validationErrors[q.id] ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
-                      placeholder="Enter password"
+                      placeholder={t('answerQuiz.passwordPlaceholder')}
                     />
                   )}
 
@@ -1646,7 +1648,7 @@ export default function AnswerQuiz() {
                       onChange={(e) => handleSelect(q.id, e.target.value === '' ? null : Number(e.target.value))}
                       error={!!validationErrors[q.id]}
                     >
-                      <option value="">— Select an answer —</option>
+                      <option value="">{t('answerQuiz.selectAnswer')}</option>
                       {q.options.map((opt) => (
                         <option key={opt.id} value={opt.id}>{opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
                       ))}
@@ -1707,7 +1709,7 @@ export default function AnswerQuiz() {
           <div className="flex gap-3">
             {currentIdx > 0 && (
               <Button variant="secondary" size="lg" onClick={handlePrev} className="flex-1" icon={<ChevronLeft className="w-4 h-4" />}>
-                Previous
+                {t('answerQuiz.previous')}
               </Button>
             )}
             {currentIdx < formPages.length - 1 ? (
@@ -1717,7 +1719,7 @@ export default function AnswerQuiz() {
                 size="lg"
                 style={{ background: palette.cta, color: palette.onBase }}
               >
-                Next
+                {t('answerQuiz.next')}
                 <ChevronRight className="w-4 h-4" />
               </Button>
             ) : (
@@ -1731,7 +1733,7 @@ export default function AnswerQuiz() {
                 size="lg"
                 style={{ background: palette.cta, color: palette.onBase }}
               >
-                Submit
+                {t('answerQuiz.submit')}
               </Button>
             )}
             {publicForm?.is_restricted && (
@@ -1766,6 +1768,7 @@ export default function AnswerQuiz() {
 }
 
 function SaveIndicator({ status }) {
+  const { t } = useTranslation()
   if (!status) return null
   if (status === 'saving') {
     return (
@@ -1774,7 +1777,7 @@ function SaveIndicator({ status }) {
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
-        Saving…
+        {t('answerQuiz.saving')}
       </span>
     )
   }
@@ -1782,12 +1785,12 @@ function SaveIndicator({ status }) {
     return (
       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-white/85">
         <CheckCheck className="w-3.5 h-3.5" />
-        Saved
+        {t('answerQuiz.saved')}
       </span>
     )
   }
   if (status === 'error') {
-    return <span className="inline-flex items-center text-[11px] font-semibold text-white/70">Not saved — retrying</span>
+    return <span className="inline-flex items-center text-[11px] font-semibold text-white/70">{t('answerQuiz.notSaved')}</span>
   }
   return null
 }
@@ -1802,6 +1805,7 @@ function Legend({ dot, label }) {
 }
 
 function FileAnswer({ value, uploading, onFile, onRemove, error }) {
+  const { t } = useTranslation()
   const inputRef = useRef(null)
   return (
     <div>
@@ -1811,8 +1815,8 @@ function FileAnswer({ value, uploading, onFile, onRemove, error }) {
             <FileUp className="w-5 h-5" />
           </span>
           <span className="flex-1 min-w-0 text-sm font-medium text-ink dark:text-gray-100 truncate">{value.filename}</span>
-          <a href={value.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[var(--t)] hover:underline shrink-0">View</a>
-          <button onClick={onRemove} className="text-xs font-medium text-gray-400 hover:text-incorrect shrink-0">Remove</button>
+          <a href={value.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[var(--t)] hover:underline shrink-0">{t('answerQuiz.viewFile')}</a>
+          <button onClick={onRemove} className="text-xs font-medium text-gray-400 hover:text-incorrect shrink-0">{t('answerQuiz.removeFile')}</button>
         </div>
       ) : (
         <button
@@ -1826,21 +1830,22 @@ function FileAnswer({ value, uploading, onFile, onRemove, error }) {
           ) : (
             <FileUp className="w-4 h-4" />
           )}
-          {uploading ? 'Uploading...' : 'Upload answer file'}
+          {uploading ? t('answerQuiz.uploading') : t('answerQuiz.uploadFile')}
         </button>
       )}
       <input ref={inputRef} type="file" className="hidden" onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = '' }} />
       {error && (
         <p className="text-xs font-semibold text-incorrect mt-1.5 flex items-center gap-1">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Required question — upload a file first
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {t('answerQuiz.fileRequired')}
         </p>
       )}
-      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">PDF, DOC, XLS, PPT, TXT, CSV, gambar, ZIP</p>
+      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">{t('answerQuiz.fileHint')}</p>
     </div>
   )
 }
 
 function CheatLockOverlay({ info, onRefresh, refreshing }) {
+  const { t } = useTranslation()
   // Countdown sinkron ke lockedAt lokal — bukan penanda pasti dari server,
   // tapi cukup buat kasih gambaran ke responden berapa lama lagi menunggu
   // sebelum sweep otomatis. Refresh manual tetap sumber kebenaran status asli.
@@ -1879,18 +1884,17 @@ function CheatLockOverlay({ info, onRefresh, refreshing }) {
             <span className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-incorrect/20 mb-6">
               <AlertTriangle className="w-8 h-8 text-incorrect" />
             </span>
-            <p className="font-display text-2xl font-bold">You have been detected violating the rules</p>
+            <p className="font-display text-2xl font-bold">{t('answerQuiz.violatingRules')}</p>
             {info.reason && (
-              <p className="text-sm text-white/70 mt-2">Last violation: {info.reason}</p>
+              <p className="text-sm text-white/70 mt-2">{t('answerQuiz.lastViolation', { reason: info.reason })}</p>
             )}
             <p className="text-sm text-white/70 mt-4 leading-relaxed">
-              Exam is temporarily locked. Your answers are saved and will be reviewed
-              by the proctor. Do not close this page.
+              {t('answerQuiz.temporarilyLocked')}
             </p>
 
             <div className="mt-6 inline-flex flex-col items-center gap-1.5 px-6 py-4 rounded-2xl bg-white/5 border border-white/10">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50">
-                {expired ? 'Finalizing…' : 'Auto-finalize in'}
+                {expired ? t('answerQuiz.finalizing') : t('answerQuiz.autoFinalizeIn')}
               </span>
               <span className={`font-mono text-3xl font-bold tabular-nums ${urgent ? 'text-incorrect animate-pulse' : 'text-white'}`}>
                 {mm}:{ss}
@@ -1904,7 +1908,7 @@ function CheatLockOverlay({ info, onRefresh, refreshing }) {
               className="mt-6 inline-flex items-center justify-center gap-2 min-h-12 px-6 rounded-xl bg-white text-ink hover:bg-white/90 active:scale-[0.98] border border-white/10 text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Memeriksa status…' : 'Periksa status terbaru'}
+              {refreshing ? t('answerQuiz.checkingStatus') : t('answerQuiz.checkStatus')}
             </button>
           </motion.div>
         </motion.div>
@@ -1914,6 +1918,7 @@ function CheatLockOverlay({ info, onRefresh, refreshing }) {
 }
 
 function KioskLockOverlay({ locked, palette, onResume, countdown }) {
+  const { t } = useTranslation()
   // Layar kunci full — menutupi SEMUA konten. Interaksi apa pun (klik/keyboard/
   // sentuh) langsung mem-pin ulang ke fullscreen lewat onResume; konten ujian
   // tidak terlihat sampai responden kembali benar-benar ke dalam ujian.
@@ -1949,25 +1954,25 @@ function KioskLockOverlay({ locked, palette, onResume, countdown }) {
             <span className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-white/10 mb-6">
               <Lock className="w-7 h-7" />
             </span>
-            <h2 className="font-display text-xl font-bold">Exam locked</h2>
+            <h2 className="font-display text-xl font-bold">{t('answerQuiz.examLocked')}</h2>
             {countdown !== null && countdown !== undefined ? (
               <>
                 <div className="mt-5 inline-flex flex-col items-center gap-1 px-8 py-5 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
-                    Kembali dalam
+                    {t('answerQuiz.returnInSeconds', { seconds: countdown }).split(String(countdown))[0].trim() || t('answerQuiz.examLocked')}
                   </span>
                   <span className={`font-mono text-5xl font-bold tabular-nums leading-none ${countdown <= 2 ? 'text-red-300 animate-pulse' : 'text-white'}`}>
                     {countdown}
                   </span>
-                  <span className="text-xs font-medium text-white/70 -mt-1">detik atau ujian akan dikunci</span>
+                  <span className="text-xs font-medium text-white/70 -mt-1">{t('answerQuiz.returnInSeconds', { seconds: countdown }).split(String(countdown))[1]?.trim() || ''}</span>
                 </div>
                 <p className="text-white/80 text-sm mt-4 max-w-xs mx-auto leading-relaxed">
-                  Peringatan: Anda keluar dari fullscreen. Segera kembali sebelum hitungan habis!
+                  {t('answerQuiz.fullscreenWarning')}
                 </p>
               </>
             ) : (
               <p className="text-white/80 text-sm mt-2 max-w-xs mx-auto">
-                You left the exam window. Tap or click anywhere to return to fullscreen and continue the exam.
+                {t('answerQuiz.lockedHint')}
               </p>
             )}
             <button
@@ -1988,6 +1993,7 @@ function KioskLockOverlay({ locked, palette, onResume, countdown }) {
 }
 
 function ExamInfoDrawer({ show, onClose, form, data }) {
+  const { t } = useTranslation()
   const respondent = data?.respondent_name || ''
   const respondentEmail = data?.respondent_email || ''
   const banner = form?.banner_path || null
@@ -2016,7 +2022,7 @@ function ExamInfoDrawer({ show, onClose, form, data }) {
             className="fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-white dark:bg-ink-900 shadow-lift flex flex-col"
           >
             <div className="flex items-center justify-between px-5 h-16 border-b border-gray-100 dark:border-gray-800 shrink-0">
-              <h3 className="font-display font-bold text-ink dark:text-gray-100">Exam Information</h3>
+              <h3 className="font-display font-bold text-ink dark:text-gray-100">{t('answerQuiz.examInfo')}</h3>
               <button
                 onClick={onClose}
                 className="p-2 -mr-2 rounded-xl text-gray-400 hover:text-ink dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"
@@ -2036,16 +2042,16 @@ function ExamInfoDrawer({ show, onClose, form, data }) {
               {form?.description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 mb-4"><RichText html={form.description} className="rich-text" /></p>}
 
               <div className="mt-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Respondent Info</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{t('answerQuiz.respondentInfo')}</p>
                 {chip('Name', respondent)}
                 {chip('Email', respondentEmail)}
               </div>
 
               <div className="mt-4">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">Details</p>
-                {chip('Number of questions', form?.question_count ?? data?.questions?.length ?? '—')}
-                {form?.timer_seconds ? chip('Time', `${Math.ceil(form.timer_seconds / 60)} minutes`) : chip('Time', 'No limit')}
-                {form?.submission_limit === 'once' ? chip('Submission', 'Once only') : chip('Submission', 'Unlimited')}
+                {chip(t('answerQuiz.detailQuestions'), form?.question_count ?? data?.questions?.length ?? '—')}
+                {form?.timer_seconds ? chip(t('answerQuiz.detailTime'), `${Math.ceil(form.timer_seconds / 60)} minutes`) : chip(t('answerQuiz.detailTime'), t('answerQuiz.noLimit'))}
+                {form?.submission_limit === 'once' ? chip('Submission', t('answerQuiz.onceOnly')) : chip('Submission', t('answerQuiz.unlimited'))}
               </div>
 
               {form?.is_restricted && (
@@ -2064,6 +2070,7 @@ function ExamInfoDrawer({ show, onClose, form, data }) {
 }
 
 function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
+  const { t } = useTranslation()
   const STEP = 0.5
   const optionColor = (i) => OPT_COLORS[i % OPT_COLORS.length]
   const scrollRef = useRef(null)
@@ -2126,13 +2133,13 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label="Zoom in on question"
+            aria-label={t('answerQuiz.zoomTitle')}
           >
             {/* Header ramping: hanya judul panel + tombol tutup, teks soal ada di
                 area zoom supaya seluruh soal (teks+gambar+opsi) terzoom sebagai satu. */}
             <div className="px-5 sm:px-7 pt-5 sm:pt-6 pb-4 border-b border-gray-100 dark:border-gray-800 shrink-0">
               <div className="flex items-center justify-between gap-3">
-                <p className="eyebrow">Zoom Question</p>
+                <p className="eyebrow">{t('answerQuiz.zoomTitle')}</p>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-mono font-bold text-gray-500 dark:text-gray-300 tabular-nums">
                     {Math.round(scale * 100)}%

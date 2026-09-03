@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { Button, Input, Card } from '../../components/ui'
 import { AuthShell } from '../../components/auth/AuthShell'
 
 export default function Login() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const { login } = useAuth()
@@ -20,12 +22,12 @@ export default function Login() {
 
   function validate() {
     const errors = {}
-    if (!form.email) errors.email = 'Email is required'
+    if (!form.email) errors.email = t('auth.emailRequired')
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      errors.email = 'Invalid email format'
-    if (!form.password) errors.password = 'Password is required'
+      errors.email = t('auth.emailInvalid')
+    if (!form.password) errors.password = t('auth.passwordRequired')
     else if (form.password.length < 8)
-      errors.password = 'Password must be at least 8 characters'
+      errors.password = t('auth.passwordMin')
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -53,11 +55,11 @@ export default function Login() {
         })
         if (schemaMsg) setError(schemaMsg)
         else if (Object.keys(errors).length) setFieldErrors(errors)
-        else setError(msg || 'Validation failed')
+        else setError(msg || t('auth.validationFailed'))
       } else if (status === 401) {
-        setError('Invalid email or password')
+        setError(t('auth.invalidCredentials'))
       } else {
-        setError(msg || 'Something went wrong. Please try again.')
+        setError(msg || t('auth.somethingWrong'))
       }
     } finally {
       setLoading(false)
@@ -71,13 +73,13 @@ export default function Login() {
 
   return (
     <AuthShell
-      eyebrow="Welcome back"
-      title="Sign in to your account"
+      eyebrow={t('auth.welcomeBack')}
+      title={t('auth.signInTitle')}
       footer={
         <>
-          Don&apos;t have an account?{' '}
+          {t('auth.noAccount')}{' '}
           <Link to={from !== '/' ? `/register?next=${encodeURIComponent(from)}` : '/register'} state={from !== '/' ? { from } : undefined} className="font-semibold text-primary hover:text-primary-600 transition-colors">
-            Sign up
+            {t('auth.signUp')}
           </Link>
         </>
       }
@@ -98,9 +100,9 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="relative">
               <Input
-                label="Email"
+                label={t('auth.email')}
                 type="email"
-                placeholder="email@example.com"
+                placeholder={t('auth.emailPlaceholder') !== 'auth.emailPlaceholder' ? t('auth.emailPlaceholder') : 'email@example.com'}
                 value={form.email}
                 onChange={(e) => update('email', e.target.value)}
                 error={fieldErrors.email}
@@ -111,7 +113,7 @@ export default function Login() {
 
             <div className="relative">
               <Input
-                label="Password"
+                label={t('auth.password')}
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Password"
                 value={form.password}
@@ -124,14 +126,14 @@ export default function Login() {
                 type="button"
                 onClick={() => setShowPassword((p) => !p)}
                 className="absolute right-3.5 top-12 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400 transition-colors"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
               >
                 {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
               </button>
             </div>
 
             <Button type="submit" loading={loading} className="w-full" size="lg">
-              Sign In
+              {t('auth.signIn')}
             </Button>
           </form>
         </Card>
