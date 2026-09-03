@@ -56,6 +56,13 @@ class QuestionCreate(BaseModel):
             raise ValueError("password questions require a password_keyword")
         return self
 
+    @model_validator(mode="after")
+    def default_is_scored(self):
+        # ponytail: non-gradable types have no correct answer — is_scored must be False
+        if self.type in NO_OPTION_TYPES:
+            self.is_scored = False
+        return self
+
 
 class QuestionUpdate(BaseModel):
     type: Optional[str] = Field(None, pattern=QUESTION_TYPE_PATTERN)
@@ -76,6 +83,13 @@ class QuestionUpdate(BaseModel):
                 raise ValueError("multiple_choice, checkbox and dropdown questions require at least 1 option")
             if q_type in NO_OPTION_TYPES and len(opts) > 0:
                 raise ValueError("this question type must not have options")
+        return self
+
+    @model_validator(mode="after")
+    def coerce_is_scored_on_no_option_type(self):
+        # ponytail: if type changes to non-gradable, force is_scored=False
+        if self.type in NO_OPTION_TYPES:
+            self.is_scored = False
         return self
 
 

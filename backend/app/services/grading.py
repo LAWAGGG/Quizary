@@ -20,7 +20,6 @@ from app.models.submission import Submission
 GRADABLE_TYPES = (
     QuestionType.multiple_choice,
     QuestionType.checkbox,
-    QuestionType.short_answer,
     QuestionType.password,
 )
 
@@ -47,11 +46,12 @@ def grade_answer(answer: Answer, question: Question):
     """Return (is_correct, points_earned) for a stored answer vs its question.
 
     Mirrors the original submit-time rules exactly:
-      - unscored questions (or essay) -> (None, 0)
-      - multiple_choice / checkbox     -> +points when selected == correct set
-      - short_answer                   -> +points when text is non-empty
+      - non-gradable / unscored types -> (None, 0)
+      - multiple_choice / checkbox    -> +points when selected == correct set
+      - password                     -> exact keyword match
     """
-    if not question.is_scored:
+    # ponytail: non-gradable types have no correct answer — 0 regardless of is_scored
+    if question.type not in GRADABLE_TYPES or not question.is_scored:
         return None, Decimal("0")
 
     if question.type in (QuestionType.multiple_choice, QuestionType.checkbox):
@@ -60,15 +60,11 @@ def grade_answer(answer: Answer, question: Question):
         if correct_ids and selected_ids == correct_ids:
             return True, Decimal(str(question.points or 0))
         return False, Decimal("0")
+
     if question.type == QuestionType.dropdown:
         return None, Decimal("0")
 
-    if question.type == QuestionType.short_answer:
-        if answer.answer_text and answer.answer_text.strip():
-            return True, Decimal(str(question.points or 0))
-        return False, Decimal("0")
-
-    # password: exact match, case-sensitive (keputusan creator — tanpa trim).
+    # password: exact match, case-sensitive.
     if question.type == QuestionType.password:
         if question.password_keyword is not None and answer.answer_text == question.password_keyword:
             return True, Decimal(str(question.points or 0))

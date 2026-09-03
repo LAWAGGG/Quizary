@@ -130,20 +130,18 @@ export default function Profile() {
               className="bg-gray-50 dark:bg-ink-800 text-gray-500 cursor-not-allowed"
             />
 
+            <Button
+              variant="ghost"
+              className="w-full"
+              icon={<Lock className="w-4 h-4" />}
+              onClick={() => setOpenPassword(true)}
+            >
+              {t('profile.password.open')}
+            </Button>
+
             <Button onClick={handleSave} loading={saving} className="w-full" size="lg">
               {t('profile.saveProfile')}
             </Button>
-
-            <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
-              <Button
-                variant="ghost"
-                className="w-full"
-                icon={<Lock className="w-4 h-4" />}
-                onClick={() => setOpenPassword(true)}
-              >
-                {t('profile.password.open')}
-              </Button>
-            </div>
           </div>
         </Card>
       </motion.div>

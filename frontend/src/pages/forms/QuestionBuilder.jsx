@@ -34,7 +34,7 @@ const TYPE_LABELS = {
 const TYPE_OPTIONS = ['multiple_choice', 'checkbox', 'dropdown', 'short_answer', 'essay', 'password', 'date', 'time', 'datetime', 'file_upload']
 const OPTION_TYPES = ['multiple_choice', 'checkbox', 'dropdown']
 const CORRECT_OPTION_TYPES = ['multiple_choice', 'checkbox']
-const NO_GRADE_TYPES = ['essay', 'date', 'time', 'datetime', 'file_upload', 'dropdown']
+const NO_GRADE_TYPES = ['essay', 'short_answer', 'date', 'time', 'datetime', 'file_upload', 'dropdown']
 
 const TYPE_HINTS = {
   dropdown: 'Respondent selects one answer from a dropdown list (no correct answer).',
