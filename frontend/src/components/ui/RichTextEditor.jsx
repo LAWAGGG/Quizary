@@ -155,9 +155,10 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       onChangeRef.current?.(normalize(quill.root.innerHTML))
     })
 
-    // Toolbar tampil saat editor aktif. Pakai focusin/focusout native (bukan
-    // selection-change Quill) — event selection Quill kadang tidak emit saat
-    // klik/fokus (quill#1324, quill#2186) sehingga toolbar bisa tak muncul.
+    // Toolbar tampil saat editor aktif. focusin/focusout native sebagai sinyal
+    // utama, dilengkapi selection-change Quill + pointerdown (pre-aktif sebelum
+    // fokus terjadi) + :focus-within di CSS — klik pertama selalu membuka
+    // toolbar tanpa perlu blur lalu fokus ulang (quill#1324, quill#2186).
     // Debounce supaya klik tombol toolbar tidak menutup toolbar sebelum aksi
     // tercatat.
     const wrapper = container.parentNode
@@ -169,12 +170,33 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       if (hideTimer.current) clearTimeout(hideTimer.current)
       hideTimer.current = setTimeout(() => setActive(false), 250)
     }
+    // Klik/sentuh area editor langsung anggap aktif — jalan sebelum focusin
+    // sehingga toolbar mulai mengembang di klik pertama, bukan klik kedua.
+    const onPreActive = () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current)
+      setActive(true)
+    }
+    // Navigasi keyboard (Tab/Shift+Tab) tidak selalu memicu focusin yang
+    // terdeteksi — selection-change menutup celahnya.
+    const onSelectionChange = (range) => {
+      if (range) {
+        if (hideTimer.current) clearTimeout(hideTimer.current)
+        setActive(true)
+      }
+    }
+    quill.on('selection-change', onSelectionChange)
+    // Tab/card baru dibuka tidak pernah auto-aktif; tapi bila browser
+    // mengembalikan fokus ke editor ini saat mount, sinkronkan state.
+    if (quill.hasFocus()) setActive(true)
     wrapper?.addEventListener('focusin', onFocusIn)
     wrapper?.addEventListener('focusout', onFocusOut)
+    wrapper?.addEventListener('pointerdown', onPreActive)
 
     return () => {
+      quill.off('selection-change', onSelectionChange)
       wrapper?.removeEventListener('focusin', onFocusIn)
       wrapper?.removeEventListener('focusout', onFocusOut)
+      wrapper?.removeEventListener('pointerdown', onPreActive)
       quillRef.current = null
       if (hideTimer.current) clearTimeout(hideTimer.current)
       const parent = container.parentNode
@@ -288,7 +310,10 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
         spellCheck={false}
         autoCorrect="off"
         autoComplete="off"
-        onClick={() => quillRef.current?.focus()}
+        onClick={() => {
+          const q = quillRef.current
+          if (q && !q.hasFocus()) q.focus()
+        }}
       />
       {symbolsOpen && (
         <div

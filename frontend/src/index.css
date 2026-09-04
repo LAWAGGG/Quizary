@@ -262,7 +262,8 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   transition: max-height 0.18s ease, padding 0.18s ease;
 }
 
-.rich-editor.rich-editor-active .ql-toolbar.ql-snow {
+.rich-editor.rich-editor-active .ql-toolbar.ql-snow,
+.rich-editor:focus-within .ql-toolbar.ql-snow {
   @apply px-3 py-2;
   max-height: 100px;
 }
@@ -279,7 +280,8 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   border-top-right-radius: 12px;
 }
 
-.rich-editor.rich-editor-active .ql-container.ql-snow {
+.rich-editor.rich-editor-active .ql-container.ql-snow,
+.rich-editor:focus-within .ql-container.ql-snow {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
 }
@@ -351,7 +353,8 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   @apply py-1;
 }
 
-.rich-editor-compact.rich-editor-active .ql-toolbar.ql-snow {
+.rich-editor-compact.rich-editor-active .ql-toolbar.ql-snow,
+.rich-editor-compact:focus-within .ql-toolbar.ql-snow {
   @apply py-1;
 }
 
