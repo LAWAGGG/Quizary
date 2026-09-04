@@ -486,6 +486,34 @@ export default function FormEdit() {
             </div>
           </CollapsibleCard>
 
+          <CollapsibleCard title={t('formEdit.access')} icon={<Lock className="w-4 h-4" />}>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              <SettingRow
+                title={t('formEdit.requireLogin')}
+                desc={onceLocked ? t('formEdit.requireLoginDescLocked') : t('formEdit.requireLoginDesc')}
+                control={
+                  <Toggle
+                    label={t('formEdit.requireLogin')}
+                    checked={form.require_login}
+                    disabled={onceLocked}
+                    onChange={(v) => toggleSetting('require_login', v)}
+                  />
+                }
+              />
+              <SettingRow
+                title={t('formEdit.showInHistory')}
+                desc={form.show_in_history === false ? t('formEdit.showInHistoryDescOff') : t('formEdit.showInHistoryDescOn')}
+                control={
+                  <Toggle
+                    label={t('formEdit.showInHistory')}
+                    checked={form.show_in_history !== false}
+                    onChange={(v) => setForm((prev) => ({ ...prev, show_in_history: v }))}
+                  />
+                }
+              />
+            </div>
+          </CollapsibleCard>
+
           <CollapsibleCard title={t('formEdit.design')} icon={<Palette className="w-4 h-4" />} open={designOpen} onToggle={setDesignOpen}>
             <div ref={designRef} className="space-y-5">
               <div>
@@ -495,8 +523,8 @@ export default function FormEdit() {
                     type="button"
                     onClick={() => setForm((prev) => ({ ...prev, display_style: 'card' }))}
                     className={`relative rounded-xl border-2 overflow-hidden transition-all ${(form.display_style || 'card') === 'card'
-                        ? 'border-primary ring-2 ring-primary/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                      ? 'border-primary ring-2 ring-primary/20'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                       }`}
                   >
                     <img src="/preview-form.png" alt="Card style" className="w-full h-32 object-cover" />
@@ -511,8 +539,8 @@ export default function FormEdit() {
                     type="button"
                     onClick={() => setForm((prev) => ({ ...prev, display_style: 'quiz' }))}
                     className={`relative rounded-xl border-2 overflow-hidden transition-all ${form.display_style === 'quiz'
-                        ? 'border-primary ring-2 ring-primary/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                      ? 'border-primary ring-2 ring-primary/20'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                       }`}
                   >
                     <img src="/preview-quiz.png" alt="Quiz style" className="w-full h-32 object-cover" />
@@ -548,34 +576,6 @@ export default function FormEdit() {
                 </div>
                 {errors.theme_color && <p className="field-error">{errors.theme_color}</p>}
               </div>
-            </div>
-          </CollapsibleCard>
-
-          <CollapsibleCard title={t('formEdit.access')} icon={<Lock className="w-4 h-4" />}>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              <SettingRow
-                title={t('formEdit.requireLogin')}
-                desc={onceLocked ? t('formEdit.requireLoginDescLocked') : t('formEdit.requireLoginDesc')}
-                control={
-                  <Toggle
-                    label={t('formEdit.requireLogin')}
-                    checked={form.require_login}
-                    disabled={onceLocked}
-                    onChange={(v) => toggleSetting('require_login', v)}
-                  />
-                }
-              />
-              <SettingRow
-                title={t('formEdit.showInHistory')}
-                desc={form.show_in_history === false ? t('formEdit.showInHistoryDescOff') : t('formEdit.showInHistoryDescOn')}
-                control={
-                  <Toggle
-                    label={t('formEdit.showInHistory')}
-                    checked={form.show_in_history !== false}
-                    onChange={(v) => setForm((prev) => ({ ...prev, show_in_history: v }))}
-                  />
-                }
-              />
             </div>
           </CollapsibleCard>
 

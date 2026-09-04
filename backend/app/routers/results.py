@@ -3,7 +3,7 @@ from io import BytesIO
 from datetime import datetime
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -457,7 +457,7 @@ def _safe_cell(value):
     return value
 
 
-def _export_columns(form: Form, subs: list[Submission], db: Session):
+def _export_columns(form: Form, subs: list[Submission], db: Session, base_url: str | None = None):
     """Build dynamic export: one column per question + Dikirim/Skor/Status."""
     questions = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).order_by(Question.order_index).all()
     q_ids = [q.id for q in questions]
@@ -479,6 +479,16 @@ def _export_columns(form: Form, subs: list[Submission], db: Session):
         if text:
             ao_by_answer.setdefault(ao.answer_id, []).append(text)
 
+    def _file_link(path: str | None) -> str:
+        """Path relatif → URL penuh agar bisa diklik di Excel."""
+        if not path:
+            return ""
+        if path.startswith("http://") or path.startswith("https://"):
+            return path
+        if base_url:
+            return f"{base_url.rstrip('/')}/uploads/{path.lstrip('/')}"
+        return path
+
     q_by_id = {q.id: q for q in questions}
     answer_map: dict[tuple[int, int], str] = {}
     for a in answers:
@@ -488,7 +498,7 @@ def _export_columns(form: Form, subs: list[Submission], db: Session):
         if q.type in (QuestionType.multiple_choice, QuestionType.checkbox, QuestionType.dropdown):
             answer_map[(a.submission_id, a.question_id)] = ", ".join(ao_by_answer.get(a.id, []))
         elif q.type == QuestionType.file_upload:
-            answer_map[(a.submission_id, a.question_id)] = a.answer_file or _strip_html(a.answer_text) or ""
+            answer_map[(a.submission_id, a.question_id)] = _file_link(a.answer_file) or _strip_html(a.answer_text) or ""
         else:
             answer_map[(a.submission_id, a.question_id)] = _strip_html(a.answer_text) or ""
 
@@ -504,6 +514,7 @@ def _export_columns(form: Form, subs: list[Submission], db: Session):
 
 @router.get("/forms/{form_id}/export/excel")
 def export_excel(
+    request: Request,
     form: Form = Depends(verify_form_owner),
     db: Session = Depends(get_db),
     status: str | None = Query(None, alias="status"),
@@ -547,7 +558,8 @@ def export_excel(
 
     subs = q.all()
 
-    _, headers, rows = _export_columns(form, subs, db)
+    base_url = str(request.base_url).rstrip("/")
+    questions, headers, rows = _export_columns(form, subs, db, base_url)
 
     wb = Workbook()
     ws = wb.active
@@ -555,6 +567,20 @@ def export_excel(
     ws.append(headers)
     for row in rows:
         ws.append(row)
+
+    # Soal file_upload → hyperlink klikable (display = nama file, target = URL
+    # penuh). Excel render biru-underline; user klik langsung buka file.
+    file_col_idx = {i for i, qq in enumerate(questions) if qq.type == QuestionType.file_upload}
+    link_font = Font(color="0563C1", underline="single")
+    for row in ws.iter_rows(min_row=2, max_row=1 + len(rows)):
+        for i in file_col_idx:
+            cell = row[i]
+            url = cell.value
+            if isinstance(url, str) and url.startswith(("http://", "https://")):
+                fname = url.rsplit("/", 1)[-1] or "Lihat File"
+                cell.value = fname
+                cell.hyperlink = url
+                cell.font = link_font
 
     # Styling: header di-highlight (fill primary, teks putih tebal) + border tipis
     # di semua sel + wrap text, supaya tabel terbaca jelas walau teks panjang.
