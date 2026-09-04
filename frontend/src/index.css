@@ -230,6 +230,13 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   pointer-events: none;
 }
 
+/* AI overlay: shimmer bar gerak bolak-balik (elegan, bukan spinner linear) */
+@keyframes overlay-shimmer {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(200%); }
+  100% { transform: translateX(-100%); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,

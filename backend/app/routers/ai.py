@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.ai_generation import AiGeneration
-from app.models.form import Form, FormType, SubmissionLimit, ScoringMode
+from app.models.form import DisplayStyle, Form, FormType, SubmissionLimit, ScoringMode
 from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
 from app.models.user import User
@@ -110,7 +110,7 @@ def ai_generate(
 
     try:
         raw, model_used = call_gemini(build_user_text(title, description, type, prompt, refs))
-        draft = sanitize_draft(raw, type)
+        draft = sanitize_draft(raw, type, prompt)
     except AiNotConfigured:
         raise HTTPException(status_code=503, detail="Fitur AI belum dikonfigurasi server. Hubungi admin.")
     except AiFailed as e:
@@ -119,7 +119,8 @@ def ai_generate(
     db.add(AiGeneration(user_id=user.id, created_at=now_wib()))
     db.commit()
     left = AI_DAILY_LIMIT - (used + 1)
-    return {"draft": draft, "model": model_used, "remaining": max(0, left), "limit": AI_DAILY_LIMIT}
+    ignored = draft.pop("ignored", []) if isinstance(draft, dict) else []
+    return {"draft": draft, "model": model_used, "remaining": max(0, left), "limit": AI_DAILY_LIMIT, "ignored": ignored}
 
 
 @router.post("/ai/accept", status_code=201, response_model=AiAcceptResponse)
@@ -138,8 +139,8 @@ def ai_accept(body: AiAcceptRequest, user: User = Depends(get_current_user), db:
                     )
 
     settings = _apply_setting_chain(
-        {"is_restricted": False, "submission_limit": body.settings.submission_limit, "require_login": body.settings.require_login},
-        Form(is_restricted=False, submission_limit=body.settings.submission_limit),
+        {"is_restricted": body.settings.is_restricted, "submission_limit": body.settings.submission_limit, "require_login": body.settings.require_login},
+        Form(is_restricted=body.settings.is_restricted, submission_limit=body.settings.submission_limit),
     )
     now = now_wib()
     form = Form(
@@ -147,12 +148,22 @@ def ai_accept(body: AiAcceptRequest, user: User = Depends(get_current_user), db:
         title=body.title,
         description=body.description,
         type=_parse_enum(body.type, FormType, "type"),
+        display_style=_parse_enum(body.settings.display_style, DisplayStyle, "display_style"),
         require_login=settings["require_login"],
         submission_limit=_parse_enum(settings["submission_limit"], SubmissionLimit, "submission_limit"),
-        scoring_mode=ScoringMode.auto,
+        scoring_mode=_parse_enum(body.settings.scoring_mode if is_quiz else "auto", ScoringMode, "scoring_mode"),
         timer_seconds=body.settings.timer_minutes * 60 if body.settings.timer_minutes else None,
         shuffle_questions=body.settings.shuffle_questions,
         shuffle_options=body.settings.shuffle_options,
+        show_leaderboard=body.settings.show_leaderboard if is_quiz else False,
+        is_restricted=settings["is_restricted"],
+        show_in_history=body.settings.show_in_history,
+        reveal_score=body.settings.reveal_score,
+        reveal_answers=body.settings.reveal_answers,
+        theme_color=body.settings.theme_color,
+        thank_you_message=body.settings.thank_you_message,
+        starts_at=body.settings.starts_at,
+        ends_at=body.settings.ends_at,
         short_code=_generate_short_code(db),
         created_at=now,
         updated_at=now,

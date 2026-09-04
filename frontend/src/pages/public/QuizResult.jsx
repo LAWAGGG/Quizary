@@ -372,7 +372,7 @@ export default function QuizResult() {
             <Button
               variant="secondary"
               onClick={() => setShowReview(!showReview)}
-              className="w-full mb-4"
+              className="w-full mb-3"
               icon={showReview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             >
               {showReview ? t('quizResult.hideReview') : t('quizResult.viewReview')}
@@ -435,7 +435,7 @@ export default function QuizResult() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5 }}
-            className="mt-6"
+            className="mt-3"
           >
             <Button
               onClick={() => navigate(`/q/${formCode}`)}

@@ -437,16 +437,6 @@ export default function FormList() {
         </>
       )}
 
-      {/* FAB: buat form dengan AI */}
-      <button
-        type="button"
-        onClick={() => navigate('/forms/ai')}
-        title={t('forms.aiFab')}
-        aria-label={t('forms.aiFab')}
-        className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-primary hover:bg-primary-700 text-white shadow-lift flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-      >
-        <img src="/Quizary_Logo_White.png" alt="" className="w-7 h-7 object-contain" />
-      </button>
     </div>
   )
 }

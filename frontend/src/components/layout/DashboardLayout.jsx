@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, ClipboardList, ListChecks, UserRound, Settings, X, Sun, Moon } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, ListChecks, UserRound, Settings, X, Sun, Moon, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
@@ -39,6 +39,37 @@ function BottomNav({ hidden }) {
         })}
       </div>
     </nav>
+  )
+}
+
+/* ── FAB: buat form dengan AI (hanya di /forms) ────────────────────
+   Ikut status bottom nav mobile: nav tampil -> di atas bar,
+   nav sembunyi (scroll) -> turun ke pojok kanan. Durasi samakan nav. */
+function AiFab({ navHidden }) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const location = useLocation()
+  if (location.pathname !== '/forms') return null
+  return (
+    <button
+      type="button"
+      onClick={() => navigate('/forms/ai')}
+      title={t('forms.aiFab')}
+      aria-label={t('forms.aiFab')}
+      className={`group fixed right-6 z-40 w-14 h-14 rounded-[18px] rounded-br-[6px] bg-primary text-white flex items-center justify-center
+        shadow-[0_8px_24px_-10px_rgba(108,92,231,0.55)] hover:shadow-[0_14px_36px_-10px_rgba(108,92,231,0.70),0_0_32px_rgba(139,124,246,0.45)]
+        hover:bg-primary-600 hover:scale-[1.06] active:scale-[0.96]
+        transition-all duration-300 ease-out overflow-visible
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-paper
+        ${navHidden ? 'bottom-6' : 'bottom-[4.5rem]'} lg:bottom-6`}
+    >
+      <span aria-hidden="true" className="pointer-events-none absolute -inset-3 rounded-[26px] bg-primary/30 blur-xl opacity-0 group-hover:opacity-70 group-focus-visible:opacity-70 transition-opacity duration-500" />
+      <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[18px] rounded-br-[6px] overflow-hidden">
+        <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full group-focus-visible:translate-x-full transition-transform duration-700 ease-out bg-gradient-to-r from-transparent via-white/25 to-transparent -skew-x-12" />
+      </span>
+      <img src="/Quizary_Logo_White.png" alt="" className="relative w-7 h-7 object-contain transition-transform duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:rotate-[360deg] group-hover:scale-110 group-focus-visible:rotate-[360deg] group-focus-visible:scale-110 drop-shadow-[0_1px_6px_rgba(0,0,0,0.2)] group-hover:drop-shadow-[0_3px_10px_rgba(0,0,0,0.28)]" />
+      <span aria-hidden="true" className="pointer-events-none absolute -bottom-[5px] right-[2.5px] w-4 h-4 rotate-45 -z-10 rounded-[4px] bg-primary group-hover:bg-primary-600 group-focus-visible:bg-primary-600 transition-colors shadow-[0_4px_12px_rgba(108,92,231,0.35)] group-hover:shadow-[0_6px_16px_rgba(108,92,231,0.45)]" />
+    </button>
   )
 }
 
@@ -313,6 +344,7 @@ export default function DashboardLayout() {
 
       {/* Bottom nav: mobile only, same hide/show as navbar */}
       <BottomNav hidden={navHidden} />
+      <AiFab navHidden={navHidden} />
     </div>
   )
 }

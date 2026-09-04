@@ -2,8 +2,10 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.schemas.form import _title_has_text
+from app.schemas.form import FlexDatetime, _title_has_text
 from app.schemas.question import QuestionCreate
+
+HEX_COLOR = r"^#[0-9A-Fa-f]{6}$"
 
 
 class AiSettings(BaseModel):
@@ -12,11 +14,29 @@ class AiSettings(BaseModel):
     timer_minutes: Optional[int] = Field(None, ge=1, le=1440)
     require_login: bool = False
     submission_limit: str = "unlimited"
+    # non-file extras (diatur AI via prompt, tanpa upload)
+    show_leaderboard: bool = False
+    is_restricted: bool = False
+    show_in_history: bool = True
+    reveal_score: bool = True
+    reveal_answers: bool = True
+    display_style: str = "card"
+    scoring_mode: str = "auto"
+    theme_color: Optional[str] = Field(None, pattern=HEX_COLOR)
+    thank_you_message: Optional[str] = Field(None, max_length=2000)
+    starts_at: Optional[FlexDatetime] = None
+    ends_at: Optional[FlexDatetime] = None
 
     @model_validator(mode="after")
     def validate_enums(self):
         if self.submission_limit not in ("unlimited", "once"):
             raise ValueError("submission_limit harus 'unlimited' atau 'once'")
+        if self.display_style not in ("card", "quiz"):
+            raise ValueError("display_style harus 'card' atau 'quiz'")
+        if self.scoring_mode not in ("auto", "manual"):
+            raise ValueError("scoring_mode harus 'auto' atau 'manual'")
+        if self.starts_at and self.ends_at and self.starts_at >= self.ends_at:
+            raise ValueError("starts_at harus sebelum ends_at")
         return self
 
 
@@ -69,6 +89,17 @@ class AiDraftSettings(BaseModel):
     timer_minutes: Optional[int] = None
     require_login: bool = False
     submission_limit: str = "unlimited"
+    show_leaderboard: bool = False
+    is_restricted: bool = False
+    show_in_history: bool = True
+    reveal_score: bool = True
+    reveal_answers: bool = True
+    display_style: str = "card"
+    scoring_mode: str = "auto"
+    theme_color: Optional[str] = None
+    thank_you_message: Optional[str] = None
+    starts_at: Optional[str] = None
+    ends_at: Optional[str] = None
 
 
 class AiGenerateResponse(BaseModel):
@@ -76,6 +107,7 @@ class AiGenerateResponse(BaseModel):
     model: str = ""
     remaining: int
     limit: int
+    ignored: list[str] = []
 
 
 class AiQuotaResponse(BaseModel):

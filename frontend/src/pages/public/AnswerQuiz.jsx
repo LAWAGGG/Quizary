@@ -1138,7 +1138,7 @@ export default function AnswerQuiz() {
             transition={{ duration: 0.2 }}
           >
             {current && (
-              <div className="max-w-lg mx-auto">
+              <div className="max-w-3xl mx-auto">
                 <div className="flex items-start justify-between gap-3 mb-1">
                   <div className="flex items-center gap-2">
                     {current.is_required === false && (

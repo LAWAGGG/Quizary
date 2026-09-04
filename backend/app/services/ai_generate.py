@@ -4,9 +4,11 @@ Alur: prompt + file referensi (teks) -> Gemini (JSON mode) -> draf yang
 sudah disanitasi. Draf TIDAK langsung jadi form — creator mereview lalu
 POST /api/ai/accept yang memvalidasi ulang memakai skema existing.
 """
+import html
 import io
 import json
 import logging
+import re
 
 import httpx
 
@@ -88,15 +90,32 @@ Bentuk:
    "is_required": true, "points": 1,
    "options": [{"option_text": "teks opsi", "is_correct": true}],
    "password_keyword": null}
-]}], "settings": {"shuffle_questions": false, "shuffle_options": false, "timer_minutes": null}}
+]}], "settings": {"shuffle_questions": false, "shuffle_options": false, "timer_minutes": null, "require_login": false, "submission_limit": "unlimited", "show_leaderboard": false, "is_restricted": false, "show_in_history": true, "reveal_score": true, "reveal_answers": true, "display_style": "card", "scoring_mode": "auto", "theme_color": null, "thank_you_message": null, "starts_at": null, "ends_at": null}}
 
 Aturan:
 - options HANYA untuk multiple_choice/checkbox/dropdown (2-4 opsi); tipe lain: options [] dan password_keyword null.
 - password_keyword HANYA untuk type password (isi kata sandinya), selain itu null.
 - Quiz: multiple_choice WAJIB tepat 1 option is_correct=true; checkbox boleh >1; timer_minutes WAJIB angka 1-1440.
-- Bukan quiz: timer_minutes null, is_correct semua false.
-- Maksimal 10 sections, total maksimal 30 soal. question_text ringkas, tanpa HTML.
+- Bukan quiz: timer_minutes null, is_correct semua false, show_leaderboard false, scoring_mode auto.
+- submission_limit: "unlimited" atau "once" (once = wajib login, auto-coerce).
+- display_style: "card" (formal) atau "quiz" (gamified satu soal per layar).
+- scoring_mode: "auto" atau "manual" (hanya bermakna untuk quiz).
+- theme_color: hex "#RRGGBB" atau null. thank_you_message: ringkas atau null.
+- starts_at/ends_at: ISO "YYYY-MM-DDTHH:MM:SS" atau null; starts_at harus sebelum ends_at.
+- question_text/option_text = teks polos, TANPA tag HTML (HTML mentah tampil sebagai teks, bukan render).
+- Rumus/simbol: tulis LaTeX dengan delimiter \(...\) inline atau \[...\] display. JANGAN art Unicode (√½) dan JANGAN ejaan kata ("akar kuadrat dari").
+- Kode: fence ```bahasa ... ``` (satu blok per snippet, bahasa opsional: python, javascript, java, sql, cpp, html). Kode inline: `satu backtick`.
+- Link: [teks](https://...) — hanya http(s); jangan link lain.
+- Maksimal 10 sections, total maksimal 30 soal. question_text ringkas.
 """ % (", ".join(QUESTION_TYPES))
+
+
+# prompt -> label Indonesia untuk fitur yang TIDAK didukung AI
+# (banner & kategori tak pernah bisa; sisanya "diabaikan" bila AI tak menyetelnya).
+IGNORED_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("banner", ("banner", "cover", "gambar header", "header image")),
+    ("kategori", ("kategori", "category", "kelompok form")),
+)
 
 
 def build_user_text(title: str, description: str | None, form_type: str, prompt: str, refs: list[tuple[str, str]]) -> str:
@@ -118,6 +137,55 @@ def _gemini_models() -> list[str]:
     return list(dict.fromkeys(models)) or ["gemini-3.6-flash"]
 
 
+def _repair_json_escapes(text: str) -> str:
+    """Perbaiki backslash LaTeX yang tak di-escape Gemini (contoh \\( \\frac).
+
+    JSON mode kadang mengembalikan perintah LaTeX mentah sehingga json.loads
+    gagal (invalid \\escape) atau diam-diam korup (\\f jadi formfeed, \\t jadi
+    tab). Aturan: perintah/delimiter LaTeX (\\frac, \\neq, \\(, ..., dikenali
+    via _bfnrt_is_latex + huruf/paren/bracket) -> backslash digandakan;
+    escape JSON valid (\\", \\\\, \\/, \\uXXXX, \\n/\\t/\\b/\\f/\\r yang bukan
+    perintah) dibiarkan. Idempotent untuk output yang sudah benar.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch != "\\" or i + 1 >= n:
+            out.append(ch)
+            i += 1
+            continue
+        nxt = text[i + 1]
+        if nxt in '"\\/':
+            out.append(text[i:i + 2])
+            i += 2
+            continue
+        if nxt == "u":
+            hexpart = text[i + 2:i + 6]
+            if len(hexpart) == 4 and all(c in "0123456789abcdefABCDEF" for c in hexpart):
+                out.append(text[i:i + 6])
+                i += 6
+            else:  # \usepackage, \underbrace, ...
+                out.append("\\\\")
+                i += 1
+            continue
+        if nxt in "bfnrt":
+            if _bfnrt_is_latex(nxt, text[i + 1:]):
+                out.append("\\\\")  # \neq \frac \times \right ... (LaTeX)
+                i += 1
+            else:
+                out.append(text[i:i + 2])  # escape JSON asli (\nbaru, \ttab, ...)
+                i += 2
+            continue
+        if nxt.isalpha() or nxt in "()[]":
+            out.append("\\\\")  # perintah/delimiter LaTeX
+            i += 1
+            continue
+        out.append(text[i:i + 2])
+        i += 2
+    return "".join(out)
+
+
 def _parse_gemini_text(data: dict) -> dict:
     if data.get("promptFeedback", {}).get("blockReason"):
         raise AiFailed("Prompt ditolak filter keamanan AI. Coba ubah kata-katanya.")
@@ -126,7 +194,11 @@ def _parse_gemini_text(data: dict) -> dict:
     try:
         parsed = json.loads(text)
     except (ValueError, TypeError):
-        raise AiFailed("AI gagal menyusun draf. Coba generate ulang.")
+        try:  # ponytail: 1x repair LaTeX mentah sebelum menyerah (hemat retry)
+            parsed = json.loads(_repair_json_escapes(text))
+            logger.info("gemini: JSON diperbaiki via escape-repair")
+        except (ValueError, TypeError):
+            raise AiFailed("AI gagal menyusun draf. Coba generate ulang.")
     if not isinstance(parsed, dict):
         raise AiFailed("AI gagal menyusun draf. Coba generate ulang.")
     return parsed
@@ -189,6 +261,95 @@ def call_gemini(user_text: str) -> tuple[dict, str]:
     raise AiFailed("AI tidak merespons. Periksa koneksi lalu coba lagi.")
 
 
+# Konvensi rich-lite yang boleh dipakai AI di question_text/option_text:
+# rumus \(...\) / \[...\] (KaTeX render di client), fence ```lang untuk kode,
+# [teks](https://...) untuk link. Selain itu = teks polos.
+# Pembuka fence valid: ``` + token bahasa + TERMINATOR (spasi/newline/backtick).
+# Lookahead mencegah lang terpotong ("c++x..." tak jadi lang "c++") dan
+# karakter asing ("evil\"...") — keduanya gagal jadi fence = teks biasa.
+_FENCE_RE = re.compile(r"```([A-Za-z0-9+#_-]{0,20})(?=[ \t\n`])[ \t]*\n?(.*?)```", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"`([^`\n]{1,500})`")
+_LINK_RE = re.compile(r"\[([^\]\n]{1,300})\]\(([^)\s]{1,500})\)")
+_URL_OK_RE = re.compile(r"^https?://[^\s<>\"]+$", re.IGNORECASE)
+_LANG_OK_RE = re.compile(r"^[A-Za-z0-9+#_-]{1,20}$")
+
+# Perintah LaTeX umum berawalan huruf escape JSON (b/f/n/r/t) — dipakai untuk
+# membedakan "\neq" (LaTeX) dari "\n..." + kata (newline asli, mis. "\nbaru").
+# Cocok hanya bila diikuti batas kata; sisanya dianggap escape JSON.
+_LATEX_BFNRT = {
+    "b": ("binom", "boldsymbol", "bigodot", "bigoplus", "bigotimes", "bigg", "bigl", "bigm", "bigr", "big", "bmod", "bot", "bowtie", "breve", "bullet", "bar", "box"),
+    "f": ("frac", "fbox"),
+    "n": ("notin", "nexists", "nabla", "neq", "ni"),
+    "r": ("rightarrow", "rfloor", "rceil", "rangle", "right"),
+    "t": ("triangle", "theta", "tilde", "times", "tau", "top", "to"),
+}
+
+
+def _bfnrt_is_latex(letter: str, rest: str) -> bool:
+    for cmd in _LATEX_BFNRT[letter]:
+        if rest.startswith(cmd) and (len(rest) == len(cmd) or not rest[len(cmd)].isalpha()):
+            return True
+    return False
+
+# headroom untuk tag yang disisipkan konverter (batas kolom 5000/2000)
+_RICH_HEADROOM = 500
+
+
+def _inline_rich(esc: str, parts: list[str]) -> str:
+    """Inline code + link di atas teks yang SUDAH di-escape. Tanpa placeholder
+    bersarang: tiap temuan langsung jadi placeholder bernomor."""
+
+    def inline_sub(m: re.Match) -> str:
+        parts.append(f"<code>{m.group(1)}</code>")
+        return f"\x00{len(parts) - 1}\x00"
+
+    esc = _INLINE_CODE_RE.sub(inline_sub, esc)
+
+    def link_sub(m: re.Match) -> str:
+        url = html.unescape(m.group(2)).strip()
+        if not _URL_OK_RE.match(url):
+            return m.group(0)  # skema asing (javascript:/data:) = biarkan teks
+        parts.append(f'<a href="{html.escape(url, quote=True)}">{m.group(1)}</a>')
+        return f"\x00{len(parts) - 1}\x00"
+
+    esc = _LINK_RE.sub(link_sub, esc)
+    return esc
+
+
+def _rich_lite_to_html(text: str) -> str:
+    """Ubah konvensi rich-lite AI -> HTML allowlist frontend.
+
+    Aman by construction: tiap segmen teks di-escape dulu, lalu hanya tag yang
+    dibuat fungsi ini yang disisipkan (<div>/<code>/<a href http(s)>).
+    HTML mentah dari AI TIDAK pernah passthrough (tampil sebagai teks).
+    Delimiter LaTeX dibiarkan — KaTeX auto-render di client (pre/div kode
+    dikecualikan render via ignoredTags).
+    """
+    parts: list[str] = []
+    out: list[str] = []
+    pos = 0
+    for m in _FENCE_RE.finditer(text):
+        out.append(_inline_rich(html.escape(text[pos:m.start()], quote=True), parts))
+        lang = (m.group(1) or "").strip().lower() or "plain"
+        if not _LANG_OK_RE.match(lang):
+            lang = "plain"
+        code = m.group(2).strip("\n")[:4000]
+        parts.append(
+            '<div class="ql-code-block-container">'
+            f'<div class="ql-code-block" data-language="{lang}">'
+            f"{html.escape(code, quote=True)}"
+            "</div></div>"
+        )
+        out.append(f"\x00{len(parts) - 1}\x00")
+        pos = m.end()
+    out.append(_inline_rich(html.escape(text[pos:], quote=True), parts))
+    esc = "".join(out)
+    # kembalikan potongan (terdalam dulu agar placeholder bersarang aman)
+    for i in range(len(parts) - 1, -1, -1):
+        esc = esc.replace(f"\x00{i}\x00", parts[i])
+    return esc
+
+
 def _coerce_question(raw: dict) -> dict | None:
     """Bersihkan 1 soal AI -> dict valid QuestionCreate, atau None bila sampah."""
     if not isinstance(raw, dict):
@@ -197,7 +358,7 @@ def _coerce_question(raw: dict) -> dict | None:
     text = str(raw.get("question_text") or "").strip()
     if not q_type or not text:
         return None
-    text = text[:5000]
+    text = _rich_lite_to_html(text[:5000 - _RICH_HEADROOM])
     opts: list[dict] = []
     if q_type in OPTION_TYPES:
         for o in (raw.get("options") or [])[:MAX_OPTIONS]:
@@ -205,7 +366,7 @@ def _coerce_question(raw: dict) -> dict | None:
                 continue
             t = str(o.get("option_text") or "").strip()
             if t:
-                opts.append({"option_text": t[:2000], "is_correct": bool(o.get("is_correct"))})
+                opts.append({"option_text": _rich_lite_to_html(t[:2000 - _RICH_HEADROOM]), "is_correct": bool(o.get("is_correct"))})
         if not opts:
             return None
     try:
@@ -227,7 +388,7 @@ def _coerce_question(raw: dict) -> dict | None:
     return q.model_dump()
 
 
-def sanitize_draft(raw: dict, form_type: str) -> dict:
+def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
     """Bersihkan output AI -> draf valid. Raise AiFailed bila tak ada soal layak."""
     sections: list[dict] = []
     total = 0
@@ -254,6 +415,46 @@ def sanitize_draft(raw: dict, form_type: str) -> dict:
     except (TypeError, ValueError):
         timer = None
     sub = settings.get("submission_limit")
+    is_quiz_type = form_type == "quiz"
+
+    def _hex(v):
+        s = str(v or "").strip()
+        if len(s) == 7 and s.startswith("#"):
+            try:
+                int(s[1:], 16)
+                return s.upper()
+            except ValueError:
+                return None
+        return None
+
+    def _dt(v):
+        # ponytail: tanggal AI tak tentu formatnya — gagal parse = null, bukan gagal generate.
+        s = str(v or "").strip()
+        if not s:
+            return None
+        try:
+            from app.schemas.form import _parse_datetime
+
+            _parse_datetime(s)
+            return s
+        except Exception:
+            return None
+
+    disp = settings.get("display_style")
+    disp = disp if disp in ("card", "quiz") else "card"
+    scoring = settings.get("scoring_mode")
+    scoring = scoring if scoring in ("auto", "manual") else "auto"
+    thank = str(settings.get("thank_you_message") or "").strip()[:2000] or None
+    starts = _dt(settings.get("starts_at"))
+    ends = _dt(settings.get("ends_at"))
+    if starts and ends:
+        try:
+            from app.schemas.form import _parse_datetime
+
+            if _parse_datetime(starts) >= _parse_datetime(ends):
+                starts = ends = None
+        except Exception:
+            starts = ends = None
     draft = {
         "sections": sections,
         "settings": {
@@ -262,9 +463,60 @@ def sanitize_draft(raw: dict, form_type: str) -> dict:
             "timer_minutes": timer,
             "require_login": bool(settings.get("require_login", False)),
             "submission_limit": sub if sub in ("unlimited", "once") else "unlimited",
+            "show_leaderboard": bool(settings.get("show_leaderboard", False)) and is_quiz_type,
+            "is_restricted": bool(settings.get("is_restricted", False)),
+            "show_in_history": bool(settings.get("show_in_history", True)),
+            "reveal_score": bool(settings.get("reveal_score", True)),
+            "reveal_answers": bool(settings.get("reveal_answers", True)),
+            "display_style": disp,
+            "scoring_mode": scoring if is_quiz_type else "auto",
+            "theme_color": _hex(settings.get("theme_color")),
+            "thank_you_message": thank,
+            "starts_at": starts,
+            "ends_at": ends,
         },
     }
     if form_type == "quiz" and timer is None:
         # Jangan diam-diam tanpa timer (publish quiz wajib timer) — creator regenerate.
         raise AiFailed("AI tidak menyertakan timer untuk kuis. Coba generate ulang.")
+    draft["ignored"] = detect_ignored(prompt_text, draft["settings"])
     return draft
+
+
+def detect_ignored(prompt_text: str, settings: dict) -> list[str]:
+    """Minta user menyebut fitur X tapi AI tak menyetelnya -> label untuk warning box.
+
+    Murni heuristik substring (ID+EN), tanpa panggilan AI tambahan (hemat kuota).
+    """
+    p = (prompt_text or "").lower()
+    out: list[str] = []
+
+    def has(*words: str) -> bool:
+        return any(w in p for w in words)
+
+    for label, words in IGNORED_KEYWORDS:
+        if has(*words):
+            out.append(label)
+    s = settings or {}
+    if has("leaderboard", "peringkat", "papan skor", "ranking") and not s.get("show_leaderboard"):
+        out.append("leaderboard")
+    if has("warna", "theme", "colour", "color", "ungu", "biru", "merah", "hijau") and not s.get("theme_color"):
+        out.append("warna tema")
+    if has("jadwal", "dibuka", "ditutup", "berakhir", "deadline", "batas waktu", "tanggal mulai", "tanggal selesai") and not (s.get("starts_at") or s.get("ends_at")):
+        out.append("jadwal")
+    if has("terima kasih", "thank you", "pesan penutup", "closing message") and not s.get("thank_you_message"):
+        out.append("pesan terima kasih")
+    if has("tampilan kuis", "gamified", "satu soal per layar", "mode kuis") and s.get("display_style") == "card":
+        out.append("tampilan")
+    if has("skor manual", "bobot nilai", "penilaian manual", "manual scoring") and s.get("scoring_mode") == "auto":
+        out.append("mode penilaian")
+    if has("sembunyikan skor", "sembunyikan nilai", "tanpa skor") and s.get("reveal_score"):
+        out.append("tampil skor")
+    if has("sembunyikan kunci", "sembunyikan jawaban", "tanpa pembahasan") and s.get("reveal_answers"):
+        out.append("tampil jawaban")
+    if has("sembunyikan dari riwayat", "tanpa riwayat") and s.get("show_in_history"):
+        out.append("riwayat")
+    if has("terbatas", "restricted", "hanya undangan") and not s.get("is_restricted"):
+        out.append("mode terbatas")
+    # dedupe, jaga urutan
+    return list(dict.fromkeys(out))

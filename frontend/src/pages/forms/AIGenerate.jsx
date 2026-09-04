@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Sparkles, RefreshCw, Check, X, FileText, Clock, Shuffle, Lock, ListChecks } from 'lucide-react'
+import { ArrowLeft, Sparkles, RefreshCw, Check, X, FileText, Clock, Shuffle, Lock, ListChecks, Trophy, EyeOff, CalendarDays, LayoutGrid, Info } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { stripTags } from '../../lib/sanitize'
-import { Button, Card, PageHeader, RichTextEditor, RichText, Textarea, Badge } from '../../components/ui'
+import { Button, Card, PageHeader, RichTextEditor, RichText, Textarea, Badge, Toggle, Select, Input, AiLoadingOverlay } from '../../components/ui'
 
 const humanizeType = (t) => (t || '').replace(/_/g, ' ')
 
@@ -34,6 +34,14 @@ function SettingChips({ settings }) {
   if (settings.shuffle_options) chips.push({ icon: <Shuffle className="w-3.5 h-3.5" />, label: t('aiGenerate.shuffleO') })
   if (settings.require_login) chips.push({ icon: <Lock className="w-3.5 h-3.5" />, label: t('aiGenerate.requireLogin') })
   chips.push({ icon: <ListChecks className="w-3.5 h-3.5" />, label: settings.submission_limit === 'once' ? t('aiGenerate.limitOnce') : t('aiGenerate.limitUnlimited') })
+  if (settings.show_leaderboard) chips.push({ icon: <Trophy className="w-3.5 h-3.5" />, label: t('aiGenerate.leaderboard') })
+  if (settings.is_restricted) chips.push({ icon: <Lock className="w-3.5 h-3.5" />, label: t('aiGenerate.restricted') })
+  if (!settings.reveal_score) chips.push({ icon: <EyeOff className="w-3.5 h-3.5" />, label: t('aiGenerate.revealScore') })
+  if (!settings.reveal_answers) chips.push({ icon: <EyeOff className="w-3.5 h-3.5" />, label: t('aiGenerate.revealAnswers') })
+  if (settings.display_style === 'quiz') chips.push({ icon: <LayoutGrid className="w-3.5 h-3.5" />, label: t('aiGenerate.displayQuiz') })
+  if (settings.scoring_mode === 'manual') chips.push({ icon: <ListChecks className="w-3.5 h-3.5" />, label: t('aiGenerate.scoringManual') })
+  if (settings.theme_color) chips.push({ icon: <span className="w-3 h-3 rounded-full border border-black/10" style={{ backgroundColor: settings.theme_color }} />, label: settings.theme_color })
+  if (settings.starts_at || settings.ends_at) chips.push({ icon: <CalendarDays className="w-3.5 h-3.5" />, label: [settings.starts_at?.slice(0, 10), settings.ends_at?.slice(0, 10)].filter(Boolean).join(' → ') })
   return (
     <div className="flex flex-wrap gap-2">
       {chips.map((c, i) => (
@@ -44,6 +52,36 @@ function SettingChips({ settings }) {
     </div>
   )
 }
+
+function IgnoredBox({ items }) {
+  const { t } = useTranslation()
+  if (!items?.length) return null
+  return (
+    <div className="rounded-xl border border-warn/30 bg-warn-soft dark:bg-warn-soft px-4 py-3 flex gap-2.5" role="status">
+      <Info className="w-4 h-4 text-warn shrink-0 mt-0.5" />
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-ink dark:text-gray-100">{t('aiGenerate.ignoredTitle')}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{t('aiGenerate.ignoredDesc')}</p>
+        <p className="text-xs font-medium text-ink dark:text-gray-200 mt-1">{items.join(' · ')}</p>
+      </div>
+    </div>
+  )
+}
+
+function SettingRow({ title, desc, control }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-2.5">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-ink dark:text-gray-100">{title}</p>
+        {desc && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{desc}</p>}
+      </div>
+      <div className="shrink-0">{control}</div>
+    </div>
+  )
+}
+
+// datetime-local butuh "YYYY-MM-DDTHH:MM"; backend kirim ISO detik — potong menit.
+const toInputDateTime = (v) => (v ? String(v).slice(0, 16) : '')
 
 export default function AIGenerate() {
   const { t } = useTranslation()
@@ -59,6 +97,7 @@ export default function AIGenerate() {
   const [files, setFiles] = useState([])
   const [quota, setQuota] = useState(null)
   const [draft, setDraft] = useState(null)
+  const [ignored, setIgnored] = useState([])
   const [modelUsed, setModelUsed] = useState('')
   const [generating, setGenerating] = useState(false)
   const [accepting, setAccepting] = useState(false)
@@ -68,7 +107,28 @@ export default function AIGenerate() {
     api.get('/ai/quota').then((r) => setQuota(r.data)).catch(() => {})
   }, [])
 
+  // Kunci scroll + cegah interaksi halaman saat overlay loading tampil.
+  useEffect(() => {
+    if (!generating && !accepting) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [generating, accepting])
+
   const questionCount = draft ? draft.sections.reduce((n, s) => n + s.questions.length, 0) : 0
+
+  const patchSettings = (patch) => setDraft((d) => (d ? { ...d, settings: { ...d.settings, ...patch } } : d))
+
+  // Mirror rantai backend: restricted ⇒ once ⇒ require_login.
+  const toggleDraft = (key, value) => {
+    if (key === 'is_restricted' && value) {
+      patchSettings({ is_restricted: true, submission_limit: 'once', require_login: true })
+    } else if (key === 'submission_limit' && value === 'once') {
+      patchSettings({ submission_limit: 'once', require_login: true })
+    } else {
+      patchSettings({ [key]: value })
+    }
+  }
 
   const pickFiles = (e) => {
     const chosen = Array.from(e.target.files || []).slice(0, MAX_FILES - files.length)
@@ -94,6 +154,7 @@ export default function AIGenerate() {
         timeout: 180000,
       })
       setDraft(res.data.draft)
+      setIgnored(res.data.ignored || [])
       setModelUsed(res.data.model || '')
       setQuota((q) => (q ? { ...q, remaining: res.data.remaining, used: q.limit - res.data.remaining } : q))
       setStep(2)
@@ -112,11 +173,18 @@ export default function AIGenerate() {
     setAccepting(true)
     setError('')
     try {
+      const s = draft.settings
       const res = await api.post('/ai/accept', {
         title,
         description: description || null,
         type: formType,
-        settings: draft.settings,
+        settings: {
+          ...s,
+          theme_color: s.theme_color || null,
+          thank_you_message: s.thank_you_message || null,
+          starts_at: s.starts_at || null,
+          ends_at: s.ends_at || null,
+        },
         sections: draft.sections,
       })
       toast.success(t('aiGenerate.accepted'))
@@ -236,6 +304,7 @@ export default function AIGenerate() {
                 )}
               </div>
               <SettingChips settings={draft.settings} />
+              <IgnoredBox items={ignored} />
               <div>
                 <span className="field-label">{t('aiGenerate.titleLabel')}</span>
                 <RichTextEditor value={title} onChange={setTitle} minHeight={60} />
@@ -243,6 +312,57 @@ export default function AIGenerate() {
               <div>
                 <span className="field-label">{t('aiGenerate.descLabel')}</span>
                 <RichTextEditor value={description} onChange={setDescription} minHeight={80} />
+              </div>
+            </Card>
+
+            <Card className="space-y-1 divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="pb-2">
+                <h3 className="font-display font-semibold text-ink dark:text-gray-100">{t('aiGenerate.settingsTitle')}</h3>
+                <p className="field-hint mt-0.5">{t('aiGenerate.settingsHint')}</p>
+              </div>
+              <SettingRow title={t('aiGenerate.shuffleQ')} control={<Toggle label={t('aiGenerate.shuffleQ')} checked={!!draft.settings.shuffle_questions} onChange={(v) => toggleDraft('shuffle_questions', v)} />} />
+              <SettingRow title={t('aiGenerate.shuffleO')} control={<Toggle label={t('aiGenerate.shuffleO')} checked={!!draft.settings.shuffle_options} onChange={(v) => toggleDraft('shuffle_options', v)} />} />
+              <SettingRow title={t('aiGenerate.requireLogin')} control={<Toggle label={t('aiGenerate.requireLogin')} checked={!!draft.settings.require_login} onChange={(v) => toggleDraft('require_login', v)} />} />
+              <SettingRow
+                title={t('aiGenerate.limitOnce')}
+                control={
+                  <Toggle
+                    label={t('aiGenerate.limitOnce')}
+                    checked={draft.settings.submission_limit === 'once'}
+                    onChange={(v) => toggleDraft('submission_limit', v ? 'once' : 'unlimited')}
+                  />
+                }
+              />
+              {formType === 'quiz' && (
+                <SettingRow title={t('aiGenerate.leaderboard')} control={<Toggle label={t('aiGenerate.leaderboard')} checked={!!draft.settings.show_leaderboard} onChange={(v) => toggleDraft('show_leaderboard', v)} />} />
+              )}
+              <SettingRow title={t('aiGenerate.restricted')} control={<Toggle label={t('aiGenerate.restricted')} checked={!!draft.settings.is_restricted} onChange={(v) => toggleDraft('is_restricted', v)} />} />
+              <SettingRow title={t('aiGenerate.history')} control={<Toggle label={t('aiGenerate.history')} checked={draft.settings.show_in_history !== false} onChange={(v) => toggleDraft('show_in_history', v)} />} />
+              <SettingRow title={t('aiGenerate.revealScore')} control={<Toggle label={t('aiGenerate.revealScore')} checked={draft.settings.reveal_score !== false} onChange={(v) => toggleDraft('reveal_score', v)} />} />
+              <SettingRow title={t('aiGenerate.revealAnswers')} control={<Toggle label={t('aiGenerate.revealAnswers')} checked={draft.settings.reveal_answers !== false} onChange={(v) => toggleDraft('reveal_answers', v)} />} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
+                <Select label={t('aiGenerate.displayStyle')} value={draft.settings.display_style || 'card'} onChange={(e) => toggleDraft('display_style', e.target.value)}>
+                  <option value="card">{t('aiGenerate.displayCard')}</option>
+                  <option value="quiz">{t('aiGenerate.displayQuiz')}</option>
+                </Select>
+                {formType === 'quiz' && (
+                  <Select label={t('aiGenerate.scoringMode')} value={draft.settings.scoring_mode || 'auto'} onChange={(e) => toggleDraft('scoring_mode', e.target.value)}>
+                    <option value="auto">{t('aiGenerate.scoringAuto')}</option>
+                    <option value="manual">{t('aiGenerate.scoringManual')}</option>
+                  </Select>
+                )}
+                <Input label={t('aiGenerate.themeColor')} value={draft.settings.theme_color || ''} onChange={(e) => toggleDraft('theme_color', e.target.value)} placeholder="#6C5CE7" helper={t('aiGenerate.themeColorHint')} />
+                <div className="flex items-end gap-2">
+                  <input type="color" value={/^#[0-9A-Fa-f]{6}$/.test(draft.settings.theme_color || '') ? draft.settings.theme_color : '#6C5CE7'} onChange={(e) => toggleDraft('theme_color', e.target.value)} aria-label={t('aiGenerate.themeColor')} className="w-11 h-11 rounded-xl cursor-pointer border border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-ink-900" />
+                  <div className="flex-1 min-w-0">
+                    <Input label={t('aiGenerate.startsAt')} type="datetime-local" value={toInputDateTime(draft.settings.starts_at)} onChange={(e) => toggleDraft('starts_at', e.target.value || null)} />
+                  </div>
+                </div>
+                <Input label={t('aiGenerate.endsAt')} type="datetime-local" value={toInputDateTime(draft.settings.ends_at)} onChange={(e) => toggleDraft('ends_at', e.target.value || null)} helper={t('aiGenerate.scheduleHint')} />
+              </div>
+              <div className="pt-3">
+                <span className="field-label">{t('aiGenerate.thankYou')}</span>
+                <RichTextEditor value={draft.settings.thank_you_message || ''} onChange={(html) => toggleDraft('thank_you_message', html)} minHeight={60} />
               </div>
             </Card>
 
@@ -262,7 +382,7 @@ export default function AIGenerate() {
                         {q.options.map((o, oi) => (
                           <li key={oi} className={`flex items-start gap-2 text-sm px-2.5 py-1.5 rounded-lg ${o.is_correct ? 'bg-correct-soft text-correct font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
                             {o.is_correct ? <Check className="w-4 h-4 shrink-0 mt-0.5" /> : <span className="w-4 h-4 shrink-0 mt-0.5 text-center leading-4 text-gray-300">·</span>}
-                            <span>{o.option_text}</span>
+                            <span className="flex-1 min-w-0 [&>p]:mb-0"><RichText html={o.option_text} className="rich-text" /></span>
                           </li>
                         ))}
                       </ul>
@@ -281,7 +401,7 @@ export default function AIGenerate() {
               <Button
                 variant="secondary"
                 size="lg"
-                onClick={() => { setStep(1); setError(''); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                onClick={() => { setStep(1); setIgnored([]); setError(''); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                 icon={<RefreshCw className="w-4 h-4" />}
                 title={t('aiGenerate.regenerateHint')}
               >
@@ -292,6 +412,7 @@ export default function AIGenerate() {
           </div>
         )}
       </motion.div>
+      <AiLoadingOverlay open={generating || accepting} mode={generating ? 'generate' : 'accept'} />
     </div>
   )
 }
