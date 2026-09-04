@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, ClipboardList, Search, Trophy, HelpCircle, FolderOpen, Settings2, MoreVertical, Pencil, FolderInput, Trash2, Sparkles } from 'lucide-react'
+import { Plus, ClipboardList, Search, Trophy, HelpCircle, FolderOpen, Settings2, MoreVertical, Pencil, FolderInput, Trash2 } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { stripTags } from '../../lib/sanitize'
@@ -436,6 +436,17 @@ export default function FormList() {
           )}
         </>
       )}
+
+      {/* FAB: buat form dengan AI */}
+      <button
+        type="button"
+        onClick={() => navigate('/forms/ai')}
+        title={t('forms.aiFab')}
+        aria-label={t('forms.aiFab')}
+        className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-primary hover:bg-primary-700 text-white shadow-lift flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+      >
+        <img src="/Quizary_Logo_White.png" alt="" className="w-7 h-7 object-contain" />
+      </button>
     </div>
   )
 }

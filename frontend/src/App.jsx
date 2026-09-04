@@ -11,6 +11,7 @@ import VerifyOtp from './pages/auth/VerifyOtp'
 import Dashboard from './pages/dashboard/Dashboard'
 import FormList from './pages/forms/FormList'
 import FormCreate from './pages/forms/FormCreate'
+import AIGenerate from './pages/forms/AIGenerate'
 import FormEdit from './pages/forms/FormEdit'
 import QuestionBuilder from './pages/forms/QuestionBuilder'
 import FormLanding from './pages/public/FormLanding'
@@ -57,6 +58,7 @@ function AppRoutes() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/forms" element={<FormList />} />
         <Route path="/forms/new" element={<FormCreate />} />
+        <Route path="/forms/ai" element={<AIGenerate />} />
         <Route path="/forms/:formId" element={<FormEdit />} />
         <Route path="/forms/:formId/questions" element={<QuestionBuilder />} />
         <Route path="/forms/:formId/results" element={<Results />} />
