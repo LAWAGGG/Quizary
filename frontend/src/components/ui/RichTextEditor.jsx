@@ -6,6 +6,7 @@ import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import 'quill/dist/quill.snow.css'
 import { Button } from './Button'
+import { RichText } from './RichText'
 
 Quill.register('modules/syntax', Syntax, true)
 
@@ -29,7 +30,7 @@ const FORMULA_TEMPLATES = [
   { label: 'lim', tex: '\\lim_{x \\to \\infty} f(x)' },
 ]
 
-export function RichTextEditor({ value = '', onChange, placeholder = '', compact = false, minHeight = 140 }) {
+export function RichTextEditor({ value = '', onChange, placeholder = '', compact = false, minHeight = 140, showPreview = true }) {
   const containerRef = useRef(null)
   const wrapperRef = useRef(null)
   const quillRef = useRef(null)
@@ -234,32 +235,35 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
 
   // Buka dialog formula. Bila seleksi editor berupa rumus $..$ / $$..$$,
   // isi draft dengannya supaya bisa diedit lalu diganti saat disimpan.
+  // Default selalu inline ($..$) agar menyatu satu baris dengan soal/opsi.
+  // Display ($$..$$) hanya bila user centang "blok tersendiri".
   const openFormulaDialog = () => {
     const quill = quillRef.current
     if (!quill) return
     const sel = quill.getSelection()
     let tex = ''
+    let display = false
     const index = sel ? sel.index : Math.max(0, quill.getLength() - 1)
     let length = sel ? sel.length : 0
 
     if (sel?.length) {
       const text = quill.getText(sel.index, sel.length)
-      const m = text.match(/^\$\$([\s\S]+)\$\$$/) || text.match(/^\$([\s\S]+)\$$/)
-      if (m) {
-        tex = m[1]
+      const md = text.match(/^\$\$([\s\S]+)\$\$$/)
+      const mi = text.match(/^\$([\s\S]+)\$$/)
+      if (md) {
+        tex = md[1]
+        display = true
         // Ganti utuh termasuk delimiternya saat save
+      } else if (mi) {
+        tex = mi[1]
+        // Seleksi biasa akan ditimpa oleh rumus baru
       } else {
         // Seleksi biasa akan ditimpa oleh rumus baru
       }
     }
 
-    setFormula({ tex, index, length })
+    setFormula({ tex, index, length, display })
   }
-
-  // Mode render ditentukan otomatis dari isi rumus — user tidak perlu tahu
-  // soal delimiter $/$$. Rumus "berat" (pecahan, sigma, integral, matriks)
-  // tampil sebagai blok center; rumus ringkas menyatu dengan teks.
-  const isDisplayTex = (tex) => /\\(frac|dfrac|tfrac|sum|int|prod|lim|begin)(?![a-zA-Z])|\\\\/.test(tex)
 
   const saveFormula = () => {
     const quill = quillRef.current
@@ -267,7 +271,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     const tex = formula.tex.trim()
     setFormula(null)
     if (!tex) return
-    const wrap = isDisplayTex(tex) ? '$$' : '$'
+    const wrap = formula.display ? '$$' : '$'
     const text = `${wrap}${tex}${wrap}`
     quill.deleteText(formula.index, formula.length, 'silent')
     quill.insertText(formula.index, text, 'user')
@@ -284,7 +288,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     const tex = formula?.tex.trim()
     if (!tex) return null
     try {
-      return { html: katex.renderToString(tex, { throwOnError: true, displayMode: isDisplayTex(tex) }) }
+      return { html: katex.renderToString(tex, { throwOnError: true, displayMode: !!formula.display }) }
     } catch (err) {
       return { error: err.message?.replace(/^KaTeX parse error:\s*/, '') || 'Invalid syntax' }
     }
@@ -302,7 +306,16 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     setSymbolsOpen(false)
   }
 
+  // Preview hasil render (termasuk KaTeX) langsung di bawah input,
+  // tanpa perlu save. Hanya muncul bila ada kandidat rumus biar hemat tempat.
+  const hasMath = showPreview && typeof value === 'string' && (value.includes('$') || value.includes('\\(') || value.includes('\\['))
+  const focusEditor = () => {
+    const q = quillRef.current
+    if (q && !q.hasFocus()) q.focus()
+  }
+
   return (
+    <>
     <div ref={wrapperRef} className={`rich-editor relative ${compact ? 'rich-editor-compact' : ''} ${active ? 'rich-editor-active' : ''}`}>
       <div
         ref={containerRef}
@@ -310,10 +323,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
         spellCheck={false}
         autoCorrect="off"
         autoComplete="off"
-        onClick={() => {
-          const q = quillRef.current
-          if (q && !q.hasFocus()) q.focus()
-        }}
+        onClick={focusEditor}
       />
       {symbolsOpen && (
         <div
@@ -404,6 +414,16 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
             ))}
           </div>
 
+          <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <input
+              type="checkbox"
+              checked={!!formula.display}
+              onChange={(e) => setFormula((f) => ({ ...f, display: e.target.checked }))}
+              className="mt-0.5 accent-[#6C5CE7]"
+            />
+            <span>Tampilkan dalam baris baru</span>
+          </label>
+
           <div className="flex items-center justify-end mt-3">
             <div className="flex gap-1.5">
               <Button size="sm" variant="ghost" onClick={() => setFormula(null)}>Cancel</Button>
@@ -413,5 +433,17 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
         </div>
       )}
     </div>
+    {hasMath && (
+      <button
+        type="button"
+        onClick={focusEditor}
+        title="Klik untuk edit kembali di atas"
+        className="mt-1.5 w-full rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-3 py-2 text-left transition-colors hover:border-primary/40 dark:border-gray-700 dark:bg-ink-900/60"
+      >
+        <span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Preview Formula</span>
+        <RichText html={value} className="rich-text block text-sm text-ink dark:text-gray-100" />
+      </button>
+    )}
+    </>
   )
 }
