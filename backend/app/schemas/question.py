@@ -113,10 +113,17 @@ class QuestionCreate(BaseModel):
     def default_is_scored(self):
         # ponytail: non-gradable types have no correct answer — is_scored must be False,
         # kecuali essay/short_answer yang punya answer_key (bisa dinilai otomatis)
+        # Jika is_scored eksplisit True tanpa kunci, biarkan True agar router
+        # dapat mengembalikan 422 field-specific (answer_key) dengan red border + scroll.
         if self.type in NO_OPTION_TYPES and not (
             self.type in KEYWORD_TYPES and (self.answer_key or "").strip()
         ):
-            self.is_scored = False
+            if "is_scored" not in self.model_fields_set:
+                self.is_scored = False
+            elif self.is_scored:
+                pass  # explicit True tanpa kunci — validasi field di router
+            else:
+                self.is_scored = False
         return self
 
 
@@ -151,10 +158,17 @@ class QuestionUpdate(BaseModel):
     def coerce_is_scored_on_no_option_type(self):
         # ponytail: if type changes to non-gradable, force is_scored=False —
         # kecuali essay/short_answer yang dikirim bersama answer_key
+        # Jika is_scored eksplisit True tanpa kunci, biarkan True agar router
+        # dapat mengembalikan 422 field-specific.
         if self.type in NO_OPTION_TYPES and not (
             self.type in KEYWORD_TYPES and (self.answer_key or "").strip()
         ):
-            self.is_scored = False
+            if self.is_scored is True:
+                pass  # explicit True tanpa kunci — biar router yang 422
+            elif self.is_scored is None and self.type is not None:
+                self.is_scored = False
+            elif self.is_scored is False:
+                self.is_scored = False
         return self
 
 

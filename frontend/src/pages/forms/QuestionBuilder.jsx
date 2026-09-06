@@ -71,23 +71,36 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   }
   // Satu-satunya section = default tujuan soal baru; select section tak perlu tampil.
   const singleSectionId = sectionsAllowed && sections?.length === 1 ? sections[0].id : null
+  // UX essay/short quiz baru: default tidak dinilai sampai user aktifkan toggle + isi kunci.
+  // Existing question (edit) pakai nilai dari server, default true bila tidak ada.
+  const defaultIsScored = initial
+    ? (initial.is_scored ?? true)
+    : (isQuiz ? false : true)
   const [form, setForm] = useState({
     question_text: '',
     type: 'essay',
     points: 1,
-    is_scored: true,
+    is_scored: defaultIsScored,
     is_required: true,
     options: [],
     password_keyword: '',
     answer_key: '',
     allow_other: false,
     ...(initial || {}),
+    is_scored: initial ? (initial.is_scored ?? true) : defaultIsScored,
     section_id: initial?.section_id || singleSectionId,
   })
   const isEditing = !!initial
   const ferr = (name) => errors?.[name]
   const optionsErr = Object.keys(errors || {}).some((k) => k.startsWith('options'))
   const optionsMsg = Object.values(errors || {}).find((v, i) => Object.keys(errors)[i]?.startsWith('options'))
+  const answerKeyInputRef = useRef(null)
+  useEffect(() => {
+    if (errors?.answer_key && answerKeyInputRef.current) {
+      answerKeyInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      answerKeyInputRef.current.focus({ preventScroll: true })
+    }
+  }, [errors?.answer_key])
 
   const optionFileRefs = useRef([])
   const [imgLoading, setImgLoading] = useState(null)
@@ -222,14 +235,21 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   }
 
   const handleTypeChange = (type) => {
-    setForm((prev) => ({
-      ...prev,
-      type,
-      points: NO_GRADE_TYPES.includes(type) ? 0 : prev.points,
-      options: OPTION_TYPES.includes(type)
-        ? (prev.options.length ? prev.options : [{ option_text: '', is_correct: false }])
-        : [],
-    }))
+    setForm((prev) => {
+      const isKeyword = type === 'essay' || type === 'short_answer'
+      const isAlwaysNoGrade = ['date', 'time', 'datetime', 'file_upload', 'dropdown'].includes(type)
+      return {
+        ...prev,
+        type,
+        // essay/short_answer quiz: default OFF agar user sadar harus toggle ON + isi kunci
+        is_scored: isKeyword && isQuiz ? false : isAlwaysNoGrade ? false : prev.is_scored || true,
+        answer_key: isKeyword ? prev.answer_key : '',
+        points: isAlwaysNoGrade || (isKeyword && isQuiz) ? 0 : prev.points,
+        options: OPTION_TYPES.includes(type)
+          ? (prev.options.length ? prev.options : [{ option_text: '', is_correct: false }])
+          : [],
+      }
+    })
   }
 
   const addOption = () => {
@@ -254,12 +274,15 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   const isPassword = form.type === 'password'
   const canSave = !!textOnly(form.question_text) && (!isPassword || !!form.password_keyword?.trim())
   const needsOptions = OPTION_TYPES.includes(form.type)
-  // Essay/short_answer bisa dinilai bila punya answer_key (khusus quiz) —
-  // tanpa kunci, perlakuannya sama seperti tipe non-graded lainnya.
   const isKeywordType = form.type === 'essay' || form.type === 'short_answer'
+  const isQuizKeyword = isQuiz && isKeywordType
+  // noGrade untuk logika lama dipertahankan untuk kompatibilitas card display,
+  // tapi untuk scoring toggle essay/short quiz kini dikontrol langsung oleh is_scored
   const hasAnswerKey = !!(form.answer_key || '').trim()
   const noGrade = NO_GRADE_TYPES.includes(form.type) && !(isKeywordType && hasAnswerKey)
   const hasCorrect = form.options.some((o) => o.is_correct)
+  const showKeywordScoring = isQuizKeyword // toggle → answer_key grouping
+  const showChoiceScoring = isQuiz && ['multiple_choice', 'checkbox'].includes(form.type)
   // Proyeksi eksak jatah soal baru di pool auto-100: backend menaruh soal baru
   // paling akhir lalu membagi rata (sisa ke urutan awal) — tiru rumusnya persis
   // agar preview tambah-soal sama dengan hasil tersimpan (bukan default 1/0).
@@ -294,27 +317,6 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         </div>
       )}
 
-      {isQuiz && isKeywordType && (
-        <div>
-          <label className="field-label">{t('questionBuilder.answerKey')}</label>
-          <input
-            value={form.answer_key || ''}
-            onChange={(e) => {
-              const v = e.target.value
-              setForm((p) => (v.trim()
-                ? { ...p, answer_key: v }
-                : { ...p, answer_key: v, is_scored: false, points: 0 }))
-            }}
-            placeholder={t('questionBuilder.answerKeyPlaceholder')}
-            className={`input-field font-mono ${ferr('answer_key') ? 'border-incorrect focus:border-incorrect' : ''}`}
-            maxLength={500}
-            spellCheck={false}
-          />
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('questionBuilder.answerKeyHint')}</p>
-          {ferr('answer_key') && <p className="field-error">{ferr('answer_key')}</p>}
-        </div>
-      )}
-
       {sectionsAllowed && sections?.length > 1 && (
         <div>
           <label className="field-label">{t('questionBuilder.sectionLabel')}</label>
@@ -337,6 +339,25 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         />
         {ferr('question_text') && <p className="field-error">{ferr('question_text')}</p>}
       </div>
+
+      {/* Essay/short_answer quiz: input kunci jawaban sama visual dengan input lain (password_keyword, dll) — beda hanya perilaku toggle (required saat Hitung poin ON). */}
+      {showKeywordScoring && (
+        <div>
+          <label className="field-label">
+            {t('questionBuilder.answerKey')}
+            {form.is_scored && <span className="text-incorrect ml-0.5">*</span>}
+          </label>
+          <input
+            ref={answerKeyInputRef}
+            value={form.answer_key || ''}
+            onChange={(e) => setForm((p) => ({ ...p, answer_key: e.target.value }))}
+            placeholder={t('questionBuilder.answerKeyPlaceholder')}
+            className={`input-field font-mono ${ferr('answer_key') ? 'border-incorrect focus:border-incorrect' : ''}`}
+            maxLength={500}
+            spellCheck={false}
+          />
+        </div>
+      )}
 
       <div className="space-y-3">
   <input
@@ -383,45 +404,60 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   )}
 </div>
 
-      <div className="flex items-end gap-4">
-        {isQuiz && !noGrade && (
-          <div className="flex-1">
-            {isEditing ? (
-              <Input
-                label={t('questionBuilder.points')}
-                type="number"
-                value={form.points}
-                onChange={(e) => setForm((p) => ({ ...p, points: parseInt(e.target.value) || 0 }))}
-                min={0}
-                max={999}
-                disabled={!form.is_scored || scoringMode === 'auto'}
-                error={ferr('points')}
-              />
-            ) : (
-              <div>
-                <label className="field-label">{t('questionBuilder.points')}</label>
-                <p className="text-sm text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-ink-800/50 border border-gray-200 dark:border-gray-700 rounded-xl px-4 h-11 flex items-center">
-                  {scoringMode === 'auto' ? t('questionBuilder.pointsAuto', { points: projectedAutoPoints }) : t('questionBuilder.pointsAuto', { points: form.points })}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-        <div className="flex items-center gap-2.5 h-11 pb-[1px]">
-          {isQuiz && isEditing && !noGrade && (
-            <>
-              <span className="text-sm text-gray-600 dark:text-gray-400">{t('questionBuilder.countPoints')}</span>
-              <Toggle
-                label={t('questionBuilder.countPoints')}
-                checked={form.is_scored}
-                onChange={(v) => setForm((p) => ({ ...p, is_scored: v, points: v ? p.points : 0 }))}
-              />
-            </>
+      {/* ——— Scoring row: sama visual untuk semua tipe — points input + toggle Hitung poin (essay/short + MC/checkbox) + toggle Wajib. */}
+      {isQuiz && (
+        <div className={`flex items-end gap-4 ${showKeywordScoring ? 'flex-wrap' : ''}`}>
+          {(showKeywordScoring || showChoiceScoring) && (
+            <div className="flex-1 min-w-[180px]">
+              {isEditing ? (
+                <Input
+                  label={t('questionBuilder.points')}
+                  type="number"
+                  value={form.points}
+                  onChange={(e) => setForm((p) => ({ ...p, points: parseInt(e.target.value) || 0 }))}
+                  min={0}
+                  max={999}
+                  disabled={!form.is_scored || scoringMode === 'auto'}
+                  helper={scoringMode === 'auto' ? t('questionBuilder.pointsAutoHint') : (form.is_scored ? t('questionBuilder.pointsManualHint') : t('questionBuilder.scoringInactiveHint'))}
+                  error={ferr('points')}
+                />
+              ) : (
+                <div>
+                  <label className="field-label">{t('questionBuilder.points')}</label>
+                  <p className="input-field cursor-default flex items-center text-sm text-gray-600 dark:text-gray-300">
+                    {scoringMode === 'auto' ? t('questionBuilder.pointsAuto', { points: projectedAutoPoints }) : t('questionBuilder.pointsAuto', { points: form.points })}
+                  </p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                    {scoringMode === 'auto' ? t('questionBuilder.pointsAutoHint') : t('questionBuilder.pointsManualHint')}
+                  </p>
+                </div>
+              )}
+            </div>
           )}
+          <div className="flex items-center gap-2.5 h-11 pb-[1px] ml-auto">
+            <span className="text-sm text-gray-600 dark:text-gray-400">{t('questionBuilder.countPoints')}</span>
+            <Toggle
+              label={t('questionBuilder.countPoints')}
+              checked={!!form.is_scored}
+              onChange={(v) => {
+                if (showKeywordScoring) {
+                  setForm((p) => (v ? { ...p, is_scored: true } : { ...p, is_scored: false, answer_key: '', points: 0 }))
+                } else {
+                  setForm((p) => ({ ...p, is_scored: v, points: v ? p.points : 0 }))
+                }
+              }}
+            />
+            <span className="text-sm text-gray-600 dark:text-gray-400 ml-2">{t('questionBuilder.required')}</span>
+            <Toggle label={t('questionBuilder.required')} checked={form.is_required} onChange={(v) => setForm((p) => ({ ...p, is_required: v }))} />
+          </div>
+        </div>
+      )}
+      {!isQuiz && (
+        <div className="flex items-center gap-2.5">
           <span className="text-sm text-gray-600 dark:text-gray-400">{t('questionBuilder.required')}</span>
           <Toggle label={t('questionBuilder.required')} checked={form.is_required} onChange={(v) => setForm((p) => ({ ...p, is_required: v }))} />
         </div>
-      </div>
+      )}
 
       {needsOptions && (
         <div className={`${optionsErr ? 'border border-incorrect rounded-xl p-3' : ''}`}>

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi import UploadFile, File
+from fastapi.responses import JSONResponse
 import os
 import shutil
 import uuid
@@ -328,6 +329,17 @@ def create_question(
         )
     answer_key = body.answer_key if body.type in _KEYWORD_TYPES else None
 
+    # UX essay/short_answer: toggle Hitung poin ON wajib disertai answer_key
+    # → 422 field-specific agar frontend dapat red border + scroll ke input.
+    if body.type in _KEYWORD_TYPES and body.is_scored and not (answer_key or "").strip():
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "message": "Isi answer key terlebih dahulu untuk mengaktifkan penilaian soal ini",
+                "errors": [{"answer_key": "Isi answer key terlebih dahulu untuk mengaktifkan penilaian soal ini"}],
+            },
+        )
+
     question = Question(
         form_id=form.id,
         type=QuestionType(body.type),
@@ -419,17 +431,20 @@ def update_question(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(e),
             )
-    # Menyalakan penilaian essay/short_answer wajib disertai kunci (payload
-    # atau yang sudah tersimpan) — kalau tidak, toggle tak bisa menyala.
-    if (
-        new_type_str in _KEYWORD_TYPES
-        and update_data.get("is_scored") is True
-        and not (update_data.get("answer_key", question.answer_key) or "").strip()
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Isi answer key terlebih dahulu untuk mengaktifkan penilaian soal ini",
-        )
+    # Menyalakan penilaian essay/short_answer wajib disertai kunci.
+    # UX: toggle Hitung poin ON tanpa kunci → 422 field answer_key (red border + scroll).
+    # Juga jika kunci dihapus/clear sementara scored → 422.
+    effective_is_scored = update_data.get("is_scored", question.is_scored)
+    effective_answer_key = update_data.get("answer_key", question.answer_key)
+    if new_type_str in _KEYWORD_TYPES and effective_is_scored and not (effective_answer_key or "").strip():
+        if "is_scored" in update_data or "answer_key" in update_data or "type" in update_data:
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={
+                    "message": "Isi answer key terlebih dahulu untuk mengaktifkan penilaian soal ini",
+                    "errors": [{"answer_key": "Isi answer key terlebih dahulu untuk mengaktifkan penilaian soal ini"}],
+                },
+            )
 
     # Fix #4 — non-empty options with a text type is invalid; an empty list is
     # allowed and simply means "clear options" (e.g. switching MC → short_answer).
