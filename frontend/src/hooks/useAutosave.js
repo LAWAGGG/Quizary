@@ -126,11 +126,23 @@ export function useAutosave({ submissionId, onExpired }) {
   }, [flush, setStatus, stashDraft])
 
   const flushAll = useCallback(async (answers) => {
-    const tasks = Object.entries(answers).map(([qId, value]) => {
-      clearTimeout(timers.current[qId])
-      return flush(qId, toPayload(qId, value))
+    const entries = Object.entries(answers).filter(([, v]) => {
+      // skip empty to avoid pointless PATCH
+      if (Array.isArray(v)) return v.length > 0
+      if (v && typeof v === 'object') return (v.ids || []).length > 0 || String(v.text || '').trim()
+      return !!v
     })
-    await Promise.all(tasks)
+    if (!entries.length) return
+    // ponytail: sequential not Promise.all — 20+ concurrent PATCH overload DB + cause hang after cheating->in_progress
+    for (const [qId, value] of entries) {
+      clearTimeout(timers.current[qId])
+      try {
+        await flush(qId, toPayload(qId, value))
+      } catch {
+        // jangan gagalkan semua — draft tetap, submit tetap jalan
+        console.warn('flushAll skip', qId)
+      }
+    }
   }, [flush])
 
   const clearTimers = useCallback(() => {

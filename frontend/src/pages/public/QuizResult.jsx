@@ -314,59 +314,6 @@ export default function QuizResult() {
           )}
         </motion.div>
 
-        {leaderboard && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-8"
-          >
-            <Card className="p-5">
-              <div className="flex items-center gap-2.5 mb-4">
-                <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-warn-soft text-warn">
-                  <Trophy className="w-4 h-4" />
-                </span>
-                <div>
-                  <h3 className="font-display font-semibold text-ink dark:text-gray-100">{t('quizResult.leaderboard')}</h3>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">{t('quizResult.participants', { count: leaderboard.total })}</p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {leaderboard.data.map((row) => {
-                  const isMe = leaderboard.own && row.rank === leaderboard.own.rank
-                  return (
-                    <div
-                      key={row.rank}
-                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl ${isMe ? 'bg-primary-50 ring-1 ring-primary/30' : 'bg-gray-50 dark:bg-ink-800/50'
-                        }`}
-                    >
-                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${row.rank === 1 ? 'bg-warn text-white' : row.rank === 2 ? 'bg-gray-400 text-white' : row.rank === 3 ? 'bg-orange-400 text-white' : 'bg-gray-200 dark:bg-ink-700 text-gray-500 dark:text-gray-400'
-                        }`}>
-                        {row.rank}
-                      </span>
-                      <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink dark:text-gray-100">
-                        {row.respondent_name}
-                        {isMe && <span className="text-primary text-xs font-semibold ml-1.5">{t('quizResult.youBadge')}</span>}
-                      </span>
-                      <span className="text-sm font-semibold tabular-nums text-ink dark:text-gray-100">{row.score}</span>
-                    </div>
-                  )
-                })}
-              </div>
-              {leaderboard.own && !leaderboard.data.some((r) => r.rank === leaderboard.own.rank) && (
-                <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-primary-50">
-                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-gray-300 text-white">
-                    {leaderboard.own.rank}
-                  </span>
-                  <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink dark:text-gray-100">
-                    {leaderboard.own.respondent_name} <span className="text-primary text-xs font-semibold">{t('quizResult.youBadge')}</span>
-                  </span>
-                  <span className="text-sm font-semibold tabular-nums text-ink dark:text-gray-100">{leaderboard.own.score}</span>
-                </div>
-              )}
-            </Card>
-          </motion.div>
-        )}
-
         {revealAnswers && totalQ > 0 && (
           <>
             <Button
@@ -433,6 +380,59 @@ export default function QuizResult() {
               )}
             </AnimatePresence>
           </>
+        )}
+
+        {leaderboard && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8"
+          >
+            <Card className="p-5">
+              <div className="flex items-center gap-2.5 mb-4">
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-warn-soft text-warn">
+                  <Trophy className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="font-display font-semibold text-ink dark:text-gray-100">{t('quizResult.leaderboard')}</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">{t('quizResult.participants', { count: leaderboard.total })}</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {leaderboard.data.map((row) => {
+                  const isMe = leaderboard.own && row.rank === leaderboard.own.rank
+                  return (
+                    <div
+                      key={row.rank}
+                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl ${isMe ? 'bg-primary-50 ring-1 ring-primary/30' : 'bg-gray-50 dark:bg-ink-800/50'
+                        }`}
+                    >
+                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${row.rank === 1 ? 'bg-warn text-white' : row.rank === 2 ? 'bg-gray-400 text-white' : row.rank === 3 ? 'bg-orange-400 text-white' : 'bg-gray-200 dark:bg-ink-700 text-gray-500 dark:text-gray-400'
+                        }`}>
+                        {row.rank}
+                      </span>
+                      <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink dark:text-gray-100">
+                        {row.respondent_name}
+                        {isMe && <span className="text-primary text-xs font-semibold ml-1.5">{t('quizResult.youBadge')}</span>}
+                      </span>
+                      <span className="text-sm font-semibold tabular-nums text-ink dark:text-gray-100">{row.score}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              {leaderboard.own && !leaderboard.data.some((r) => r.rank === leaderboard.own.rank) && (
+                <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-primary-50">
+                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 bg-gray-300 text-white">
+                    {leaderboard.own.rank}
+                  </span>
+                  <span className="flex-1 min-w-0 truncate text-sm font-medium text-ink dark:text-gray-100">
+                    {leaderboard.own.respondent_name} <span className="text-primary text-xs font-semibold">{t('quizResult.youBadge')}</span>
+                  </span>
+                  <span className="text-sm font-semibold tabular-nums text-ink dark:text-gray-100">{leaderboard.own.score}</span>
+                </div>
+              )}
+            </Card>
+          </motion.div>
         )}
 
         {canRefill && (

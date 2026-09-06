@@ -1167,14 +1167,26 @@ export default function AnswerQuiz() {
     setSubmitError(null)
     setSubmitting(true)
     try {
-      await flushAll(answers)
+      // ponytail: flush jangan blok submit selamanya — timeout 4s, gagal tetap lanjut submit (autosave sudah ada)
+      try {
+        await Promise.race([
+          flushAll(answers),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('flush timeout')), 4000)),
+        ])
+      } catch {}
       await api.post(`/submissions/${submissionId}/submit`, undefined, { headers: sessionTokenHeaders(submissionId) })
       goToResult()
     } catch (err) {
       if (err.response?.status === 410) {
         goToResult()
-      } else {
+      } else if (err.response?.status === 409) {
+        // 409 setelah cheating->in_progress biasanya karena stale locked — refresh lalu coba lagi
+        try { await handleRefresh() } catch {}
         const msg = err.response?.data?.message || err.response?.data?.detail || t('answerQuiz.submitFailed')
+        setShowConfirm(false)
+        setSubmitError(msg + ' — coba Submit lagi')
+      } else {
+        const msg = err.response?.data?.message || err.response?.data?.detail || err.message || t('answerQuiz.submitFailed')
         setShowConfirm(false)
         // Submit error ditampilkan inline, BUKAN redirect ke FallbackPage
         setSubmitError(msg)

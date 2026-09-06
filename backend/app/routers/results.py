@@ -178,16 +178,15 @@ def set_result_status(
 
     now = now_wib()
     if body.status == "in_progress":
-        # ponytail: locked -> in_progress jangan reset timer, biar tidak dapat waktu ekstra
-        # submitted/cheating -> in_progress boleh reset (mulai dari awal)
-        was_locked = sub.status == SubmissionStatus.locked
+        # ponytail: locked/cheating -> in_progress jangan reset timer, biar tidak dapat waktu ekstra
+        # submitted/auto_submitted -> in_progress boleh reset (mulai dari awal)
+        was_violation = sub.status in (SubmissionStatus.locked, SubmissionStatus.cheating)
         sub.status = SubmissionStatus.in_progress
-        if not was_locked:
+        if not was_violation:
             sub.started_at = now
-        # locked yang dibuka: pertahankan started_at asli (timer lanjut dari sisa waktu saat ter-lock)
-        # tapi jika sudah lewat deadline, biar sweep yang handle; jangan reset tab_exit agar tidak langsung re-lock?
+        # pelanggaran yang dibuka: pertahankan started_at asli (timer lanjut dari sisa waktu saat ter-lock)
         # reset cheat counter biar tidak langsung lock lagi di percobaan berikutnya (beri kesempatan)
-        if was_locked:
+        if was_violation:
             sub.tab_exit_count = 0
             # cheat_reason tetap untuk audit, tidak dihapus
         sub.submitted_at = None
@@ -201,7 +200,12 @@ def set_result_status(
     else:  # cheating
         sub.status = SubmissionStatus.cheating
         sub.submitted_at = sub.submitted_at or now
-        grade_submission(db, sub, form)
+        # ponytail: cheating selalu 0, skip grade_submission yang heavy (N+1 query + update per answer)
+        # per-answer is_correct tidak penting untuk cheating, simpan apa adanya
+        # cukup set max_score cepat tanpa loop answers
+        from app.services.grading import max_score_for
+        qs = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).all()
+        sub.max_score = max_score_for(qs, form.scoring_mode.value if form.scoring_mode else "auto")
         sub.score = 0
         message = "Submission dinilai curang (nilai 0)"
 
@@ -233,11 +237,11 @@ def set_bulk_result_status(
     now = now_wib()
     for sub in subs:
         if body.status == "in_progress":
-            was_locked = sub.status == SubmissionStatus.locked
+            was_violation = sub.status in (SubmissionStatus.locked, SubmissionStatus.cheating)
             sub.status = SubmissionStatus.in_progress
-            if not was_locked:
+            if not was_violation:
                 sub.started_at = now
-            if was_locked:
+            if was_violation:
                 sub.tab_exit_count = 0
             sub.submitted_at = None
             sub.score = None
@@ -248,7 +252,9 @@ def set_bulk_result_status(
         else:  # cheating
             sub.status = SubmissionStatus.cheating
             sub.submitted_at = sub.submitted_at or now
-            grade_submission(db, sub, form)
+            from app.services.grading import max_score_for as _max_for
+            qs2 = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).all()
+            sub.max_score = _max_for(qs2, form.scoring_mode.value if form.scoring_mode else "auto")
             sub.score = 0
         
         sub.updated_at = now
