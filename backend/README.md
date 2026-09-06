@@ -270,6 +270,20 @@ Di-mount sebagai static files di `/uploads`. Semua response API mengembalikan **
 
 Frontend tinggal pakai tanpa tambahan prefix.
 
+## Anti-Cheat & Status Flow
+
+* `is_restricted` quiz wajib `fullscreen` + grace 5 detik (`submissions.py:576` `reportTabExit` threshold 1 → `locked`). `window-blur` (tombol Windows) / `split-screen` / `tab-hidden` / `left-fullscreen` guard `fsAvailable`, sound loop di frontend `AnswerQuiz.jsx:218`.
+* `locked` 5 menit tidak diputuskan creator → auto `cheating` (nilai 0) via `session_expiry.py:56` `finalize_locked` (`LOCK_DECISION_MINUTES=5`, `updated_at` sebagai `locked_at`). Sweep lazy di `GET /submissions/{id}` + `auto_submit_expired_for_form:76`.
+* Status flow `results.py:180` `PATCH /forms/{id}/results/{id}/status`: `locked/cheating → in_progress` **pertahankan `started_at`** (timer lanjut sisa, tidak restart) + `tab_exit_count=0`, `submitted → in_progress` reset `now`. `locked → cheating` skip `grade_submission` heavy (hanya `max_score_for` 1 query).
+* Teks pelanggaran disimpan raw (`left-fullscreen`/`window-blur`/`; ` join 5 terakhir) di `submissions.cheat_reason`, diformat di frontend `lib/cheatReason.js`.
+
+## Optimasi & Index (Fase 1 & 2)
+
+* **N+1 → 3 query:** `session_expiry.py:76` bulk `Question`+`Answer IN (expired_ids)` + grading in-memory, single `commit`; `submissions.py:262` `_build_questions_response` `selectinload(Question.options.images, Question.images)` + bulk `SubmissionOptionOrder` 1 query; `get_submission:906` preload `Answer.selected_options`/`Question.images`; `results.py:268` analytics preload `Question.options`+`Answer.selected_options`; `questions.py:112` `list_questions` preload — 50 soal 300 query → 3 query, 500 peserta analytics 10k → 2 query.
+* **Index komposit** migrasi `alembic/versions/f1527199e451_add_composite_indexes_fase2.py` (`alembic upgrade head`): `questions(form_id,is_deleted)/(section/group)`, `submissions(form_id,status)/(form_id,status,user_id)/(ip_address)/(form_id,ip_address)`, `answers(question_id)/(submission_id)`, `forms(user_id,status/type/category)` — `WHERE form_id+status+is_deleted` dari scan → index. `questions.is_deleted` drift `index=True` tanpa DB index diperbaiki.
+* **Submit anti-hang:** `submissions.py` `POST /submit` tetap `grade_submission` tapi `useAutosave` sequential, frontend `handleSubmitAll` `Promise.race 4s`.
+* **Password bug:** `submissions.py`/`AnswerQuiz.jsx:304` handle `password` sebagai `answer_text` string (sebelumnya `else` jadi object → `[object Object]`).
+
 ## Ownership & Keamanan
 
 Setiap akses ke resource form milik user tertentu WAJIB melewati pengecekan kepemilikan:

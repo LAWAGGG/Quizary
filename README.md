@@ -78,3 +78,19 @@ Referensi lengkap (source of truth) ada di `config/`:
 
 1. **Mode Form/Survey** — pengalaman formal dan minimalis untuk survey, feedback, pendataan.
 2. **Mode Quiz** — pengalaman gamified, satu soal per layar, timer, auto-grading, leaderboard, anti-cheat.
+
+## Update Terbaru (Sep 2026)
+
+Perubahan besar yang belum masuk `config/` — sudah live di `main`:
+
+**Anti-cheat & UX:**
+* `is_restricted` fullscreen + grace 5 detik loop sound `frontend/public/sounds/cheat-alert.mp3` (`/sounds/cheat-alert.mp3`, `loop=true`, prime `pointerdown` sebelum `visibilitychange` karena autoplay policy). Sound infinite selama grace, stop saat balik/kelock. Klik kanan / `F12` / `Ctrl+P/U/S` / `Ctrl+Shift+I/J/C` hanya diblok (`preventDefault`) tidak hitung curang — curang hanya `left-fullscreen` / `tab-hidden` / `window-blur` (termasuk tombol Windows) / `split-screen`.
+* Teks pelanggaran rapi bilingual via `frontend/src/lib/cheatReason.js` (`formatCheatReason`) + `violation` keys `id.json/en.json` (`window-blur` → "Jendela ujian tidak aktif" bukan raw code). `locked` 5 menit auto-finalize sweep.
+* Timer preserve: `locked/cheating → in_progress` pertahankan `started_at` (sisa waktu saat ter-lock) + `tab_exit_count=0`, `submitted → in_progress` baru reset `now` (`backend/app/routers/results.py:180`).
+* Double-lock refresh fix: `fetchSubmission`/`handleRefresh` clear `kioskLocked`+`graceTimer`+audio saat `in_progress`, `grace` guard `fsAvailable`, `pinToFullscreen` force clear saat sudah fullscreen.
+
+**Performansi (Fase 1 & 2 & 3):**
+* Backend N+1 → 3 query: `session_expiry.py:76` bulk preload, `submissions.py:262` `selectinload(Question.options.images)` + bulk `SubmissionOptionOrder`, `results.py:268` analytics preload, `questions.py:112` preload `list_questions`. `locked→cheating` skip `grade_submission` heavy.
+* Index komposit migrasi `f1527199e451` (`alembic upgrade head`): `questions(form_id,is_deleted)/(section/group)`, `submissions(form_id,status)/(form_id,status,user_id)/(ip_address)`, `answers(question_id)`, `forms(user_id,status/type/category)` — `WHERE form_id+status+is_deleted` dari scan → index.
+* Frontend render: `AnswerQuiz` `memo(OptionTile/OtherTile)` + `formPages` IIFE, `FormEdit` `dirty useMemo`, `FormList` debounce 300ms `debouncedSearch`, `QuestionBuilder` `memo(QuestionCard/Sortable*)`, `Results` `questionGroups useMemo`, `Analytics` `QuestionRow memo`. `useAutosave flushAll` sequential + `handleSubmitAll` `Promise.race 4s` anti-hang.
+* Bug `password` `[object Object]` setelah refresh → `AnswerQuiz.jsx:304` `fetchSubmission` handle `password` sebagai `answer_text` string + draft restore convert `{ids,text}` → string.

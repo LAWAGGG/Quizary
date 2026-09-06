@@ -172,9 +172,15 @@ export default function AIGenerate() {
       setStep(2)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err) {
-      const msg = err.response?.data?.message || err.code === 'ECONNABORTED' ? t('aiGenerate.timeout') : t('aiGenerate.generateFailed')
+      const status = err.response?.status
+      const serverMsg = err.response?.data?.message || err.response?.data?.detail
+      let msg
+      if (status === 429) msg = serverMsg || t('aiGenerate.quotaEmpty')
+      else if (status === 502 && serverMsg?.toLowerCase().includes('terpotong')) msg = serverMsg
+      else if (err.code === 'ECONNABORTED') msg = t('aiGenerate.timeout')
+      else msg = serverMsg || t('aiGenerate.generateFailed')
       setError(typeof msg === 'string' ? msg : t('aiGenerate.generateFailed'))
-      toast.error(err.response?.data?.message || t('aiGenerate.generateFailed'))
+      toast.error(serverMsg || msg)
     } finally {
       setGenerating(false)
     }
@@ -369,13 +375,13 @@ export default function AIGenerate() {
                     <option value="manual">{t('aiGenerate.scoringManual')}</option>
                   </Select>
                 )}
-                <Input label={t('aiGenerate.themeColor')} value={draft.settings.theme_color || ''} onChange={(e) => toggleDraft('theme_color', e.target.value)} placeholder="#6C5CE7" helper={t('aiGenerate.themeColorHint')} />
                 <div className="flex items-end gap-2">
                   <input type="color" value={/^#[0-9A-Fa-f]{6}$/.test(draft.settings.theme_color || '') ? draft.settings.theme_color : '#6C5CE7'} onChange={(e) => toggleDraft('theme_color', e.target.value)} aria-label={t('aiGenerate.themeColor')} className="w-11 h-11 rounded-xl cursor-pointer border border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-ink-900" />
                   <div className="flex-1 min-w-0">
                     <Input label={t('aiGenerate.startsAt')} type="datetime-local" value={toInputDateTime(draft.settings.starts_at)} onChange={(e) => toggleDraft('starts_at', e.target.value || null)} />
                   </div>
                 </div>
+                <Input label={t('aiGenerate.themeColor')} value={draft.settings.theme_color || ''} onChange={(e) => toggleDraft('theme_color', e.target.value)} placeholder="#6C5CE7" />
                 <Input label={t('aiGenerate.endsAt')} type="datetime-local" value={toInputDateTime(draft.settings.ends_at)} onChange={(e) => toggleDraft('ends_at', e.target.value || null)} helper={t('aiGenerate.scheduleHint')} />
               </div>
               <div className="pt-3">

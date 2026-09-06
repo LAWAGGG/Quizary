@@ -104,3 +104,36 @@ frontend/
 - Token JWT disimpan di `localStorage` (`token`, `user`).
 - Axios interceptor menyisipkan `Authorization: Bearer <token>` di setiap request.
 - Saat response `401` di halaman admin, token dihapus dan redirect ke `/login`. Halaman publik (`/q/`, `/s/`) menangani `401` sendiri agar konteks form tidak hilang.
+
+## Anti-Cheat & Fitur Terbaru
+
+* **Sound peringatan** `public/sounds/cheat-alert.mp3` (150K, `preload=auto`, `loop=true`, `volume=1`) — diputar di `src/pages/public/AnswerQuiz.jsx:218` `alertAudioRef` prime `pointerdown` (unlock autoplay), loop infinite selama grace 5 detik (`graceCountdown` `play`), stop saat `clearGrace`/`lockedInfo`/`goToResult`. Timer backend tetap `display_deadline` (WIB).
+* **Teks pelanggaran rapi** `src/lib/cheatReason.js` `formatCheatReason(raw,t)` map `left-fullscreen/tab-hidden/window-blur/split-screen` → `violation.*` (`src/locales/id.json:752` `en.json:752`), dipakai di `AnswerQuiz` banner `cheatWarningTitle` + `CheatLockOverlay` `lastViolation` dan `Results` tabel/detail `lastRecorded`. `left-fullscreen` keep, `window-blur` → "Jendela ujian tidak aktif".
+* **Block-only** klik kanan / `F12` / `Ctrl+P/U/S` / `Ctrl+Shift+I/J/C` / `print` / `PiP` hanya `preventDefault` (`AnswerQuiz.jsx:649`) tidak `reportTabExit` — curang hanya keluar web beneran (`left-fullscreen/tab-hidden/window-blur/split-screen` guard `fsAvailable`).
+* **Fix password** `AnswerQuiz.jsx:304` `fetchSubmission` handle `password` sebagai `answer_text` string (sebelumnya masuk `else` jadi `{ids,text}` → `[object Object]`), draft restore convert object → string.
+
+## Optimasi Frontend (Fase 3)
+
+* `AnswerQuiz` `memo(OptionTile/OtherTile)` + `formPages` IIFE + fallback `formPage || {}` biar 50 soal tidak re-render tiap ketik.
+* `FormEdit.jsx:230` `dirty` `useMemo` `JSON.stringify(normalize())` biar tidak `stringify` tiap render saat ketik 100 soal.
+* `FormList.jsx:290` debounce 300ms `search` → `debouncedSearch` + `filtered useMemo [forms,debouncedSearch]` + `selectionMode` deps `debouncedSearch`.
+* `QuestionBuilder.jsx:597` `memo(QuestionCard/SortableQuestionCard/SortableGroupCard)` dnd-kit GPU `Translate`.
+* `Results.jsx:247` `answerByQ/questionGroups` `useMemo [detail]`, `Analytics.jsx:67` `memo(QuestionRow)`.
+* `useAutosave.js:128` `flushAll` sequential skip empty + `try/catch` per item (bukan `Promise.all` 30 concurrent → DB overload), `AnswerQuiz.jsx:1169` `handleSubmitAll` `Promise.race 4s` + `409` refresh + `finally setSubmitting(false)` anti hang `cheating→in_progress`.
+
+## Struktur Folder (update)
+
+```
+frontend/
+├── public/sounds/cheat-alert.mp3 # sound anti-cheat loop
+└── src/
+    ├── lib/cheatReason.js        # formatCheatReason(raw,t)
+    ├── locales/id.json, en.json  # violation.* keys
+    └── pages/...
+```
+
+## Troubleshooting Anti-Cheat
+
+* Windows key `blur` tanpa keluar fullscreen tetap hitung grace 5s (`stillBlurred=!hasFocus()` + `onFocus` clearGrace). `split-screen` cek `screen.height-innerHeight>120`.
+* Refresh keluar fullscreen → `fsAvailable` false jadi tidak langsung `report`, tunggu gesture `pointerdown` baru `fsAvailable=true`.
+* `pinToFullscreen` branch `already fullscreen` force clear `graceTimerRef/kioskTimer` + `setKioskLocked(false)` biar tidak perlu 2x update status.

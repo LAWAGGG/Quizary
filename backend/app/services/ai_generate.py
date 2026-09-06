@@ -82,15 +82,15 @@ def extract_ref_text(filename: str, raw: bytes) -> str:
     raise AiFailed(f"Tipe file tidak didukung ({filename}). Pakai docx, pdf, atau pptx.")
 
 
-SYSTEM_INSTRUCTION = """Kamu penyusun form/kuis berbahasa Indonesia. Jawab HANYA dengan SATU objek JSON valid, tanpa markdown, tanpa penjelasan.
+SYSTEM_INSTRUCTION = """Kamu penyusun form/kuis untuk berbagai bahasa. Jawab HANYA dengan SATU objek JSON valid, tanpa markdown, tanpa penjelasan.
 
 Bentuk:
 {"sections": [{"title": "nama section", "questions": [
   {"type": "salah satu: %s", "question_text": "teks soal",
-   "is_required": true, "points": 1,
+   "is_required": true, "points": 1, "group_id": null,
    "options": [{"option_text": "teks opsi", "is_correct": true}],
    "password_keyword": null, "answer_key": null, "allow_other": false}
-]}], "settings": {"shuffle_questions": false, "shuffle_options": false, "timer_minutes": null, "require_login": false, "submission_limit": "unlimited", "show_leaderboard": false, "is_restricted": false, "show_in_history": true, "reveal_score": true, "reveal_answers": true, "display_style": "card", "scoring_mode": "auto", "theme_color": null, "thank_you_message": null, "starts_at": null, "ends_at": null}}
+]]}], "settings": {"shuffle_questions": false, "shuffle_options": false, "timer_minutes": null, "require_login": false, "submission_limit": "unlimited", "show_leaderboard": false, "is_restricted": false, "show_in_history": true, "reveal_score": true, "reveal_answers": true, "display_style": "card", "scoring_mode": "auto", "theme_color": null, "thank_you_message": null, "starts_at": null, "ends_at": null}}
 
 Aturan:
 - options HANYA untuk multiple_choice/checkbox/dropdown (2-4 opsi); tipe lain: options [] dan password_keyword null.
@@ -109,6 +109,7 @@ Aturan:
 - Kode: fence ```bahasa ... ``` (satu blok per snippet, bahasa opsional: python, javascript, java, sql, cpp, html). Kode inline: `satu backtick`.
 - Link: [teks](https://...) — hanya http(s); jangan link lain.
 - Maksimal 10 sections, total maksimal 30 soal. question_text ringkas.
+- Hemat token: bila user minta passage yang sama di awal banyak question_text (mis. 5 soal per passage), cukup taruh passage lengkap di soal pertama tiap grup + set group_id sama (mis. "p1") untuk 5 soal se-passage. JANGAN duplikasi passage di 4 soal lain — server akan duplikasi otomatis saat accept. Ini menghemat output token.
 """ % (", ".join(QUESTION_TYPES))
 
 
@@ -137,6 +138,33 @@ def _gemini_models() -> list[str]:
     """Model utama + cadangan (dedupe). Kosong = tanpa fallback."""
     models = [m.strip() for m in (GEMINI_MODEL, GEMINI_FALLBACK_MODEL) if m and m.strip()]
     return list(dict.fromkeys(models)) or ["gemini-3.6-flash"]
+
+
+def _repair_truncated_json(text: str) -> str:
+    """Tutup JSON terpotong karena maxOutputTokens (mis. 20 soal passage)."""
+    t = text.strip()
+    # hitung buka vs tutup, tutup yang kurang
+    # ponytail: cukup tutup } ] } } untuk kasus sections->questions terpotong
+    open_braces = t.count("{") - t.count("}")
+    open_brackets = t.count("[") - t.count("]")
+    # jika dalam string (quote belum tutup), tutup dulu
+    # sederhana: potong di last complete object boundary
+    if t.endswith(",") or t.endswith(":") or t.endswith('"'):
+        # potong trailing comma/colon yang bikin invalid
+        t = t.rstrip(", :\"")
+        # cari last } atau ] yang valid
+        last_brace = t.rfind("}")
+        last_bracket = t.rfind("]")
+        cut = max(last_brace, last_bracket)
+        if cut > 0:
+            t = t[:cut+1]
+            open_braces = t.count("{") - t.count("}")
+            open_brackets = t.count("[") - t.count("]")
+    t += "]" * open_brackets + "}" * open_braces
+    # pastikan punya settings jika hilang
+    if '"settings"' not in t:
+        t = t.rstrip("}") + ', "settings": {"timer_minutes": 30}}'
+    return t
 
 
 def _repair_json_escapes(text: str) -> str:
@@ -193,6 +221,10 @@ def _parse_gemini_text(data: dict) -> dict:
         raise AiFailed("Prompt ditolak filter keamanan AI. Coba ubah kata-katanya.")
     cands = data.get("candidates") or []
     text = (cands[0].get("content", {}).get("parts") or [{}])[0].get("text", "") if cands else ""
+    # ponytail: cek finishReason truncated
+    finish = (cands[0].get("finishReason") or "") if cands else ""
+    if finish == "MAX_TOKENS":
+        logger.warning("gemini: finishReason MAX_TOKENS, coba repair truncated")
     try:
         parsed = json.loads(text)
     except (ValueError, TypeError):
@@ -200,7 +232,13 @@ def _parse_gemini_text(data: dict) -> dict:
             parsed = json.loads(_repair_json_escapes(text))
             logger.info("gemini: JSON diperbaiki via escape-repair")
         except (ValueError, TypeError):
-            raise AiFailed("AI gagal menyusun draf. Coba generate ulang.")
+            try:
+                # ponytail: 2nd repair untuk terpotong karena 20 soal passage (8192→16384 overflow)
+                repaired = _repair_truncated_json(_repair_json_escapes(text))
+                parsed = json.loads(repaired)
+                logger.info("gemini: JSON diperbaiki via truncated-repair")
+            except (ValueError, TypeError):
+                raise AiFailed("AI gagal menyusun draf (output terpotong). Coba generate ulang dengan 10 soal per batch.")
     if not isinstance(parsed, dict):
         raise AiFailed("AI gagal menyusun draf. Coba generate ulang.")
     return parsed
@@ -216,10 +254,14 @@ def call_gemini(user_text: str) -> tuple[dict, str]:
     """
     if not GEMINI_API_KEY:
         raise AiNotConfigured("Fitur AI belum dikonfigurasi server.")
+    # ponytail: guard estimasi token sebelum panggil, hemat quota 3/hari
+    est_tokens = len(user_text) // 4 + 8192
+    if est_tokens > 100_000:
+        raise AiFailed("Prompt + file referensi terlalu panjang untuk 20 soal. Coba 10 soal per batch atau kurangi teks passage.")
     payload = {
         "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION}]},
         "contents": [{"parts": [{"text": user_text}]}],
-        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7, "maxOutputTokens": 8192},
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7, "maxOutputTokens": 16384},
     }
     headers = {"x-goog-api-key": GEMINI_API_KEY}
     last_err: Exception | None = None
@@ -380,12 +422,15 @@ def _coerce_question(raw: dict) -> dict | None:
     # paksa null agar soal tak gugur validasi; creator mengisi saat review.
     # allow_other: teruskan hanya untuk MC/checkbox, selain itu False.
     allow_other = bool(raw.get("allow_other", False)) and q_type in ("multiple_choice", "checkbox")
+    # ponytail: group_id hemat token — AI boleh set group_id untuk 5 soal se-passage
+    raw_gid = str(raw.get("group_id") or "").strip()[:36] or None
     try:
         q = QuestionCreate(
             type=q_type,
             question_text=text,
             points=max(0, min(999, points)),
             is_required=bool(raw.get("is_required", True)),
+            group_id=raw_gid,
             password_keyword=kw if q_type == "password" else None,
             answer_key=None,
             allow_other=allow_other,
@@ -414,6 +459,12 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
             sections.append({"title": title, "questions": questions})
     if not sections:
         raise AiFailed("AI tidak menghasilkan soal yang valid. Coba perjelas prompt lalu generate ulang.")
+
+    # ponytail: hemat token — auto group per 5 jika AI tidak set group_id (untuk 20 soal passage)
+    all_qs = [q for s in sections for q in s["questions"]]
+    if all_qs and all(q.get("group_id") is None for q in all_qs) and len(all_qs) >= 15:
+        for idx, q in enumerate(all_qs):
+            q["group_id"] = f"p{idx//5+1}"
 
     settings = raw.get("settings") or {}
     try:
@@ -485,8 +536,12 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
         },
     }
     if form_type == "quiz" and timer is None:
-        # Jangan diam-diam tanpa timer (publish quiz wajib timer) — creator regenerate.
-        raise AiFailed("AI tidak menyertakan timer untuk kuis. Coba generate ulang.")
+        # ponytail: fallback 30 menit (izin user nomor 3) — hemat regenerate untuk 20 soal passage yang token habis
+        if "timer" in (prompt_text or "").lower() or "menit" in (prompt_text or "").lower():
+            timer = 30
+            draft["settings"]["timer_minutes"] = 30
+        else:
+            raise AiFailed("AI tidak menyertakan timer untuk kuis. Coba generate ulang.")
     draft["ignored"] = detect_ignored(prompt_text, draft["settings"])
     return draft
 

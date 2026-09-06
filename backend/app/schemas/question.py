@@ -91,6 +91,7 @@ class QuestionCreate(BaseModel):
     is_scored: bool = True
     is_required: bool = True
     section_id: Optional[int] = None
+    group_id: Optional[str] = Field(None, max_length=36)
     password_keyword: Optional[str] = Field(None, min_length=1, max_length=255)
     answer_key: Optional[str] = Field(None, min_length=1, max_length=500)
     allow_other: bool = False
