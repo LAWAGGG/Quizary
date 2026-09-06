@@ -178,8 +178,18 @@ def set_result_status(
 
     now = now_wib()
     if body.status == "in_progress":
+        # ponytail: locked -> in_progress jangan reset timer, biar tidak dapat waktu ekstra
+        # submitted/cheating -> in_progress boleh reset (mulai dari awal)
+        was_locked = sub.status == SubmissionStatus.locked
         sub.status = SubmissionStatus.in_progress
-        sub.started_at = now
+        if not was_locked:
+            sub.started_at = now
+        # locked yang dibuka: pertahankan started_at asli (timer lanjut dari sisa waktu saat ter-lock)
+        # tapi jika sudah lewat deadline, biar sweep yang handle; jangan reset tab_exit agar tidak langsung re-lock?
+        # reset cheat counter biar tidak langsung lock lagi di percobaan berikutnya (beri kesempatan)
+        if was_locked:
+            sub.tab_exit_count = 0
+            # cheat_reason tetap untuk audit, tidak dihapus
         sub.submitted_at = None
         sub.score = None
         message = "Submission dibuka kembali — responden dapat melanjutkan"
@@ -223,8 +233,12 @@ def set_bulk_result_status(
     now = now_wib()
     for sub in subs:
         if body.status == "in_progress":
+            was_locked = sub.status == SubmissionStatus.locked
             sub.status = SubmissionStatus.in_progress
-            sub.started_at = now
+            if not was_locked:
+                sub.started_at = now
+            if was_locked:
+                sub.tab_exit_count = 0
             sub.submitted_at = None
             sub.score = None
         elif body.status == "submitted":

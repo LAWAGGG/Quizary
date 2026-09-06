@@ -10,6 +10,7 @@ import { isAudioUrl } from '../../lib/media'
 import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { sessionTokenHeaders } from '../../lib/sessionToken'
+import { formatCheatReason } from '../../lib/cheatReason'
 
 const OPT_COLORS = ['#3B82F6', '#EF4444', '#F59E0B', '#10B981']
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -214,8 +215,25 @@ export default function AnswerQuiz() {
 
   const timerRef = useRef(null)
   const questionRefs = useRef({})   // { [qId]: HTMLElement } untuk scroll ke soal bermasalah
+  // ponytail: cheat alert — loop infinite selama grace 5s
+  const alertAudioRef = useRef(null)
+  useEffect(() => {
+    const a = new Audio('/sounds/cheat-alert.mp3')
+    a.preload = 'auto'
+    a.loop = true
+    a.volume = 1
+    alertAudioRef.current = a
+    return () => { a.pause(); a.currentTime = 0 }
+  }, [])
+  // ponytail: grace controls — butuh diakses dari pinToFullscreen saat sudah fullscreen tapi overlay masih nongol (Windows-key case)
+  const graceTimerRef = useRef(null)
+  const graceIntervalRef = useRef(null)
+  const graceEndAtRef = useRef(0)
+  const graceReasonRef = useRef('')
 
   const goToResult = useCallback(() => {
+    const aa = alertAudioRef.current
+    if (aa) { aa.pause(); aa.currentTime = 0 }
     // Sesi selesai (submit / timeout / cheating) — draft offline tak berguna lagi.
     clearDraft(submissionId)
     // Keluar dari fullscreen saat selesai (semua jalur: submit, timeout, cheating).
@@ -265,6 +283,20 @@ export default function AnswerQuiz() {
         return
       }
       setLockedInfo((previous) => lockedInfoFromSubmission(d, previous))
+      // ponytail: unlock ke in_progress — reset overlay & grace biar tidak perlu 2x update (bug double-lock)
+      if (d.status === 'in_progress') {
+        setKioskLocked(false)
+        if (graceTimerRef.current) clearTimeout(graceTimerRef.current)
+        if (graceIntervalRef.current) clearInterval(graceIntervalRef.current)
+        graceTimerRef.current = null
+        graceIntervalRef.current = null
+        graceEndAtRef.current = 0
+        graceReasonRef.current = ''
+        setGraceCountdown(null)
+        const _aa = alertAudioRef.current
+        if (_aa) { _aa.pause(); _aa.currentTime = 0 }
+        if (kioskTimer.current) clearTimeout(kioskTimer.current)
+      }
       setData(d)
       const ans = {}
       const files = {}
@@ -358,6 +390,20 @@ export default function AnswerQuiz() {
           return
         }
         setLockedInfo((previous) => lockedInfoFromSubmission(d, previous))
+        // ponytail: unlock ke in_progress — reset overlay & grace biar tidak perlu 2x update
+        if (d.status === 'in_progress') {
+          setKioskLocked(false)
+          if (graceTimerRef.current) clearTimeout(graceTimerRef.current)
+          if (graceIntervalRef.current) clearInterval(graceIntervalRef.current)
+          graceTimerRef.current = null
+          graceIntervalRef.current = null
+          graceEndAtRef.current = 0
+          graceReasonRef.current = ''
+          setGraceCountdown(null)
+          const _aa2 = alertAudioRef.current
+          if (_aa2) { _aa2.pause(); _aa2.currentTime = 0 }
+          if (kioskTimer.current) clearTimeout(kioskTimer.current)
+        }
         setData((prev) => {
           if (!prev) return prev
           return { ...prev, questions: d.questions, sections: d.sections, expired_at: d.expired_at }
@@ -466,6 +512,12 @@ export default function AnswerQuiz() {
       }
     }
     const onFirst = () => {
+      // ponytail: prime audio unlock — play harus dari gesture sebelum grace (visibilitychange bukan gesture)
+      const aa = alertAudioRef.current
+      if (aa) {
+        aa.volume = 0
+        aa.play().then(() => { aa.pause(); aa.currentTime = 0; aa.volume = 1 }).catch(() => { aa.volume = 1 })
+      }
       if (!(document.fullscreenElement || document.webkitFullscreenElement)) requestFs()
     }
     requestFs()
@@ -557,41 +609,39 @@ export default function AnswerQuiz() {
   // 5..0 sebelum benar-benar dikunci server.
   useEffect(() => {
     if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data?.id) return
-    let graceTimer = null
-    let graceInterval = null
-    let graceEndAt = 0
-    let graceReason = ''
     const GRACE_MS = 5000
 
     const clearGrace = () => {
-      if (graceTimer) clearTimeout(graceTimer)
-      if (graceInterval) clearInterval(graceInterval)
-      graceTimer = null
-      graceInterval = null
-      graceEndAt = 0
-      graceReason = ''
+      if (graceTimerRef.current) clearTimeout(graceTimerRef.current)
+      if (graceIntervalRef.current) clearInterval(graceIntervalRef.current)
+      graceTimerRef.current = null
+      graceIntervalRef.current = null
+      graceEndAtRef.current = 0
+      graceReasonRef.current = ''
       setGraceCountdown(null)
     }
 
     const startGrace = (reason) => {
-      if (graceTimer) return // already counting — debounce burst
-      graceReason = reason
-      graceEndAt = Date.now() + GRACE_MS
+      if (graceTimerRef.current) return // already counting — debounce burst
+      graceReasonRef.current = reason
+      graceEndAtRef.current = Date.now() + GRACE_MS
       setGraceCountdown(5)
-      graceInterval = setInterval(() => {
-        const remaining = Math.max(0, Math.ceil((graceEndAt - Date.now()) / 1000))
+      graceIntervalRef.current = setInterval(() => {
+        const remaining = Math.max(0, Math.ceil((graceEndAtRef.current - Date.now()) / 1000))
         setGraceCountdown(remaining)
       }, 200)
-      graceTimer = setTimeout(() => {
-        clearInterval(graceInterval)
-        graceInterval = null
-        graceTimer = null
+      graceTimerRef.current = setTimeout(() => {
+        clearInterval(graceIntervalRef.current)
+        graceIntervalRef.current = null
+        graceTimerRef.current = null
         const stillOutside = !document.fullscreenElement && !document.webkitFullscreenElement
         const stillHidden = document.visibilityState === 'hidden'
-        if (stillOutside || stillHidden) {
+        const stillBlurred = !document.hasFocus()
+        const stillSplit = (document.fullscreenElement || document.webkitFullscreenElement) && (window.screen.height - window.innerHeight > 120)
+        if (stillOutside || stillHidden || stillBlurred || stillSplit) {
           setGraceCountdown(null)
-          graceEndAt = 0
-          reportTabExit(graceReason)
+          graceEndAtRef.current = 0
+          reportTabExit(graceReasonRef.current)
         } else {
           clearGrace()
         }
@@ -605,14 +655,22 @@ export default function AnswerQuiz() {
     const inFullscreen = () => document.fullscreenElement || document.webkitFullscreenElement
 
     const onFsChange = () => {
+      if (!fsAvailable) return
       if (inFullscreen() && document.visibilityState === 'visible') clearGrace()
       else report('left-fullscreen')
     }
     const onVis = () => {
+      if (!fsAvailable) return
       if (document.visibilityState === 'hidden') report('tab-hidden')
       else if (inFullscreen()) clearGrace()
     }
-    const onBlur = () => { if (!kbInsetRef.current) report('window-blur') }
+    const onBlur = () => { if (!fsAvailable) return; if (!kbInsetRef.current) report('window-blur') }
+    const onFocus = () => {
+      // ponytail: Windows-key blur tidak keluar fullscreen — fokus kembali dalam grace harus clear tanpa lock
+      if ((document.fullscreenElement || document.webkitFullscreenElement) && document.visibilityState === 'visible' && document.hasFocus()) {
+        if (window.screen.height - window.innerHeight <= 120) clearGrace()
+      }
+    }
 
     // Split-screen / floating window: only meaningful while fullscreen is ON —
     // in fullscreen the content should cover the whole screen, so any large
@@ -621,6 +679,7 @@ export default function AnswerQuiz() {
     // kbInset aktif (sudah diidentifikasi sebagai keyboard via visualViewport).
     let shrinkTimer = null
     const onResize = () => {
+      if (!fsAvailable) return
       if (!inFullscreen() || kbInsetRef.current) return
       if (window.screen.height - window.innerHeight > 120) {
         clearTimeout(shrinkTimer)
@@ -628,12 +687,13 @@ export default function AnswerQuiz() {
       }
     }
 
-    const beforePrint = () => report('print')
-    const onPiP = () => report('picture-in-picture')
-    const onContext = (e) => { e.preventDefault(); report('context-menu') }
-    const onCopy = () => report('copy')
-    const onCut = () => report('copy')
-    const onPaste = () => report('copy')
+    // ponytail: block-only — klik kanan / shortcut / print / pip tidak hitung cheating, hanya dicegah
+    const beforePrint = (e) => { e?.preventDefault?.() }
+    const onPiP = (e) => { e?.preventDefault?.() }
+    const onContext = (e) => { e.preventDefault() }
+    const onCopy = (e) => { e.preventDefault() }
+    const onCut = (e) => { e.preventDefault() }
+    const onPaste = (e) => { e.preventDefault() }
     const onDragStart = (e) => { e.preventDefault() }
     const onKey = (e) => {
       const k = (e.key || '').toLowerCase()
@@ -645,7 +705,6 @@ export default function AnswerQuiz() {
         (e.ctrlKey && ['c', 'x', 'v'].includes(k))
       if (blocked) {
         e.preventDefault()
-        report('shortcut')
       }
     }
 
@@ -653,6 +712,7 @@ export default function AnswerQuiz() {
     document.addEventListener('webkitfullscreenchange', onFsChange)
     document.addEventListener('visibilitychange', onVis)
     window.addEventListener('blur', onBlur)
+    window.addEventListener('focus', onFocus)
     window.addEventListener('resize', onResize)
     window.addEventListener('beforeprint', beforePrint)
     document.addEventListener('enterpictureinpicture', onPiP)
@@ -668,6 +728,7 @@ export default function AnswerQuiz() {
       document.removeEventListener('webkitfullscreenchange', onFsChange)
       document.removeEventListener('visibilitychange', onVis)
       window.removeEventListener('blur', onBlur)
+      window.removeEventListener('focus', onFocus)
       window.removeEventListener('resize', onResize)
       window.removeEventListener('beforeprint', beforePrint)
       document.removeEventListener('enterpictureinpicture', onPiP)
@@ -681,7 +742,30 @@ export default function AnswerQuiz() {
       clearGrace()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveType, publicForm?.is_restricted, data?.id, reportTabExit])
+  }, [effectiveType, publicForm?.is_restricted, data?.id, fsAvailable, reportTabExit])
+
+  // ponytail: audio loop infinite selama grace 5s — stop saat balik (clearGrace) / kelock
+  useEffect(() => {
+    const a = alertAudioRef.current
+    if (!a) return
+    const active = graceCountdown !== null
+    if (active && a.paused) {
+      a.volume = 1
+      a.muted = false
+      a.currentTime = 0
+      a.play().catch(() => {})
+    } else if (!active && !a.paused) {
+      a.pause()
+      a.currentTime = 0
+    }
+  }, [graceCountdown])
+
+  useEffect(() => {
+    if (lockedInfo) {
+      const a = alertAudioRef.current
+      if (a) { a.pause(); a.currentTime = 0 }
+    }
+  }, [lockedInfo])
 
   // Auto-dismiss the cheat warning banner after a few seconds.
   useEffect(() => {
@@ -1149,7 +1233,25 @@ export default function AnswerQuiz() {
     const el = document.documentElement
     const req = el.requestFullscreen || el.webkitRequestFullscreen
     const cur = document.fullscreenElement || document.webkitFullscreenElement
-    if (req && !cur) Promise.resolve(req.call(el)).catch(() => { })
+    if (req && !cur) {
+      Promise.resolve(req.call(el)).catch(() => { })
+    } else if (cur) {
+      // ponytail: already fullscreen but overlay stuck (Windows-key blur) — force clear grace + kiosk
+      if (graceTimerRef.current || graceCountdown !== null) {
+        if (graceTimerRef.current) clearTimeout(graceTimerRef.current)
+        if (graceIntervalRef.current) clearInterval(graceIntervalRef.current)
+        graceTimerRef.current = null
+        graceIntervalRef.current = null
+        graceEndAtRef.current = 0
+        graceReasonRef.current = ''
+        setGraceCountdown(null)
+        const a = alertAudioRef.current
+        if (a) { a.pause(); a.currentTime = 0 }
+      }
+      if (kioskTimer.current) clearTimeout(kioskTimer.current)
+      if (kioskLocked) setKioskLocked(false)
+      if (!document.hasFocus()) window.focus()
+    }
   }
 
   // Mode form: satu section = satu halaman. Quiz style: satu soal = satu halaman.
@@ -1230,7 +1332,7 @@ export default function AnswerQuiz() {
             <div className="flex items-start gap-3 bg-incorrect text-white px-4 py-3.5 rounded-2xl shadow-lift">
               <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-semibold">{t('answerQuiz.cheatWarningTitle', { reason: cheatWarn.reason || 'leaving page' })}</p>
+                <p className="font-semibold">{t('answerQuiz.cheatWarningTitle', { reason: formatCheatReason(cheatWarn.reason, t) })}</p>
                 <p className="text-white/85 mt-0.5">
                   {t('answerQuiz.cheatWarningDesc', { current: 3 - cheatWarn.left })}
                 </p>
@@ -1630,7 +1732,7 @@ export default function AnswerQuiz() {
           <div className="flex items-start gap-3 bg-incorrect text-white px-4 py-3.5 rounded-2xl shadow-lift">
             <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
             <div className="text-sm">
-              <p className="font-semibold">{t('answerQuiz.cheatWarningTitle', { reason: cheatWarn.reason || 'leaving page' })}</p>
+              <p className="font-semibold">{t('answerQuiz.cheatWarningTitle', { reason: formatCheatReason(cheatWarn.reason, t) })}</p>
               <p className="text-white/85 mt-0.5">
                 {t('answerQuiz.cheatWarningDesc', { current: 3 - cheatWarn.left })}
               </p>
@@ -2163,7 +2265,7 @@ function CheatLockOverlay({ info, onRefresh, refreshing }) {
             </span>
             <p className="font-display text-2xl font-bold">{t('answerQuiz.violatingRules')}</p>
             {info.reason && (
-              <p className="text-sm text-white/70 mt-2">{t('answerQuiz.lastViolation', { reason: info.reason })}</p>
+              <p className="text-sm text-white/70 mt-2">{t('answerQuiz.lastViolation', { reason: formatCheatReason(info.reason, t) })}</p>
             )}
             <p className="text-sm text-white/70 mt-4 leading-relaxed">
               {t('answerQuiz.temporarilyLocked')}
@@ -2196,12 +2298,6 @@ function CheatLockOverlay({ info, onRefresh, refreshing }) {
 
 function KioskLockOverlay({ locked, palette, onResume, countdown }) {
   const { t } = useTranslation()
-  // Layar kunci full — menutupi SEMUA konten. Interaksi apa pun (klik/keyboard/
-  // sentuh) langsung mem-pin ulang ke fullscreen lewat onResume; konten ujian
-  // tidak terlihat sampai responden kembali benar-benar ke dalam ujian.
-  // countdown 5..0: warning sebelum server lock. ponytail: countdown dikontrol
-  // dari anti-cheat effect (graceCountdown), bukan timer lokal duplikat.
-  // visible juga saat countdown aktif meski locked belum (fsAvailable race).
   const visible = locked || (countdown !== null && countdown !== undefined)
   useEffect(() => {
     if (!visible) return
@@ -2259,9 +2355,6 @@ function KioskLockOverlay({ locked, palette, onResume, countdown }) {
               <Lock className="w-4 h-4" />
               Lock again &amp; continue
             </button>
-            <p className="text-white/60 text-xs mt-4">
-              {countdown !== null ? 'Jika hitungan mencapai 0, ujian dikunci & menunggu pengawas.' : 'Quiz will be auto-submitted with score 0 if you leave too often.'}
-            </p>
           </div>
         </motion.div>
       )}

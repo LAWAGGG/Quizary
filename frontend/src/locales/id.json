@@ -746,5 +746,14 @@
     "deleted": "{{count}} hasil dihapus",
     "deleteFailed": "Gagal menghapus",
     "statusUpdated": "Status diperbarui"
+  },
+  "violation": {
+    "leftFullscreen": "Keluar dari fullscreen",
+    "tabHidden": "Meninggalkan tab ujian",
+    "windowBlur": "Jendela ujian tidak aktif",
+    "splitScreen": "Layar terbagi (split-screen)",
+    "blockedAction": "Aksi terlarang diblokir",
+    "appBackground": "Keluar dari aplikasi",
+    "unknown": "Aktivitas mencurigakan"
   }
 }

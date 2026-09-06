@@ -746,5 +746,14 @@
     "deleted": "{{count}} result(s) deleted",
     "deleteFailed": "Failed to delete",
     "statusUpdated": "Status updated"
+  },
+  "violation": {
+    "leftFullscreen": "Left fullscreen",
+    "tabHidden": "Left exam tab",
+    "windowBlur": "Exam window inactive",
+    "splitScreen": "Split-screen detected",
+    "blockedAction": "Blocked action",
+    "appBackground": "Left application",
+    "unknown": "Suspicious activity"
   }
 }

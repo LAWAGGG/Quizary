@@ -8,6 +8,7 @@ import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { stripTags } from '../../lib/sanitize'
 import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichText, ConfirmModal, sanitizeHtml } from '../../components/ui'
 import { isAudioUrl } from '../../lib/media'
+import { formatCheatReason } from '../../lib/cheatReason'
 import { useTranslation } from 'react-i18next'
 
 
@@ -388,7 +389,7 @@ export default function Results() {
                         )}
                       </td>
                       <td className="px-5 py-3.5"><StatusSelect row={row} />{row.cheat_reason && (
-                        <p className="text-[11px] text-incorrect/80 mt-1 max-w-[180px] truncate" title={row.cheat_reason}>{row.cheat_reason}</p>
+                        <p className="text-[11px] text-incorrect/80 mt-1 max-w-[180px] truncate" title={row.cheat_reason}>{formatCheatReason(row.cheat_reason, t)}</p>
                       )}</td>
                       <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400">{row.submitted_at || '-'}</td>
                     </motion.tr>
@@ -418,7 +419,7 @@ export default function Results() {
                         <StatusBadge status={row.status} />
                       </div>
                       {row.cheat_reason && (
-                        <p className="text-[11px] text-incorrect/80 mb-2 truncate" title={row.cheat_reason}>{row.cheat_reason}</p>
+                        <p className="text-[11px] text-incorrect/80 mb-2 truncate" title={row.cheat_reason}>{formatCheatReason(row.cheat_reason, t)}</p>
                       )}
                       <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400">
                     {isQuiz ? (
@@ -524,7 +525,7 @@ export default function Results() {
                     </p>
                     {detail.cheat_reason && (
                       <p className={`text-[11px] mt-1 ${detail.status === 'cheating' ? 'text-incorrect/80' : 'text-warn/80'}`}>
-                        {t('results.lastRecorded', { reason: detail.cheat_reason })}
+                        {t('results.lastRecorded', { reason: formatCheatReason(detail.cheat_reason, t) })}
                       </p>
                     )}
                   </div>
