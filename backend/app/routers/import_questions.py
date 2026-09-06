@@ -26,7 +26,16 @@ R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 # Opsi jawaban tidak dibatasi A-D — bebas sampai A-J (10 opsi), konsisten
 # dengan iterator "ABCDEFGHIJ" untuk native Word list di bawah. Huruf tunggal
 # M+ (I/O/Q/X/Y/Z) rentan false-positive sebagai teks biasa, jadi batasi di J.
-ANSWER_RE = re.compile(r'(?:Kunci\s*)?(?:Jawaban|Jawab|Answer)\s*[:\-]?\s*([A-Ja-j])\b', re.IGNORECASE)
+# Multi-huruf dipisah koma/space (mis. "Answer: A, C" / "Jawaban: A C") untuk checkbox.
+ANSWER_RE = re.compile(r'(?:Kunci\s*)?(?:Jawaban|Jawab|Answer)\s*[:\-]?\s*([A-Ja-j](?:\s*[,;\s]\s*[A-Ja-j])*)\b', re.IGNORECASE)
+# Kunci teks panjang untuk essay/short_answer: tangkap sisa baris setelah
+# "Kunci:" / "Answer:" (multi-kunci pisah ";" — di-trim/di-truncate saat
+# validasi lewat check_answer_key dari schemas.question).
+ANSWER_TEXT_RE = re.compile(r'^\s*(?:Kunci|Answer)\s*[:\-]\s*(.+?)\s*$', re.IGNORECASE)
+# Marker tipe lama tetap dikenali agar baris metadata pada dokumen lama tidak
+# ikut masuk ke teks soal. Untuk DOCX, tipe ditentukan dari ada/tidaknya opsi:
+# tanpa opsi = essay; dengan opsi = multiple_choice/checkbox.
+TYPE_RE = re.compile(r'^\s*(?:Tipe|Type)\s*[:\-]\s*(essay|short[\s_]?answer|isian[\s_]?singkat|esai|isian)\s*$', re.IGNORECASE)
 NUMBERED_RE = re.compile(r'\d+[\.\)]\s*(.+)')
 OPTION_INLINE_RE = re.compile(r'(?:^|\s)([A-Ja-j])[\.\)]\s*(.*?)(?=\s+[A-Ja-j][\.\)]|$)')
 
@@ -46,6 +55,8 @@ def _parse_text(raw: str) -> list[dict]:
         q_text = None
         options: list[dict] = []
         answer_letter = None
+        answer_key: str | None = None
+        forced_type: str | None = None
 
         for line in block.split("\n"):
             line = line.strip()
@@ -55,9 +66,24 @@ def _parse_text(raw: str) -> list[dict]:
             if m:
                 q_text = m.group(1).strip()
                 continue
+            m = TYPE_RE.match(line)
+            if m:
+                tag = m.group(1).lower().replace(' ', '_').replace('_', ' ').strip()
+                # normalisasi: short answer / isian singkat → short_answer, esai/essay
+                if tag in ('short_answer', 'short answer', 'isian_singkat', 'isian singkat', 'isian'):
+                    forced_type = 'short_answer'
+                else:
+                    forced_type = 'essay'
+                continue
             m = ANSWER_RE.match(line)
             if m:
-                answer_letter = m.group(1).upper()
+                # Parse "A, C" / "A C" / "A;C" jadi set huruf
+                letters = {x.upper() for x in re.findall(r'[A-Ja-j]', m.group(1))}
+                answer_letter = letters
+                continue
+            m = ANSWER_TEXT_RE.match(line)
+            if m:
+                answer_key = m.group(1).strip()
                 continue
             for om in OPTION_INLINE_RE.finditer(line):
                 text = om.group(2).strip()
@@ -65,12 +91,18 @@ def _parse_text(raw: str) -> list[dict]:
                     options.append({"letter": om.group(1).upper(), "text": text})
 
         if q_text:
+            # essay/short_answer eksplisit: abaikan opsi A./B. agar tidak jadi MC
+            if forced_type in ('essay', 'short_answer'):
+                options = []
+                answer_letter = None
             questions.append({
                 "question_text": q_text,
+                "forced_type": forced_type,
                 "options": [
-                    {"text": opt["text"], "is_correct": opt["letter"] == answer_letter}
+                    {"text": opt["text"], "is_correct": (opt["letter"] in answer_letter) if isinstance(answer_letter, set) else (opt["letter"] == answer_letter)}
                     for opt in options
                 ],
+                "answer_key": answer_key,
             })
 
     return questions
@@ -112,9 +144,17 @@ def _extract_docx_items(doc) -> list[tuple[str, str | None, list]]:
 
     Paragraf text kosong TIDAK di-skip bila ia membawa numbering (nomor soal
     auto Word) atau gambar (stem soal berupa gambar) — keduanya krusial.
+
+    Heading (Heading 1/2/3) di-skip karena itu cuma judul bagian, bukan soal.
     """
     items = []
     for p in doc.paragraphs:
+        # Skip heading paragraphs (Heading 1/2/3) — they are section titles
+        # in the document, not questions. The numbering inside headings is
+        # already excluded.
+        style_name = (p.style.name or "").lower() if p.style else ""
+        if style_name.startswith("heading"):
+            continue
         text = p.text.strip()
         numPr = p._p.find(f".//{WORD_NS}numPr")
         num_id = None
@@ -157,7 +197,14 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
     def start_question(text: str, imgs: list):
         nonlocal current, active_option_num_id, option_letters
         flush()
-        current = {"question_text": text.strip(), "options": [], "answer_letter": None, "images": []}
+        current = {
+            "question_text": text.strip(),
+            "options": [],
+            "answer_letter": None,
+            "answer_key": None,
+            "forced_type": None,
+            "images": [],
+        }
         active_option_num_id = None
         option_letters = iter("ABCDEFGHIJ")
         attach_imgs(current, imgs)
@@ -170,13 +217,27 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
             start_question(m.group(1), imgs)
             continue
 
-        # 2) baris "Jawaban: X"
-        m = ANSWER_RE.match(text)
+        # 2) Marker tipe lama tidak lagi menentukan tipe pada import DOCX.
+        #    Lewati barisnya, lalu biarkan opsi tetap diproses seperti biasa.
+        m = TYPE_RE.match(text)
         if m and current is not None:
-            current["answer_letter"] = m.group(1).upper()
             continue
 
-        # 3) opsi manual "A. ..." (termasuk multi-kolom satu baris "A. x D. y")
+        # 3) baris "Jawaban: X" (huruf A-J, bisa multi "A, C") — untuk soal dengan opsi
+        m = ANSWER_RE.match(text)
+        if m and current is not None:
+            letters = {x.upper() for x in re.findall(r'[A-Ja-j]', m.group(1))}
+            current["answer_letter"] = letters
+            continue
+
+        # 4) baris "Kunci: ..." (teks panjang) atau "Answer: teks" untuk essay/short_answer
+        m = ANSWER_TEXT_RE.match(text)
+        if m and current is not None:
+            current["answer_key"] = m.group(1).strip()
+            continue
+
+        # 5) opsi manual "A. ..." (termasuk multi-kolom satu baris "A. x D. y").
+        #    Opsi tetap diproses; tipe akhir ditentukan saat persistence.
         found_option = False
         if current is not None:
             for om in OPTION_INLINE_RE.finditer(text):
@@ -189,13 +250,13 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
         if found_option:
             continue
 
-        # 4) native Word numbered list, numId = numId soal (mayoritas) -> soal baru.
+        # 6) native Word numbered list, numId = numId soal (mayoritas) -> soal baru.
         #    Paragraf bisa text kosong (nomor auto Word ada di paragraf terpisah).
         if num_id is not None and num_id == question_num_id:
             start_question(text, imgs)
             continue
 
-        # 5) native Word numbered list, numId BEDA -> anggap sub-list opsi jawaban
+        # 7) native Word numbered list, numId BEDA -> anggap sub-list opsi jawaban
         if num_id is not None and current is not None:
             if active_option_num_id != num_id:
                 active_option_num_id = num_id
@@ -206,7 +267,7 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
             current["options"].append(opt)
             continue
 
-        # 6) tidak ada numbering & tidak match pola apapun -> baris lanjutan
+        # 8) tidak ada numbering & tidak match pola apapun -> baris lanjutan
         #    (soal/opsi yang wrap ke baris baru, atau stem soal berupa gambar),
         #    gabungkan ke item terakhir
         if current is not None:
@@ -221,26 +282,63 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
                 attach_imgs(current, imgs)
             continue
 
-        # 7) belum ada soal terbuka (misal judul dokumen di baris pertama) -> lewati
+        # 9) belum ada soal terbuka (misal judul dokumen di baris pertama) -> lewati
 
     flush()
 
-    # finalisasi is_correct
+    # finalisasi is_correct + pastikan struktur konsisten
     result = []
     for q in questions:
         answer_letter = q.pop("answer_letter", None)
+        answer_key = q.pop("answer_key", None)
+        forced_type = q.pop("forced_type", None)
         result.append({
             "question_text": q["question_text"],
             "images": q["images"],
+            "forced_type": forced_type,
             "options": [
-                {"text": o["text"], "is_correct": o["letter"] == answer_letter, "images": o["images"]}
+                {
+                    "text": o["text"],
+                    "is_correct": (o["letter"] in answer_letter) if isinstance(answer_letter, set) else (o["letter"] == answer_letter),
+                    "images": o["images"],
+                }
                 for o in q["options"]
             ],
+            "answer_key": answer_key,
         })
     return result
 
 
 _WEB_IMG_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def _sanitize_answer_key(raw: str | None) -> str | None:
+    """Sanitasi kunci jawaban dari import Word/Docx.
+
+    - Kosong / whitespace → None (soal dianggap tanpa kunci, is_scored=False)
+    - Trim + potong per kunci (maks MAX_KEYWORD_LEN=100 char) sesuai schema
+    - Drop kunci kosong (mis. ";; jakarta;;") agar parse_answer_key tidak dapat list berlubang
+    - Drop kunci setelah MAX_KEYWORDS=10 agar sesuai schema
+    - Hasil digabung kembali dengan pemisah ";" — input boleh pakai ";" atau "\n"
+    """
+    if not raw:
+        return None
+    from app.schemas.question import MAX_KEYWORD_LEN, MAX_KEYWORDS
+    parts = re.split(r"[;\n]+", raw)
+    cleaned: list[str] = []
+    for p in parts:
+        p = p.strip()
+        if not p:
+            continue
+        if len(p) > MAX_KEYWORD_LEN:
+            p = p[:MAX_KEYWORD_LEN].rstrip()
+        if p:
+            cleaned.append(p)
+        if len(cleaned) >= MAX_KEYWORDS:
+            break
+    if not cleaned:
+        return None
+    return ";".join(cleaned)
 
 
 def _save_blob(ext: str, blob: bytes) -> str:
@@ -327,6 +425,8 @@ def import_docx(
         has_options = bool(q_data["options"])
         correct_count = sum(1 for o in q_data["options"] if o["is_correct"])
 
+        # Soal dengan opsi tetap menjadi pilihan ganda/checkbox. Hanya soal
+        # tanpa opsi yang otomatis menjadi essay.
         if has_options and correct_count > 1:
             q_type = QuestionType.checkbox
         elif has_options:
@@ -334,15 +434,40 @@ def import_docx(
         else:
             q_type = QuestionType.essay
 
-        _no_grade = q_type in (QuestionType.essay, QuestionType.date, QuestionType.time, QuestionType.file_upload)
+        # Sanitasi answer_key dari parser — multi-kunci pisah ";" (sesuai schema).
+        raw_key = q_data.get("answer_key")
+        answer_key = _sanitize_answer_key(raw_key) if q_type in (
+            QuestionType.essay, QuestionType.short_answer
+        ) else None
+
+        # Tipe tanpa opsi (essay/short tanpa key, date, time, file_upload) → no-grade.
+        # Essay/short_answer dengan key valid → is_scored=True (auto-graded).
+        _has_keyword_grade = (
+            q_type in (QuestionType.essay, QuestionType.short_answer)
+            and bool(answer_key)
+        )
+        _no_grade = q_type in (
+            QuestionType.date, QuestionType.time, QuestionType.file_upload
+        ) or (q_type in (QuestionType.essay, QuestionType.short_answer) and not _has_keyword_grade)
+
         q = Question(
             form_id=form.id,
             type=q_type,
             question_text=q_data["question_text"],
-            points=0 if form.type.value == "quiz" or _no_grade else 1,
+            # Auto mode pool 100 → poin 0 dulu, distribute_quiz_points di akhir
+            # yang mengisi; manual mode pakai default 1.
+            # Essay/short tanpa key / tipe non-graded → selalu 0 (tidak ikut pool).
+            points=(
+                0
+                if form.type.value == "quiz"
+                or q_type in (QuestionType.date, QuestionType.time, QuestionType.file_upload)
+                or (q_type in (QuestionType.essay, QuestionType.short_answer) and not _has_keyword_grade)
+                else 1
+            ),
             is_scored=not _no_grade,
             section_id=target_section_id,
             order_index=next_order,
+            answer_key=answer_key,
             created_at=now,
         )
         db.add(q)
@@ -412,6 +537,64 @@ A. satu B. dua C. tiga D. empat E. lima
     five = qs[3]
     assert [o["text"] for o in five["options"]] == ["satu", "dua", "tiga", "empat", "lima"], "opsi E harusnya tidak tertimbun"
     assert [o["is_correct"] for o in five["options"]] == [False, False, False, False, True], "kunci E harus dikenali"
+
+    # fixture: checkbox dengan multi-huruf "Answer: A, C" — harus tangkap A dan C benar
+    cb = """1. Bilangan prima
+A. 2
+B. 4
+C. 7
+D. 9
+Answer: A, C
+"""
+    qs_cb = _parse_text(cb)
+    assert len(qs_cb) == 1
+    assert sum(1 for o in qs_cb[0]["options"] if o["is_correct"]) == 2
+    correct_texts = sorted(o["text"] for o in qs_cb[0]["options"] if o["is_correct"])
+    assert correct_texts == ["2", "7"], correct_texts
+
+    # fixture: essay + kunci multi-key pisah ";" (sintaks import Word)
+    s2 = """1. Jelaskan proses fotosintesis.
+Kunci: fotosintesis; tumbuhan; cahaya matahari
+2. Apa ibu kota Indonesia?
+Tipe: short answer
+Kunci: Jakarta
+3. Soal Tipe: essay dengan opsi A./B. (opsi harus di-drop)
+Tipe: essay
+A. pilihan 1
+B. pilihan 2
+4. Multi-kunci dengan kunci panjang
+Kunci: ibu kota; DKI Jakarta; Special Capital Region
+"""
+    qs2 = _parse_text(s2)
+    assert len(qs2) == 4, qs2
+    # essay + multi-kunci
+    assert qs2[0]["options"] == [], "essay #1 tidak boleh punya opsi"
+    assert qs2[0]["answer_key"] == "fotosintesis; tumbuhan; cahaya matahari", qs2[0]["answer_key"]
+    assert qs2[0]["forced_type"] is None, "no marker → forced_type None (heuristic)"
+    # short answer eksplisit
+    assert qs2[1]["forced_type"] == "short_answer", qs2[1]["forced_type"]
+    assert qs2[1]["options"] == [], "short_answer #2 tidak boleh punya opsi"
+    assert qs2[1]["answer_key"] == "Jakarta", qs2[1]["answer_key"]
+    # Tipe essay + opsi harus drop opsi
+    assert qs2[2]["forced_type"] == "essay", qs2[2]["forced_type"]
+    assert qs2[2]["options"] == [], "essay eksplisit harus drop opsi"
+    # multi-kunci 3 entri
+    assert qs2[3]["answer_key"] == "ibu kota; DKI Jakarta; Special Capital Region", qs2[3]["answer_key"]
+
+    # fixture: sanitizer untuk kunci panjang
+    long_key = "x" * 150
+    multi_overflow = ";".join([f"k{i}" for i in range(15)])
+    sanitized = _sanitize_answer_key(long_key)
+    assert sanitized is not None and len(sanitized) == 100, f"kunci panjang harus dipotong ke 100: {len(sanitized or '')}"
+    sanitized2 = _sanitize_answer_key(multi_overflow)
+    assert sanitized2 is not None and sanitized2.count(";") == 9, f"multi-kunci >10 harus dipotong ke 10 entri: {sanitized2}"
+    # whitespace + pemisah campur
+    sanitized3 = _sanitize_answer_key("  jakarta ;;\nDKI Jakarta  \n; ")
+    assert sanitized3 == "jakarta;DKI Jakarta", sanitized3
+    # kosong / None
+    assert _sanitize_answer_key(None) is None
+    assert _sanitize_answer_key("   ") is None
+    print("ok essay/short_answer + Kunci parser + sanitizer")
 
     # fixture: docx dengan native Word numbering (numPr)
     sample = os.path.join(os.path.dirname(__file__), "../../../tmp_test/soal mtk.docx")

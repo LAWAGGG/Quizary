@@ -2424,40 +2424,36 @@ export default function QuestionBuilder() {
                 <section>
                   <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">{t('questionBuilder.formatRules')}</h4>
                   <ul className="space-y-1 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>Start each question with a number, e.g. <strong>1.</strong> or <strong>1)</strong></span></li>
-                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>List choices with letters: <strong>A.</strong>, <strong>B.</strong>, etc.</span></li>
-                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>Mark correct answer with <strong>Answer: B</strong></span></li>
-                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>Multiple correct = checkbox. No choices = essay.</span></li>
+                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>{t('questionBuilder.importFormatNumbered').replace(/<[^>]+>/g, '')} <strong>1.</strong> / <strong>1)</strong></span></li>
+                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>{t('questionBuilder.importFormatOptions').replace(/<[^>]+>/g, '')} <strong>A.</strong>, <strong>B.</strong>, dst.</span></li>
+                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>{t('questionBuilder.importFormatAnswerLetter').replace(/<[^>]+>/g, '')} <strong>Answer: B</strong></span></li>
+                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>{t('questionBuilder.importFormatEssayOnly')}</span></li>
+                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span dangerouslySetInnerHTML={{ __html: t('questionBuilder.importFormatKunci') }} /></li>
                   </ul>
                 </section>
 
                 {/* Example */}
                 <section>
                   <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">{t('questionBuilder.example')}</h4>
-                  <div className="rounded-xl bg-gray-50 dark:bg-ink-800/60 border border-gray-200 dark:border-gray-700 p-3 sm:p-4 font-mono text-[11px] sm:text-[13px] leading-relaxed text-gray-700 dark:text-gray-300 overflow-auto max-h-48 whitespace-pre">{`1. What is the capital of France?
+                  <div className="rounded-xl bg-gray-50 dark:bg-ink-800/60 border border-gray-200 dark:border-gray-700 p-3 sm:p-4 font-mono text-[11px] sm:text-[13px] leading-relaxed text-gray-700 dark:text-gray-300 overflow-auto max-h-56 whitespace-pre">{`1. What is the capital of France?
    A. London
    B. Paris
    C. Berlin
    D. Madrid
    Answer: B
 
-2. Which of the following are prime numbers?
-   A. 2
-   B. 4
-   C. 7
-   D. 9
-   Answer: A, C
+${t('questionBuilder.importExampleEssay')}
 
-3. Explain how photosynthesis works.`}</div>
+`}</div>
                 </section>
 
                 {/* Notes */}
                 <section>
                   <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">{t('questionBuilder.notes')}</h4>
                   <ul className="space-y-1 text-[11px] sm:text-xs text-gray-500 dark:text-gray-400 list-disc pl-4">
-                    <li>Only .docx files are accepted.</li>
-                    <li>Imported questions are appended at the end.</li>
-                    <li>For quizzes, points are redistributed automatically.</li>
+                    <li>{t('questionBuilder.importNoteOnlyDocx')}</li>
+                    <li>{t('questionBuilder.importNoteAppend')}</li>
+                    <li>{t('questionBuilder.importNoteQuiz')}</li>
                   </ul>
                 </section>
               </div>
