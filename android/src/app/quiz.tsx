@@ -41,6 +41,9 @@ import { RestrictedWarningOverlay } from '../components/quiz/RestrictedWarningOv
 import { ViolatingLockOverlay } from '../components/quiz/ViolatingLockOverlay';
 import { getThemeGradientColors } from '../components/quiz/QuizBackground';
 import { useAppPinning } from '../hooks/useAppPinning';
+import { useCheatSound } from '../hooks/useCheatSound';
+import { useLockedVolume } from '../hooks/useLockedVolume';
+import { useFloatingBlock } from '../hooks/useFloatingBlock';
 
 function parseWibDate(dateStr: string): Date | null {
   if (!dateStr) return null;
@@ -101,6 +104,9 @@ export default function QuizScreen() {
   const warningVisibleRef = useRef(false);
   const lockedVisibleRef = useRef(false);
   const { pin, unpin, canPin, isExpoGo, nativeMissing } = useAppPinning();
+  const { play: playCheat, stop: stopCheat } = useCheatSound();
+  const { lock: lockVolume, unlock: unlockVolume } = useLockedVolume();
+  const { hasFloating, setSecure } = useFloatingBlock();
 
   const themeColor =
     publicForm?.theme_color ||
@@ -164,15 +170,16 @@ export default function QuizScreen() {
   }, [shortCode]);
 
   // Poll submission if locked (check if creator unlocked)
-  // Cleanup timer and unpin on unmount
+  // Cleanup timer and unpin + unlock volume + stop sound + secure off on unmount
   useEffect(() => {
     return () => {
       if (warningTimerRef.current) clearInterval(warningTimerRef.current);
-      // Ensure we unpin if component unmounts while pinned (e.g. back to home)
-      // Fire-and-forget; don't block unmount
       unpin().catch(() => {});
+      unlockVolume().catch(() => {});
+      stopCheat().catch(() => {});
+      setSecure(false).catch(() => {});
     };
-  }, [unpin]);
+  }, [unpin, unlockVolume, stopCheat, setSecure]);
 
   // Block hardware back when pinned (restricted quiz in progress)
   useEffect(() => {
@@ -196,6 +203,21 @@ export default function QuizScreen() {
     return () => sub.remove();
   }, [canPin, language]);
 
+  const triggerFloatingLock = useCallback(async (reason: string) => {
+    if (lockedVisibleRef.current) return;
+    const sid = submissionIdRef.current;
+    if (!sid) return;
+    const now = Date.now();
+    setLockedAt(now);
+    setCheatReason(reason);
+    setLockedVisible(true);
+    lockedVisibleRef.current = true;
+    setWarningVisible(false);
+    warningVisibleRef.current = false;
+    playCheat().catch(() => {});
+    lockSubmission(sid, reason).catch(() => {});
+  }, [playCheat]);
+
   const handleCheckLockedStatus = useCallback(async () => {
     const sid = submissionIdRef.current;
     if (!sid) return;
@@ -204,7 +226,6 @@ export default function QuizScreen() {
       const detail = await getSubmissionDetail(sid);
       const status = detail.status;
       if (status === 'in_progress') {
-        // Creator unlocked -> continue
         setLockedVisible(false);
         lockedVisibleRef.current = false;
         setWarningVisible(false);
@@ -212,14 +233,18 @@ export default function QuizScreen() {
         setCheatReason('window-blur');
         setLockedAt(null);
         setSubmission((prev: any) => ({ ...prev, status: 'in_progress' }));
+        stopCheat().catch(() => {});
+        // keep secure flag on when unlocked (still restricted)
+        setSecure(true).catch(() => {});
         showAlert({ type: 'success', title: language === 'ID' ? 'Dibuka Kembali' : 'Unlocked', message: language === 'ID' ? 'Pengawas telah membuka kembali ujian. Silakan lanjutkan.' : 'Proctor has unlocked the exam. Please continue.' });
       } else if (status === 'locked') {
-        // Still locked, refresh timer (keep pinned)
         setCheatReason(detail.cheat_reason || 'window-blur');
         showAlert({ type: 'warning', title: language === 'ID' ? 'Masih Terkunci' : 'Still Locked', message: language === 'ID' ? 'Ujian masih terkunci, tunggu keputusan pengawas.' : 'Exam is still locked, waiting for proctor decision.' });
       } else if (status === 'cheating' || status === 'submitted' || status === 'auto_submitted') {
-        // Final state -> unpin before leaving
         await unpin().catch(() => {});
+        await unlockVolume().catch(() => {});
+        await stopCheat().catch(() => {});
+        await setSecure(false).catch(() => {});
         setLockedVisible(false);
         setWarningVisible(false);
         router.replace({ pathname: '/(tabs)/home' } as any);
@@ -248,6 +273,22 @@ export default function QuizScreen() {
     }, 1000);
     return () => clearInterval(id);
   }, [submission?.expired_at]);
+
+  // Floating overlay auto-check (all floating: PiP, multi-window, overlay)
+  useEffect(() => {
+    if (!submission) return;
+    if (!isRestrictedRef.current) return;
+    const id = setInterval(async () => {
+      if (!answeringRef.current || lockedVisibleRef.current) return;
+      try {
+        const floating = await hasFloating();
+        if (floating) {
+          await triggerFloatingLock('floating-overlay');
+        }
+      } catch {}
+    }, 800);
+    return () => clearInterval(id);
+  }, [submission, hasFloating, triggerFloatingLock]);
 
   // AppState restricted handler -> 5 sec warning
   useEffect(() => {
@@ -284,6 +325,7 @@ export default function QuizScreen() {
             setCheatReason('window-blur');
             setLockedVisible(true);
             lockedVisibleRef.current = true;
+            playCheat().catch(() => {});
             // Server lock
             lockSubmission(sid, 'window-blur').catch(() => {});
           }
@@ -304,6 +346,7 @@ export default function QuizScreen() {
             setCheatReason('window-blur');
             setLockedVisible(true);
             lockedVisibleRef.current = true;
+            playCheat().catch(() => {});
             const sid2 = submissionIdRef.current;
             if (sid2) lockSubmission(sid2, 'window-blur').catch(() => {});
           }
@@ -315,20 +358,30 @@ export default function QuizScreen() {
     return () => {
       sub.remove();
     };
-  }, []);
+  }, [playCheat]);
 
-  const handleReenter = useCallback(() => {
+  const handleReenter = useCallback(async () => {
     if (warningTimerRef.current) clearInterval(warningTimerRef.current);
     warningTimerRef.current = null;
+    // Auto-check floating before re-enter
+    if (isRestrictedRef.current) {
+      try {
+        if (await hasFloating()) {
+          await triggerFloatingLock('floating-overlay');
+          return;
+        }
+      } catch {}
+    }
     setWarningVisible(false);
     warningVisibleRef.current = false;
     setWarningCountdown(5);
     countdownRef.current = 5;
-    // Re-pin if we were pinned before (user returned within grace period)
     if (isRestrictedRef.current && canPin) {
       pin().catch(() => {});
+      setSecure(true).catch(() => {});
     }
-  }, [canPin, pin]);
+    stopCheat().catch(() => {});
+  }, [canPin, pin, stopCheat, hasFloating, triggerFloatingLock, setSecure]);
 
   const handleStart = async () => {
     if (!publicForm) return;
@@ -381,8 +434,23 @@ export default function QuizScreen() {
         setAnswers(init);
       }
       answeringRef.current = true;
-      // Pin app if restricted quiz (screen pinning). Fire-and-forget with fallback.
       if (publicForm.type === 'quiz' && publicForm.is_restricted) {
+        // Auto-check floating before pin
+        try {
+          if (await hasFloating()) {
+            await triggerFloatingLock('floating-overlay');
+            showAlert({
+              type: 'warning',
+              title: language === 'ID' ? 'Floating terdeteksi' : 'Floating detected',
+              message: language === 'ID'
+                ? 'Floating app terdeteksi. Tutup semua floating/bubble/PiP sebelum mulai.'
+                : 'Floating app detected. Close all floating/bubble/PiP before starting.',
+            });
+            return;
+          }
+        } catch {}
+        lockVolume().catch(() => {});
+        setSecure(true).catch(() => {});
         if (canPin) {
           const pinned = await pin().catch(() => false);
           if (!pinned) {
@@ -583,6 +651,9 @@ export default function QuizScreen() {
     if (!sid) return;
     answeringRef.current = false;
     await unpin().catch(() => {});
+    await unlockVolume().catch(() => {});
+    await stopCheat().catch(() => {});
+    await setSecure(false).catch(() => {});
     try {
       await finalizeSubmission(sid);
     } catch {}
@@ -643,6 +714,9 @@ export default function QuizScreen() {
       const res = await finalizeSubmission(sid);
       answeringRef.current = false;
       await unpin().catch(() => {});
+      await unlockVolume().catch(() => {});
+      await stopCheat().catch(() => {});
+      await setSecure(false).catch(() => {});
       // Show submitted step briefly then go home
       setSubmission((prev: any) => ({ ...prev, result: res }));
       // Navigate to success view
@@ -651,6 +725,9 @@ export default function QuizScreen() {
     } catch (e: any) {
       if (e.message?.includes('waktu') || e.message?.includes('expired')) {
         answeringRef.current = false;
+        await unlockVolume().catch(() => {});
+        await stopCheat().catch(() => {});
+        await setSecure(false).catch(() => {});
         router.replace({ pathname: '/(tabs)/home' } as any);
       } else {
         showAlert({ type: 'error', title: 'Gagal submit', message: e.message });
@@ -798,6 +875,9 @@ export default function QuizScreen() {
           onOpenZoom={setZoomQuestion}
           onCloseQuiz={async () => {
             await unpin().catch(() => {});
+            await unlockVolume().catch(() => {});
+            await stopCheat().catch(() => {});
+            await setSecure(false).catch(() => {});
             router.replace('/(tabs)/home' as any);
           }}
           submissionId={submissionIdRef.current}
@@ -808,6 +888,9 @@ export default function QuizScreen() {
             <TouchableOpacity
               onPress={async () => {
                 await unpin().catch(() => {});
+                await unlockVolume().catch(() => {});
+                await stopCheat().catch(() => {});
+                await setSecure(false).catch(() => {});
                 router.replace('/(tabs)/home' as any);
               }}
               style={{ padding: 6 }}
