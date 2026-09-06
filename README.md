@@ -2,7 +2,7 @@
 
 Platform pembuatan form dan quiz berbasis web + mobile. Admin membuat form/quiz, membagikan link, responden mengisi lewat web atau Android, dan hasilnya otomatis di-grade.
 
-Menggabungkan kemudahan form builder (seperti Google Forms) dengan kelengkapan sistem ujian: timer terjadwal, anti-cheat, auto-grading, leaderboard, dan pengalaman gamified untuk mode quiz.
+Menggabungkan kemudahan form builder (seperti Google Forms) dengan kelengkapan sistem ujian: timer terjadwal, anti-cheat, auto-grading, leaderboard, pengalaman gamified untuk mode quiz, serta bantuan AI untuk pembuatan soal.
 
 ## Struktur Project
 
@@ -26,7 +26,7 @@ quizary/
 
 | Bagian | Teknologi |
 |---|---|
-| Backend | FastAPI, SQLAlchemy 2.0, MySQL, Pydantic v2, JWT, Alembic |
+| Backend | FastAPI, SQLAlchemy 2.0, MySQL, Pydantic v2, JWT, Alembic, Gemini API (AI builder) |
 | Frontend web | React 19, Vite, Tailwind CSS, React Router, Axios |
 | Android | Expo / React Native, expo-router |
 
@@ -78,19 +78,18 @@ Referensi lengkap (source of truth) ada di `config/`:
 
 1. **Mode Form/Survey** — pengalaman formal dan minimalis untuk survey, feedback, pendataan.
 2. **Mode Quiz** — pengalaman gamified, satu soal per layar, timer, auto-grading, leaderboard, anti-cheat.
+3. **Bantuan AI** — buat draf form/quiz dari prompt deskriptif (mis. “20 soal HOTS reading comprehension”) beserta file referensi `docx/pdf/pptx`. AI menyusun section, soal pilihan ganda/isi-an, dan pengaturan dasar untuk direview sebelum disimpan.
 
-## Update Terbaru (Sep 2026)
+## Sorotan Terbaru
 
-Perubahan besar yang belum masuk `config/` — sudah live di `main`:
+Pengembangan beberapa minggu terakhir difokuskan pada pengalaman ujian dan kecepatan:
 
-**Anti-cheat & UX:**
-* `is_restricted` fullscreen + grace 5 detik loop sound `frontend/public/sounds/cheat-alert.mp3` (`/sounds/cheat-alert.mp3`, `loop=true`, prime `pointerdown` sebelum `visibilitychange` karena autoplay policy). Sound infinite selama grace, stop saat balik/kelock. Klik kanan / `F12` / `Ctrl+P/U/S` / `Ctrl+Shift+I/J/C` hanya diblok (`preventDefault`) tidak hitung curang — curang hanya `left-fullscreen` / `tab-hidden` / `window-blur` (termasuk tombol Windows) / `split-screen`.
-* Teks pelanggaran rapi bilingual via `frontend/src/lib/cheatReason.js` (`formatCheatReason`) + `violation` keys `id.json/en.json` (`window-blur` → "Jendela ujian tidak aktif" bukan raw code). `locked` 5 menit auto-finalize sweep.
-* Timer preserve: `locked/cheating → in_progress` pertahankan `started_at` (sisa waktu saat ter-lock) + `tab_exit_count=0`, `submitted → in_progress` baru reset `now` (`backend/app/routers/results.py:180`).
-* Double-lock refresh fix: `fetchSubmission`/`handleRefresh` clear `kioskLocked`+`graceTimer`+audio saat `in_progress`, `grace` guard `fsAvailable`, `pinToFullscreen` force clear saat sudah fullscreen.
+**Ujian terasa lebih adil dan tenang.** Mode terbatas kini memberi jeda 5 detik dengan alarm lembut saat peserta keluar dari layar ujian, lalu kembali otomatis tanpa perlu proses berulang. Klik kanan atau shortcut seperti `F12` hanya dicegah, tidak langsung dihitung sebagai pelanggaran. Pesan pelanggaran juga sudah dua bahasa dan lebih mudah dipahami — misalnya `window-blur` tampil sebagai "Jendela ujian tidak aktif" — serta status `locked` akan difinalisasi otomatis setelah 5 menit.
 
-**Performansi (Fase 1 & 2 & 3):**
-* Backend N+1 → 3 query: `session_expiry.py:76` bulk preload, `submissions.py:262` `selectinload(Question.options.images)` + bulk `SubmissionOptionOrder`, `results.py:268` analytics preload, `questions.py:112` preload `list_questions`. `locked→cheating` skip `grade_submission` heavy.
-* Index komposit migrasi `f1527199e451` (`alembic upgrade head`): `questions(form_id,is_deleted)/(section/group)`, `submissions(form_id,status)/(form_id,status,user_id)/(ip_address)`, `answers(question_id)`, `forms(user_id,status/type/category)` — `WHERE form_id+status+is_deleted` dari scan → index.
-* Frontend render: `AnswerQuiz` `memo(OptionTile/OtherTile)` + `formPages` IIFE, `FormEdit` `dirty useMemo`, `FormList` debounce 300ms `debouncedSearch`, `QuestionBuilder` `memo(QuestionCard/Sortable*)`, `Results` `questionGroups useMemo`, `Analytics` `QuestionRow memo`. `useAutosave flushAll` sequential + `handleSubmitAll` `Promise.race 4s` anti-hang.
-* Bug `password` `[object Object]` setelah refresh → `AnswerQuiz.jsx:304` `fetchSubmission` handle `password` sebagai `answer_text` string + draft restore convert `{ids,text}` → string.
+**Waktu pengerjaan lebih konsisten.** Jika peserta dikembalikan dari status `locked` atau `cheating` ke `in_progress`, sisa waktunya melanjutkan dari posisi terakhir, bukan mengulang dari awal. Hanya pengiriman yang sudah selesai (`submitted`) yang akan memulai waktu baru saat dibuka kembali.
+
+**Aplikasi terasa lebih cepat.** Beban data di backend dikurangi dari ratusan query menjadi beberapa query terpusat untuk pembukaan soal dan analitik, ditambah indeks database yang lebih tepat untuk pencarian berdasarkan form dan status. Di sisi web, daftar form, editor soal, dan halaman pengerjaan tidak lagi merender ulang semuanya saat mengetik, sehingga tetap lancar bahkan dengan puluhan soal.
+
+**Pembuatan soal dibantu AI.** Dari dashboard, pembuat form cukup menuliskan kebutuhan dalam bahasa sehari-hari — AI akan menyusun draf section, soal, dan pengaturan awal untuk ditinjau. Prosesnya mendukung file referensi dan tetap memberi kontrol penuh sebelum disimpan.
+
+Detail teknis lengkap ada di `frontend/README.md` dan `backend/README.md`.

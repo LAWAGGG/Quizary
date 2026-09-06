@@ -15,6 +15,7 @@ REST API untuk platform pembuatan form dan quiz. Melayani dashboard admin (manaj
 | Migration | Alembic |
 | Export | OpenPyXL (.xlsx) |
 | Import | python-docx (.docx, termasuk gambar) |
+| AI Builder | Gemini API (draf section/soal + pengaturan) |
 
 ## Struktur Folder
 
@@ -29,7 +30,7 @@ backend/
 │   ├── utils.py             # Helper: file_url (path → full URL)
 │   ├── models/              # 11 tabel database (1 file per entitas)
 │   ├── schemas/             # Pydantic request/response per modul
-│   ├── services/            # Logika non-routing: grading, points, session_expiry
+│   ├── services/            # Logika non-routing: grading, points, session_expiry, ai_generate
 │   └── routers/             # 8 file router (auth, forms, questions, ...)
 ├── alembic/                 # Database migrations
 ├── requirements.txt
@@ -229,6 +230,16 @@ Status submission: `in_progress`, `submitted`, `auto_submitted` (timer habis), `
 
 Import langsung membuat soal sekaligus menyimpan gambar yang ditemukan di dokumen Word.
 
+### Bantuan AI
+
+| Method | Path | Auth | Deskripsi |
+|---|---|---|---|
+| POST | `/api/ai/generate` | Bearer | Buat draf section/soal + pengaturan dari prompt + file `docx/pdf/pptx` (hemat token via `group_id`) |
+| POST | `/api/ai/accept` | Bearer | Simpan draf yang sudah direview menjadi form baru |
+| GET | `/api/ai/quota` | Bearer | Cek sisa kuota harian (3/hari) |
+
+Alur: prompt deskriptif → AI menyusun draf untuk ditinjau → diterima menjadi form. File referensi dibatasi per file 5MB, total teks 30 ribu karakter.
+
 ## Validasi Input
 
 Semua endpoint dengan request body memiliki validasi Pydantic:
@@ -270,19 +281,19 @@ Di-mount sebagai static files di `/uploads`. Semua response API mengembalikan **
 
 Frontend tinggal pakai tanpa tambahan prefix.
 
-## Anti-Cheat & Status Flow
+## Perilaku Ujian
 
-* `is_restricted` quiz wajib `fullscreen` + grace 5 detik (`submissions.py:576` `reportTabExit` threshold 1 → `locked`). `window-blur` (tombol Windows) / `split-screen` / `tab-hidden` / `left-fullscreen` guard `fsAvailable`, sound loop di frontend `AnswerQuiz.jsx:218`.
-* `locked` 5 menit tidak diputuskan creator → auto `cheating` (nilai 0) via `session_expiry.py:56` `finalize_locked` (`LOCK_DECISION_MINUTES=5`, `updated_at` sebagai `locked_at`). Sweep lazy di `GET /submissions/{id}` + `auto_submit_expired_for_form:76`.
-* Status flow `results.py:180` `PATCH /forms/{id}/results/{id}/status`: `locked/cheating → in_progress` **pertahankan `started_at`** (timer lanjut sisa, tidak restart) + `tab_exit_count=0`, `submitted → in_progress` reset `now`. `locked → cheating` skip `grade_submission` heavy (hanya `max_score_for` 1 query).
-* Teks pelanggaran disimpan raw (`left-fullscreen`/`window-blur`/`; ` join 5 terakhir) di `submissions.cheat_reason`, diformat di frontend `lib/cheatReason.js`.
+Mode terbatas menjaga peserta tetap di layar penuh. Jika peserta keluar dari fullscreen, pindah tab, atau jendela menjadi tidak aktif, sistem memberi jeda 5 detik sebelum mengunci sesi. Status `locked` akan difinalisasi otomatis menjadi `cheating` (nilai 0) jika dalam 5 menit pengawas tidak mengambil keputusan.
 
-## Optimasi & Index (Fase 1 & 2)
+Alur status juga dibuat lebih adil: peserta yang dikembalikan dari `locked` atau `cheating` ke `in_progress` akan melanjutkan sisa waktu sebelumnya, bukan mengulang dari awal. Hanya pengiriman yang sudah selesai yang akan memulai waktu baru saat dibuka kembali. Teks pelanggaran disimpan apa adanya di database dan diformat menjadi pesan yang mudah dipahami di sisi web.
 
-* **N+1 → 3 query:** `session_expiry.py:76` bulk `Question`+`Answer IN (expired_ids)` + grading in-memory, single `commit`; `submissions.py:262` `_build_questions_response` `selectinload(Question.options.images, Question.images)` + bulk `SubmissionOptionOrder` 1 query; `get_submission:906` preload `Answer.selected_options`/`Question.images`; `results.py:268` analytics preload `Question.options`+`Answer.selected_options`; `questions.py:112` `list_questions` preload — 50 soal 300 query → 3 query, 500 peserta analytics 10k → 2 query.
-* **Index komposit** migrasi `alembic/versions/f1527199e451_add_composite_indexes_fase2.py` (`alembic upgrade head`): `questions(form_id,is_deleted)/(section/group)`, `submissions(form_id,status)/(form_id,status,user_id)/(ip_address)/(form_id,ip_address)`, `answers(question_id)/(submission_id)`, `forms(user_id,status/type/category)` — `WHERE form_id+status+is_deleted` dari scan → index. `questions.is_deleted` drift `index=True` tanpa DB index diperbaiki.
-* **Submit anti-hang:** `submissions.py` `POST /submit` tetap `grade_submission` tapi `useAutosave` sequential, frontend `handleSubmitAll` `Promise.race 4s`.
-* **Password bug:** `submissions.py`/`AnswerQuiz.jsx:304` handle `password` sebagai `answer_text` string (sebelumnya `else` jadi object → `[object Object]`).
+## Kecepatan
+
+Beberapa bagian yang paling sering diakses kini jauh lebih ringan. Pembukaan soal, pengambilan detail pengerjaan, dan halaman analitik yang sebelumnya memicu ratusan query kini diringkas menjadi beberapa query terpusat. Perubahan status seperti `locked` menjadi `cheating` juga tidak lagi melakukan penilaian ulang yang berat.
+
+Di sisi database, indeks yang lebih tepat ditambahkan untuk pencarian berdasarkan form, status, dan identitas peserta — termasuk untuk peserta anonim berbasis IP. Migrasi `f1527199e451` sudah mencakup penyesuaian ini dan cukup dijalankan dengan `alembic upgrade head`. Untuk pengerjaan, penyimpanan otomatis kini berjalan berurutan dengan batas waktu, sehingga proses submit tidak lagi menggantung.
+
+Perbaikan kecil: isian tipe password kini tetap tersimpan sebagai teks setelah refresh.
 
 ## Ownership & Keamanan
 
