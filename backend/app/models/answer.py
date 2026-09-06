@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Numeric, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Index, Numeric, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -22,4 +22,6 @@ class Answer(Base):
 
     __table_args__ = (
         UniqueConstraint("submission_id", "question_id", name="uniq_submission_question"),
+        Index("idx_answers_question", "question_id"),
+        Index("idx_answers_submission", "submission_id"),
     )

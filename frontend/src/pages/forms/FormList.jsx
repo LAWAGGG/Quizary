@@ -288,6 +288,9 @@ export default function FormList() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('All')
   const [search, setSearch] = useState('')
+  // ponytail: debounce 300ms biar filter tidak jalan tiap ketik (100 soal → lag)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 300); return () => clearTimeout(t) }, [search])
   const [categories, setCategories] = useState([])
   const [activeCategory, setActiveCategory] = useState(null)
   const [showCatMgr, setShowCatMgr] = useState(false)
@@ -346,13 +349,13 @@ export default function FormList() {
   }
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return forms
-    const q = search.toLowerCase()
+    if (!debouncedSearch.trim()) return forms
+    const q = debouncedSearch.toLowerCase()
     return forms.filter((f) => stripTags(f.title).toLowerCase().includes(q))
-  }, [forms, search])
+  }, [forms, debouncedSearch])
 
   // Seleksi bulk — reset tiap konteks daftar berubah (scope halaman ini saja)
-  useEffect(() => { setSelected(new Set()); setMenuOpen(null) }, [activeTab, activeCategory, search, meta.page])
+  useEffect(() => { setSelected(new Set()); setMenuOpen(null) }, [activeTab, activeCategory, debouncedSearch, meta.page])
   const selectionMode = selected.size > 0
   const selectedForms = useMemo(() => filtered.filter((f) => selected.has(f.id)), [filtered, selected])
   const allSelected = filtered.length > 0 && filtered.every((f) => selected.has(f.id))

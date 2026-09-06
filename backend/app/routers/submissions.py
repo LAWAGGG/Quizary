@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status, UploadFile, File
 from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user, get_optional_user
@@ -258,11 +258,13 @@ def _build_questions_response(sub_id: int, request: Request, db: Session, includ
     Ordered questions for a submission — respects per-submission shuffle.
     Does NOT expose is_correct (security boundary for respondents).
     """
+    # ponytail: preload options+images bulk biar tidak N+1, SubmissionOptionOrder bulk sekali
     qs_filter = [SubmissionQuestionOrder.submission_id == sub_id]
     if not include_deleted:
         qs_filter.append(Question.is_deleted.is_(False))
     ordered_qs = (
         db.query(Question)
+        .options(selectinload(Question.options).selectinload(QuestionOption.images), selectinload(Question.images))
         .join(SubmissionQuestionOrder, SubmissionQuestionOrder.question_id == Question.id)
         .filter(*qs_filter)
         .order_by(SubmissionQuestionOrder.order_index)
@@ -275,11 +277,15 @@ def _build_questions_response(sub_id: int, request: Request, db: Session, includ
     # selalu mendarat di blok section-nya, bukan nempel di ekor array.
     sub = db.get(Submission, sub_id)
     seen_ids = {q.id for q in ordered_qs}
-    new_filter = [Question.form_id == sub.form_id, ~Question.id.in_(seen_ids)]
+    if seen_ids:
+        new_filter = [Question.form_id == sub.form_id, ~Question.id.in_(seen_ids)]
+    else:
+        new_filter = [Question.form_id == sub.form_id]
     if not include_deleted:
         new_filter.append(Question.is_deleted.is_(False))
     new_qs = (
         db.query(Question)
+        .options(selectinload(Question.options).selectinload(QuestionOption.images), selectinload(Question.images))
         .filter(*new_filter)
         .order_by(Question.order_index)
         .all()
@@ -295,17 +301,14 @@ def _build_questions_response(sub_id: int, request: Request, db: Session, includ
     # dalam section (termasuk hasil shuffle) tidak tersentuh.
     ordered_qs.sort(key=lambda q: section_rank.get(q.section_id, len(section_rank)))
 
+    # bulk SubmissionOptionOrder sekali
+    soo_all = db.query(SubmissionOptionOrder).filter(SubmissionOptionOrder.submission_id == sub_id).all()
+    soo_map = {soo.option_id: soo.order_index for soo in soo_all}
+
     result = []
     for idx, q in enumerate(ordered_qs):
         if q.type in (QuestionType.multiple_choice, QuestionType.checkbox, QuestionType.dropdown):
-            opt_order = {
-                soo.option_id: soo.order_index
-                for soo in db.query(SubmissionOptionOrder).filter(
-                    SubmissionOptionOrder.submission_id == sub_id,
-                    SubmissionOptionOrder.option_id.in_([o.id for o in q.options]),
-                ).all()
-            }
-            opts = sorted(q.options, key=lambda o: opt_order.get(o.id, o.order_index or 0))
+            opts = sorted(q.options, key=lambda o: soo_map.get(o.id, o.order_index or 0))
         else:
             opts = []
 
@@ -890,7 +893,8 @@ def get_submission(
             if i < 8:  # sama dengan LETTERS di frontend
                 opt_label_map[o.id] = f"{'ABCDEFGH'[i]}. "
 
-    q_map = {q.id: q for q in db.query(Question).filter(*q_filter).all()}
+    # ponytail: preload images & selected_options bulk — hindari N query per answer/question
+    q_map = {q.id: q for q in db.query(Question).options(selectinload(Question.images)).filter(*q_filter).all()}
 
     # Keamanan (FR-34/7.3): jangan bocorkan is_correct/score sebelum submission selesai.
     # Toggle creator (khusus quiz): reveal_score mengontrol angka nilai final,
@@ -901,7 +905,7 @@ def get_submission(
     reveal_answers = completed and (non_quiz or form.reveal_answers or is_owner)
 
     answers_data: list[SavedAnswer] = []
-    for answer in db.query(Answer).filter(Answer.submission_id == sub.id).all():
+    for answer in db.query(Answer).options(selectinload(Answer.selected_options)).filter(Answer.submission_id == sub.id).all():
         q = q_map.get(answer.question_id)
         if not q:
             continue

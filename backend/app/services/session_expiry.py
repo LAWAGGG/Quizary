@@ -12,7 +12,9 @@ from sqlalchemy.orm import Session
 
 from app.models.form import Form
 from app.models.submission import Submission, SubmissionStatus
-from app.services.grading import grade_submission
+from app.models.question import Question
+from app.models.answer import Answer
+from app.services.grading import grade_submission, max_score_for
 from app.utils import now_wib
 
 MAX_SESSION_HOURS = 24
@@ -53,7 +55,7 @@ def display_deadline(sub: Submission, form: Form):
     return exp or ends
 
 
-def finalize_locked(db: Session, sub: Submission, form: Form) -> bool:
+def finalize_locked(db: Session, sub: Submission, form: Form, *, commit: bool = True) -> bool:
     """Fallback: submission `locked` tak diputuskan creator dalam 5 menit →
     otomatis cheating (nilai 0). Return True kalau finalisasi terjadi."""
     if sub.status != SubmissionStatus.locked:
@@ -62,9 +64,16 @@ def finalize_locked(db: Session, sub: Submission, form: Form) -> bool:
         return False
     sub.status = SubmissionStatus.cheating
     sub.submitted_at = now_wib()
-    grade_submission(db, sub, form)
+    # ponytail: cheating selalu 0, skip grade_submission heavy (N query)
+    # cukup set max_score cepat 1 query, per-answer is_correct tidak penting untuk cheating
+    try:
+        qs = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).all()
+        sub.max_score = max_score_for(qs, form.scoring_mode.value if form.scoring_mode else "auto")
+    except Exception:
+        pass
     sub.score = Decimal("0")
-    db.commit()
+    if commit:
+        db.commit()
     return True
 
 
@@ -77,20 +86,68 @@ def auto_submit_expired_for_form(db: Session, form: Form) -> int:
     """Lazy sweep: auto-submit submission in_progress yang lewat deadline,
     dan finalisasi locked yang tidak diputuskan creator dalam 5 menit."""
     now = now_wib()
-    count = 0
     subs = db.query(Submission).filter(
         Submission.form_id == form.id,
         Submission.status.in_([SubmissionStatus.in_progress, SubmissionStatus.locked]),
     ).all()
+    if not subs:
+        return 0
+    # ponytail: preload questions sekali untuk semua grading, bulk answers untuk expired
+    # hindari N * (Q+A) query di loop
+    questions = None
+    q_map = None
+    answers_by_sub = {}
+    # kumpulkan id yang perlu grading (expired in_progress)
+    expired_ids = []
+    for s in subs:
+        if s.status == SubmissionStatus.in_progress and is_expired(s, form):
+            expired_ids.append(s.id)
+    if expired_ids:
+        # preload Questions + Answers sekali
+        from sqlalchemy.orm import selectinload
+        # questions dengan options & images tidak perlu untuk expired grading? but grade_submission butuh
+        # cukup preload via grade_submission yang akan query lagi — untuk ponytail, biarkan grade_submission tetap query per sub
+        # tapi bulk fetch answers untuk kurangi N
+        answers = db.query(Answer).filter(Answer.submission_id.in_(expired_ids)).all()
+        for a in answers:
+            answers_by_sub.setdefault(a.submission_id, []).append(a)
+        questions = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).all()
+        q_map = {q.id: q for q in questions}
+
+    count = 0
     for s in subs:
         if s.status == SubmissionStatus.locked:
-            if finalize_locked(db, s, form):
+            if finalize_locked(db, s, form, commit=False):
                 count += 1
-        elif is_expired(s, form):
-            s.status = SubmissionStatus.auto_submitted
-            s.submitted_at = now
-            grade_submission(db, s, form)
-            count += 1
+        elif s.id in answers_by_sub or (s.status == SubmissionStatus.in_progress and is_expired(s, form)):
+            # sudah terfilter expired_ids, tapi cek lagi untuk yang belum masuk answers_by_sub (tanpa jawaban)
+            if s.status == SubmissionStatus.in_progress and is_expired(s, form):
+                s.status = SubmissionStatus.auto_submitted
+                s.submitted_at = now
+                # ponytail: grading pakai preloaded q_map/answers jika ada, else fallback grade_submission
+                if q_map is not None:
+                    # manual grading tanpa query tambahan
+                    from app.services.grading import grade_answer, max_score_for as _max
+                    from decimal import Decimal as _Dec
+                    scoring_mode = form.scoring_mode.value if form.scoring_mode else "auto"
+                    raw_max = _max(questions, scoring_mode=None)
+                    max_sc = _max(questions, scoring_mode=scoring_mode)
+                    total = 0.0
+                    for ans in answers_by_sub.get(s.id, []):
+                        q = q_map.get(ans.question_id)
+                        if not q:
+                            continue
+                        correct, pts = grade_answer(ans, q)
+                        ans.is_correct = correct
+                        ans.points_earned = pts
+                        total += float(pts)
+                    if scoring_mode == "manual" and raw_max:
+                        total = round(total / raw_max * 100, 2)
+                    s.score = _Dec(str(total))
+                    s.max_score = _Dec(str(max_sc))
+                else:
+                    grade_submission(db, s, form)
+                count += 1
     if count:
         db.commit()
     return count

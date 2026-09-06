@@ -76,4 +76,7 @@ class Form(Base):
     __table_args__ = (
         Index("idx_forms_user", "user_id"),
         Index("idx_forms_category", "category_id"),
+        Index("idx_forms_user_status", "user_id", "status"),
+        Index("idx_forms_user_type", "user_id", "type"),
+        Index("idx_forms_user_category", "user_id", "category_id"),
     )

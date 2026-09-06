@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Copy, Check, ArrowLeft, Save, Trash2, ImageUp, Link2, ChevronDown, Info, Lock, Settings2, Download, QrCode, X, Palette } from 'lucide-react'
@@ -226,10 +226,13 @@ export default function FormEdit() {
     return str
   }
 
-  const timerChanged = timerMinutes !== initialTimerMinutes
-  const dirty = form && base
-    ? (JSON.stringify(normalize()) !== JSON.stringify(baseSnapshot()) || timerChanged)
-    : false
+  // ponytail: stringify tiap render berat — memoize biar tidak lag saat ketik di 100 soal
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const dirty = useMemo(() => {
+    if (!form || !base) return false
+    const timerChanged = timerMinutes !== initialTimerMinutes
+    return JSON.stringify(normalize()) !== JSON.stringify(baseSnapshot()) || timerChanged
+  }, [form, base, timerMinutes, initialTimerMinutes])
 
   const buildPayload = () => ({
     ...normalize(),

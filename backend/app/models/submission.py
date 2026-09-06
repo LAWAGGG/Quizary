@@ -47,4 +47,9 @@ class Submission(Base):
     __table_args__ = (
         Index("idx_submissions_form", "form_id"),
         Index("idx_submissions_user", "user_id"),
+        Index("idx_submissions_form_status", "form_id", "status"),
+        Index("idx_submissions_form_status_user", "form_id", "status", "user_id"),
+        Index("idx_submissions_ip", "ip_address"),
+        Index("idx_submissions_form_ip", "form_id", "ip_address"),
+        Index("idx_submissions_form_status_ip", "form_id", "status", "ip_address"),
     )

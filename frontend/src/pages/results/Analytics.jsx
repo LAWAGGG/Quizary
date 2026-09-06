@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Users, Trophy, TrendingUp, TrendingDown, ArrowLeft, BarChart3, ClipboardList, ChevronDown, CheckCircle2, Clock, Zap, AlertCircle, Timer } from 'lucide-react'
@@ -64,7 +64,7 @@ function stripHtml(str) {
   return (str || '').replace(/<[^>]*>/g, '').trim()
 }
 
-function QuestionRow({ q, i, total, open, onToggle }) {
+const QuestionRow = memo(function QuestionRow({ q, i, total, open, onToggle }) {
   const { t } = useTranslation()
   const answeredPct = total ? Math.round((q.answered / total) * 100) : 0
   const text = stripHtml(q.question_text) || `Question ${i + 1}`
@@ -143,7 +143,7 @@ function QuestionRow({ q, i, total, open, onToggle }) {
       )}
     </div>
   )
-}
+})
 
 function FormAnalytics({ data }) {
   const { t } = useTranslation()

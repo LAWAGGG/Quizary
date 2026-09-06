@@ -409,7 +409,7 @@ export default function SectionManager({ formId, show, onClose, sections: initia
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-lg bg-white dark:bg-ink-900 flex flex-col shadow-lift"
+            className="fixed right-0 top-0 border border-l dark:border-ink-800 bottom-0 z-50 w-full max-w-lg bg-white dark:bg-ink-900 flex flex-col shadow-lift"
           >
             <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-gray-700 shrink-0">
               <div>

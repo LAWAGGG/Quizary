@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle, Info, ZoomIn, ZoomOut, X, Lock, FileUp, RefreshCw, PenLine } from 'lucide-react'
@@ -48,7 +48,7 @@ function lockedInfoFromSubmission(submission, previous = null) {
   }
 }
 
-function OptionTile({ letter, color, selected, checkbox, children, onClick, disabled, image }) {
+const OptionTile = memo(function OptionTile({ letter, color, selected, checkbox, children, onClick, disabled, image }) {
   return (
     <motion.button
       whileTap={{ scale: 0.96 }}
@@ -93,12 +93,12 @@ function OptionTile({ letter, color, selected, checkbox, children, onClick, disa
       )}
     </motion.button>
   )
-}
+})
 
-// Opsi "Lainnya" (ketik sendiri) — hanya tampil bila creator mengaktifkan
+ // Opsi "Lainnya" (ketik sendiri) — hanya tampil bila creator mengaktifkan
 // (question.allow_other). Dua varian mengikuti gaya sekitarnya: tile warna
 // (mode quiz) dan baris ber-border (mode card/form).
-function OtherTile({ variant = 'quiz', color, checkbox, selected, text, onToggle, onText, inputId, label, placeholder, error }) {
+const OtherTile = memo(function OtherTile({ variant = 'quiz', color, checkbox, selected, text, onToggle, onText, inputId, label, placeholder, error }) {
   if (variant === 'card') {
     return (
       <div
@@ -167,7 +167,7 @@ function OtherTile({ variant = 'quiz', color, checkbox, selected, text, onToggle
       />
     </motion.div>
   )
-}
+})
 
 export default function AnswerQuiz() {
   const { t } = useTranslation()
@@ -301,7 +301,8 @@ export default function AnswerQuiz() {
       const ans = {}
       const files = {}
       d.answers.forEach((a) => {
-        if (a.question_type === 'short_answer' || a.question_type === 'essay' || a.question_type === 'date' || a.question_type === 'time' || a.question_type === 'datetime') {
+        if (a.question_type === 'short_answer' || a.question_type === 'essay' || a.question_type === 'date' || a.question_type === 'time' || a.question_type === 'datetime' || a.question_type === 'password') {
+          // ponytail: password sebelumnya masuk else → {ids, text} → Input tampil [object Object]
           ans[a.question_id] = a.answer_text || ''
         } else if (a.question_type === 'file_upload') {
           if (a.answer_file) files[a.question_id] = { url: a.answer_file, filename: a.answer_file.split('/').pop() }
@@ -343,7 +344,16 @@ export default function AnswerQuiz() {
       return Array.isArray(v) ? v.length > 0 : v !== undefined && v !== null && v !== ''
     })
     if (!entries.length) return
-    const restored = Object.fromEntries(entries.map(([qid, e]) => [Number(qid), e.value]))
+    // ponytail: password sebelumnya tersimpan sebagai {ids, text} → restore jadi string biar tidak [object Object]
+    const qTypeById = Object.fromEntries((data.questions || []).map((q) => [q.id, q.type]))
+    const restored = Object.fromEntries(
+      entries.map(([qid, e]) => {
+        let v = e.value
+        const t = qTypeById[Number(qid)]
+        if (t === 'password' && v && typeof v === 'object' && !Array.isArray(v)) v = v.text ?? ''
+        return [Number(qid), v]
+      })
+    )
     setAnswers((prev) => ({ ...prev, ...restored }))
     setTimeout(() => flushAll(restored).catch(() => {}), 800)
   }, [data, submissionId, flushAll])
@@ -1271,7 +1281,9 @@ export default function AnswerQuiz() {
   // desain; shuffle hanya mengacak soal DI DALAM section). Array mentah
   // data.questions bisa tidak sinkron dgn section — soal yang ditambahkan
   // setelah sesi mulai selalu nempel di ekor snapshot.
+  // ponytail: IIFE tetap — useMemo di sini langgar rules-of-hooks karena setelah early return, skip untuk Fase 3
   const formPages = (() => {
+    if (!data) return []
     const ordered = []
     const seen = new Set()
     ;(data.sections || []).forEach((s) => {
@@ -1288,7 +1300,7 @@ export default function AnswerQuiz() {
     })
     return pages.length ? pages : [{ title: null, questions }]
   })()
-  const formPage = formPages[Math.min(currentIdx, formPages.length - 1)]
+  const formPage = formPages[Math.min(currentIdx, Math.max(0, formPages.length - 1))] || { title: null, questions: [] }
 
   // Helper shared by both quiz and form modes
   const isAnswered = (q, val) => {

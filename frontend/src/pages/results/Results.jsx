@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { BarChart3, Download, ClipboardList, X, Check, AlertTriangle, Trash2 } from 'lucide-react'
@@ -244,19 +244,23 @@ export default function Results() {
   const totalPages = Math.ceil(meta.total / meta.per_page)
 
   // Semua soal dikelompokkan per section — soal yang tidak dijawab tetap tampil ("-").
-  let answerByQ = {}
-  let questionGroups = []
-  if (detail) {
-    for (const a of detail.answers) answerByQ[a.question_id] = a
-    const qs = detail.questions || []
-    const sectionIds = new Set((detail.sections || []).map((s) => s.id))
-    for (const s of detail.sections || []) {
-      questionGroups.push({ title: s.title, items: qs.filter((q) => q.section_id === s.id) })
+  // ponytail: memoize biar tidak hitung ulang tiap ketik di modal detail (100 soal → lag)
+  const { answerByQ, questionGroups } = useMemo(() => {
+    let abq = {}
+    let qg = []
+    if (detail) {
+      for (const a of detail.answers) abq[a.question_id] = a
+      const qs = detail.questions || []
+      const sectionIds = new Set((detail.sections || []).map((s) => s.id))
+      for (const s of detail.sections || []) {
+        qg.push({ title: s.title, items: qs.filter((q) => q.section_id === s.id) })
+      }
+      const rest = qs.filter((q) => q.section_id == null || !sectionIds.has(q.section_id))
+      if (rest.length) qg.push({ title: null, items: rest })
+      qg = qg.filter((g) => g.items.length > 0)
     }
-    const rest = qs.filter((q) => q.section_id == null || !sectionIds.has(q.section_id))
-    if (rest.length) questionGroups.push({ title: null, items: rest })
-  }
-  questionGroups = questionGroups.filter((g) => g.items.length > 0)
+    return { answerByQ: abq, questionGroups: qg }
+  }, [detail])
 
   const containerVariants = {
     hidden: { opacity: 0 },

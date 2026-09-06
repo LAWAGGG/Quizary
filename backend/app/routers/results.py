@@ -4,7 +4,7 @@ from datetime import datetime
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -271,13 +271,14 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
     ).all()
 
     total = len(subs)
-    questions = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).order_by(Question.order_index).all()
+    # ponytail: preload options+selected_options bulk biar tidak N+1
+    questions = db.query(Question).options(selectinload(Question.options)).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).order_by(Question.order_index).all()
     sub_ids = [s.id for s in subs]
 
     if total == 0:
         return AnalyticsResponse(type=form.type.value, total_participants=0)
 
-    all_answers = db.query(Answer).filter(
+    all_answers = db.query(Answer).options(selectinload(Answer.selected_options)).filter(
         Answer.question_id.in_([q.id for q in questions]),
         Answer.submission_id.in_(sub_ids),
     ).all()

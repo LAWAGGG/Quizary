@@ -3,7 +3,7 @@ from fastapi import UploadFile, File
 import os
 import shutil
 import uuid
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user, verify_form_owner
@@ -109,8 +109,10 @@ def list_questions(
     form: Form = Depends(verify_form_owner),
     db: Session = Depends(get_db),
 ):
+    # ponytail: preload options+images bulk — 500 SELECT jadi 3
     questions = (
         db.query(Question)
+        .options(selectinload(Question.options).selectinload(QuestionOption.images), selectinload(Question.images))
         .filter(Question.form_id == form.id, Question.is_deleted.is_(False))
         .order_by(Question.order_index)
         .all()

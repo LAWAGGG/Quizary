@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, memo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, TextQuote, Unlink, ChevronDown, ChevronUp, Pencil, Copy } from 'lucide-react'
@@ -594,7 +594,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   )
 }
 
-function QuestionCard({ question, index, onDelete, onDuplicate, duplicating, isDragging, isQuiz, selected, onToggleSelect, groupId, groupIndex, _groupSize, moveButtons }) {
+const QuestionCard = memo(function QuestionCard({ question, index, onDelete, onDuplicate, duplicating, isDragging, isQuiz, selected, onToggleSelect, groupId, groupIndex, _groupSize, moveButtons }) {
   const { t } = useTranslation()
   const typeLabels = {
     multiple_choice: t('questionBuilder.typeMultipleChoice'),
@@ -723,9 +723,9 @@ function QuestionCard({ question, index, onDelete, onDuplicate, duplicating, isD
       )}
     </Card>
   )
-}
+})
 
-function SortableQuestionCard({ question, index, onEdit, onDelete, onDuplicate, duplicating, isQuiz, selected, onToggleSelect, groupId, groupIndex, groupSize, onMove, isFirst, isLast, selectCount }) {
+const SortableQuestionCard = memo(function SortableQuestionCard({ question, index, onEdit, onDelete, onDuplicate, duplicating, isQuiz, selected, onToggleSelect, groupId, groupIndex, groupSize, onMove, isFirst, isLast, selectCount }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: question.id,
     data: { type: 'question', questionId: question.id },
@@ -808,9 +808,9 @@ function SortableQuestionCard({ question, index, onEdit, onDelete, onDuplicate, 
       </div>
     </motion.div>
   )
-}
+})
 
-// inner card — samakan dengan QuestionCard biasa (ponytail: reuse, bukan varian baru)
+ // inner card — samakan dengan QuestionCard biasa (ponytail: reuse, bukan varian baru)
 function GroupInnerRow({ q, globalIndex, isQuiz, selected, onToggleSelect, onEdit, onDelete, onDuplicate, duplicating, selectCount }) {
   const holdProps = useHoldSelect({ selectedCount: selectCount, onToggle: () => onToggleSelect(q.id) })
   return (
@@ -845,7 +845,7 @@ function GroupInnerRow({ q, globalIndex, isQuiz, selected, onToggleSelect, onEdi
   )
 }
 
-function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, onToggle, isQuiz, selectedIds, onToggleSelect, onToggleGroupSelect, onEdit, onDelete, onDuplicate, duplicating, onUngroup, onMove, isFirst, isLast, selectCount, idToIndex, editing, showForm, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, scoringMode, allQuestions, onAddToGroup }) {
+const SortableGroupCard = memo(function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, onToggle, isQuiz, selectedIds, onToggleSelect, onToggleGroupSelect, onEdit, onDelete, onDuplicate, duplicating, onUngroup, onMove, isFirst, isLast, selectCount, idToIndex, editing, showForm, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, scoringMode, allQuestions, onAddToGroup }) {
   const { t } = useTranslation()
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: `g-${groupId}`,
@@ -989,7 +989,7 @@ function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, 
       </div>
     </motion.div>
   )
-}
+})
 
 function QuestionItem({ q, index, onEdit, onDelete, onDuplicate, duplicating, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupIndex, groupSize, onMove, totalCount, selectCount, scoringMode }) {
   const { t } = useTranslation()
@@ -2346,7 +2346,7 @@ export default function QuestionBuilder() {
               initial={{ scale: 0.96, opacity: 0, y: 8 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.96, opacity: 0, y: 8 }}
-              className="bg-white dark:bg-ink-900 rounded-2xl w-full max-w-2xl max-h-[85dvh] flex flex-col shadow-lift"
+              className="bg-white dark:bg-ink-900 border dark:border-ink-800 rounded-2xl w-full max-w-2xl max-h-[85dvh] flex flex-col shadow-lift"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}

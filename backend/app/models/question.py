@@ -68,4 +68,7 @@ class Question(Base):
 
     __table_args__ = (
         Index("idx_questions_form", "form_id"),
+        Index("idx_questions_form_deleted", "form_id", "is_deleted"),
+        Index("idx_questions_section", "section_id"),
+        Index("idx_questions_group", "group_id"),
     )
