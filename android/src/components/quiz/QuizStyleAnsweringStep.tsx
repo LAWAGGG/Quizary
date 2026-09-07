@@ -75,9 +75,35 @@ export function QuizStyleAnsweringStep({
   const [showPicker, setShowPicker] = useState<{ qId: number; mode: 'date' | 'time' } | null>(null);
   const [pickerDate, setPickerDate] = useState<Date>(new Date());
   const [showDropdownModal, setShowDropdownModal] = useState<number | null>(null);
+  const pendingDatetimeRef = useRef<Date | null>(null);
 
   const openPicker = (qId: number, mode: 'date' | 'time') => {
     const currentVal = answers[qId];
+    const qForId = questions.find((qq: any) => qq.id === qId);
+    const typeForQ = String(qForId?.type || qForId?.question_type || '').toLowerCase();
+    if (typeForQ === 'datetime' && mode === 'date') {
+      let d = new Date();
+      if (typeof currentVal === 'string' && currentVal.trim().includes('T')) {
+        const [datePart, timePart] = currentVal.trim().split('T');
+        const dParts = datePart.split('-');
+        const tParts = timePart.split(':');
+        if (dParts.length === 3 && tParts.length >= 2) {
+          const y = parseInt(dParts[0], 10), m = parseInt(dParts[1], 10) - 1, day = parseInt(dParts[2], 10);
+          const h = parseInt(tParts[0], 10), min = parseInt(tParts[1], 10);
+          if (!isNaN(y) && !isNaN(m) && !isNaN(day) && !isNaN(h) && !isNaN(min)) d = new Date(y, m, day, h, min, 0, 0);
+        }
+      } else if (typeof currentVal === 'string' && currentVal.trim().length > 0) {
+        const parts = currentVal.trim().split('-');
+        if (parts.length === 3) {
+          const y = parseInt(parts[0], 10), m = parseInt(parts[1], 10) - 1, day = parseInt(parts[2], 10);
+          if (!isNaN(y) && !isNaN(m) && !isNaN(day)) d = new Date(y, m, day);
+        }
+      }
+      pendingDatetimeRef.current = null;
+      setPickerDate(d);
+      setShowPicker({ qId, mode });
+      return;
+    }
     let d = new Date();
     if (typeof currentVal === 'string' && currentVal.trim().length > 0) {
       if (mode === 'date') {
@@ -107,42 +133,59 @@ export function QuizStyleAnsweringStep({
   };
 
   const handlePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    const activePicker = showPicker;
-
     if (event.type === 'dismissed') {
+      pendingDatetimeRef.current = null;
       setShowPicker(null);
       return;
     }
-
-    if (event.type === 'set' || (Platform.OS === 'ios' && selectedDate)) {
-      setShowPicker(null);
-
-      let dateToSave = selectedDate;
-      if (!dateToSave && (event as any)?.nativeEvent?.timestamp) {
-        const ts = Number((event as any).nativeEvent.timestamp);
-        if (!isNaN(ts)) {
-          dateToSave = new Date(ts);
-        }
-      }
-      if (!dateToSave || isNaN(dateToSave.getTime())) {
-        dateToSave = pickerDate;
-      }
-
-      setPickerDate(dateToSave);
-
-      if (activePicker) {
-        if (activePicker.mode === 'date') {
-          const yyyy = dateToSave.getFullYear();
-          const mm = String(dateToSave.getMonth() + 1).padStart(2, '0');
-          const dd = String(dateToSave.getDate()).padStart(2, '0');
-          onTextChange(activePicker.qId, `${yyyy}-${mm}-${dd}`);
-        } else if (activePicker.mode === 'time') {
-          const hh = String(dateToSave.getHours()).padStart(2, '0');
-          const min = String(dateToSave.getMinutes()).padStart(2, '0');
-          onTextChange(activePicker.qId, `${hh}:${min}`);
-        }
-      }
+    let next = selectedDate;
+    if (!next && (event as any)?.nativeEvent?.timestamp) {
+      const ts = Number((event as any).nativeEvent.timestamp);
+      if (!isNaN(ts)) next = new Date(ts);
     }
+    if (next && !isNaN(next.getTime())) {
+      setPickerDate(next);
+    }
+  };
+
+  const confirmPicker = () => {
+    const active = showPicker;
+    if (!active) return;
+    const qForId = questions.find((qq: any) => qq.id === active.qId);
+    const typeForQ = String(qForId?.type || qForId?.question_type || '').toLowerCase();
+    if (typeForQ === 'datetime' && active.mode === 'date') {
+      pendingDatetimeRef.current = new Date(pickerDate);
+      setShowPicker({ qId: active.qId, mode: 'time' });
+      return;
+    }
+    if (typeForQ === 'datetime' && active.mode === 'time' && pendingDatetimeRef.current) {
+      const datePart = pendingDatetimeRef.current;
+      const yyyy = String(datePart.getFullYear()).padStart(4, '0');
+      const mm = String(datePart.getMonth() + 1).padStart(2, '0');
+      const dd = String(datePart.getDate()).padStart(2, '0');
+      const hh = String(pickerDate.getHours()).padStart(2, '0');
+      const min = String(pickerDate.getMinutes()).padStart(2, '0');
+      onTextChange(active.qId, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
+      pendingDatetimeRef.current = null;
+      setShowPicker(null);
+      return;
+    }
+    if (active.mode === 'date') {
+      const yyyy = String(pickerDate.getFullYear()).padStart(4, '0');
+      const mm = String(pickerDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(pickerDate.getDate()).padStart(2, '0');
+      onTextChange(active.qId, `${yyyy}-${mm}-${dd}`);
+    } else if (active.mode === 'time') {
+      const hh = String(pickerDate.getHours()).padStart(2, '0');
+      const min = String(pickerDate.getMinutes()).padStart(2, '0');
+      onTextChange(active.qId, `${hh}:${min}`);
+    }
+    setShowPicker(null);
+  };
+
+  const cancelPicker = () => {
+    pendingDatetimeRef.current = null;
+    setShowPicker(null);
   };
 
   const themeColor =
@@ -333,10 +376,11 @@ export function QuizStyleAnsweringStep({
 
   const isDateType = rawType === 'date';
   const isTimeType = rawType === 'time';
+  const isDatetimeType = rawType === 'datetime';
   const isPasswordType = rawType === 'password';
   const isEssayType = rawType === 'essay' || rawType === 'long_text';
   const isFileUploadType = rawType === 'file_upload' || rawType === 'file';
-  const isTextType = !isOptionType && !isDropdownType && !isDateType && !isTimeType && !isPasswordType && !isFileUploadType;
+  const isTextType = !isOptionType && !isDropdownType && !isDateType && !isTimeType && !isDatetimeType && !isPasswordType && !isFileUploadType;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -728,15 +772,48 @@ export function QuizStyleAnsweringStep({
                     </View>
                   )}
 
+                  {/* Datetime sequential: date then time */}
+                  {isDatetimeType && (
+                    <View style={styles.textInputBox}>
+                      <Text style={styles.inputHelperLabel}>Format: YYYY-MM-DDTHH:MM (contoh: 2026-08-25T14:30)</Text>
+                      <View style={styles.pickerFieldRow}>
+                        <TextInput
+                          style={[styles.shortAnswerInput, { flex: 1, color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                          placeholder="YYYY-MM-DDTHH:MM"
+                          placeholderTextColor="#64748B"
+                          value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
+                          onChangeText={(text) => onTextChange(currentQ.id, text)}
+                        />
+                        <TouchableOpacity
+                          style={styles.pickerTriggerBtnStyle}
+                          onPress={() => openPicker(currentQ.id, 'date')}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="calendar-outline" size={22} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+
                   {showPicker && (
-                    <DateTimePicker
-                      value={pickerDate}
-                      mode={showPicker.mode}
-                      display="spinner"
-                      is24Hour={true}
-                      onChange={handlePickerChange}
-                      onDismiss={() => setShowPicker(null)}
-                    />
+                    <Modal transparent animationType="fade" visible={!!showPicker} onRequestClose={cancelPicker}>
+                      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16 }}>
+                        <View style={{ backgroundColor: isDark ? '#1E293B' : '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: isDark ? '#334155' : '#E2E8F0' }}>
+                          <Text style={{ fontWeight: '700', fontSize: 14, color: isDark ? '#FFF' : '#0F172A', textAlign: 'center', marginBottom: 8 }}>
+                            {showPicker.mode === 'date' ? (isDatetimeType && !pendingDatetimeRef.current ? 'Pilih Tanggal' : 'Pilih Tanggal') : isDatetimeType ? 'Pilih Waktu' : 'Pilih Waktu'}
+                          </Text>
+                          <DateTimePicker value={pickerDate} mode={showPicker.mode} display="spinner" is24Hour={true} onChange={handlePickerChange} />
+                          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 12 }}>
+                            <TouchableOpacity onPress={cancelPicker} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: isDark ? '#334155' : '#F1F5F9', borderWidth: 1, borderColor: isDark ? '#475569' : '#E2E8F0' }}>
+                              <Text style={{ color: isDark ? '#FFF' : '#0F172A', fontWeight: '700' }}>BATAL</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={confirmPicker} style={{ paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10, backgroundColor: themeColor }}>
+                              <Text style={{ color: '#FFF', fontWeight: '700' }}>{isDatetimeType && showPicker.mode === 'date' ? 'LANJUT' : 'OK'}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </View>
+                    </Modal>
                   )}
 
                   {/* Password Input — blocked until correct */}
