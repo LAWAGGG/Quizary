@@ -5,9 +5,9 @@ quizary-*
 .vscode/
 .superpowers/
 
-# env files — never commit secrets
 .env
 .env.local
 .env.*.local
 **/.env
 **/.env.local
+secrets/

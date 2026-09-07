@@ -1,0 +1,94 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: quizary-mysql-prod
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-fastapi_quizary}
+      MYSQL_USER: ${MYSQL_USER:-quizary}
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_password
+      TZ: UTC
+    secrets:
+      - mysql_root_password
+      - mysql_password
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+00:00
+      - --innodb-buffer-pool-size=256M
+      - --max-connections=100
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - internal
+    ports:
+      - "127.0.0.1:3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$$(cat /run/secrets/mysql_root_password)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: quizary-backend-prod
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: ${MYSQL_USER:-quizary}
+      DB_PASSWORD_FILE: /run/secrets/mysql_password
+      DB_NAME: ${MYSQL_DATABASE:-fastapi_quizary}
+      SECRET_KEY_FILE: /run/secrets/secret_key
+    secrets:
+      - mysql_password
+      - secret_key
+    volumes:
+      - backend_uploads:/app/uploads
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: quizary-frontend-prod
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - web
+      - internal
+    ports:
+      - "127.0.0.1:80:80"
+
+networks:
+  web:
+  internal:
+    internal: true
+
+volumes:
+  mysql_data:
+  backend_uploads:
+
+secrets:
+  mysql_root_password:
+    file: ./secrets/mysql_root_password.txt
+  mysql_password:
+    file: ./secrets/mysql_password.txt
+  secret_key:
+    file: ./secrets/secret_key.txt
