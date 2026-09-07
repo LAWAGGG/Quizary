@@ -22,8 +22,6 @@ class AiSettings(BaseModel):
     reveal_answers: bool = True
     display_style: str = "card"
     scoring_mode: str = "auto"
-    theme_color: Optional[str] = Field(None, pattern=HEX_COLOR)
-    thank_you_message: Optional[str] = Field(None, max_length=2000)
     starts_at: Optional[FlexDatetime] = None
     ends_at: Optional[FlexDatetime] = None
 
@@ -100,8 +98,6 @@ class AiDraftSettings(BaseModel):
     reveal_answers: bool = True
     display_style: str = "card"
     scoring_mode: str = "auto"
-    theme_color: Optional[str] = None
-    thank_you_message: Optional[str] = None
     starts_at: Optional[str] = None
     ends_at: Optional[str] = None
 

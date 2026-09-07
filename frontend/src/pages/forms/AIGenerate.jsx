@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Sparkles, RefreshCw, Check, X, FileText, Clock, Shuffle, Lock, ListChecks, Trophy, EyeOff, CalendarDays, LayoutGrid, Info } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Paperclip, Sparkles, RefreshCw, Check, X, FileText, Clock, Shuffle, Lock, ListChecks, Trophy, EyeOff, CalendarDays, Info } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { stripTags } from '../../lib/sanitize'
-import { Button, Card, PageHeader, RichTextEditor, RichText, Textarea, Badge, Toggle, Select, Input, AiLoadingOverlay } from '../../components/ui'
+import { Button, Card, RichTextEditor, RichText, Badge, Toggle, Select, Input, AiLoadingOverlay } from '../../components/ui'
 
 const humanizeType = (t) => (t || '').replace(/_/g, ' ')
 
@@ -38,10 +38,9 @@ function SettingChips({ settings }) {
   if (settings.is_restricted) chips.push({ icon: <Lock className="w-3.5 h-3.5" />, label: t('aiGenerate.restricted') })
   if (!settings.reveal_score) chips.push({ icon: <EyeOff className="w-3.5 h-3.5" />, label: t('aiGenerate.revealScore') })
   if (!settings.reveal_answers) chips.push({ icon: <EyeOff className="w-3.5 h-3.5" />, label: t('aiGenerate.revealAnswers') })
-  if (settings.display_style === 'quiz') chips.push({ icon: <LayoutGrid className="w-3.5 h-3.5" />, label: t('aiGenerate.displayQuiz') })
   if (settings.scoring_mode === 'manual') chips.push({ icon: <ListChecks className="w-3.5 h-3.5" />, label: t('aiGenerate.scoringManual') })
-  if (settings.theme_color) chips.push({ icon: <span className="w-3 h-3 rounded-full border border-black/10" style={{ backgroundColor: settings.theme_color }} />, label: settings.theme_color })
   if (settings.starts_at || settings.ends_at) chips.push({ icon: <CalendarDays className="w-3.5 h-3.5" />, label: [settings.starts_at?.slice(0, 10), settings.ends_at?.slice(0, 10)].filter(Boolean).join(' → ') })
+
   return (
     <div className="flex flex-wrap gap-2">
       {chips.map((c, i) => (
@@ -116,6 +115,18 @@ export default function AIGenerate() {
   }, [generating, accepting])
 
   const questionCount = draft ? draft.sections.reduce((n, s) => n + s.questions.length, 0) : 0
+  const steps = [
+    { id: 1, label: t('aiGenerate.stepShape'), desc: t('aiGenerate.stepShapeDesc') },
+    { id: 2, label: t('aiGenerate.stepPrompt'), desc: t('aiGenerate.stepPromptDesc') },
+    { id: 3, label: t('aiGenerate.stepPolish'), desc: t('aiGenerate.stepPolishDesc') },
+  ]
+
+  const goToPrompt = () => {
+    if (!stripTags(title)) { setError(t('aiGenerate.titleRequired')); return }
+    setError('')
+    setStep(2)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   const patchSettings = (patch) => setDraft((d) => (d ? { ...d, settings: { ...d.settings, ...patch } } : d))
 
@@ -169,7 +180,7 @@ export default function AIGenerate() {
       setIgnored(res.data.ignored || [])
       setModelUsed(res.data.model || '')
       setQuota((q) => (q ? { ...q, remaining: res.data.remaining, used: q.limit - res.data.remaining } : q))
-      setStep(2)
+      setStep(3)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (err) {
       const status = err.response?.status
@@ -198,10 +209,6 @@ export default function AIGenerate() {
         type: formType,
         settings: {
           ...s,
-          theme_color: s.theme_color || null,
-          thank_you_message: s.thank_you_message || null,
-          starts_at: s.starts_at || null,
-          ends_at: s.ends_at || null,
         },
         // Kunci kosong (cuma spasi) dinull-kan agar lolos min_length backend.
         sections: draft.sections.map((s) => ({
@@ -223,9 +230,11 @@ export default function AIGenerate() {
   }
 
   const quotaEmpty = quota && quota.remaining <= 0
+  const templates = [t('aiGenerate.templateQuiz'), t('aiGenerate.templateForm'), t('aiGenerate.templateSchedule')]
+  const canSend = !generating && !quotaEmpty && prompt.trim().length >= 10 && !!stripTags(title)
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-3xl mx-auto">
       <button
         onClick={() => navigate('/forms')}
         className="inline-flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 transition-colors mb-4"
@@ -233,16 +242,57 @@ export default function AIGenerate() {
         <ArrowLeft className="w-4 h-4" /> {t('aiGenerate.back')}
       </button>
 
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl">
-        <PageHeader
-          eyebrow={t('aiGenerate.eyebrow')}
-          title={t('aiGenerate.title')}
-          description={t('aiGenerate.description')}
-        />
-        <div className="mt-3"><QuotaPill quota={quota} /></div>
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+        <div className="flex items-center justify-between gap-3">
+          <p className="eyebrow">{t('aiGenerate.eyebrow')}</p>
+          <QuotaPill quota={quota} />
+        </div>
+
+        {/* Stepper: node bernomor di atas rel, kartu caption di bawah — satu lebar kolom. */}
+        <div>
+          <div className="relative flex items-center justify-between px-5" aria-hidden>
+            <div className="absolute left-10 right-10 top-1/2 h-px -translate-y-1/2 bg-gray-200 dark:bg-gray-700" />
+            <div
+              className="absolute left-10 top-1/2 h-0.5 -translate-y-1/2 bg-primary transition-all duration-300"
+              style={{ width: `calc(${((step - 1) / (steps.length - 1)) * 100}% - ${((step - 1) / (steps.length - 1)) * 2.5}rem)` }}
+            />
+            {steps.map((item) => (
+              <span
+                key={item.id}
+                className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-bold tabular-nums transition-colors ${
+                  step > item.id
+                    ? 'border-primary bg-primary text-white'
+                    : step === item.id
+                      ? 'border-primary bg-white dark:bg-ink-900 text-primary'
+                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 text-gray-400'
+                }`}
+              >
+                {step > item.id ? <Check className="h-4 w-4" strokeWidth={3} /> : String(item.id).padStart(2, '0')}
+              </span>
+            ))}
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-3">
+            {steps.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                disabled={item.id >= step || (item.id === 3 && !draft)}
+                onClick={() => item.id < step && setStep(item.id)}
+                className={`rounded-2xl border p-3 text-left transition-colors ${
+                  step === item.id
+                    ? 'border-primary bg-primary-50/60 dark:bg-primary-900/20'
+                    : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-ink-900 opacity-70'
+                } ${item.id < step ? 'cursor-pointer hover:border-primary/50' : 'cursor-default'}`}
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">Step {item.id}</p>
+                <p className="mt-1 text-sm font-semibold text-ink dark:text-gray-100">{item.label}</p>
+              </button>
+            ))}
+          </div>
+        </div>
 
         {step === 1 ? (
-          <form onSubmit={handleGenerate} className="space-y-5 mt-6">
+          <form onSubmit={(e) => { e.preventDefault(); goToPrompt() }} className="space-y-5">
             <Card className="space-y-5">
               <div>
                 <span className="field-label">{t('aiGenerate.titleLabel')}</span>
@@ -263,6 +313,7 @@ export default function AIGenerate() {
                       key={o.value}
                       type="button"
                       onClick={() => setFormType(o.value)}
+                      aria-pressed={formType === o.value}
                       className={`text-left px-4 py-3.5 rounded-xl border-2 transition-all ${formType === o.value ? 'border-primary bg-primary-50 shadow-chip' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 hover:border-gray-300 dark:hover:border-gray-600'}`}
                     >
                       <span className={`block text-sm font-semibold ${formType === o.value ? 'text-primary-700' : 'text-ink dark:text-gray-100'}`}>{o.label}</span>
@@ -273,49 +324,101 @@ export default function AIGenerate() {
               </div>
             </Card>
 
-            <Card className="space-y-4">
-              <Textarea
-                label={t('aiGenerate.promptLabel')}
+            {error && <p className="field-error">{error}</p>}
+
+            <Button type="submit" className="w-full" size="lg">
+              {t('aiGenerate.nextPrompt')}
+            </Button>
+          </form>
+        ) : step === 2 ? (
+          <form onSubmit={handleGenerate} className="space-y-4">
+            <div>
+              <p className="field-label">{t('aiGenerate.templatesLabel')}</p>
+              <div className="flex flex-wrap gap-2">
+                {templates.map((tpl) => (
+                  <button
+                    key={tpl}
+                    type="button"
+                    onClick={() => { setPrompt(tpl); setError('') }}
+                    className={`rounded-full border px-3.5 h-9 text-xs font-medium transition-colors ${prompt === tpl ? 'border-primary bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 text-gray-600 dark:text-gray-300 hover:border-primary/50'}`}
+                  >
+                    {tpl.length > 64 ? `${tpl.slice(0, 64)}…` : tpl}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Komposer chat: mengikuti tema — terang di light, ink-900 di dark, aksen violet. */}
+            <div className="rounded-[1.75rem] border border-primary-100 bg-white p-4 shadow-lift transition-colors focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 dark:border-gray-700 dark:bg-ink-900 dark:focus-within:border-primary dark:focus-within:ring-primary/20">
+              {files.length > 0 && (
+                <div className="mb-3 mt-2 flex flex-wrap gap-2">
+                  {files.map((f, i) => (
+                    <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 rounded-full bg-primary-50 py-1.5 pl-3 pr-1.5 text-xs font-medium text-primary-700 dark:bg-primary-900/25 dark:text-primary-300">
+                      <FileText className="h-3.5 w-3.5" />
+                      <span className="max-w-[180px] truncate">{f.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                        aria-label={t('aiGenerate.removeFile')}
+                        className="flex h-6 w-6 items-center justify-center rounded-full text-primary-400 transition-colors hover:bg-primary-100 hover:text-primary-700 dark:hover:bg-primary-900/40"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <label className="sr-only" htmlFor="ai-prompt">{t('aiGenerate.promptLabel')}</label>
+              <textarea
+                id="ai-prompt"
                 value={prompt}
                 onChange={(e) => { setPrompt(e.target.value); setError('') }}
-                placeholder={t('aiGenerate.promptPlaceholder')}
-                rows={4}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (canSend) handleGenerate() } }}
+                placeholder={t('aiGenerate.promptComposerPlaceholder')}
+                rows={5}
+                className="w-full resize-none bg-transparent px-1 text-[15px] leading-6 text-ink placeholder:text-gray-400 focus:outline-none focus:ring-0 focus:border-transparent dark:text-gray-100 dark:placeholder:text-gray-500"
               />
-              <div>
-                <span className="field-label">{t('aiGenerate.filesLabel')}</span>
-                <input ref={fileRef} type="file" multiple accept={ACCEPT_EXT} onChange={pickFiles} className="hidden" />
-                {files.length > 0 && (
-                  <div className="space-y-2 mb-3">
-                    {files.map((f, i) => (
-                      <div key={`${f.name}-${i}`} className="flex items-center gap-2.5 px-3.5 h-11 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-ink-800/50">
-                        <FileText className="w-4 h-4 text-primary shrink-0" />
-                        <span className="flex-1 min-w-0 text-sm text-ink dark:text-gray-100 truncate">{f.name}</span>
-                        <span className="text-xs text-gray-400 shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
-                        <button type="button" onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-incorrect transition-colors" aria-label={t('aiGenerate.removeFile')}>
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {files.length < MAX_FILES && (
-                  <Button type="button" variant="secondary" size="sm" onClick={() => fileRef.current?.click()}>
-                    {t('aiGenerate.filesAdd')}
-                  </Button>
-                )}
-                <p className="field-hint mt-1">{t('aiGenerate.filesHint')}</p>
+              <div className="mt-2 flex items-center gap-2 border-t border-gray-300 pt-3 dark:border-gray-800">
+                <input ref={fileRef} type="file" multiple accept={ACCEPT_EXT} onChange={pickFiles} className="hidden outline-hidden" />
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={files.length >= MAX_FILES}
+                  aria-label={t('aiGenerate.filesLabel')}
+                  title={t('aiGenerate.filesLabel')}
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-primary-50 hover:text-primary-600 disabled:opacity-40 dark:text-gray-500 dark:hover:bg-primary-900/25 dark:hover:text-primary-300"
+                >
+                  <Paperclip className="h-5 w-5" />
+                </button>
+                <span className="min-w-0 flex-1 truncate text-xs text-gray-400 dark:text-gray-500">{files.length}/{MAX_FILES} · {t('aiGenerate.filesHint')}</span>
+                <button
+                  type="submit"
+                  disabled={!canSend}
+                  aria-label={t('aiGenerate.generate')}
+                  title={t('aiGenerate.generate')}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-chip transition-all hover:from-primary-600 hover:to-primary-800 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {generating ? (
+                    <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  ) : (
+                    <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
+                  )}
+                </button>
               </div>
-            </Card>
+            </div>
 
             {error && <p className="field-error">{error}</p>}
             {quotaEmpty && <p className="field-error">{t('aiGenerate.quotaEmpty')}</p>}
 
-            <Button type="submit" loading={generating} disabled={quotaEmpty} className="w-full" size="lg" icon={<Sparkles className="w-4 h-4" />}>
-              {generating ? t('aiGenerate.generating') : t('aiGenerate.generate')}
-            </Button>
+            <div className="flex gap-3">
+              <Button type="button" variant="secondary" className="flex-1" onClick={() => setStep(1)}>{t('aiGenerate.back')}</Button>
+            </div>
           </form>
         ) : (
-          <div className="space-y-5 mt-6">
+          <div className="space-y-5">
             <Card className="space-y-4">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <h2 className="font-display font-semibold text-ink dark:text-gray-100">
@@ -358,35 +461,28 @@ export default function AIGenerate() {
                 }
               />
               {formType === 'quiz' && (
-                <SettingRow title={t('aiGenerate.leaderboard')} control={<Toggle label={t('aiGenerate.leaderboard')} checked={!!draft.settings.show_leaderboard} onChange={(v) => toggleDraft('show_leaderboard', v)} />} />
+                <>
+                  <SettingRow title={t('aiGenerate.leaderboard')} control={<Toggle label={t('aiGenerate.leaderboard')} checked={!!draft.settings.show_leaderboard} onChange={(v) => toggleDraft('show_leaderboard', v)} />} />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
+                    <Input label={t('aiGenerate.timerLabel')} type="number" min="1" max="1440" value={draft.settings.timer_minutes || ''} onChange={(e) => toggleDraft('timer_minutes', e.target.value ? Number(e.target.value) : null)} />
+                    <Select label={t('aiGenerate.scoringMode')} value={draft.settings.scoring_mode || 'auto'} onChange={(e) => toggleDraft('scoring_mode', e.target.value)}>
+                      <option value="auto">{t('aiGenerate.scoringAuto')}</option>
+                      <option value="manual">{t('aiGenerate.scoringManual')}</option>
+                    </Select>
+                  </div>
+                </>
               )}
               <SettingRow title={t('aiGenerate.restricted')} control={<Toggle label={t('aiGenerate.restricted')} checked={!!draft.settings.is_restricted} onChange={(v) => toggleDraft('is_restricted', v)} />} />
               <SettingRow title={t('aiGenerate.history')} control={<Toggle label={t('aiGenerate.history')} checked={draft.settings.show_in_history !== false} onChange={(v) => toggleDraft('show_in_history', v)} />} />
-              <SettingRow title={t('aiGenerate.revealScore')} control={<Toggle label={t('aiGenerate.revealScore')} checked={draft.settings.reveal_score !== false} onChange={(v) => toggleDraft('reveal_score', v)} />} />
-              <SettingRow title={t('aiGenerate.revealAnswers')} control={<Toggle label={t('aiGenerate.revealAnswers')} checked={draft.settings.reveal_answers !== false} onChange={(v) => toggleDraft('reveal_answers', v)} />} />
+              {formType === 'quiz' && (
+                <>
+                  <SettingRow title={t('aiGenerate.revealScore')} control={<Toggle label={t('aiGenerate.revealScore')} checked={draft.settings.reveal_score !== false} onChange={(v) => toggleDraft('reveal_score', v)} />} />
+                  <SettingRow title={t('aiGenerate.revealAnswers')} control={<Toggle label={t('aiGenerate.revealAnswers')} checked={draft.settings.reveal_answers !== false} onChange={(v) => toggleDraft('reveal_answers', v)} />} />
+                </>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
-                <Select label={t('aiGenerate.displayStyle')} value={draft.settings.display_style || 'card'} onChange={(e) => toggleDraft('display_style', e.target.value)}>
-                  <option value="card">{t('aiGenerate.displayCard')}</option>
-                  <option value="quiz">{t('aiGenerate.displayQuiz')}</option>
-                </Select>
-                {formType === 'quiz' && (
-                  <Select label={t('aiGenerate.scoringMode')} value={draft.settings.scoring_mode || 'auto'} onChange={(e) => toggleDraft('scoring_mode', e.target.value)}>
-                    <option value="auto">{t('aiGenerate.scoringAuto')}</option>
-                    <option value="manual">{t('aiGenerate.scoringManual')}</option>
-                  </Select>
-                )}
-                <div className="flex items-end gap-2">
-                  <input type="color" value={/^#[0-9A-Fa-f]{6}$/.test(draft.settings.theme_color || '') ? draft.settings.theme_color : '#6C5CE7'} onChange={(e) => toggleDraft('theme_color', e.target.value)} aria-label={t('aiGenerate.themeColor')} className="w-11 h-11 rounded-xl cursor-pointer border border-gray-200 dark:border-gray-700 shrink-0 bg-white dark:bg-ink-900" />
-                  <div className="flex-1 min-w-0">
-                    <Input label={t('aiGenerate.startsAt')} type="datetime-local" value={toInputDateTime(draft.settings.starts_at)} onChange={(e) => toggleDraft('starts_at', e.target.value || null)} />
-                  </div>
-                </div>
-                <Input label={t('aiGenerate.themeColor')} value={draft.settings.theme_color || ''} onChange={(e) => toggleDraft('theme_color', e.target.value)} placeholder="#6C5CE7" />
+                <Input label={t('aiGenerate.startsAt')} type="datetime-local" value={toInputDateTime(draft.settings.starts_at)} onChange={(e) => toggleDraft('starts_at', e.target.value || null)} />
                 <Input label={t('aiGenerate.endsAt')} type="datetime-local" value={toInputDateTime(draft.settings.ends_at)} onChange={(e) => toggleDraft('ends_at', e.target.value || null)} helper={t('aiGenerate.scheduleHint')} />
-              </div>
-              <div className="pt-3">
-                <span className="field-label">{t('aiGenerate.thankYou')}</span>
-                <RichTextEditor value={draft.settings.thank_you_message || ''} onChange={(html) => toggleDraft('thank_you_message', html)} minHeight={60} />
               </div>
             </Card>
 

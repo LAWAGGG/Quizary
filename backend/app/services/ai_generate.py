@@ -90,7 +90,7 @@ Bentuk:
    "is_required": true, "points": 1, "group_id": null,
    "options": [{"option_text": "teks opsi", "is_correct": true}],
    "password_keyword": null, "answer_key": null, "allow_other": false}
-]]}], "settings": {"shuffle_questions": false, "shuffle_options": false, "timer_minutes": null, "require_login": false, "submission_limit": "unlimited", "show_leaderboard": false, "is_restricted": false, "show_in_history": true, "reveal_score": true, "reveal_answers": true, "display_style": "card", "scoring_mode": "auto", "theme_color": null, "thank_you_message": null, "starts_at": null, "ends_at": null}}
+]]}], "settings": {"shuffle_questions": false, "shuffle_options": false, "timer_minutes": null, "require_login": false, "submission_limit": "unlimited", "show_leaderboard": false, "is_restricted": false, "show_in_history": true, "reveal_score": true, "reveal_answers": true, "starts_at": null, "ends_at": null}}
 
 Aturan:
 - options HANYA untuk multiple_choice/checkbox/dropdown (2-4 opsi); tipe lain: options [] dan password_keyword null.
@@ -100,9 +100,6 @@ Aturan:
 - Quiz: multiple_choice WAJIB tepat 1 option is_correct=true; checkbox boleh >1; timer_minutes WAJIB angka 1-1440.
 - Bukan quiz: timer_minutes null, is_correct semua false, show_leaderboard false, scoring_mode auto.
 - submission_limit: "unlimited" atau "once" (once = wajib login, auto-coerce).
-- display_style: "card" (formal) atau "quiz" (gamified satu soal per layar).
-- scoring_mode: "auto" atau "manual" (hanya bermakna untuk quiz).
-- theme_color: hex "#RRGGBB" atau null. thank_you_message: ringkas atau null.
 - starts_at/ends_at: ISO "YYYY-MM-DDTHH:MM:SS" atau null; starts_at harus sebelum ends_at.
 - question_text/option_text = teks polos, TANPA tag HTML (HTML mentah tampil sebagai teks, bukan render).
 - Rumus/simbol: tulis LaTeX dengan delimiter \(...\) inline atau \[...\] display. JANGAN art Unicode (√½) dan JANGAN ejaan kata ("akar kuadrat dari").
@@ -476,16 +473,6 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
     sub = settings.get("submission_limit")
     is_quiz_type = form_type == "quiz"
 
-    def _hex(v):
-        s = str(v or "").strip()
-        if len(s) == 7 and s.startswith("#"):
-            try:
-                int(s[1:], 16)
-                return s.upper()
-            except ValueError:
-                return None
-        return None
-
     def _dt(v):
         # ponytail: tanggal AI tak tentu formatnya — gagal parse = null, bukan gagal generate.
         s = str(v or "").strip()
@@ -499,11 +486,8 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
         except Exception:
             return None
 
-    disp = settings.get("display_style")
-    disp = disp if disp in ("card", "quiz") else "card"
     scoring = settings.get("scoring_mode")
     scoring = scoring if scoring in ("auto", "manual") else "auto"
-    thank = str(settings.get("thank_you_message") or "").strip()[:2000] or None
     starts = _dt(settings.get("starts_at"))
     ends = _dt(settings.get("ends_at"))
     if starts and ends:
@@ -527,10 +511,8 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
             "show_in_history": bool(settings.get("show_in_history", True)),
             "reveal_score": bool(settings.get("reveal_score", True)),
             "reveal_answers": bool(settings.get("reveal_answers", True)),
-            "display_style": disp,
+            "display_style": "card",
             "scoring_mode": scoring if is_quiz_type else "auto",
-            "theme_color": _hex(settings.get("theme_color")),
-            "thank_you_message": thank,
             "starts_at": starts,
             "ends_at": ends,
         },
@@ -563,14 +545,8 @@ def detect_ignored(prompt_text: str, settings: dict) -> list[str]:
     s = settings or {}
     if has("leaderboard", "peringkat", "papan skor", "ranking") and not s.get("show_leaderboard"):
         out.append("leaderboard")
-    if has("warna", "theme", "colour", "color", "ungu", "biru", "merah", "hijau") and not s.get("theme_color"):
-        out.append("warna tema")
     if has("jadwal", "dibuka", "ditutup", "berakhir", "deadline", "batas waktu", "tanggal mulai", "tanggal selesai") and not (s.get("starts_at") or s.get("ends_at")):
         out.append("jadwal")
-    if has("terima kasih", "thank you", "pesan penutup", "closing message") and not s.get("thank_you_message"):
-        out.append("pesan terima kasih")
-    if has("tampilan kuis", "gamified", "satu soal per layar", "mode kuis") and s.get("display_style") == "card":
-        out.append("tampilan")
     if has("skor manual", "bobot nilai", "penilaian manual", "manual scoring") and s.get("scoring_mode") == "auto":
         out.append("mode penilaian")
     if has("sembunyikan skor", "sembunyikan nilai", "tanpa skor") and s.get("reveal_score"):

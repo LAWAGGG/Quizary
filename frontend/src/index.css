@@ -131,6 +131,10 @@
   @apply ring-primary-400 ring-offset-ink-950;
 }
 
+#ai-prompt{
+  outline: none;
+}
+
 /* Dark mode: tint chips (badge/ikon/state aktif) pakai tint gelap + teks terang,
    bukan pastel light. Cover base + hover/active variant yang dipakai. */
 .dark .bg-primary-50 { background-color: rgb(108 92 231 / 0.16); }

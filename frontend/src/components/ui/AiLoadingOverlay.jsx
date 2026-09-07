@@ -52,9 +52,7 @@ export function AiLoadingOverlay({ open, mode = 'generate' }) {
                   className="w-11 h-11 object-contain animate-[spin_1.6s_ease-in-out_infinite]"
                 />
               </div>
-              <div className="mx-auto mt-5 h-1.5 w-40 overflow-hidden rounded-full bg-gray-100 dark:bg-ink-800" aria-hidden="true">
-                <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-primary-400 to-primary-600 animate-[overlay-shimmer_1.4s_ease-in-out_infinite]" />
-              </div>
+             
               <h3 className="mt-4 font-display text-lg font-bold text-ink dark:text-gray-100">{title}</h3>
               <AnimatePresence mode="wait">
                 <motion.p
