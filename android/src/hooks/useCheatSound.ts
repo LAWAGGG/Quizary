@@ -9,7 +9,7 @@ try {
   useAudioPlayerStatus = EA.useAudioPlayerStatus;
 } catch {}
 
-const CHEAT_SOUND = require('../assets/sounds/cheat-alert.mp3');
+const CHEAT_SOUND = require('../../assets/sounds/cheat-alert.mp3');
 
 export function useCheatSound() {
   // expo-audio hook must be called unconditionally at top level
