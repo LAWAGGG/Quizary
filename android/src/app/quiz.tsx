@@ -377,23 +377,9 @@ export default function QuizScreen() {
       pinInProgressRef.current = true;
       try {
         const ok = await pin();
-        // Poll isPinned up to 1s (dialog Pin this app? needs user tap)
-        let verified = !!ok;
-        if (ok) {
-          for (let i = 0; i < 5; i++) {
-            await new Promise((r) => setTimeout(r, 200));
-            try {
-              const { NativeModules } = require('react-native');
-              const n = (NativeModules as any).AppPinning;
-              if (n?.isPinned) verified = await n.isPinned();
-              else verified = true;
-            } catch {
-              verified = true;
-            }
-            if (verified) break;
-          }
-        }
-        if (!verified || !ok) {
+        // Soft pin like handleStart: isPinned poll causes false-negative (dialog Pin this app? not yet confirmed but toast shows pinned)
+        // So just trust ok, don't poll isPinned immediate
+        if (!ok) {
           showAlert({
             type: 'warning',
             title: language === 'ID' ? 'Pin gagal' : 'Pin failed',
@@ -401,7 +387,6 @@ export default function QuizScreen() {
               ? 'Gagal pin ulang. Coba lagi atau akan terkunci.'
               : 'Failed to re-pin. Try again or will be locked.',
           });
-          // keep warning visible and loop sound
           playCheat().catch(() => {});
           return;
         }
