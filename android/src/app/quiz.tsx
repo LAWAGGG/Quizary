@@ -363,9 +363,7 @@ export default function QuizScreen() {
   }, [playCheat, stopCheat, hasFloating]);
 
   const handleReenter = useCallback(async () => {
-    if (warningTimerRef.current) clearInterval(warningTimerRef.current);
-    warningTimerRef.current = null;
-    warningStartRef.current = 0;
+    // Check floating first
     if (isRestrictedRef.current) {
       try {
         if (await hasFloating()) {
@@ -374,20 +372,28 @@ export default function QuizScreen() {
         }
       } catch {}
     }
-    setWarningVisible(false);
-    warningVisibleRef.current = false;
-    setWarningCountdown(5);
-    countdownRef.current = 5;
-    await stopCheat().catch(() => {});
-    if (warningTimerRef.current) clearInterval(warningTimerRef.current);
-    warningTimerRef.current = null;
-    // Re-pin for real: soft check like handleStart, no immediate isPinned
+    // Don't hide warning before pin success — keep visible until verified
     if (isRestrictedRef.current && canPin) {
       pinInProgressRef.current = true;
       try {
         const ok = await pin();
-        // setSecure(true) disabled for debugging
-        if (!ok) {
+        // Poll isPinned up to 1s (dialog Pin this app? needs user tap)
+        let verified = !!ok;
+        if (ok) {
+          for (let i = 0; i < 5; i++) {
+            await new Promise((r) => setTimeout(r, 200));
+            try {
+              const { NativeModules } = require('react-native');
+              const n = (NativeModules as any).AppPinning;
+              if (n?.isPinned) verified = await n.isPinned();
+              else verified = true;
+            } catch {
+              verified = true;
+            }
+            if (verified) break;
+          }
+        }
+        if (!verified || !ok) {
           showAlert({
             type: 'warning',
             title: language === 'ID' ? 'Pin gagal' : 'Pin failed',
@@ -395,9 +401,19 @@ export default function QuizScreen() {
               ? 'Gagal pin ulang. Coba lagi atau akan terkunci.'
               : 'Failed to re-pin. Try again or will be locked.',
           });
+          // keep warning visible and loop sound
           playCheat().catch(() => {});
           return;
         }
+        // Success: clear warning and stop loop
+        if (warningTimerRef.current) clearInterval(warningTimerRef.current);
+        warningTimerRef.current = null;
+        warningStartRef.current = 0;
+        setWarningVisible(false);
+        warningVisibleRef.current = false;
+        setWarningCountdown(5);
+        countdownRef.current = 5;
+        await stopCheat().catch(() => {});
       } catch {
         showAlert({
           type: 'warning',
@@ -408,12 +424,18 @@ export default function QuizScreen() {
         return;
       } finally {
         pinInProgressRef.current = false;
-        if (warningTimerRef.current) clearInterval(warningTimerRef.current);
-        warningTimerRef.current = null;
       }
+    } else {
+      // Expo Go / nativeMissing: just dismiss
+      if (warningTimerRef.current) clearInterval(warningTimerRef.current);
+      warningTimerRef.current = null;
+      warningStartRef.current = 0;
+      setWarningVisible(false);
+      warningVisibleRef.current = false;
+      setWarningCountdown(5);
+      countdownRef.current = 5;
+      await stopCheat().catch(() => {});
     }
-    // Ensure sound off when pinned again
-    await stopCheat().catch(() => {});
   }, [canPin, pin, stopCheat, playCheat, hasFloating, triggerFloatingLock, language]);
 
   const handleStart = async () => {
