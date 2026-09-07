@@ -65,6 +65,7 @@ class Form(Base):
     scoring_mode = Column(SAEnum(ScoringMode), default=ScoringMode.auto, nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=True)
+    last_opened_at = Column(DateTime(timezone=True), nullable=True)
 
     category_id = Column(BigInteger, ForeignKey("form_categories.id", ondelete="SET NULL"), nullable=True)
 
@@ -79,4 +80,5 @@ class Form(Base):
         Index("idx_forms_user_status", "user_id", "status"),
         Index("idx_forms_user_type", "user_id", "type"),
         Index("idx_forms_user_category", "user_id", "category_id"),
+        Index("idx_forms_user_opened", "user_id", "last_opened_at"),
     )

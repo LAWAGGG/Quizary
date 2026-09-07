@@ -232,7 +232,7 @@ function CategoryMoveModal({ open, onClose, form, forms: formsProp, categories, 
     <AnimatePresence>
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4 backdrop-blur-sm" onClick={onClose}>
-          <motion.div initial={{ scale: 0.96, y: 8, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.96, y: 8, opacity: 0 }} className="bg-white dark:bg-ink-900 rounded-2xl w-full max-w-md shadow-lift overflow-hidden" onClick={(e)=>e.stopPropagation()}>
+          <motion.div initial={{ scale: 0.96, y: 8, opacity: 0 }} animate={{ scale: 1, y: 0, opacity: 1 }} exit={{ scale: 0.96, y: 8, opacity: 0 }} className="bg-white dark:bg-ink-900 border dark:border-ink-800 rounded-2xl w-full max-w-md shadow-lift overflow-hidden" onClick={(e)=>e.stopPropagation()}>
             <div className="px-6 pt-5 pb-4">
               <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 flex items-center gap-2">
                 <FolderInput className="w-5 h-5 text-primary" /> {isBulk ? t('forms.bulkMoveTitle', { count: targets.length }) : t('forms.changeCategoryTitle')}
@@ -312,7 +312,7 @@ export default function FormList() {
   const fetchForms = () => {
     setLoading(true)
     const status = activeTab === 'All' ? undefined : activeTab.toLowerCase()
-    const params = { page: meta.page, per_page: meta.per_page, status }
+    const params = { page: meta.page, per_page: meta.per_page, status, sort: 'recent' }
     if (activeCategory !== null) params.category_id = activeCategory
     api.get('/forms', { params })
       .then((res) => { setForms(res.data.data); setMeta(res.data.meta) })

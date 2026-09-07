@@ -149,6 +149,7 @@ def list_forms(
     status_filter: str | None = Query(None, alias="status"),
     type_filter: str | None = Query(None, alias="type"),
     category_id: int | None = Query(None, ge=0),
+    sort: str = Query("recent", regex="^(recent|created|title)$"),
     page: int = Query(1, ge=1),
     per_page: int = Query(10, ge=1, le=100),
     user: User = Depends(get_current_user),
@@ -176,7 +177,15 @@ def list_forms(
             q = q.filter(Form.category_id == category_id)
 
     total = q.count()
-    forms = q.order_by(Form.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    if sort == "recent":
+        # Terakhir dibuka / diupdate / dibuat
+        sort_expr = func.coalesce(Form.last_opened_at, Form.updated_at, Form.created_at).desc()
+    elif sort == "title":
+        sort_expr = Form.title.asc()
+    else:
+        sort_expr = Form.created_at.desc()
+
+    forms = q.order_by(sort_expr).offset((page - 1) * per_page).limit(per_page).all()
 
     # Hitungan soal per form — satu query GROUP BY, dipetakan ke card list.
     counts: dict[int, int] = {}
@@ -312,10 +321,13 @@ def bulk_move_category(
     return {"moved": len(forms), "message": f"{len(forms)} formulir dipindahkan ke {cat.name}"}
 
 
-# ── GET /forms/{form_id} ──────────────────────────────────────────────────────
+# ── GET /forms/{id} ──────────────────────────────────────────────────────
 
 @router.get("/forms/{form_id}")
 def get_form(request: Request, form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
+    form.last_opened_at = now_wib()
+    db.commit()
+    db.refresh(form)
     return _form_dict(form, request, db)
 
 

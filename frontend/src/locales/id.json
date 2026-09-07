@@ -139,7 +139,7 @@
     "confirmDeleteCategoryTitle": "Hapus kategori?",
     "confirmDeleteCategoryMessage": "Kategori \"{{name}}\" akan dihapus. Form di dalamnya akan menjadi Tanpa kategori.",
     "menuEdit": "Ubah formulir",
-    "menuMoveCategory": "Ganti kategori",
+    "menuMoveCategory": "Kategori",
     "menuDelete": "Hapus formulir",
     "quickActions": "Aksi cepat",
     "emptyCategory": "Kosong di kategori ini",

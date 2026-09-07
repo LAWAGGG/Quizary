@@ -139,7 +139,7 @@
     "confirmDeleteCategoryTitle": "Delete category?",
     "confirmDeleteCategoryMessage": "Category \"{{name}}\" will be deleted. Forms inside will become Uncategorized.",
     "menuEdit": "Edit form",
-    "menuMoveCategory": "Change category",
+    "menuMoveCategory": "Category",
     "menuDelete": "Delete form",
     "quickActions": "Quick actions",
     "emptyCategory": "Empty in this category",
