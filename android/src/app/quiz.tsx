@@ -372,14 +372,37 @@ export default function QuizScreen() {
         }
       } catch {}
     }
-    // Don't hide warning before pin success — keep visible until verified
+    // Don't hide warning before pin success — keep visible until verified via isPinned poll
     if (isRestrictedRef.current && canPin) {
       pinInProgressRef.current = true;
       try {
         const ok = await pin();
-        // Soft pin like handleStart: isPinned poll causes false-negative (dialog Pin this app? not yet confirmed but toast shows pinned)
-        // So just trust ok, don't poll isPinned immediate
         if (!ok) {
+          showAlert({
+            type: 'warning',
+            title: language === 'ID' ? 'Pin gagal' : 'Pin failed',
+            message: language === 'ID'
+              ? 'Gagal pin ulang. Coba lagi atau akan terkunci.'
+              : 'Failed to re-pin. Try again or will be locked.',
+          });
+          playCheat().catch(() => {});
+          return;
+        }
+        // Poll isPinned up to 1s (system dialog Pin this app? needs user tap / lockTaskModeState delay)
+        let verified = false;
+        for (let i = 0; i < 5; i++) {
+          await new Promise((r) => setTimeout(r, 200));
+          try {
+            const { NativeModules } = require('react-native');
+            const n = (NativeModules as any).AppPinning;
+            if (n?.isPinned) verified = await n.isPinned();
+            else verified = true;
+          } catch {
+            verified = true;
+          }
+          if (verified) break;
+        }
+        if (!verified) {
           showAlert({
             type: 'warning',
             title: language === 'ID' ? 'Pin gagal' : 'Pin failed',

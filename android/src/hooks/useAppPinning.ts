@@ -40,8 +40,17 @@ export function useAppPinning() {
 
   const pin = useCallback(async (): Promise<boolean> => {
     if (!canPin || !native) return false;
-    if (isPinning) return true;
+    // Don't short-circuit on isPinning — verify real state via isPinned poll in handleReenter
+    // Previous guard `if(isPinning) return true` caused false-positive pin on re-lock
     try {
+      // Re-check real state if isPinning true
+      if (isPinning) {
+        try {
+          const v = await native.isPinned();
+          if (v) return true;
+          setIsPinning(false);
+        } catch {}
+      }
       setIsPinning(true);
       await native.startPinning();
       return true;
