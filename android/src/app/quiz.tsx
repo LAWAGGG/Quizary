@@ -214,9 +214,9 @@ export default function QuizScreen() {
     lockedVisibleRef.current = true;
     setWarningVisible(false);
     warningVisibleRef.current = false;
-    playCheat().catch(() => {});
+    stopCheat().catch(() => {});
     lockSubmission(sid, reason).catch(() => {});
-  }, [playCheat]);
+  }, [stopCheat]);
 
   const handleCheckLockedStatus = useCallback(async () => {
     const sid = submissionIdRef.current;
@@ -301,13 +301,14 @@ export default function QuizScreen() {
       if (lockedVisibleRef.current) return; // already locked, ignore
 
       if (next === 'background' || next === 'inactive') {
-        // Start warning if not already
+        // Start warning if not already — loop cheat sound during warning
         if (warningVisibleRef.current) return;
         warningStartRef.current = Date.now();
         countdownRef.current = 5;
         setWarningCountdown(5);
         setWarningVisible(true);
         warningVisibleRef.current = true;
+        playCheat().catch(() => {});
         if (warningTimerRef.current) clearInterval(warningTimerRef.current);
         warningTimerRef.current = setInterval(() => {
           const elapsed = Math.floor((Date.now() - warningStartRef.current) / 1000);
@@ -319,13 +320,13 @@ export default function QuizScreen() {
             warningTimerRef.current = null;
             setWarningVisible(false);
             warningVisibleRef.current = false;
-            // Trigger lock
+            stopCheat().catch(() => {});
+            // Trigger lock — silent at lock
             const now = Date.now();
             setLockedAt(now);
             setCheatReason('window-blur');
             setLockedVisible(true);
             lockedVisibleRef.current = true;
-            playCheat().catch(() => {});
             // Server lock
             lockSubmission(sid, 'window-blur').catch(() => {});
           }
@@ -341,12 +342,12 @@ export default function QuizScreen() {
             warningTimerRef.current = null;
             setWarningVisible(false);
             warningVisibleRef.current = false;
+            stopCheat().catch(() => {});
             const now = Date.now();
             setLockedAt(now);
             setCheatReason('window-blur');
             setLockedVisible(true);
             lockedVisibleRef.current = true;
-            playCheat().catch(() => {});
             const sid2 = submissionIdRef.current;
             if (sid2) lockSubmission(sid2, 'window-blur').catch(() => {});
           }
@@ -358,12 +359,11 @@ export default function QuizScreen() {
     return () => {
       sub.remove();
     };
-  }, [playCheat]);
+  }, [playCheat, stopCheat]);
 
   const handleReenter = useCallback(async () => {
     if (warningTimerRef.current) clearInterval(warningTimerRef.current);
     warningTimerRef.current = null;
-    // Auto-check floating before re-enter
     if (isRestrictedRef.current) {
       try {
         if (await hasFloating()) {
@@ -376,12 +376,41 @@ export default function QuizScreen() {
     warningVisibleRef.current = false;
     setWarningCountdown(5);
     countdownRef.current = 5;
+    // Must re-pin for real: await + verify
     if (isRestrictedRef.current && canPin) {
-      pin().catch(() => {});
-      setSecure(true).catch(() => {});
+      try {
+        const ok = await pin();
+        await setSecure(true).catch(() => {});
+        // Verify pin actually active; checkPinned uses ActivityManager
+        let verified = !!ok;
+        try {
+          const { NativeModules } = require('react-native');
+          const n = (NativeModules as any).AppPinning;
+          if (n?.isPinned) verified = ok && (await n.isPinned());
+        } catch {}
+        if (!verified) {
+          showAlert({
+            type: 'warning',
+            title: language === 'ID' ? 'Pin gagal' : 'Pin failed',
+            message: language === 'ID'
+              ? 'Gagal pin ulang. Coba lagi atau akan terkunci.'
+              : 'Failed to re-pin. Try again or will be locked.',
+          });
+          playCheat().catch(() => {});
+          return;
+        }
+      } catch {
+        showAlert({
+          type: 'warning',
+          title: language === 'ID' ? 'Pin gagal' : 'Pin failed',
+          message: language === 'ID' ? 'Gagal pin ulang.' : 'Failed to re-pin.',
+        });
+        playCheat().catch(() => {});
+        return;
+      }
     }
     stopCheat().catch(() => {});
-  }, [canPin, pin, stopCheat, hasFloating, triggerFloatingLock, setSecure]);
+  }, [canPin, pin, stopCheat, playCheat, hasFloating, triggerFloatingLock, setSecure, language]);
 
   const handleStart = async () => {
     if (!publicForm) return;
