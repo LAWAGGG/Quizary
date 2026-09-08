@@ -249,7 +249,7 @@
     "allowOtherHint": "Responden bisa memilih Lainnya dan mengetik sendiri",
     "answerKey": "Kunci jawaban",
     "answerKeyPlaceholder": "cth. 2 atau jakarta; DKI Jakarta",
-    "answerKeyHint": "Kosongkan bila tak ingin dinilai otomatis. Benar bila salah satu kunci terkandung (kapital diabaikan).",
+    "answerKeyHint": "Kosongkan bila tak ingin dinilai otomatis. Tambah kunci satu per satu lewat tombol.",
     "accept": "Buat form ini",
     "accepting": "Membuat form...",
     "accepted": "Form dari AI berhasil dibuat",
@@ -480,8 +480,8 @@
     "passwordPlaceholder": "cth. Rahasia2026",
     "passwordHint": "Jawaban harus cocok persis untuk lanjut ke bagian berikutnya.",
     "answerKey": "Kunci jawaban",
-    "answerKeyPlaceholder": "cth. 2 atau jakarta; DKI Jakarta",
-    "answerKeyHint": "Isi untuk mengaktifkan penilaian. Benar bila salah satu kunci terkandung dalam jawaban (kapital diabaikan). Pisahkan beberapa kunci dengan ; .",
+    "answerKeyPlaceholder": "cth. jakarta",
+    "answerKeyHint": "Isi untuk mengaktifkan penilaian. Benar bila salah satu kunci terkandung dalam jawaban (kapital diabaikan). Tambah satu per satu lewat tombol.",
     "answerKeyHintScored": "Wajib diisi bila Hitung poin aktif. Benar bila salah satu kunci terkandung (kapital diabaikan).",
     "answerKeyRequired": "Isi answer key terlebih dahulu untuk mengaktifkan penilaian soal ini",
     "scoringInactiveHint": "Tidak dinilai · 0 poin",
@@ -785,5 +785,15 @@
     "blockedAction": "Aksi terlarang diblokir",
     "appBackground": "Keluar dari aplikasi",
     "unknown": "Aktivitas mencurigakan"
+  },
+  "answerKey": {
+    "label": "Kunci jawaban",
+    "placeholder": "cth. jakarta",
+    "add": "Tambah kunci",
+    "remove": "Hapus kunci {{key}}",
+    "tooLong": "Tiap kunci maksimal {{max}} karakter",
+    "max": "Maksimal {{max}} kunci jawaban",
+    "duplicate": "Kunci ini sudah ada",
+    "hintChip": "Tambah satu per satu, tekan Enter untuk tambah. Maksimal {{max}} kunci."
   }
 }

@@ -16,7 +16,7 @@ import { useToast } from '../../hooks/useToast'
 import { useTranslation } from 'react-i18next'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { isAudioUrl } from '../../lib/media'
-import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText } from '../../components/ui'
+import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText, AnswerKeyEditor } from '../../components/ui'
 import SectionManager from '../../components/ui/SectionManager'
 
 const TYPE_LABELS = {
@@ -340,23 +340,15 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         {ferr('question_text') && <p className="field-error">{ferr('question_text')}</p>}
       </div>
 
-      {/* Essay/short_answer quiz: input kunci jawaban sama visual dengan input lain (password_keyword, dll) — beda hanya perilaku toggle (required saat Hitung poin ON). */}
+      {/* Essay/short_answer quiz: kunci jawaban sebagai chip ala opsi — tambah/hapus per kunci, join ";" hanya saat payload. */}
       {showKeywordScoring && (
-        <div>
-          <label className="field-label">
-            {t('questionBuilder.answerKey')}
-            {form.is_scored && <span className="text-incorrect ml-0.5">*</span>}
-          </label>
-          <input
-            ref={answerKeyInputRef}
-            value={form.answer_key || ''}
-            onChange={(e) => setForm((p) => ({ ...p, answer_key: e.target.value }))}
-            placeholder={t('questionBuilder.answerKeyPlaceholder')}
-            className={`input-field font-mono ${ferr('answer_key') ? 'border-incorrect focus:border-incorrect' : ''}`}
-            maxLength={500}
-            spellCheck={false}
-          />
-        </div>
+        <AnswerKeyEditor
+          value={form.answer_key || ''}
+          onChange={(v) => setForm((p) => ({ ...p, answer_key: v }))}
+          required={form.is_scored}
+          error={ferr('answer_key')}
+          inputRef={answerKeyInputRef}
+        />
       )}
 
       <div className="space-y-3">

@@ -249,7 +249,7 @@
     "allowOtherHint": "Respondents can pick Other and type their own",
     "answerKey": "Answer key",
     "answerKeyPlaceholder": "e.g. 2 or jakarta; DKI Jakarta",
-    "answerKeyHint": "Leave empty to skip auto-grading. Correct when any key is contained (case-insensitive).",
+    "answerKeyHint": "Leave empty to skip auto-grading. Add keys one by one with the button.",
     "accept": "Create this form",
     "accepting": "Creating form...",
     "accepted": "AI form created successfully",
@@ -480,8 +480,8 @@
     "passwordPlaceholder": "e.g. Secret2026",
     "passwordHint": "Answer must match exactly to proceed to the next section.",
     "answerKey": "Answer key",
-    "answerKeyPlaceholder": "e.g. 2 or jakarta; DKI Jakarta",
-    "answerKeyHint": "Correct when any key is contained in the answer. Separate multiple keys with ; .",
+    "answerKeyPlaceholder": "e.g. jakarta",
+    "answerKeyHint": "Correct when any key is contained in the answer. Add keys one by one with the button.",
     "answerKeyHintScored": "Required when Count points is on. Correct when any key is contained (case-insensitive).",
     "answerKeySeparatorHint": "Separate multiple keys with ;",
     "answerKeyRequired": "Fill in the answer key first to enable scoring for this question",
@@ -790,5 +790,15 @@
     "blockedAction": "Blocked action",
     "appBackground": "Left application",
     "unknown": "Suspicious activity"
+  },
+  "answerKey": {
+    "label": "Answer key",
+    "placeholder": "e.g. jakarta",
+    "add": "Add key",
+    "remove": "Remove key {{key}}",
+    "tooLong": "Each key max {{max}} characters",
+    "max": "Max {{max}} answer keys",
+    "duplicate": "This key already exists",
+    "hintChip": "Add one by one, press Enter to add. Max {{max}} keys."
   }
 }

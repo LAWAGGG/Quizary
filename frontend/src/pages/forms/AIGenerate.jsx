@@ -6,7 +6,7 @@ import { ArrowLeft, ArrowUp, Paperclip, Sparkles, RefreshCw, Check, X, FileText,
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { stripTags } from '../../lib/sanitize'
-import { Button, Card, RichTextEditor, RichText, Badge, Toggle, Select, Input, AiLoadingOverlay } from '../../components/ui'
+import { Button, Card, RichTextEditor, RichText, Badge, Toggle, Select, Input, AiLoadingOverlay, AnswerKeyEditor } from '../../components/ui'
 
 const humanizeType = (t) => (t || '').replace(/_/g, ' ')
 
@@ -520,20 +520,14 @@ export default function AIGenerate() {
                         </span>
                       </label>
                     )}
-                    {formType === 'quiz' && (q.type === 'essay' || q.type === 'short_answer') && (
-                      <div className="pt-1">
-                        <span className="field-label">{t('aiGenerate.answerKey')}</span>
-                        <input
-                          value={q.answer_key || ''}
-                          onChange={(e) => patchQuestion(si, qi, { answer_key: e.target.value })}
-                          placeholder={t('aiGenerate.answerKeyPlaceholder')}
-                          className="input-field font-mono h-10 text-sm w-full"
-                          maxLength={500}
-                          spellCheck={false}
-                        />
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('aiGenerate.answerKeyHint')}</p>
-                      </div>
-                    )}
+                      {formType === 'quiz' && (q.type === 'essay' || q.type === 'short_answer') && (
+                       <div className="pt-1">
+                         <AnswerKeyEditor
+                           value={q.answer_key || ''}
+                           onChange={(value) => patchQuestion(si, qi, { answer_key: value })}
+                         />
+                       </div>
+                     )}
                   </div>
                 ))}
               </Card>
