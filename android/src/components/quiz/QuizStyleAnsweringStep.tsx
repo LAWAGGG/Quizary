@@ -132,20 +132,30 @@ export function QuizStyleAnsweringStep({
     setShowPicker({ qId, mode });
   };
 
-  const handlePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (event.type === 'dismissed') {
+  const handlePickerChange = (event: any, selectedDate?: Date) => {
+    // Deprecated onChange unified handler — keep for fallback, but prefer onValueChange
+    if (event?.type === 'dismissed') {
       pendingDatetimeRef.current = null;
       setShowPicker(null);
       return;
     }
     let next = selectedDate;
-    if (!next && (event as any)?.nativeEvent?.timestamp) {
-      const ts = Number((event as any).nativeEvent.timestamp);
+    if (!next && event?.nativeEvent?.timestamp) {
+      const ts = Number(event.nativeEvent.timestamp);
       if (!isNaN(ts)) next = new Date(ts);
     }
     if (next && !isNaN(next.getTime())) {
       setPickerDate(next);
     }
+  };
+
+  const handleValueChange = (_event: any, date: Date) => {
+    if (date && !isNaN(date.getTime())) setPickerDate(date);
+  };
+
+  const handleDismiss = () => {
+    pendingDatetimeRef.current = null;
+    setShowPicker(null);
   };
 
   const confirmPicker = () => {
@@ -862,7 +872,7 @@ export function QuizStyleAnsweringStep({
               <Text style={{ fontWeight: '700', fontSize: 14, color: isDark ? '#FFF' : '#0F172A', textAlign: 'center', marginBottom: 8 }}>
                 {showPicker.mode === 'date' ? 'Pilih Tanggal' : 'Pilih Waktu'}
               </Text>
-              <DateTimePicker value={pickerDate} mode={showPicker.mode} display="spinner" is24Hour={true} onChange={handlePickerChange} textColor={isDark ? '#FFF' : '#0F172A'} themeVariant={isDark ? 'dark' : 'light'} />
+              <DateTimePicker key={`${showPicker.qId}-${showPicker.mode}`} value={pickerDate} mode={showPicker.mode} display="spinner" is24Hour={true} onChange={handlePickerChange} onValueChange={handleValueChange} onDismiss={handleDismiss} textColor={isDark ? '#FFF' : '#0F172A'} themeVariant={isDark ? 'dark' : 'light'} />
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
                 <TouchableOpacity onPress={cancelPicker} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: isDark ? '#334155' : '#F1F5F9', borderWidth: 1, borderColor: isDark ? '#475569' : '#E2E8F0' }}>
                   <Text style={{ color: isDark ? '#FFF' : '#0F172A', fontWeight: '700' }}>BATAL</Text>

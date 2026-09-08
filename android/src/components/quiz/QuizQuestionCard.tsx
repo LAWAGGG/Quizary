@@ -134,21 +134,29 @@ function QuizQuestionCardComponent({
     setShowPicker(mode);
   };
 
-  const handlePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (event.type === 'dismissed') {
+  const handlePickerChange = (event: any, selectedDate?: Date) => {
+    if (event?.type === 'dismissed') {
       pendingDatetimeRef.current = null;
       setShowPicker(null);
       return;
     }
-    // Keep controlled value in sync live — no snap
     let next = selectedDate;
-    if (!next && (event as any)?.nativeEvent?.timestamp) {
-      const ts = Number((event as any).nativeEvent.timestamp);
+    if (!next && event?.nativeEvent?.timestamp) {
+      const ts = Number(event.nativeEvent.timestamp);
       if (!isNaN(ts)) next = new Date(ts);
     }
     if (next && !isNaN(next.getTime())) {
       setPickerDate(next);
     }
+  };
+
+  const handleValueChange = (_event: any, date: Date) => {
+    if (date && !isNaN(date.getTime())) setPickerDate(date);
+  };
+
+  const handleDismiss = () => {
+    pendingDatetimeRef.current = null;
+    setShowPicker(null);
   };
 
   const confirmPicker = () => {
@@ -489,7 +497,7 @@ function QuizQuestionCardComponent({
               <Text style={{ fontWeight: '700', fontSize: 14, color: colors.text, textAlign: 'center', marginBottom: 8 }}>
                 {showPicker === 'date' ? (q.type === 'datetime' && !pendingDatetimeRef.current ? 'Pilih Tanggal' : 'Pilih Tanggal') : q.type === 'datetime' ? 'Pilih Waktu' : 'Pilih Waktu'}
               </Text>
-              <DateTimePicker value={pickerDate} mode={showPicker} display="spinner" is24Hour={true} onChange={handlePickerChange} />
+              <DateTimePicker key={showPicker} value={pickerDate} mode={showPicker} display="spinner" is24Hour={true} onChange={handlePickerChange} onValueChange={handleValueChange} onDismiss={handleDismiss} />
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 12 }}>
                 <TouchableOpacity onPress={cancelPicker} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.cardBorder }}>
                   <Text style={{ color: colors.text, fontWeight: '700' }}>BATAL</Text>
