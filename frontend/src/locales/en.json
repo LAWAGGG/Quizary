@@ -399,6 +399,7 @@
     "title": "Settings",
     "description": "Customize how Quizary looks and works for you.",
     "appearance": "Appearance",
+    "appearanceDesc": "Customize theme and text size",
     "theme": "Theme",
     "themeDesc": "Light, dark, or follow your system",
     "light": "Light",

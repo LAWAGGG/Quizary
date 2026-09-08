@@ -399,6 +399,7 @@
     "title": "Pengaturan",
     "description": "Sesuaikan tampilan dan perilaku Quizary untuk Anda.",
     "appearance": "Tampilan",
+    "appearanceDesc": "Sesuaikan tema dan ukuran teks",
     "theme": "Tema",
     "themeDesc": "Terang, gelap, atau ikuti sistem",
     "light": "Terang",

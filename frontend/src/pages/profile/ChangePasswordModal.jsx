@@ -136,7 +136,7 @@ export default function ChangePasswordModal({ show, onClose }) {
             className="bg-white dark:bg-ink-900 rounded-2xl p-6 w-full max-w-md shadow-lift border border-gray-100 dark:border-gray-800"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start gap-3">
+            <div className="flex items-center gap-3">
               <span className="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/30 text-primary flex items-center justify-center shrink-0">
                 <Lock className="w-4 h-4" />
               </span>
@@ -144,7 +144,6 @@ export default function ChangePasswordModal({ show, onClose }) {
                 <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100">
                   {t('profile.password.title')}
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{t('profile.password.desc')}</p>
               </div>
             </div>
 
