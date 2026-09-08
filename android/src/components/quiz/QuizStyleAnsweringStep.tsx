@@ -133,9 +133,51 @@ export function QuizStyleAnsweringStep({
   };
 
   const handlePickerChange = (event: any, selectedDate?: Date) => {
-    // Deprecated onChange unified handler — keep for fallback, but prefer onValueChange
     if (event?.type === 'dismissed') {
       pendingDatetimeRef.current = null;
+      setShowPicker(null);
+      return;
+    }
+    if (event?.type === 'set' || event?.type === 'neutralButtonPressed') {
+      let dateToSave = selectedDate;
+      if (!dateToSave && event?.nativeEvent?.timestamp) {
+        const ts = Number(event.nativeEvent.timestamp);
+        if (!isNaN(ts)) dateToSave = new Date(ts);
+      }
+      if (!dateToSave || isNaN(dateToSave.getTime())) dateToSave = pickerDate;
+      const active = showPicker;
+      if (!active) return;
+      const qForId = questions.find((qq: any) => qq.id === active.qId);
+      const typeForQ = String(qForId?.type || qForId?.question_type || '').toLowerCase();
+      if (typeForQ === 'datetime' && active.mode === 'date') {
+        pendingDatetimeRef.current = new Date(dateToSave);
+        setPickerDate(dateToSave);
+        setShowPicker({ qId: active.qId, mode: 'time' });
+        return;
+      }
+      if (typeForQ === 'datetime' && active.mode === 'time' && pendingDatetimeRef.current) {
+        const datePart = pendingDatetimeRef.current;
+        const yyyy = String(datePart.getFullYear()).padStart(4, '0');
+        const mm = String(datePart.getMonth() + 1).padStart(2, '0');
+        const dd = String(datePart.getDate()).padStart(2, '0');
+        const hh = String(dateToSave.getHours()).padStart(2, '0');
+        const min = String(dateToSave.getMinutes()).padStart(2, '0');
+        onTextChange(active.qId, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
+        pendingDatetimeRef.current = null;
+        setShowPicker(null);
+        return;
+      }
+      setPickerDate(dateToSave);
+      if (active.mode === 'date') {
+        const yyyy = String(dateToSave.getFullYear()).padStart(4, '0');
+        const mm = String(dateToSave.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateToSave.getDate()).padStart(2, '0');
+        onTextChange(active.qId, `${yyyy}-${mm}-${dd}`);
+      } else if (active.mode === 'time') {
+        const hh = String(dateToSave.getHours()).padStart(2, '0');
+        const min = String(dateToSave.getMinutes()).padStart(2, '0');
+        onTextChange(active.qId, `${hh}:${min}`);
+      }
       setShowPicker(null);
       return;
     }
@@ -150,44 +192,7 @@ export function QuizStyleAnsweringStep({
   };
 
   const handleValueChange = (_event: any, date: Date) => {
-    if (!date || isNaN(date.getTime())) return;
-    const active = showPicker;
-    if (!active) {
-      setPickerDate(date);
-      return;
-    }
-    const qForId = questions.find((qq: any) => qq.id === active.qId);
-    const typeForQ = String(qForId?.type || qForId?.question_type || '').toLowerCase();
-    if (typeForQ === 'datetime' && active.mode === 'date') {
-      pendingDatetimeRef.current = new Date(date);
-      setPickerDate(date);
-      setShowPicker({ qId: active.qId, mode: 'time' });
-      return;
-    }
-    if (typeForQ === 'datetime' && active.mode === 'time' && pendingDatetimeRef.current) {
-      const datePart = pendingDatetimeRef.current;
-      const yyyy = String(datePart.getFullYear()).padStart(4, '0');
-      const mm = String(datePart.getMonth() + 1).padStart(2, '0');
-      const dd = String(datePart.getDate()).padStart(2, '0');
-      const hh = String(date.getHours()).padStart(2, '0');
-      const min = String(date.getMinutes()).padStart(2, '0');
-      onTextChange(active.qId, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
-      pendingDatetimeRef.current = null;
-      setShowPicker(null);
-      return;
-    }
-    setPickerDate(date);
-    if (active.mode === 'date') {
-      const yyyy = String(date.getFullYear()).padStart(4, '0');
-      const mm = String(date.getMonth() + 1).padStart(2, '0');
-      const dd = String(date.getDate()).padStart(2, '0');
-      onTextChange(active.qId, `${yyyy}-${mm}-${dd}`);
-    } else if (active.mode === 'time') {
-      const hh = String(date.getHours()).padStart(2, '0');
-      const min = String(date.getMinutes()).padStart(2, '0');
-      onTextChange(active.qId, `${hh}:${min}`);
-    }
-    setShowPicker(null);
+    if (date && !isNaN(date.getTime())) setPickerDate(date);
   };
 
   const handleDismiss = () => {
@@ -908,6 +913,7 @@ export function QuizStyleAnsweringStep({
           mode={showPicker.mode}
           display="spinner"
           is24Hour={true}
+          onChange={handlePickerChange}
           onValueChange={handleValueChange}
           onDismiss={handleDismiss}
         />

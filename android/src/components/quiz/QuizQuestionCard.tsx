@@ -140,48 +140,57 @@ function QuizQuestionCardComponent({
       setShowPicker(null);
       return;
     }
+    if (event?.type === 'set' || event?.type === 'neutralButtonPressed') {
+      let dateToSave = selectedDate;
+      if (!dateToSave && event?.nativeEvent?.timestamp) {
+        const ts = Number(event.nativeEvent.timestamp);
+        if (!isNaN(ts)) dateToSave = new Date(ts);
+      }
+      if (!dateToSave || isNaN(dateToSave.getTime())) dateToSave = pickerDate;
+      // 2 native Set for datetime: date Set → time picker, time Set → commit
+      if (q.type === 'datetime' && showPicker === 'date') {
+        pendingDatetimeRef.current = new Date(dateToSave);
+        setPickerDate(dateToSave);
+        setShowPicker('time');
+        return;
+      }
+      if (q.type === 'datetime' && showPicker === 'time' && pendingDatetimeRef.current) {
+        const datePart = pendingDatetimeRef.current;
+        const yyyy = String(datePart.getFullYear()).padStart(4, '0');
+        const mm = String(datePart.getMonth() + 1).padStart(2, '0');
+        const dd = String(datePart.getDate()).padStart(2, '0');
+        const hh = String(dateToSave.getHours()).padStart(2, '0');
+        const min = String(dateToSave.getMinutes()).padStart(2, '0');
+        onTextChange(q.id, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
+        pendingDatetimeRef.current = null;
+        setShowPicker(null);
+        return;
+      }
+      setPickerDate(dateToSave);
+      if (showPicker === 'date') {
+        const yyyy = String(dateToSave.getFullYear()).padStart(4, '0');
+        const mm = String(dateToSave.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateToSave.getDate()).padStart(2, '0');
+        onTextChange(q.id, `${yyyy}-${mm}-${dd}`);
+      } else if (showPicker === 'time') {
+        const hh = String(dateToSave.getHours()).padStart(2, '0');
+        const min = String(dateToSave.getMinutes()).padStart(2, '0');
+        onTextChange(q.id, `${hh}:${min}`);
+      }
+      setShowPicker(null);
+      return;
+    }
+    // Live sync for spinner without commit
     let next = selectedDate;
     if (!next && event?.nativeEvent?.timestamp) {
       const ts = Number(event.nativeEvent.timestamp);
       if (!isNaN(ts)) next = new Date(ts);
     }
-    if (next && !isNaN(next.getTime())) {
-      setPickerDate(next);
-    }
+    if (next && !isNaN(next.getTime())) setPickerDate(next);
   };
 
   const handleValueChange = (_event: any, date: Date) => {
-    if (!date || isNaN(date.getTime())) return;
-    setPickerDate(date);
-    // 2 native Set for datetime: date Set → time picker, time Set → commit
-    if (q.type === 'datetime' && showPicker === 'date') {
-      pendingDatetimeRef.current = new Date(date);
-      setShowPicker('time');
-      return;
-    }
-    if (q.type === 'datetime' && showPicker === 'time' && pendingDatetimeRef.current) {
-      const datePart = pendingDatetimeRef.current;
-      const yyyy = String(datePart.getFullYear()).padStart(4, '0');
-      const mm = String(datePart.getMonth() + 1).padStart(2, '0');
-      const dd = String(datePart.getDate()).padStart(2, '0');
-      const hh = String(date.getHours()).padStart(2, '0');
-      const min = String(date.getMinutes()).padStart(2, '0');
-      onTextChange(q.id, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
-      pendingDatetimeRef.current = null;
-      setShowPicker(null);
-      return;
-    }
-    if (showPicker === 'date') {
-      const yyyy = String(date.getFullYear()).padStart(4, '0');
-      const mm = String(date.getMonth() + 1).padStart(2, '0');
-      const dd = String(date.getDate()).padStart(2, '0');
-      onTextChange(q.id, `${yyyy}-${mm}-${dd}`);
-    } else if (showPicker === 'time') {
-      const hh = String(date.getHours()).padStart(2, '0');
-      const min = String(date.getMinutes()).padStart(2, '0');
-      onTextChange(q.id, `${hh}:${min}`);
-    }
-    setShowPicker(null);
+    if (date && !isNaN(date.getTime())) setPickerDate(date);
   };
 
   const handleDismiss = () => {
@@ -527,6 +536,7 @@ function QuizQuestionCardComponent({
           mode={showPicker}
           display="spinner"
           is24Hour={true}
+          onChange={handlePickerChange}
           onValueChange={handleValueChange}
           onDismiss={handleDismiss}
         />
