@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import verify_form_owner
-from app.models.form import Form
+from app.models.form import Form, ScoringMode
 from app.models.image import Image
 from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
@@ -38,6 +38,18 @@ ANSWER_TEXT_RE = re.compile(r'^\s*(?:Kunci|Answer)\s*[:\-]\s*(.+?)\s*$', re.IGNO
 TYPE_RE = re.compile(r'^\s*(?:Tipe|Type)\s*[:\-]\s*(essay|short[\s_]?answer|isian[\s_]?singkat|esai|isian)\s*$', re.IGNORECASE)
 NUMBERED_RE = re.compile(r'\d+[\.\)]\s*(.+)')
 OPTION_INLINE_RE = re.compile(r'(?:^|\s)([A-Ja-j])[\.\)]\s*(.*?)(?=\s+[A-Ja-j][\.\)]|$)')
+# Kolom point per soal — posisi bebas dalam blok soal (atas/tengah/akhir).
+# Varian: Point:/Poin:/Skor: + integer 1-100. Nilai di luar itu = tanpa point.
+POINT_PREFIX_RE = re.compile(r'^\s*(?:Point|Poin|Skor)\s*[:\-]', re.IGNORECASE)
+POINT_RE = re.compile(r'^\s*(?:Point|Poin|Skor)\s*[:\-]\s*(\d{1,3})\s*$', re.IGNORECASE)
+
+
+def _parse_point_value(text: str) -> int | None:
+    m = POINT_RE.match(text)
+    if not m:
+        return None
+    v = int(m.group(1))
+    return v if 1 <= v <= 100 else None
 
 
 # ============================================================
@@ -57,6 +69,7 @@ def _parse_text(raw: str) -> list[dict]:
         answer_letter = None
         answer_key: str | None = None
         forced_type: str | None = None
+        points: int | None = None
 
         for line in block.split("\n"):
             line = line.strip()
@@ -65,6 +78,13 @@ def _parse_text(raw: str) -> list[dict]:
             m = NUMBERED_RE.match(line)
             if m:
                 q_text = m.group(1).strip()
+                continue
+            # Kolom point posisi bebas — baris khusus, jangan jadi teks soal.
+            # Nilai invalid (0, >100, non-angka) = dianggap tanpa point.
+            if POINT_PREFIX_RE.match(line):
+                v = _parse_point_value(line)
+                if v is not None:
+                    points = v
                 continue
             m = TYPE_RE.match(line)
             if m:
@@ -103,6 +123,7 @@ def _parse_text(raw: str) -> list[dict]:
                     for opt in options
                 ],
                 "answer_key": answer_key,
+                "points": points,
             })
 
     return questions
@@ -183,6 +204,9 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
     current: dict | None = None
     active_option_num_id: str | None = None
     option_letters = iter("ABCDEFGHIJ")
+    # Point di atas nomor soal (sebelum soal pertama / antar soal): tadah
+    # sementara, ditempel ke soal berikutnya saat start_question.
+    pending_points: int | None = None
 
     def flush():
         nonlocal current
@@ -195,7 +219,7 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
             target["images"].append({"ext": ext, "blob": blob})
 
     def start_question(text: str, imgs: list):
-        nonlocal current, active_option_num_id, option_letters
+        nonlocal current, active_option_num_id, option_letters, pending_points
         flush()
         current = {
             "question_text": text.strip(),
@@ -203,8 +227,10 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
             "answer_letter": None,
             "answer_key": None,
             "forced_type": None,
+            "points": pending_points,
             "images": [],
         }
+        pending_points = None
         active_option_num_id = None
         option_letters = iter("ABCDEFGHIJ")
         attach_imgs(current, imgs)
@@ -234,6 +260,19 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
         m = ANSWER_TEXT_RE.match(text)
         if m and current is not None:
             current["answer_key"] = m.group(1).strip()
+            continue
+
+        # 4b) baris "Point: N" / "Poin: N" / "Skor: N" — posisi bebas dalam
+        # blok soal (atas/tengah/akhir). Invalid (0, >100, non-angka) =
+        # tanpa point, bukan teks soal. Sebelum soal pertama → pending,
+        # ditempel ke soal berikutnya saat start_question.
+        if POINT_PREFIX_RE.match(text):
+            v = _parse_point_value(text)
+            if v is not None:
+                if current is not None:
+                    current["points"] = v
+                else:
+                    pending_points = v
             continue
 
         # 5) opsi manual "A. ..." (termasuk multi-kolom satu baris "A. x D. y").
@@ -292,6 +331,7 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
         answer_letter = q.pop("answer_letter", None)
         answer_key = q.pop("answer_key", None)
         forced_type = q.pop("forced_type", None)
+        points = q.pop("points", None)
         result.append({
             "question_text": q["question_text"],
             "images": q["images"],
@@ -305,6 +345,7 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
                 for o in q["options"]
             ],
             "answer_key": answer_key,
+            "points": points,
         })
     return result
 
@@ -421,6 +462,18 @@ def import_docx(
     now = now_wib()
     count = 0
 
+    # Kolom "Point: N" per soal (quiz saja): ada satu saja point valid →
+    # form pindah ke manual, point mengikuti angka import. Soal tanpa point
+    # valid (termasuk essay berpoint tapi tanpa kunci) → is_scored=False,
+    # points=0. Tanpa point sama sekali → perilaku lama (auto pool 100).
+    is_quiz = form.type.value == "quiz"
+    has_manual_points = is_quiz and any(
+        isinstance(q_data.get("points"), int) and 1 <= q_data["points"] <= 100
+        for q_data in parsed
+    )
+    if has_manual_points:
+        form.scoring_mode = ScoringMode.manual
+
     for q_data in parsed:
         has_options = bool(q_data["options"])
         correct_count = sum(1 for o in q_data["options"] if o["is_correct"])
@@ -450,20 +503,39 @@ def import_docx(
             QuestionType.date, QuestionType.time, QuestionType.file_upload
         ) or (q_type in (QuestionType.essay, QuestionType.short_answer) and not _has_keyword_grade)
 
-        q = Question(
-            form_id=form.id,
-            type=q_type,
-            question_text=q_data["question_text"],
+        # Point import (quiz manual): angka valid 1-100 dipakai apa adanya,
+        # KECUALI essay berpoint tapi tanpa kunci → is_scored=False, points=0.
+        # Soal tanpa point valid dalam batch manual → is_scored=False, points=0.
+        _import_points = q_data.get("points")
+        _valid_import_points = (
+            has_manual_points
+            and isinstance(_import_points, int)
+            and 1 <= _import_points <= 100
+        )
+        if has_manual_points:
+            _no_grade = True if not _valid_import_points else _no_grade
+            if _valid_import_points and q_type in (QuestionType.essay, QuestionType.short_answer) and not _has_keyword_grade:
+                _no_grade = True
+
+        if has_manual_points:
+            _points = _import_points if (_valid_import_points and not _no_grade) else 0
+        else:
             # Auto mode pool 100 → poin 0 dulu, distribute_quiz_points di akhir
             # yang mengisi; manual mode pakai default 1.
             # Essay/short tanpa key / tipe non-graded → selalu 0 (tidak ikut pool).
-            points=(
+            _points = (
                 0
                 if form.type.value == "quiz"
                 or q_type in (QuestionType.date, QuestionType.time, QuestionType.file_upload)
                 or (q_type in (QuestionType.essay, QuestionType.short_answer) and not _has_keyword_grade)
                 else 1
-            ),
+            )
+
+        q = Question(
+            form_id=form.id,
+            type=q_type,
+            question_text=q_data["question_text"],
+            points=_points,
             is_scored=not _no_grade,
             section_id=target_section_id,
             order_index=next_order,
@@ -595,6 +667,53 @@ Kunci: ibu kota; DKI Jakarta; Special Capital Region
     assert _sanitize_answer_key(None) is None
     assert _sanitize_answer_key("   ") is None
     print("ok essay/short_answer + Kunci parser + sanitizer")
+
+    # fixture: kolom Point:/Poin:/Skor: posisi bebas (atas/tengah/akhir),
+    # 1-100 bulat valid; 0/>100/desimal/non-angka = tanpa point.
+    assert _parse_point_value("Point: 10") == 10
+    assert _parse_point_value("Poin: 20") == 20
+    assert _parse_point_value("Skor: 5") == 5
+    assert _parse_point_value("Point: 0") is None
+    assert _parse_point_value("Point: 101") is None
+    assert _parse_point_value("Point: 2.5") is None
+    assert _parse_point_value("Point: abc") is None
+    s3 = """1. Soal MC point di atas
+Point: 10
+A. x
+B. y
+Answer: B
+2. Soal MC point di tengah
+A. x
+B. y
+Poin: 20
+Answer: A
+3. Soal MC point di akhir
+A. x
+B. y
+Answer: A
+Skor: 30
+4. Soal tanpa point
+A. x
+B. y
+Answer: B
+5. Essay berpoint tanpa kunci
+Point: 15
+6. Essay berpoint berkunci
+Point: 25
+Kunci: jakarta
+7. Soal nilai nol
+Point: 0
+A. x
+B. y
+Answer: A
+"""
+    qs3 = _parse_text(s3)
+    assert [q["points"] for q in qs3] == [10, 20, 30, None, 15, 25, None], [q["points"] for q in qs3]
+    assert all(
+        "Point:" not in q["question_text"] and "Poin:" not in q["question_text"] and "Skor:" not in q["question_text"]
+        for q in qs3
+    ), "point bocor ke teks soal"
+    print("ok Point:/Poin:/Skor: posisi bebas + invalid ditolak")
 
     # fixture: docx dengan native Word numbering (numPr)
     sample = os.path.join(os.path.dirname(__file__), "../../../tmp_test/soal mtk.docx")

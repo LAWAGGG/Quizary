@@ -406,9 +406,9 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
 
       {/* ——— Scoring row: sama visual untuk semua tipe — points input + toggle Hitung poin (essay/short + MC/checkbox) + toggle Wajib. */}
       {isQuiz && (
-        <div className={`flex items-end gap-4 ${showKeywordScoring ? 'flex-wrap' : ''}`}>
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
           {(showKeywordScoring || showChoiceScoring) && (
-            <div className="flex-1 min-w-[180px]">
+            <div className="flex-1 min-w-0 basis-40">
               {isEditing ? (
                 <Input
                   label={t('questionBuilder.points')}
@@ -431,21 +431,25 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
               )}
             </div>
           )}
-          <div className="flex items-center gap-2.5 h-11 pb-[1px] ml-auto">
-            <span className="text-sm text-gray-600 dark:text-gray-400">{t('questionBuilder.countPoints')}</span>
-            <Toggle
-              label={t('questionBuilder.countPoints')}
-              checked={!!form.is_scored}
-              onChange={(v) => {
-                if (showKeywordScoring) {
-                  setForm((p) => (v ? { ...p, is_scored: true } : { ...p, is_scored: false, answer_key: '', points: 0 }))
-                } else {
-                  setForm((p) => ({ ...p, is_scored: v, points: v ? p.points : 0 }))
-                }
-              }}
-            />
-            <span className="text-sm text-gray-600 dark:text-gray-400 ml-2">{t('questionBuilder.required')}</span>
-            <Toggle label={t('questionBuilder.required')} checked={form.is_required} onChange={(v) => setForm((p) => ({ ...p, is_required: v }))} />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0 ml-auto pb-[1px] sm:h-11">
+            <label className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 text-sm text-gray-600 dark:text-gray-400">{t('questionBuilder.countPoints')}</span>
+              <Toggle
+                label={t('questionBuilder.countPoints')}
+                checked={!!form.is_scored}
+                onChange={(v) => {
+                  if (showKeywordScoring) {
+                    setForm((p) => (v ? { ...p, is_scored: true } : { ...p, is_scored: false, answer_key: '', points: 0 }))
+                  } else {
+                    setForm((p) => ({ ...p, is_scored: v, points: v ? p.points : 0 }))
+                  }
+                }}
+              />
+            </label>
+            <label className="flex min-w-0 items-center gap-2">
+              <span className="shrink-0 text-sm text-gray-600 dark:text-gray-400">{t('questionBuilder.required')}</span>
+              <Toggle label={t('questionBuilder.required')} checked={form.is_required} onChange={(v) => setForm((p) => ({ ...p, is_required: v }))} />
+            </label>
           </div>
         </div>
       )}
@@ -2425,6 +2429,7 @@ export default function QuestionBuilder() {
                     <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>{t('questionBuilder.importFormatAnswerLetter').replace(/<[^>]+>/g, '')} <strong>Answer: B</strong></span></li>
                     <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span>{t('questionBuilder.importFormatEssayOnly')}</span></li>
                     <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span dangerouslySetInnerHTML={{ __html: t('questionBuilder.importFormatKunci') }} /></li>
+                    <li className="flex gap-1.5"><Check className="w-3.5 h-3.5 text-correct shrink-0 mt-0.5" /><span dangerouslySetInnerHTML={{ __html: t('questionBuilder.importFormatPoint') }} /></li>
                   </ul>
                 </section>
 
@@ -2432,15 +2437,16 @@ export default function QuestionBuilder() {
                 <section>
                   <h4 className="text-xs sm:text-sm font-semibold text-ink dark:text-gray-100 mb-2">{t('questionBuilder.example')}</h4>
                   <div className="rounded-xl bg-gray-50 dark:bg-ink-800/60 border border-gray-200 dark:border-gray-700 p-3 sm:p-4 font-mono text-[11px] sm:text-[13px] leading-relaxed text-gray-700 dark:text-gray-300 overflow-auto max-h-56 whitespace-pre">{`1. What is the capital of France?
-   A. London
-   B. Paris
-   C. Berlin
-   D. Madrid
-   Answer: B
+    Point: 10
+    A. London
+    B. Paris
+    C. Berlin
+    D. Madrid
+    Answer: B
 
-${t('questionBuilder.importExampleEssay')}
+ ${t('questionBuilder.importExampleEssay')}
 
-`}</div>
+ `}</div>
                 </section>
 
                 {/* Notes */}

@@ -560,6 +560,7 @@
     "importFormatAnswerLetter": "Mark the correct answer with <strong>Answer: B</strong>",
     "importFormatEssayOnly": "Questions without options are automatically imported as essay.",
     "importFormatKunci": "For essay, add <strong>Answer: jakarta; DKI Jakarta</strong> to enable auto-grading (multi-key separate with <strong>;</strong>, max 10)",
+    "importFormatPoint": "Optional (quiz only): add <strong>Point: 10</strong> (1–100) under the question number or after Answer. Any single one switches scoring to manual. Questions without points / keyless essay with points → unscored (0).",
     "importExampleEssay": "2. Explain how photosynthesis works.\n   Answer: photosynthesis; plants; sunlight",
     "importNoteOnlyDocx": "Only .docx files are accepted.",
     "importNoteAppend": "Imported questions are appended at the end.",

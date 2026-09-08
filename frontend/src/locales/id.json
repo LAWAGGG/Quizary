@@ -555,6 +555,7 @@
     "importFormatAnswerLetter": "Tandai jawaban benar dengan <strong>Answer: B</strong> (atau <strong>Jawaban: B</strong>)",
     "importFormatEssayOnly": "Soal tanpa opsi otomatis diimpor sebagai esai.",
     "importFormatKunci": "Untuk esai, tambahkan <strong>Kunci: jakarta; DKI Jakarta</strong> agar dinilai otomatis (multi-kunci pisah <strong>;</strong>, maks 10)",
+    "importFormatPoint": "Opsional (kuis saja): tambah <strong>Point: 10</strong> / <strong>Poin: 10</strong> / <strong>Skor: 10</strong> (1–100) di bawah nomor soal atau setelah Answer. Ada satu saja → penilaian jadi manual. Soal tanpa point / esai berpoint tanpa kunci → tidak dinilai (0).",
     "importExampleEssay": "2. Jelaskan proses fotosintesis.\n   Kunci: fotosintesis; tumbuhan; cahaya matahari",
     "importNoteOnlyDocx": "Hanya file .docx yang diterima.",
     "importNoteAppend": "Soal yang diimpor ditambahkan di akhir.",
