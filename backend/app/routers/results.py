@@ -42,6 +42,16 @@ from app.schemas.results import (
 router = APIRouter(tags=["results & dashboard"])
 
 
+@router.get("/forms/{form_id}/results/count")
+def count_results(
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    """Total submission semua status (termasuk in_progress) untuk badge tab Results."""
+    total = db.query(Submission).filter(Submission.form_id == form.id).count()
+    return {"total": total}
+
+
 @router.get("/forms/{form_id}/results", response_model=ResultListResponse)
 def list_results(
     form: Form = Depends(verify_form_owner),
