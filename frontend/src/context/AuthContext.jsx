@@ -101,6 +101,21 @@ export function AuthProvider({ children }) {
     return res.data
   }, [])
 
+  const forgotPassword = useCallback(async (email) => {
+    const res = await api.post('/password/forgot', { email })
+    return res.data
+  }, [])
+
+  const resetPassword = useCallback(async (email, code, password, password_confirmation) => {
+    const res = await api.post('/password/reset', { email, code, password, password_confirmation })
+    return res.data
+  }, [])
+
+  const verifyResetCode = useCallback(async (email, code) => {
+    const res = await api.post('/password/verify', { email, code })
+    return res.data
+  }, [])
+
   const logout = useCallback(async () => {
     try {
       await api.post('/logout')
@@ -116,7 +131,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, ready, login, register, verifyOtp, resendOtp, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, ready, login, register, verifyOtp, resendOtp, forgotPassword, verifyResetCode, resetPassword, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   )

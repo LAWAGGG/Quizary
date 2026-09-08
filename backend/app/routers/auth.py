@@ -16,18 +16,22 @@ from app.otp import (
     generate_otp,
     hash_otp,
     send_otp_email,
+    send_reset_email,
     verify_otp,
 )
-from app.ratelimit import limit_login, limit_register
+from app.ratelimit import limit_forgot_password, limit_login, limit_register
 from app.schemas.auth import (
-    RegisterRequest,
+    ForgotPasswordRequest,
     LoginRequest,
-    OtpVerifyRequest,
     OtpResendRequest,
-    UserResponse,
-    TokenResponse,
+    OtpVerifyRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    VerifyResetRequest,
     MessageResponse,
     PasswordUpdateRequest,
+    TokenResponse,
+    UserResponse,
 )
 from app.dependencies import get_current_user, security
 from app.utils import file_url
@@ -191,6 +195,87 @@ def logout(
 def me(request: Request, user: User = Depends(get_current_user)):
     # Fix #1 — avatar returned as full URL
     return _user_response(user, request)
+
+
+@router.post("/password/forgot", response_model=MessageResponse)
+def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db), _rl: None = Depends(limit_forgot_password)):
+    # Selalu 200 agar tidak bocor enumerasi email; hanya kirim jika akun ada & verified.
+    user = db.query(User).filter(User.email == body.email).first()
+    if user and user.email_verified_at:
+        if not can_resend(user.email):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Please wait before requesting a new code.",
+            )
+        code = _issue_otp(user, db)
+        try:
+            send_reset_email(user.email, code)
+        except Exception:
+            logger.exception("Failed to send reset email to %s", user.email)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send the reset email. Please try again.",
+            )
+    return MessageResponse(message="If your email is registered, a reset code has been sent.")
+
+
+@router.post("/password/verify", response_model=MessageResponse)
+def verify_reset_code(body: VerifyResetRequest, db: Session = Depends(get_db), _rl: None = Depends(limit_forgot_password)):
+    """Cek OTP reset tanpa menghapus/mengganti password — dipakai modal staged UX."""
+    user = db.query(User).filter(User.email == body.email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if not user.email_verified_at:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email is not verified. Please verify your email first.")
+    now = _now_naive()
+    if not user.otp_code or not user.otp_expires_at:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="No reset code found. Request a new one.")
+    if now > user.otp_expires_at:
+        _clear_otp(user)
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Reset code has expired. Request a new one.")
+    if (user.otp_attempts or 0) >= MAX_ATTEMPTS:
+        _clear_otp(user)
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Too many failed attempts. Request a new code.")
+    if not verify_otp(body.code, user.otp_code):
+        user.otp_attempts = (user.otp_attempts or 0) + 1
+        if user.otp_attempts >= MAX_ATTEMPTS:
+            _clear_otp(user)
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid reset code.")
+    return MessageResponse(message="Code verified. You can now reset your password.")
+
+
+@router.post("/password/reset", response_model=MessageResponse)
+def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db), _rl: None = Depends(limit_forgot_password)):
+    user = db.query(User).filter(User.email == body.email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if not user.email_verified_at:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email is not verified. Please verify your email first.")
+    now = _now_naive()
+    if not user.otp_code or not user.otp_expires_at:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="No reset code found. Request a new one.")
+    if now > user.otp_expires_at:
+        _clear_otp(user)
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Reset code has expired. Request a new one.")
+    if (user.otp_attempts or 0) >= MAX_ATTEMPTS:
+        _clear_otp(user)
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Too many failed attempts. Request a new code.")
+    if not verify_otp(body.code, user.otp_code):
+        user.otp_attempts = (user.otp_attempts or 0) + 1
+        if user.otp_attempts >= MAX_ATTEMPTS:
+            _clear_otp(user)
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid reset code.")
+    # OTP valid -> ganti password dan bersih
+    user.password = hash_password(body.password)
+    _clear_otp(user)
+    db.commit()
+    return MessageResponse(message="Password has been reset. Please sign in with your new password.")
 
 
 @router.put("/me/password", status_code=200, response_model=MessageResponse)

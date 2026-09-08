@@ -27,7 +27,7 @@ api.interceptors.response.use(
     clearStaleAuth()
     const path = window.location.pathname
     const isPublic = path.startsWith('/q/') || path.startsWith('/s/')
-    const isAuth = path.includes('/login') || path.includes('/register') || path.includes('/otp')
+    const isAuth = path.includes('/login') || path.includes('/register') || path.includes('/otp') || path.includes('/forgot-password') || path.includes('/reset-password')
     if (!isPublic && !isAuth) {
       const next = encodeURIComponent(path + window.location.search)
       window.location.href = `/login?next=${next}`

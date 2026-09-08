@@ -64,6 +64,35 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=150, pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+
+
+class VerifyResetRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=150, pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str = Field(min_length=5, max_length=150, pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    password: str = Field(min_length=8, max_length=72)
+    password_confirmation: str
+
+    @field_validator("password")
+    @classmethod
+    def password_charset(cls, v: str) -> str:
+        if not _PASSWORD_RE.fullmatch(v):
+            raise ValueError(_PASSWORD_MSG)
+        return v
+
+    @model_validator(mode="after")
+    def passwords_match(self):
+        if self.password != self.password_confirmation:
+            raise ValueError("password_confirmation does not match password")
+        return self
+
+
 class PasswordUpdateRequest(BaseModel):
     old_password: str = Field(..., min_length=1, max_length=72)
     new_password: str = Field(min_length=8, max_length=72)

@@ -50,3 +50,8 @@ def limit_register(request: Request) -> None:
 def limit_submission_create(request: Request) -> None:
     """30 sesi pengerjaan baru / menit / IP (blokir spam session anonim)."""
     _hit(f"subcreate:{_client_ip(request)}", 30)
+
+
+def limit_forgot_password(request: Request) -> None:
+    """10 percobaan forgot/reset / menit / IP."""
+    _hit(f"forgot:{_client_ip(request)}", 10)

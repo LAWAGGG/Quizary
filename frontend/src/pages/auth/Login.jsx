@@ -145,6 +145,11 @@ export default function Login() {
             <Button type="submit" loading={loading} className="w-full" size="lg">
               {t('auth.signIn')}
             </Button>
+            <div className="mt-4 text-center">
+              <Link to="/forgot-password" className="text-sm font-medium text-primary hover:text-primary-600 transition-colors">
+                {t('auth.forgotPasswordLink')}
+              </Link>
+            </div>
           </form>
         </Card>
       </motion.div>

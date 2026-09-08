@@ -8,6 +8,8 @@ import DashboardLayout from './components/layout/DashboardLayout'
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
 import VerifyOtp from './pages/auth/VerifyOtp'
+import ForgotPassword from './pages/auth/ForgotPassword'
+import ResetPassword from './pages/auth/ResetPassword'
 import Dashboard from './pages/dashboard/Dashboard'
 import FormList from './pages/forms/FormList'
 import FormCreate from './pages/forms/FormCreate'
@@ -43,7 +45,7 @@ function PublicRoute({ children }) {
   if (user) {
     const from = location.state?.from || new URLSearchParams(location.search).get('next')
     // cegah loop jika from masih halaman auth
-    const safe = from && !from.startsWith('/login') && !from.startsWith('/register') && !from.startsWith('/otp') ? from : '/'
+    const safe = from && !from.startsWith('/login') && !from.startsWith('/register') && !from.startsWith('/otp') && !from.startsWith('/forgot-password') && !from.startsWith('/reset-password') ? from : '/'
     return <Navigate to={safe} replace />
   }
   return children
@@ -55,6 +57,8 @@ function AppRoutes() {
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
       <Route path="/otp" element={<VerifyOtp />} />
+      <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+      <Route path="/reset-password" element={<PublicRoute><ResetPassword /></PublicRoute>} />
       <Route path="/q/:shortCode" element={<FormLanding />} />
       <Route path="/s/:submissionId" element={<AnswerQuiz />} />
       <Route path="/s/:submissionId/result" element={<QuizResult />} />

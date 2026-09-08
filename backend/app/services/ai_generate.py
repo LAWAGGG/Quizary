@@ -465,9 +465,6 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
     if not sections:
         raise AiFailed("AI tidak menghasilkan soal yang valid. Coba perjelas prompt lalu generate ulang.")
 
-    # B-light: group/wacana dinonaktifkan total — jangan auto-group
-    # (legacy auto-group per 5 dihapus, semua soal standalone)
-
     settings = raw.get("settings") or {}
     try:
         timer = settings.get("timer_minutes")
@@ -479,7 +476,6 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
     is_quiz_type = form_type == "quiz"
 
     def _dt(v):
-        # ponytail: tanggal AI tak tentu formatnya — gagal parse = null, bukan gagal generate.
         s = str(v or "").strip()
         if not s:
             return None
@@ -523,7 +519,6 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
         },
     }
     if form_type == "quiz" and timer is None:
-        # ponytail: fallback 30 menit (izin user nomor 3) — hemat regenerate untuk 20 soal passage yang token habis
         if "timer" in (prompt_text or "").lower() or "menit" in (prompt_text or "").lower():
             timer = 30
             draft["settings"]["timer_minutes"] = 30
@@ -562,5 +557,4 @@ def detect_ignored(prompt_text: str, settings: dict) -> list[str]:
         out.append("riwayat")
     if has("terbatas", "restricted", "hanya undangan") and not s.get("is_restricted"):
         out.append("mode terbatas")
-    # dedupe, jaga urutan
     return list(dict.fromkeys(out))
