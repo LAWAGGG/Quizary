@@ -8,13 +8,15 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK": "1"
+        "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK": "1",
+        "EXPO_PUBLIC_API_URL": "https://talked-dennis-distinguished-bumper.trycloudflare.com/api"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK": "1"
+        "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK": "1",
+        "EXPO_PUBLIC_API_URL": "https://talked-dennis-distinguished-bumper.trycloudflare.com/api"
       },
       "android": {
         "buildType": "apk"
@@ -23,7 +25,8 @@
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK": "1"
+        "EXPO_ROUTER_DISABLE_RN_NAVIGATION_CHECK": "1",
+        "EXPO_PUBLIC_API_URL": "https://talked-dennis-distinguished-bumper.trycloudflare.com/api"
       }
     }
   },
