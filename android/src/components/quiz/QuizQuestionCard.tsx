@@ -77,8 +77,35 @@ function QuizQuestionCardComponent({
   const [showPicker, setShowPicker] = useState<'date' | 'time' | null>(null);
   const [pickerDate, setPickerDate] = useState<Date>(new Date());
   const [showDropdownModal, setShowDropdownModal] = useState(false);
+  const pendingDatetimeRef = React.useRef<Date | null>(null);
 
   const openPicker = (mode: 'date' | 'time') => {
+    const type = q.type;
+    if (type === 'datetime' && mode === 'date') {
+      // datetime sequential: parse full YYYY-MM-DDTHH:MM if exists
+      let d = new Date();
+      if (typeof userAnswer === 'string' && userAnswer.trim().includes('T')) {
+        const [datePart, timePart] = userAnswer.trim().split('T');
+        const dParts = datePart.split('-');
+        const tParts = timePart.split(':');
+        if (dParts.length === 3 && tParts.length >= 2) {
+          const y = parseInt(dParts[0], 10), m = parseInt(dParts[1], 10) - 1, day = parseInt(dParts[2], 10);
+          const h = parseInt(tParts[0], 10), min = parseInt(tParts[1], 10);
+          if (!isNaN(y) && !isNaN(m) && !isNaN(day) && !isNaN(h) && !isNaN(min)) d = new Date(y, m, day, h, min, 0, 0);
+        }
+      } else if (typeof userAnswer === 'string' && userAnswer.trim().length > 0) {
+        // fallback try date part only
+        const parts = userAnswer.trim().split('-');
+        if (parts.length === 3) {
+          const y = parseInt(parts[0], 10), m = parseInt(parts[1], 10) - 1, day = parseInt(parts[2], 10);
+          if (!isNaN(y) && !isNaN(m) && !isNaN(day)) d = new Date(y, m, day);
+        }
+      }
+      pendingDatetimeRef.current = null;
+      setPickerDate(d);
+      setShowPicker('date');
+      return;
+    }
     let d = new Date();
     if (typeof userAnswer === 'string' && userAnswer.trim().length > 0) {
       if (mode === 'date') {
@@ -108,42 +135,59 @@ function QuizQuestionCardComponent({
   };
 
   const handlePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    const activeMode = showPicker;
-
     if (event.type === 'dismissed') {
+      pendingDatetimeRef.current = null;
       setShowPicker(null);
       return;
     }
-
-    if (event.type === 'set' || (Platform.OS === 'ios' && selectedDate)) {
-      setShowPicker(null);
-
-      let dateToSave = selectedDate;
-      if (!dateToSave && (event as any)?.nativeEvent?.timestamp) {
-        const ts = Number((event as any).nativeEvent.timestamp);
-        if (!isNaN(ts)) {
-          dateToSave = new Date(ts);
-        }
-      }
-      if (!dateToSave || isNaN(dateToSave.getTime())) {
-        dateToSave = pickerDate;
-      }
-
-      setPickerDate(dateToSave);
-
-      if (activeMode) {
-        if (activeMode === 'date') {
-          const yyyy = dateToSave.getFullYear();
-          const mm = String(dateToSave.getMonth() + 1).padStart(2, '0');
-          const dd = String(dateToSave.getDate()).padStart(2, '0');
-          onTextChange(q.id, `${yyyy}-${mm}-${dd}`);
-        } else if (activeMode === 'time') {
-          const hh = String(dateToSave.getHours()).padStart(2, '0');
-          const min = String(dateToSave.getMinutes()).padStart(2, '0');
-          onTextChange(q.id, `${hh}:${min}`);
-        }
-      }
+    // Keep controlled value in sync live — no snap
+    let next = selectedDate;
+    if (!next && (event as any)?.nativeEvent?.timestamp) {
+      const ts = Number((event as any).nativeEvent.timestamp);
+      if (!isNaN(ts)) next = new Date(ts);
     }
+    if (next && !isNaN(next.getTime())) {
+      setPickerDate(next);
+    }
+  };
+
+  const confirmPicker = () => {
+    const mode = showPicker;
+    if (!mode) return;
+    if (q.type === 'datetime' && mode === 'date') {
+      // First step datetime: save date part, go to time step
+      pendingDatetimeRef.current = new Date(pickerDate);
+      setShowPicker('time');
+      return;
+    }
+    if (q.type === 'datetime' && mode === 'time' && pendingDatetimeRef.current) {
+      const datePart = pendingDatetimeRef.current;
+      const yyyy = String(datePart.getFullYear()).padStart(4, '0');
+      const mm = String(datePart.getMonth() + 1).padStart(2, '0');
+      const dd = String(datePart.getDate()).padStart(2, '0');
+      const hh = String(pickerDate.getHours()).padStart(2, '0');
+      const min = String(pickerDate.getMinutes()).padStart(2, '0');
+      onTextChange(q.id, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
+      pendingDatetimeRef.current = null;
+      setShowPicker(null);
+      return;
+    }
+    if (mode === 'date') {
+      const yyyy = String(pickerDate.getFullYear()).padStart(4, '0');
+      const mm = String(pickerDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(pickerDate.getDate()).padStart(2, '0');
+      onTextChange(q.id, `${yyyy}-${mm}-${dd}`);
+    } else if (mode === 'time') {
+      const hh = String(pickerDate.getHours()).padStart(2, '0');
+      const min = String(pickerDate.getMinutes()).padStart(2, '0');
+      onTextChange(q.id, `${hh}:${min}`);
+    }
+    setShowPicker(null);
+  };
+
+  const cancelPicker = () => {
+    pendingDatetimeRef.current = null;
+    setShowPicker(null);
   };
 
   const imgUri = extractImgUrl(q, q.question_text);
@@ -418,15 +462,45 @@ function QuizQuestionCardComponent({
         </View>
       )}
 
+      {/* Datetime sequential: date then time */}
+      {q.type === 'datetime' && (
+        <View style={styles.pickerFieldContainer}>
+          <TextInput
+            style={[styles.textInput, { flex: 1, backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
+            placeholder="Format: YYYY-MM-DDTHH:MM (contoh: 2026-08-25T14:30)"
+            placeholderTextColor={colors.textMuted}
+            value={typeof userAnswer === 'string' ? userAnswer : ''}
+            onChangeText={(txt) => onTextChange(q.id, txt)}
+          />
+          <TouchableOpacity
+            style={[styles.pickerTriggerBtn, { backgroundColor: activeColor }]}
+            onPress={() => openPicker('date')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="calendar-outline" size={20} color="#FFF" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {showPicker && (
-        <DateTimePicker
-          value={pickerDate}
-          mode={showPicker}
-          display="spinner"
-          is24Hour={true}
-          onChange={handlePickerChange}
-          onDismiss={() => setShowPicker(null)}
-        />
+        <Modal transparent animationType="fade" visible={!!showPicker} onRequestClose={cancelPicker}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16 }}>
+            <View style={{ backgroundColor: isDark ? '#1E293B' : '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.cardBorder }}>
+              <Text style={{ fontWeight: '700', fontSize: 14, color: colors.text, textAlign: 'center', marginBottom: 8 }}>
+                {showPicker === 'date' ? (q.type === 'datetime' && !pendingDatetimeRef.current ? 'Pilih Tanggal' : 'Pilih Tanggal') : q.type === 'datetime' ? 'Pilih Waktu' : 'Pilih Waktu'}
+              </Text>
+              <DateTimePicker value={pickerDate} mode={showPicker} display="spinner" is24Hour={true} onChange={handlePickerChange} />
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 12 }}>
+                <TouchableOpacity onPress={cancelPicker} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.cardBorder }}>
+                  <Text style={{ color: colors.text, fontWeight: '700' }}>BATAL</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={confirmPicker} style={{ paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10, backgroundColor: activeColor }}>
+                  <Text style={{ color: '#FFF', fontWeight: '700' }}>{q.type === 'datetime' && showPicker === 'date' ? 'LANJUT' : 'OK'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       )}
 
       {/* Password Input */}

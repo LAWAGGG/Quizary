@@ -9,7 +9,7 @@ try {
   useAudioPlayerStatus = EA.useAudioPlayerStatus;
 } catch {}
 
-const CHEAT_SOUND = require('../assets/sounds/cheat-alert.mp3');
+const CHEAT_SOUND = require('../../assets/sounds/cheat-alert.mp3');
 
 export function useCheatSound() {
   // expo-audio hook must be called unconditionally at top level
@@ -24,6 +24,12 @@ export function useCheatSound() {
         if (p.volume !== undefined) p.volume = 1.0;
       } catch {}
       try {
+        // expo-audio loop: set isLooping/loop before play
+        if (p.isLooping !== undefined) p.isLooping = true;
+        else if (p.loop !== undefined) p.loop = true;
+        else if (p.setIsLooping) await p.setIsLooping(true);
+      } catch {}
+      try {
         if (p.seekTo) await p.seekTo(0);
       } catch {}
       await p.play();
@@ -36,6 +42,11 @@ export function useCheatSound() {
     try {
       const p = audioPlayer;
       if (!p) return;
+      try {
+        if (p.isLooping !== undefined) p.isLooping = false;
+        else if (p.loop !== undefined) p.loop = false;
+        else if (p.setIsLooping) await p.setIsLooping(false);
+      } catch {}
       try {
         if (p.pause) await p.pause();
       } catch {}

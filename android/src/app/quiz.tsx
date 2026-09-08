@@ -103,6 +103,8 @@ export default function QuizScreen() {
   const answeringRef = useRef(false);
   const warningVisibleRef = useRef(false);
   const lockedVisibleRef = useRef(false);
+  const pinInProgressRef = useRef(false);
+  const warningStartRef = useRef(0);
   const { pin, unpin, canPin, isExpoGo, nativeMissing } = useAppPinning();
   const { play: playCheat, stop: stopCheat } = useCheatSound();
   const { lock: lockVolume, unlock: unlockVolume } = useLockedVolume();
@@ -170,16 +172,15 @@ export default function QuizScreen() {
   }, [shortCode]);
 
   // Poll submission if locked (check if creator unlocked)
-  // Cleanup timer and unpin + unlock volume + stop sound + secure off on unmount
+  // Cleanup timer and unpin + unlock volume + stop sound + secure off on unmount (secure disabled for debugging)
   useEffect(() => {
     return () => {
       if (warningTimerRef.current) clearInterval(warningTimerRef.current);
       unpin().catch(() => {});
       unlockVolume().catch(() => {});
       stopCheat().catch(() => {});
-      setSecure(false).catch(() => {});
     };
-  }, [unpin, unlockVolume, stopCheat, setSecure]);
+  }, [unpin, unlockVolume, stopCheat]);
 
   // Block hardware back when pinned (restricted quiz in progress)
   useEffect(() => {
@@ -214,9 +215,9 @@ export default function QuizScreen() {
     lockedVisibleRef.current = true;
     setWarningVisible(false);
     warningVisibleRef.current = false;
-    playCheat().catch(() => {});
+    stopCheat().catch(() => {});
     lockSubmission(sid, reason).catch(() => {});
-  }, [playCheat]);
+  }, [stopCheat]);
 
   const handleCheckLockedStatus = useCallback(async () => {
     const sid = submissionIdRef.current;
@@ -234,8 +235,8 @@ export default function QuizScreen() {
         setLockedAt(null);
         setSubmission((prev: any) => ({ ...prev, status: 'in_progress' }));
         stopCheat().catch(() => {});
-        // keep secure flag on when unlocked (still restricted)
-        setSecure(true).catch(() => {});
+        // keep secure flag on when unlocked (still restricted) - disabled for debugging
+        // setSecure(true).catch(() => {});
         showAlert({ type: 'success', title: language === 'ID' ? 'Dibuka Kembali' : 'Unlocked', message: language === 'ID' ? 'Pengawas telah membuka kembali ujian. Silakan lanjutkan.' : 'Proctor has unlocked the exam. Please continue.' });
       } else if (status === 'locked') {
         setCheatReason(detail.cheat_reason || 'window-blur');
@@ -244,7 +245,7 @@ export default function QuizScreen() {
         await unpin().catch(() => {});
         await unlockVolume().catch(() => {});
         await stopCheat().catch(() => {});
-        await setSecure(false).catch(() => {});
+        // await setSecure(false).catch(() => {});
         setLockedVisible(false);
         setWarningVisible(false);
         router.replace({ pathname: '/(tabs)/home' } as any);
@@ -279,7 +280,7 @@ export default function QuizScreen() {
     if (!submission) return;
     if (!isRestrictedRef.current) return;
     const id = setInterval(async () => {
-      if (!answeringRef.current || lockedVisibleRef.current) return;
+      if (!answeringRef.current || lockedVisibleRef.current || pinInProgressRef.current) return;
       try {
         const floating = await hasFloating();
         if (floating) {
@@ -292,22 +293,23 @@ export default function QuizScreen() {
 
   // AppState restricted handler -> 5 sec warning
   useEffect(() => {
-    const warningStartRef = { current: 0 } as { current: number };
     const onChange = (next: AppStateStatus) => {
       const restricted = isRestrictedRef.current;
       const sid = submissionIdRef.current;
       const isAnswering = answeringRef.current;
       if (!restricted || !sid || !isAnswering) return;
-      if (lockedVisibleRef.current) return; // already locked, ignore
+      if (lockedVisibleRef.current) return;
+      if (pinInProgressRef.current) return;
 
       if (next === 'background' || next === 'inactive') {
-        // Start warning if not already
+        // Start warning if not already — loop cheat sound during warning
         if (warningVisibleRef.current) return;
         warningStartRef.current = Date.now();
         countdownRef.current = 5;
         setWarningCountdown(5);
         setWarningVisible(true);
         warningVisibleRef.current = true;
+        playCheat().catch(() => {});
         if (warningTimerRef.current) clearInterval(warningTimerRef.current);
         warningTimerRef.current = setInterval(() => {
           const elapsed = Math.floor((Date.now() - warningStartRef.current) / 1000);
@@ -319,13 +321,13 @@ export default function QuizScreen() {
             warningTimerRef.current = null;
             setWarningVisible(false);
             warningVisibleRef.current = false;
-            // Trigger lock
+            stopCheat().catch(() => {});
+            // Trigger lock — silent at lock
             const now = Date.now();
             setLockedAt(now);
             setCheatReason('window-blur');
             setLockedVisible(true);
             lockedVisibleRef.current = true;
-            playCheat().catch(() => {});
             // Server lock
             lockSubmission(sid, 'window-blur').catch(() => {});
           }
@@ -341,12 +343,12 @@ export default function QuizScreen() {
             warningTimerRef.current = null;
             setWarningVisible(false);
             warningVisibleRef.current = false;
+            stopCheat().catch(() => {});
             const now = Date.now();
             setLockedAt(now);
             setCheatReason('window-blur');
             setLockedVisible(true);
             lockedVisibleRef.current = true;
-            playCheat().catch(() => {});
             const sid2 = submissionIdRef.current;
             if (sid2) lockSubmission(sid2, 'window-blur').catch(() => {});
           }
@@ -358,12 +360,10 @@ export default function QuizScreen() {
     return () => {
       sub.remove();
     };
-  }, [playCheat]);
+  }, [playCheat, stopCheat, hasFloating]);
 
   const handleReenter = useCallback(async () => {
-    if (warningTimerRef.current) clearInterval(warningTimerRef.current);
-    warningTimerRef.current = null;
-    // Auto-check floating before re-enter
+    // Check floating first
     if (isRestrictedRef.current) {
       try {
         if (await hasFloating()) {
@@ -372,16 +372,79 @@ export default function QuizScreen() {
         }
       } catch {}
     }
-    setWarningVisible(false);
-    warningVisibleRef.current = false;
-    setWarningCountdown(5);
-    countdownRef.current = 5;
+    // Don't hide warning before pin success — keep visible until verified via isPinned poll
     if (isRestrictedRef.current && canPin) {
-      pin().catch(() => {});
-      setSecure(true).catch(() => {});
+      pinInProgressRef.current = true;
+      try {
+        const ok = await pin();
+        if (!ok) {
+          showAlert({
+            type: 'warning',
+            title: language === 'ID' ? 'Pin gagal' : 'Pin failed',
+            message: language === 'ID'
+              ? 'Gagal pin ulang. Coba lagi atau akan terkunci.'
+              : 'Failed to re-pin. Try again or will be locked.',
+          });
+          playCheat().catch(() => {});
+          return;
+        }
+        // Poll isPinned up to 1s (system dialog Pin this app? needs user tap / lockTaskModeState delay)
+        let verified = false;
+        for (let i = 0; i < 5; i++) {
+          await new Promise((r) => setTimeout(r, 200));
+          try {
+            const { NativeModules } = require('react-native');
+            const n = (NativeModules as any).AppPinning;
+            if (n?.isPinned) verified = await n.isPinned();
+            else verified = true;
+          } catch {
+            verified = true;
+          }
+          if (verified) break;
+        }
+        if (!verified) {
+          showAlert({
+            type: 'warning',
+            title: language === 'ID' ? 'Pin gagal' : 'Pin failed',
+            message: language === 'ID'
+              ? 'Gagal pin ulang. Coba lagi atau akan terkunci.'
+              : 'Failed to re-pin. Try again or will be locked.',
+          });
+          playCheat().catch(() => {});
+          return;
+        }
+        // Success: clear warning and stop loop
+        if (warningTimerRef.current) clearInterval(warningTimerRef.current);
+        warningTimerRef.current = null;
+        warningStartRef.current = 0;
+        setWarningVisible(false);
+        warningVisibleRef.current = false;
+        setWarningCountdown(5);
+        countdownRef.current = 5;
+        await stopCheat().catch(() => {});
+      } catch {
+        showAlert({
+          type: 'warning',
+          title: language === 'ID' ? 'Pin gagal' : 'Pin failed',
+          message: language === 'ID' ? 'Gagal pin ulang.' : 'Failed to re-pin.',
+        });
+        playCheat().catch(() => {});
+        return;
+      } finally {
+        pinInProgressRef.current = false;
+      }
+    } else {
+      // Expo Go / nativeMissing: just dismiss
+      if (warningTimerRef.current) clearInterval(warningTimerRef.current);
+      warningTimerRef.current = null;
+      warningStartRef.current = 0;
+      setWarningVisible(false);
+      warningVisibleRef.current = false;
+      setWarningCountdown(5);
+      countdownRef.current = 5;
+      await stopCheat().catch(() => {});
     }
-    stopCheat().catch(() => {});
-  }, [canPin, pin, stopCheat, hasFloating, triggerFloatingLock, setSecure]);
+  }, [canPin, pin, stopCheat, playCheat, hasFloating, triggerFloatingLock, language]);
 
   const handleStart = async () => {
     if (!publicForm) return;
@@ -450,7 +513,7 @@ export default function QuizScreen() {
           }
         } catch {}
         lockVolume().catch(() => {});
-        setSecure(true).catch(() => {});
+        // setSecure(true) disabled for debugging
         if (canPin) {
           const pinned = await pin().catch(() => false);
           if (!pinned) {
@@ -653,7 +716,6 @@ export default function QuizScreen() {
     await unpin().catch(() => {});
     await unlockVolume().catch(() => {});
     await stopCheat().catch(() => {});
-    await setSecure(false).catch(() => {});
     try {
       await finalizeSubmission(sid);
     } catch {}
@@ -716,7 +778,6 @@ export default function QuizScreen() {
       await unpin().catch(() => {});
       await unlockVolume().catch(() => {});
       await stopCheat().catch(() => {});
-      await setSecure(false).catch(() => {});
       // Show submitted step briefly then go home
       setSubmission((prev: any) => ({ ...prev, result: res }));
       // Navigate to success view
@@ -727,7 +788,6 @@ export default function QuizScreen() {
         answeringRef.current = false;
         await unlockVolume().catch(() => {});
         await stopCheat().catch(() => {});
-        await setSecure(false).catch(() => {});
         router.replace({ pathname: '/(tabs)/home' } as any);
       } else {
         showAlert({ type: 'error', title: 'Gagal submit', message: e.message });
@@ -877,7 +937,6 @@ export default function QuizScreen() {
             await unpin().catch(() => {});
             await unlockVolume().catch(() => {});
             await stopCheat().catch(() => {});
-            await setSecure(false).catch(() => {});
             router.replace('/(tabs)/home' as any);
           }}
           submissionId={submissionIdRef.current}
@@ -890,7 +949,6 @@ export default function QuizScreen() {
                 await unpin().catch(() => {});
                 await unlockVolume().catch(() => {});
                 await stopCheat().catch(() => {});
-                await setSecure(false).catch(() => {});
                 router.replace('/(tabs)/home' as any);
               }}
               style={{ padding: 6 }}
