@@ -150,7 +150,44 @@ export function QuizStyleAnsweringStep({
   };
 
   const handleValueChange = (_event: any, date: Date) => {
-    if (date && !isNaN(date.getTime())) setPickerDate(date);
+    if (!date || isNaN(date.getTime())) return;
+    const active = showPicker;
+    if (!active) {
+      setPickerDate(date);
+      return;
+    }
+    const qForId = questions.find((qq: any) => qq.id === active.qId);
+    const typeForQ = String(qForId?.type || qForId?.question_type || '').toLowerCase();
+    if (typeForQ === 'datetime' && active.mode === 'date') {
+      pendingDatetimeRef.current = new Date(date);
+      setPickerDate(date);
+      setShowPicker({ qId: active.qId, mode: 'time' });
+      return;
+    }
+    if (typeForQ === 'datetime' && active.mode === 'time' && pendingDatetimeRef.current) {
+      const datePart = pendingDatetimeRef.current;
+      const yyyy = String(datePart.getFullYear()).padStart(4, '0');
+      const mm = String(datePart.getMonth() + 1).padStart(2, '0');
+      const dd = String(datePart.getDate()).padStart(2, '0');
+      const hh = String(date.getHours()).padStart(2, '0');
+      const min = String(date.getMinutes()).padStart(2, '0');
+      onTextChange(active.qId, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
+      pendingDatetimeRef.current = null;
+      setShowPicker(null);
+      return;
+    }
+    setPickerDate(date);
+    if (active.mode === 'date') {
+      const yyyy = String(date.getFullYear()).padStart(4, '0');
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      onTextChange(active.qId, `${yyyy}-${mm}-${dd}`);
+    } else if (active.mode === 'time') {
+      const hh = String(date.getHours()).padStart(2, '0');
+      const min = String(date.getMinutes()).padStart(2, '0');
+      onTextChange(active.qId, `${hh}:${min}`);
+    }
+    setShowPicker(null);
   };
 
   const handleDismiss = () => {
@@ -865,29 +902,15 @@ export function QuizStyleAnsweringStep({
       </KeyboardAvoidingView>
 
       {showPicker && (
-        <Modal transparent animationType="fade" visible={!!showPicker} onRequestClose={handleDismiss} statusBarTranslucent>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16 }}>
-            <View style={{ backgroundColor: isDark ? '#1E293B' : '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: isDark ? '#334155' : '#E2E8F0', elevation: 20 }}>
-              <DateTimePicker
-                key={`${showPicker.qId}-${showPicker.mode}`}
-                value={pickerDate}
-                mode={showPicker.mode}
-                display="spinner"
-                is24Hour={true}
-                onValueChange={handleValueChange}
-                onDismiss={handleDismiss}
-              />
-              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
-                <TouchableOpacity onPress={handleDismiss} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: isDark ? '#334155' : '#F1F5F9', borderWidth: 1, borderColor: isDark ? '#475569' : '#E2E8F0' }}>
-                  <Text style={{ color: isDark ? '#FFF' : '#0F172A', fontWeight: '700' }}>BATAL</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={confirmPicker} style={{ marginLeft: 12, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10, backgroundColor: themeColor }}>
-                  <Text style={{ color: '#FFF', fontWeight: '700' }}>{(() => { const qForId = questions.find((qq: any) => qq.id === showPicker.qId); const t = String(qForId?.type || qForId?.question_type || '').toLowerCase(); return t === 'datetime' && showPicker.mode === 'date' ? 'LANJUT' : 'OK'; })()}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+        <DateTimePicker
+          key={`${showPicker.qId}-${showPicker.mode}`}
+          value={pickerDate}
+          mode={showPicker.mode}
+          display="spinner"
+          is24Hour={true}
+          onValueChange={handleValueChange}
+          onDismiss={handleDismiss}
+        />
       )}
 
       {/* BOTTOM ACTION BAR (Matching Web Screenshot 1 with Previous Text & Bright Green Next Button) */}
