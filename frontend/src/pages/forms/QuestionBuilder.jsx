@@ -72,14 +72,14 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   // Satu-satunya section = default tujuan soal baru; select section tak perlu tampil.
   const singleSectionId = sectionsAllowed && sections?.length === 1 ? sections[0].id : null
   // UX essay/short quiz baru: default tidak dinilai sampai user aktifkan toggle + isi kunci.
-  // Existing question (edit) pakai nilai dari server, default true bila tidak ada.
+  // Form (non-quiz) semua tipe selalu non-scored (survey) — toggle tidak ada.
   const defaultIsScored = initial
     ? (initial.is_scored ?? true)
-    : (isQuiz ? false : true)
+    : false // new question default non-scored; handleTypeChange yang tentukan saat ganti tipe (quiz MC → true)
   const [form, setForm] = useState({
     question_text: '',
     type: 'essay',
-    points: 1,
+    points: 0,
     is_scored: defaultIsScored,
     is_required: true,
     options: [],
@@ -88,6 +88,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     allow_other: false,
     ...(initial || {}),
     is_scored: initial ? (initial.is_scored ?? true) : defaultIsScored,
+    points: initial ? (initial.points ?? 0) : 0,
     section_id: initial?.section_id || singleSectionId,
   })
   const isEditing = !!initial
@@ -236,18 +237,39 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
 
   const handleTypeChange = (type) => {
     setForm((prev) => {
+      // ISOLASI form: survey never scored — semua tipe di form = is_scored:false, points:0
+      if (!isQuiz) {
+        const isKeyword = type === 'essay' || type === 'short_answer'
+        const needsOptions = OPTION_TYPES.includes(type)
+        // dropdown is_correct selalu false (#3)
+        const opts = needsOptions
+          ? (prev.options.length ? prev.options.map((o) => ({ ...o, is_correct: false })) : [{ option_text: '', is_correct: false }])
+          : []
+        return {
+          ...prev,
+          type,
+          is_scored: false,
+          answer_key: isKeyword ? prev.answer_key : '',
+          points: 0,
+          options: opts,
+        }
+      }
+      // Quiz: logic lama terisolasi, tidak sentuh form
       const isKeyword = type === 'essay' || type === 'short_answer'
       const isAlwaysNoGrade = ['date', 'time', 'datetime', 'file_upload', 'dropdown'].includes(type)
+      const nextIsScored = isKeyword ? false : isAlwaysNoGrade ? false : prev.is_scored || true
+      const nextPoints = isAlwaysNoGrade || isKeyword ? 0 : (prev.points || 1)
+      // dropdown is_correct selalu false (#3) — quiz juga
+      const needsOptions = OPTION_TYPES.includes(type)
+      let opts = needsOptions ? (prev.options.length ? prev.options : [{ option_text: '', is_correct: false }]) : []
+      if (type === 'dropdown') opts = opts.map((o) => ({ ...o, is_correct: false }))
       return {
         ...prev,
         type,
-        // essay/short_answer quiz: default OFF agar user sadar harus toggle ON + isi kunci
-        is_scored: isKeyword && isQuiz ? false : isAlwaysNoGrade ? false : prev.is_scored || true,
+        is_scored: nextIsScored,
         answer_key: isKeyword ? prev.answer_key : '',
-        points: isAlwaysNoGrade || (isKeyword && isQuiz) ? 0 : prev.points,
-        options: OPTION_TYPES.includes(type)
-          ? (prev.options.length ? prev.options : [{ option_text: '', is_correct: false }])
-          : [],
+        points: nextPoints,
+        options: opts,
       }
     })
   }
@@ -1236,11 +1258,9 @@ export default function QuestionBuilder() {
     }
   }, [editing])
 
-  // Sections hanya untuk: semua quiz (style apapun), atau form + card
-  const sectionsAllowed = form && (
-    form.type === 'quiz' ||
-    (form.type === 'form' && (form.display_style || 'card') === 'card')
-  )
+  // Sections selalu tampil untuk kedua design style (card dan quiz).
+  // Design style hanya mengubah tampilan pengerjaan, bukan struktur builder.
+  const sectionsAllowed = Boolean(form)
   // Import DOCX wajib pilih section tujuan hanya bila section >1.
   const importNeedsSection = sectionsAllowed && sections.length > 1
   const scoringMode = form?.scoring_mode || 'auto'

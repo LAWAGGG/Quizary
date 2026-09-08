@@ -186,6 +186,10 @@ def set_result_status(
     if not sub:
         raise HTTPException(status_code=404, detail="Hasil tidak ditemukan")
 
+    # ISOLASI form: form (survey) tidak punya sistem poin, cheating hanya untuk quiz
+    if body.status == "cheating" and form.type.value != "quiz":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Status cheating hanya tersedia untuk tipe quiz")
+
     now = now_wib()
     if body.status == "in_progress":
         # ponytail: locked/cheating -> in_progress jangan reset timer, biar tidak dapat waktu ekstra
@@ -243,6 +247,10 @@ def set_bulk_result_status(
     )
     if not subs:
         return {"updated": 0, "message": "Tidak ada hasil yang diubah"}
+
+    # ISOLASI form: cheating hanya untuk quiz
+    if body.status == "cheating" and form.type.value != "quiz":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Status cheating hanya tersedia untuk tipe quiz")
 
     now = now_wib()
     for sub in subs:

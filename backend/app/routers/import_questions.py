@@ -488,10 +488,11 @@ def import_docx(
             q_type = QuestionType.essay
 
         # Sanitasi answer_key dari parser — multi-kunci pisah ";" (sesuai schema).
+        # ISOLASI form: form tidak simpan answer_key sama sekali (never scored).
         raw_key = q_data.get("answer_key")
-        answer_key = _sanitize_answer_key(raw_key) if q_type in (
-            QuestionType.essay, QuestionType.short_answer
-        ) else None
+        answer_key = None
+        if form.type.value == "quiz" and q_type in (QuestionType.essay, QuestionType.short_answer):
+            answer_key = _sanitize_answer_key(raw_key)
 
         # Tipe tanpa opsi (essay/short tanpa key, date, time, file_upload) → no-grade.
         # Essay/short_answer dengan key valid → is_scored=True (auto-graded).

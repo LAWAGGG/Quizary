@@ -329,9 +329,9 @@ def create_question(
         )
     answer_key = body.answer_key if body.type in _KEYWORD_TYPES else None
 
-    # UX essay/short_answer: toggle Hitung poin ON wajib disertai answer_key
-    # → 422 field-specific agar frontend dapat red border + scroll ke input.
-    if body.type in _KEYWORD_TYPES and body.is_scored and not (answer_key or "").strip():
+    # UX essay/short_answer: toggle Hitung poin ON wajib disertai answer_key — hanya untuk quiz.
+    # Form (kuesioner) tidak dinilai, essay/short_answer selalu non-scored tanpa validasi kunci.
+    if form.type.value == "quiz" and body.type in _KEYWORD_TYPES and body.is_scored and not (answer_key or "").strip():
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={
@@ -339,6 +339,25 @@ def create_question(
                 "errors": [{"answer_key": "Isi answer key terlebih dahulu untuk mengaktifkan penilaian soal ini"}],
             },
         )
+    # ISOLASI: non-graded types (date/time/datetime/file_upload/dropdown) never scored untuk quiz & form
+    if body.type in _NO_GRADE_TYPES:
+        body.is_scored = False
+        if body.type == "dropdown":
+            for o in body.options:
+                o.is_correct = False
+    # Form: paksa non-scored untuk semua tipe yang tidak dinilai di form (isolasi per tipe, tidak generik).
+    # essay/short tanpa kunci sudah di atas; MC/checkbox/password di form juga never scored.
+    if form.type.value != "quiz":
+        if body.type in _KEYWORD_TYPES and not (answer_key or "").strip():
+            body.is_scored = False
+        if body.type in ("multiple_choice", "checkbox"):
+            body.is_scored = False
+        if body.type == "dropdown":
+            body.is_scored = False
+            for o in body.options:
+                o.is_correct = False
+        if body.type == "password":
+            body.is_scored = False
 
     question = Question(
         form_id=form.id,
@@ -348,7 +367,8 @@ def create_question(
         # Auto mode allocates from the 100-point pool after insert; manual mode
         # preserves the creator's per-question value. Non-graded types always 0;
         # essay/short_answer tanpa kunci juga 0 (belum bisa dinilai).
-        points=(0 if (form.type.value == "quiz" and (form.scoring_mode is None or form.scoring_mode.value == "auto")) or body.type in _NO_GRADE_TYPES or (body.type in _KEYWORD_TYPES and not (answer_key or "").strip()) else body.points),
+        # ISOLASI: form (survey) semua points 0, quiz pakai logic pool.
+        points=(0 if form.type.value != "quiz" else (0 if (form.scoring_mode is None or form.scoring_mode.value == "auto") or body.type in _NO_GRADE_TYPES or (body.type in _KEYWORD_TYPES and not (answer_key or "").strip()) else body.points)),
         is_scored=body.is_scored,
         is_required=body.is_required,
         section_id=body.section_id,
@@ -431,12 +451,13 @@ def update_question(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=str(e),
             )
-    # Menyalakan penilaian essay/short_answer wajib disertai kunci.
+    # Menyalakan penilaian essay/short_answer wajib disertai kunci — hanya untuk quiz.
+    # Form tidak dinilai: essay/short_answer selalu non-scored, tidak perlu kunci.
     # UX: toggle Hitung poin ON tanpa kunci → 422 field answer_key (red border + scroll).
     # Juga jika kunci dihapus/clear sementara scored → 422.
     effective_is_scored = update_data.get("is_scored", question.is_scored)
     effective_answer_key = update_data.get("answer_key", question.answer_key)
-    if new_type_str in _KEYWORD_TYPES and effective_is_scored and not (effective_answer_key or "").strip():
+    if form.type.value == "quiz" and new_type_str in _KEYWORD_TYPES and effective_is_scored and not (effective_answer_key or "").strip():
         if "is_scored" in update_data or "answer_key" in update_data or "type" in update_data:
             return JSONResponse(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -445,6 +466,35 @@ def update_question(
                     "errors": [{"answer_key": "Isi answer key terlebih dahulu untuk mengaktifkan penilaian soal ini"}],
                 },
             )
+    # ISOLASI: non-graded types never scored untuk quiz & form (dropdown is_correct selalu false)
+    if new_type_str in _NO_GRADE_TYPES:
+        update_data["is_scored"] = False
+        effective_is_scored = False
+        if new_type_str == "dropdown" and options_data:
+            for o in options_data:
+                o["is_correct"] = False
+    # Form: paksa non-scored untuk semua tipe form (isolasi per tipe, tidak generik).
+    if form.type.value != "quiz":
+        if new_type_str in _KEYWORD_TYPES and not (effective_answer_key or "").strip():
+            update_data["is_scored"] = False
+            effective_is_scored = False
+        if new_type_str in ("multiple_choice", "checkbox"):
+            update_data["is_scored"] = False
+            effective_is_scored = False
+        if new_type_str == "dropdown":
+            update_data["is_scored"] = False
+            effective_is_scored = False
+        if new_type_str == "password":
+            update_data["is_scored"] = False
+            effective_is_scored = False
+    # Dropdown is_correct selalu false (#3) — isolasi untuk quiz & form
+    if new_type_str == "dropdown":
+        for opt in question.options:
+            if opt.is_correct:
+                opt.is_correct = False
+        if options_data:
+            for o in options_data:
+                o["is_correct"] = False
 
     # Fix #4 — non-empty options with a text type is invalid; an empty list is
     # allowed and simply means "clear options" (e.g. switching MC → short_answer).
@@ -478,6 +528,13 @@ def update_question(
         # Tinggalkan MC/checkbox → flag Lainnya ikut dibersihkan
         if new_type.value not in ("multiple_choice", "checkbox") and "allow_other" not in update_data:
             question.allow_other = False
+        # ISOLASI form dropdown: is_correct selalu false (tidak dinilai)
+        if form.type.value != "quiz" and new_type.value == "dropdown":
+            for opt in question.options:
+                opt.is_correct = False
+            if options_data:
+                for o in options_data:
+                    o["is_correct"] = False
 
     # Toggle is_scored: off → force 0 points; on (no explicit points) → rejoin pool
     was_scored = question.is_scored

@@ -34,20 +34,6 @@ export default function Results() {
   const toast = useToast()
   const { t } = useTranslation()
 
-  const statusOptions = [
-    { value: '', label: t('results.filterAll') },
-    { value: 'submitted', label: t('results.statusSubmitted') },
-    { value: 'auto_submitted', label: t('results.statusAuto') },
-    { value: 'cheating', label: t('results.statusCheating') },
-    { value: 'locked', label: t('results.statusLocked') },
-  ]
-
-  const statusTargets = [
-    { value: 'in_progress', label: t('results.statusInProgress') },
-    { value: 'submitted', label: t('results.statusSubmitted') },
-    { value: 'cheating', label: t('results.statusCheating') },
-  ]
-
   const STATUS_LABELS = {
     in_progress: t('results.statusInProgress'),
     submitted: t('results.statusSubmitted'),
@@ -74,6 +60,24 @@ export default function Results() {
   const [selected, setSelected] = useState(() => new Set())
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  const statusOptions = [
+    { value: '', label: t('results.filterAll') },
+    { value: 'submitted', label: t('results.statusSubmitted') },
+    { value: 'auto_submitted', label: t('results.statusAuto') },
+    ...(isQuiz ? [{ value: 'cheating', label: t('results.statusCheating') }, { value: 'locked', label: t('results.statusLocked') }] : []),
+  ]
+
+  const statusTargets = isQuiz
+    ? [
+        { value: 'in_progress', label: t('results.statusInProgress') },
+        { value: 'submitted', label: t('results.statusSubmitted') },
+        { value: 'cheating', label: t('results.statusCheating') },
+      ]
+    : [
+        { value: 'in_progress', label: t('results.statusInProgress') },
+        { value: 'submitted', label: t('results.statusSubmitted') },
+      ]
 
   const toggleSelect = (id) => {
     setSelected((prev) => {

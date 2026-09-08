@@ -77,7 +77,7 @@ export function CategoryManager({ open, onClose, categories, onChanged }) {
         >
           <motion.div
             initial={{ scale: 0.96, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.96, opacity: 0, y: 8 }}
-            className="bg-white dark:bg-ink-900 rounded-2xl w-full max-w-lg shadow-lift flex flex-col max-h-[86dvh]"
+            className="bg-white dark:bg-ink-900 border dark:border-ink-800 rounded-2xl w-full max-w-lg shadow-lift flex flex-col max-h-[86dvh]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">

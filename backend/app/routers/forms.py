@@ -254,7 +254,7 @@ def create_form(
     db.add(form)
     db.flush()
     # Section default langsung tersedia — memudahkan grup cerita & pengelompokan soal.
-    db.add(Section(form_id=form.id, title="Bagian 1", order_index=0, created_at=now))
+    db.add(Section(form_id=form.id, title="Section 1", order_index=0, created_at=now))
     db.commit()
     db.refresh(form)
     return _form_dict(form, request, db)
@@ -421,12 +421,15 @@ def _prepare_quiz_after_form_conversion(form_id: int, db: Session) -> None:
 
 
 def _clear_correct_after_quiz_conversion(form_id: int, db: Session) -> None:
-    """quiz → form: no correct answers are needed anymore."""
+    """quiz → form: no correct answers are needed anymore + is_scored/answer_key/points dibersihkan (isolasi form never scored)."""
     db.query(QuestionOption).filter(
         QuestionOption.question_id.in_(
             db.query(Question.id).filter(Question.form_id == form_id, Question.is_deleted.is_(False))
         )
     ).update({"is_correct": False}, synchronize_session=False)
+    db.query(Question).filter(Question.form_id == form_id, Question.is_deleted.is_(False)).update(
+        {"is_scored": False, "points": 0, "answer_key": None}, synchronize_session=False
+    )
 
 
 # ── DELETE /forms/{form_id} ───────────────────────────────────────────────────
