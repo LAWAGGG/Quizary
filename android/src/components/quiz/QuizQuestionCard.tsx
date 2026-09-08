@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Platform, Modal, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useAppTheme } from '../../context/ThemeContext';
 import { RichTextRenderer } from '../RichTextRenderer';
 import { ImageZoomModal } from '../ImageZoomModal';
 import { AudioPlayer } from '../AudioPlayer';
 import { isAudioUrl } from '../../utils/media';
 import { BASE_URL } from '../../services/api_service';
+import { CustomDateTimePickerModal } from './CustomDateTimePickerModal';
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
@@ -74,168 +74,17 @@ function QuizQuestionCardComponent({
   const [zoomUri, setZoomUri] = useState<string | null>(null);
   const isReq = q.is_required !== false;
 
-  const [showPicker, setShowPicker] = useState<'date' | 'time' | null>(null);
-  const [pickerDate, setPickerDate] = useState<Date>(new Date());
+  const [showPicker, setShowPicker] = useState<'date' | 'time' | 'datetime' | null>(null);
   const [showDropdownModal, setShowDropdownModal] = useState(false);
-  const pendingDatetimeRef = React.useRef<Date | null>(null);
 
-  const openPicker = (mode: 'date' | 'time') => {
-    const type = q.type;
-    if (type === 'datetime' && mode === 'date') {
-      // datetime sequential: parse full YYYY-MM-DDTHH:MM if exists
-      let d = new Date();
-      if (typeof userAnswer === 'string' && userAnswer.trim().includes('T')) {
-        const [datePart, timePart] = userAnswer.trim().split('T');
-        const dParts = datePart.split('-');
-        const tParts = timePart.split(':');
-        if (dParts.length === 3 && tParts.length >= 2) {
-          const y = parseInt(dParts[0], 10), m = parseInt(dParts[1], 10) - 1, day = parseInt(dParts[2], 10);
-          const h = parseInt(tParts[0], 10), min = parseInt(tParts[1], 10);
-          if (!isNaN(y) && !isNaN(m) && !isNaN(day) && !isNaN(h) && !isNaN(min)) d = new Date(y, m, day, h, min, 0, 0);
-        }
-      } else if (typeof userAnswer === 'string' && userAnswer.trim().length > 0) {
-        // fallback try date part only
-        const parts = userAnswer.trim().split('-');
-        if (parts.length === 3) {
-          const y = parseInt(parts[0], 10), m = parseInt(parts[1], 10) - 1, day = parseInt(parts[2], 10);
-          if (!isNaN(y) && !isNaN(m) && !isNaN(day)) d = new Date(y, m, day);
-        }
-      }
-      pendingDatetimeRef.current = null;
-      setPickerDate(d);
-      setShowPicker('date');
-      return;
-    }
-    let d = new Date();
-    if (typeof userAnswer === 'string' && userAnswer.trim().length > 0) {
-      if (mode === 'date') {
-        const parts = userAnswer.trim().split('-');
-        if (parts.length === 3) {
-          const y = parseInt(parts[0], 10);
-          const m = parseInt(parts[1], 10) - 1;
-          const day = parseInt(parts[2], 10);
-          if (!isNaN(y) && !isNaN(m) && !isNaN(day)) {
-            d = new Date(y, m, day);
-          }
-        }
-      } else if (mode === 'time') {
-        const parts = userAnswer.trim().split(':');
-        if (parts.length >= 2) {
-          const h = parseInt(parts[0], 10);
-          const min = parseInt(parts[1], 10);
-          if (!isNaN(h) && !isNaN(min)) {
-            d = new Date();
-            d.setHours(h, min, 0, 0);
-          }
-        }
-      }
-    }
-    setPickerDate(d);
-    setShowPicker(mode);
+  const openPicker = (requestedMode: 'date' | 'time') => {
+    const rawType = String(q?.type || q?.question_type || requestedMode).toLowerCase();
+    const pickerMode: 'date' | 'time' | 'datetime' =
+      rawType === 'datetime' ? 'datetime' : rawType === 'time' ? 'time' : 'date';
+    setShowPicker(pickerMode);
   };
 
-  const handlePickerChange = (event: any, selectedDate?: Date) => {
-    if (event?.type === 'dismissed') {
-      pendingDatetimeRef.current = null;
-      setShowPicker(null);
-      return;
-    }
-    if (event?.type === 'set' || event?.type === 'neutralButtonPressed') {
-      let dateToSave = selectedDate;
-      if (!dateToSave && event?.nativeEvent?.timestamp) {
-        const ts = Number(event.nativeEvent.timestamp);
-        if (!isNaN(ts)) dateToSave = new Date(ts);
-      }
-      if (!dateToSave || isNaN(dateToSave.getTime())) dateToSave = pickerDate;
-      // 2 native Set for datetime: date Set → time picker, time Set → commit
-      if (q.type === 'datetime' && showPicker === 'date') {
-        pendingDatetimeRef.current = new Date(dateToSave);
-        setPickerDate(dateToSave);
-        setShowPicker('time');
-        return;
-      }
-      if (q.type === 'datetime' && showPicker === 'time' && pendingDatetimeRef.current) {
-        const datePart = pendingDatetimeRef.current;
-        const yyyy = String(datePart.getFullYear()).padStart(4, '0');
-        const mm = String(datePart.getMonth() + 1).padStart(2, '0');
-        const dd = String(datePart.getDate()).padStart(2, '0');
-        const hh = String(dateToSave.getHours()).padStart(2, '0');
-        const min = String(dateToSave.getMinutes()).padStart(2, '0');
-        onTextChange(q.id, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
-        pendingDatetimeRef.current = null;
-        setShowPicker(null);
-        return;
-      }
-      setPickerDate(dateToSave);
-      if (showPicker === 'date') {
-        const yyyy = String(dateToSave.getFullYear()).padStart(4, '0');
-        const mm = String(dateToSave.getMonth() + 1).padStart(2, '0');
-        const dd = String(dateToSave.getDate()).padStart(2, '0');
-        onTextChange(q.id, `${yyyy}-${mm}-${dd}`);
-      } else if (showPicker === 'time') {
-        const hh = String(dateToSave.getHours()).padStart(2, '0');
-        const min = String(dateToSave.getMinutes()).padStart(2, '0');
-        onTextChange(q.id, `${hh}:${min}`);
-      }
-      setShowPicker(null);
-      return;
-    }
-    // Live sync for spinner without commit
-    let next = selectedDate;
-    if (!next && event?.nativeEvent?.timestamp) {
-      const ts = Number(event.nativeEvent.timestamp);
-      if (!isNaN(ts)) next = new Date(ts);
-    }
-    if (next && !isNaN(next.getTime())) setPickerDate(next);
-  };
 
-  const handleValueChange = (_event: any, date: Date) => {
-    if (date && !isNaN(date.getTime())) setPickerDate(date);
-  };
-
-  const handleDismiss = () => {
-    pendingDatetimeRef.current = null;
-    setShowPicker(null);
-  };
-
-  const confirmPicker = () => {
-    const mode = showPicker;
-    if (!mode) return;
-    if (q.type === 'datetime' && mode === 'date') {
-      // First step datetime: save date part, go to time step
-      pendingDatetimeRef.current = new Date(pickerDate);
-      setShowPicker('time');
-      return;
-    }
-    if (q.type === 'datetime' && mode === 'time' && pendingDatetimeRef.current) {
-      const datePart = pendingDatetimeRef.current;
-      const yyyy = String(datePart.getFullYear()).padStart(4, '0');
-      const mm = String(datePart.getMonth() + 1).padStart(2, '0');
-      const dd = String(datePart.getDate()).padStart(2, '0');
-      const hh = String(pickerDate.getHours()).padStart(2, '0');
-      const min = String(pickerDate.getMinutes()).padStart(2, '0');
-      onTextChange(q.id, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
-      pendingDatetimeRef.current = null;
-      setShowPicker(null);
-      return;
-    }
-    if (mode === 'date') {
-      const yyyy = String(pickerDate.getFullYear()).padStart(4, '0');
-      const mm = String(pickerDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(pickerDate.getDate()).padStart(2, '0');
-      onTextChange(q.id, `${yyyy}-${mm}-${dd}`);
-    } else if (mode === 'time') {
-      const hh = String(pickerDate.getHours()).padStart(2, '0');
-      const min = String(pickerDate.getMinutes()).padStart(2, '0');
-      onTextChange(q.id, `${hh}:${min}`);
-    }
-    setShowPicker(null);
-  };
-
-  const cancelPicker = () => {
-    pendingDatetimeRef.current = null;
-    setShowPicker(null);
-  };
 
   const imgUri = extractImgUrl(q, q.question_text);
 
@@ -530,15 +379,16 @@ function QuizQuestionCardComponent({
       )}
 
       {showPicker && (
-        <DateTimePicker
-          key={showPicker}
-          value={pickerDate}
+        <CustomDateTimePickerModal
+          visible={!!showPicker}
           mode={showPicker}
-          display="spinner"
-          is24Hour={true}
-          onChange={handlePickerChange}
-          onValueChange={handleValueChange}
-          onDismiss={handleDismiss}
+          initialValue={typeof userAnswer === 'string' ? userAnswer : ''}
+          themeColor={activeColor}
+          onConfirm={(formattedVal) => {
+            onTextChange(q.id, formattedVal);
+            setShowPicker(null);
+          }}
+          onCancel={() => setShowPicker(null)}
         />
       )}
 

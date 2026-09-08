@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   Animated,
+  Easing,
   Modal,
   KeyboardAvoidingView,
   Platform,
@@ -18,7 +19,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAppAlert } from '../../context/AlertContext';
@@ -27,6 +27,8 @@ import { getThemeGradientColors } from './QuizBackground';
 import { extractImgUrl } from './QuizQuestionCard';
 import { AudioPlayer } from '../AudioPlayer';
 import { isAudioUrl } from '../../utils/media';
+import { CustomDateTimePickerModal } from './CustomDateTimePickerModal';
+import { checkPassword } from '../../services/api_service';
 
 interface QuizStyleAnsweringStepProps {
   publicForm: any;
@@ -72,209 +74,15 @@ export function QuizStyleAnsweringStep({
   const [showMapModal, setShowMapModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
 
-  const [showPicker, setShowPicker] = useState<{ qId: number; mode: 'date' | 'time' } | null>(null);
-  const [pickerDate, setPickerDate] = useState<Date>(new Date());
+  const [showPicker, setShowPicker] = useState<{ qId: number; mode: 'date' | 'time' | 'datetime' } | null>(null);
   const [showDropdownModal, setShowDropdownModal] = useState<number | null>(null);
-  const pendingDatetimeRef = useRef<Date | null>(null);
 
-  const openPicker = (qId: number, mode: 'date' | 'time') => {
-    const currentVal = answers[qId];
-    const qForId = questions.find((qq: any) => qq.id === qId);
-    const typeForQ = String(qForId?.type || qForId?.question_type || '').toLowerCase();
-    if (typeForQ === 'datetime' && mode === 'date') {
-      let d = new Date();
-      if (typeof currentVal === 'string' && currentVal.trim().includes('T')) {
-        const [datePart, timePart] = currentVal.trim().split('T');
-        const dParts = datePart.split('-');
-        const tParts = timePart.split(':');
-        if (dParts.length === 3 && tParts.length >= 2) {
-          const y = parseInt(dParts[0], 10), m = parseInt(dParts[1], 10) - 1, day = parseInt(dParts[2], 10);
-          const h = parseInt(tParts[0], 10), min = parseInt(tParts[1], 10);
-          if (!isNaN(y) && !isNaN(m) && !isNaN(day) && !isNaN(h) && !isNaN(min)) d = new Date(y, m, day, h, min, 0, 0);
-        }
-      } else if (typeof currentVal === 'string' && currentVal.trim().length > 0) {
-        const parts = currentVal.trim().split('-');
-        if (parts.length === 3) {
-          const y = parseInt(parts[0], 10), m = parseInt(parts[1], 10) - 1, day = parseInt(parts[2], 10);
-          if (!isNaN(y) && !isNaN(m) && !isNaN(day)) d = new Date(y, m, day);
-        }
-      }
-      pendingDatetimeRef.current = null;
-      setPickerDate(d);
-      setShowPicker({ qId, mode });
-      return;
-    }
-    let d = new Date();
-    if (typeof currentVal === 'string' && currentVal.trim().length > 0) {
-      if (mode === 'date') {
-        const parts = currentVal.trim().split('-');
-        if (parts.length === 3) {
-          const y = parseInt(parts[0], 10);
-          const m = parseInt(parts[1], 10) - 1;
-          const day = parseInt(parts[2], 10);
-          if (!isNaN(y) && !isNaN(m) && !isNaN(day)) {
-            d = new Date(y, m, day);
-          }
-        }
-      } else if (mode === 'time') {
-        const parts = currentVal.trim().split(':');
-        if (parts.length >= 2) {
-          const h = parseInt(parts[0], 10);
-          const min = parseInt(parts[1], 10);
-          if (!isNaN(h) && !isNaN(min)) {
-            d = new Date();
-            d.setHours(h, min, 0, 0);
-          }
-        }
-      }
-    }
-    setPickerDate(d);
-    setShowPicker({ qId, mode });
-  };
-
-  const handlePickerChange = (event: any, selectedDate?: Date) => {
-    if (event?.type === 'dismissed') {
-      pendingDatetimeRef.current = null;
-      setShowPicker(null);
-      return;
-    }
-    if (event?.type === 'set' || event?.type === 'neutralButtonPressed') {
-      let dateToSave = selectedDate;
-      if (!dateToSave && event?.nativeEvent?.timestamp) {
-        const ts = Number(event.nativeEvent.timestamp);
-        if (!isNaN(ts)) dateToSave = new Date(ts);
-      }
-      if (!dateToSave || isNaN(dateToSave.getTime())) dateToSave = pickerDate;
-      const active = showPicker;
-      if (!active) return;
-      const qForId = questions.find((qq: any) => qq.id === active.qId);
-      const typeForQ = String(qForId?.type || qForId?.question_type || '').toLowerCase();
-      if (typeForQ === 'datetime' && active.mode === 'date') {
-        pendingDatetimeRef.current = new Date(dateToSave);
-        setPickerDate(dateToSave);
-        setShowPicker({ qId: active.qId, mode: 'time' });
-        return;
-      }
-      if (typeForQ === 'datetime' && active.mode === 'time' && pendingDatetimeRef.current) {
-        const datePart = pendingDatetimeRef.current;
-        const yyyy = String(datePart.getFullYear()).padStart(4, '0');
-        const mm = String(datePart.getMonth() + 1).padStart(2, '0');
-        const dd = String(datePart.getDate()).padStart(2, '0');
-        const hh = String(dateToSave.getHours()).padStart(2, '0');
-        const min = String(dateToSave.getMinutes()).padStart(2, '0');
-        onTextChange(active.qId, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
-        pendingDatetimeRef.current = null;
-        setShowPicker(null);
-        return;
-      }
-      setPickerDate(dateToSave);
-      if (active.mode === 'date') {
-        const yyyy = String(dateToSave.getFullYear()).padStart(4, '0');
-        const mm = String(dateToSave.getMonth() + 1).padStart(2, '0');
-        const dd = String(dateToSave.getDate()).padStart(2, '0');
-        onTextChange(active.qId, `${yyyy}-${mm}-${dd}`);
-      } else if (active.mode === 'time') {
-        const hh = String(dateToSave.getHours()).padStart(2, '0');
-        const min = String(dateToSave.getMinutes()).padStart(2, '0');
-        onTextChange(active.qId, `${hh}:${min}`);
-      }
-      setShowPicker(null);
-      return;
-    }
-    let next = selectedDate;
-    if (!next && event?.nativeEvent?.timestamp) {
-      const ts = Number(event.nativeEvent.timestamp);
-      if (!isNaN(ts)) next = new Date(ts);
-    }
-    if (next && !isNaN(next.getTime())) {
-      setPickerDate(next);
-    }
-  };
-
-  const handleValueChange = (_event: any, date: Date) => {
-    if (!date || isNaN(date.getTime())) return;
-    const active = showPicker;
-    if (!active) {
-      setPickerDate(date);
-      return;
-    }
-    const qForId = questions.find((qq: any) => qq.id === active.qId);
-    const typeForQ = String(qForId?.type || qForId?.question_type || '').toLowerCase();
-    if (typeForQ === 'datetime' && active.mode === 'date') {
-      pendingDatetimeRef.current = new Date(date);
-      setPickerDate(date);
-      setShowPicker({ qId: active.qId, mode: 'time' });
-      return;
-    }
-    if (typeForQ === 'datetime' && active.mode === 'time' && pendingDatetimeRef.current) {
-      const datePart = pendingDatetimeRef.current;
-      const yyyy = String(datePart.getFullYear()).padStart(4, '0');
-      const mm = String(datePart.getMonth() + 1).padStart(2, '0');
-      const dd = String(datePart.getDate()).padStart(2, '0');
-      const hh = String(date.getHours()).padStart(2, '0');
-      const min = String(date.getMinutes()).padStart(2, '0');
-      onTextChange(active.qId, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
-      pendingDatetimeRef.current = null;
-      setShowPicker(null);
-      return;
-    }
-    setPickerDate(date);
-    if (active.mode === 'date') {
-      const yyyy = String(date.getFullYear()).padStart(4, '0');
-      const mm = String(date.getMonth() + 1).padStart(2, '0');
-      const dd = String(date.getDate()).padStart(2, '0');
-      onTextChange(active.qId, `${yyyy}-${mm}-${dd}`);
-    } else if (active.mode === 'time') {
-      const hh = String(date.getHours()).padStart(2, '0');
-      const min = String(date.getMinutes()).padStart(2, '0');
-      onTextChange(active.qId, `${hh}:${min}`);
-    }
-    setShowPicker(null);
-  };
-
-  const handleDismiss = () => {
-    pendingDatetimeRef.current = null;
-    setShowPicker(null);
-  };
-
-  const confirmPicker = () => {
-    const active = showPicker;
-    if (!active) return;
-    const qForId = questions.find((qq: any) => qq.id === active.qId);
-    const typeForQ = String(qForId?.type || qForId?.question_type || '').toLowerCase();
-    if (typeForQ === 'datetime' && active.mode === 'date') {
-      pendingDatetimeRef.current = new Date(pickerDate);
-      setShowPicker({ qId: active.qId, mode: 'time' });
-      return;
-    }
-    if (typeForQ === 'datetime' && active.mode === 'time' && pendingDatetimeRef.current) {
-      const datePart = pendingDatetimeRef.current;
-      const yyyy = String(datePart.getFullYear()).padStart(4, '0');
-      const mm = String(datePart.getMonth() + 1).padStart(2, '0');
-      const dd = String(datePart.getDate()).padStart(2, '0');
-      const hh = String(pickerDate.getHours()).padStart(2, '0');
-      const min = String(pickerDate.getMinutes()).padStart(2, '0');
-      onTextChange(active.qId, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
-      pendingDatetimeRef.current = null;
-      setShowPicker(null);
-      return;
-    }
-    if (active.mode === 'date') {
-      const yyyy = String(pickerDate.getFullYear()).padStart(4, '0');
-      const mm = String(pickerDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(pickerDate.getDate()).padStart(2, '0');
-      onTextChange(active.qId, `${yyyy}-${mm}-${dd}`);
-    } else if (active.mode === 'time') {
-      const hh = String(pickerDate.getHours()).padStart(2, '0');
-      const min = String(pickerDate.getMinutes()).padStart(2, '0');
-      onTextChange(active.qId, `${hh}:${min}`);
-    }
-    setShowPicker(null);
-  };
-
-  const cancelPicker = () => {
-    pendingDatetimeRef.current = null;
-    setShowPicker(null);
+  const openPicker = (qId: number, requestedMode: 'date' | 'time') => {
+    const qForId = questions.find((qq: any) => String(qq.id) === String(qId));
+    const rawType = String(qForId?.type || qForId?.question_type || requestedMode).toLowerCase();
+    const pickerMode: 'date' | 'time' | 'datetime' =
+      rawType === 'datetime' ? 'datetime' : rawType === 'time' ? 'time' : 'date';
+    setShowPicker({ qId, mode: pickerMode });
   };
 
   const themeColor =
@@ -289,29 +97,64 @@ export function QuizStyleAnsweringStep({
   // Animation values for 1-by-1 question sliding
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const isTransitioningRef = useRef(false);
+  const pendingDirRef = useRef<number>(1);
 
   const totalQ = questions.length;
   const currentQ = questions[currentIdx] || questions[0];
 
   const animateToQuestion = (newIdx: number, dir: number) => {
-    slideAnim.setValue(dir * 50);
-    fadeAnim.setValue(0.3);
+    if (isTransitioningRef.current) return;
+    isTransitioningRef.current = true;
+    pendingDirRef.current = dir;
 
-    setCurrentIdx(newIdx);
-
+    // Stage 1: Slide & Fade OUT old question (Native Driver 60fps)
     Animated.parallel([
       Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 180,
+        toValue: -dir * 50,
+        duration: 90,
+        easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 180,
+        toValue: 0,
+        duration: 90,
+        easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
-    ]).start();
+    ]).start(() => {
+      // Update state while hidden (opacity = 0)
+      setCurrentIdx(newIdx);
+    });
   };
+
+  // Stage 2: Trigger Stage 2 ONLY AFTER React has updated state & re-rendered new question!
+  useEffect(() => {
+    if (!isTransitioningRef.current) return;
+
+    const dir = pendingDirRef.current;
+    slideAnim.setValue(dir * 50);
+    fadeAnim.setValue(0);
+
+    requestAnimationFrame(() => {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 140,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 140,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        isTransitioningRef.current = false;
+      });
+    });
+  }, [currentIdx]);
 
   const isAnswered = (q: any, val: any) => {
     if (q?.type === 'file_upload' || q?.question_type === 'file_upload') return !!val;
@@ -323,22 +166,49 @@ export function QuizStyleAnsweringStep({
     setReviewed((prev) => ({ ...prev, [qId]: !prev[qId] }));
   };
 
+  const verifiedPwCacheRef = useRef<Record<number, string>>({});
+
+  const verifySinglePassword = async (q: any, inputAns: string): Promise<boolean> => {
+    const trimmed = inputAns.trim();
+    if (!trimmed) return false;
+
+    // 1. Cache hit (already verified once)
+    if (verifiedPwCacheRef.current[q.id] === trimmed) {
+      return true;
+    }
+
+    // 2. Local schema match check
+    const localPw = q?.password || q?.correct_answer || q?.answer || q?.settings?.password || q?.meta?.password;
+    if (localPw && String(localPw).trim() === trimmed) {
+      verifiedPwCacheRef.current[q.id] = trimmed;
+      return true;
+    }
+
+    // 3. Fallback API check
+    if (!submissionId) return false;
+    try {
+      const res = await checkPassword(submissionId, q.id, trimmed);
+      if (res && res.valid) {
+        verifiedPwCacheRef.current[q.id] = trimmed;
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
   const checkPasswordForQuestions = async (qs: any[]): Promise<number[]> => {
     // untuk quiz: semua password jadi gate — kosong pun salah (token hahay OPTIONAL tetap harus benar untuk Next)
     const targets = qs.filter((q) => String(q.type || q.question_type || '').toLowerCase() === 'password');
     if (!targets.length) return [];
-    if (!submissionId) return targets.map((q: any) => q.id);
-    const { checkPassword } = await import('../../services/api_service');
+
     const wrong: number[] = [];
     for (const q of targets) {
       const ans = String(answers[q.id] ?? '');
       if (!ans.trim()) { wrong.push(q.id); continue; }
-      try {
-        const res = await checkPassword(submissionId, q.id, ans);
-        if (!res.valid) wrong.push(q.id);
-      } catch {
-        wrong.push(q.id);
-      }
+      const isValid = await verifySinglePassword(q, ans);
+      if (!isValid) wrong.push(q.id);
     }
     return wrong;
   };
@@ -399,7 +269,7 @@ export function QuizStyleAnsweringStep({
         setPwWrong((p) => ({ ...p, [currentQ.id]: true }));
         return;
       }
-      if (!submissionId) {
+      if (!submissionId && !currentQ?.password && !currentQ?.correct_answer) {
         setPwWrong((p) => ({ ...p, [currentQ.id]: true }));
         showAlert({
           type: 'warning',
@@ -408,32 +278,37 @@ export function QuizStyleAnsweringStep({
         });
         return;
       }
-      setPwChecking(true);
-      try {
-        const { checkPassword } = await import('../../services/api_service');
-        const res = await checkPassword(submissionId, currentQ.id, ans);
-        if (!res.valid) {
-          setPwWrong((p) => ({ ...p, [currentQ.id]: true }));
-          showAlert({
-            type: 'warning',
-            title: language === 'ID' ? 'Password salah' : 'Wrong password',
-            message: language === 'ID' ? 'Password tidak cocok. Tidak bisa lanjut.' : 'Wrong password. Cannot proceed.',
-          });
-          setPwChecking(false);
-          return;
-        }
-        setPwWrong((p) => {
-          const n = { ...p };
-          delete n[currentQ.id];
-          return n;
-        });
-      } catch {
-        setPwWrong((p) => ({ ...p, [currentQ.id]: true }));
-        showAlert({ type: 'warning', title: 'Password salah', message: 'Gagal verifikasi password.' });
+
+      // Quick check: cache or local schema match first without triggering loading spinner
+      const isLocallyValid =
+        verifiedPwCacheRef.current[currentQ.id] === ans.trim() ||
+        (Boolean(currentQ.password || currentQ.correct_answer || currentQ.answer || currentQ.settings?.password) &&
+          String(currentQ.password || currentQ.correct_answer || currentQ.answer || currentQ.settings?.password).trim() === ans.trim());
+
+      let isValid = isLocallyValid;
+      if (!isValid) {
+        setPwChecking(true);
+        isValid = await verifySinglePassword(currentQ, ans);
         setPwChecking(false);
+      } else {
+        verifiedPwCacheRef.current[currentQ.id] = ans.trim();
+      }
+
+      if (!isValid) {
+        setPwWrong((p) => ({ ...p, [currentQ.id]: true }));
+        showAlert({
+          type: 'warning',
+          title: language === 'ID' ? 'Password salah' : 'Wrong password',
+          message: language === 'ID' ? 'Password tidak cocok. Tidak bisa lanjut.' : 'Wrong password. Cannot proceed.',
+        });
         return;
       }
-      setPwChecking(false);
+
+      setPwWrong((p) => {
+        const n = { ...p };
+        delete n[currentQ.id];
+        return n;
+      });
     }
 
     if (currentIdx < totalQ - 1) {
@@ -945,14 +820,16 @@ export function QuizStyleAnsweringStep({
       </KeyboardAvoidingView>
 
       {showPicker && (
-        <DateTimePicker
-          key={`${showPicker.qId}-${showPicker.mode}`}
-          value={pickerDate}
+        <CustomDateTimePickerModal
+          visible={!!showPicker}
           mode={showPicker.mode}
-          display="spinner"
-          is24Hour={true}
-          onValueChange={handleValueChange}
-          onDismiss={handleDismiss}
+          initialValue={typeof answers[showPicker.qId] === 'string' ? answers[showPicker.qId] : ''}
+          themeColor={themeColor}
+          onConfirm={(formattedVal) => {
+            onTextChange(showPicker.qId, formattedVal);
+            setShowPicker(null);
+          }}
+          onCancel={() => setShowPicker(null)}
         />
       )}
 
