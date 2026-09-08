@@ -190,36 +190,7 @@ function QuizQuestionCardComponent({
   };
 
   const handleValueChange = (_event: any, date: Date) => {
-    if (!date || isNaN(date.getTime())) return;
-    setPickerDate(date);
-    if (q.type === 'datetime' && showPicker === 'date') {
-      pendingDatetimeRef.current = new Date(date);
-      setShowPicker('time');
-      return;
-    }
-    if (q.type === 'datetime' && showPicker === 'time' && pendingDatetimeRef.current) {
-      const datePart = pendingDatetimeRef.current;
-      const yyyy = String(datePart.getFullYear()).padStart(4, '0');
-      const mm = String(datePart.getMonth() + 1).padStart(2, '0');
-      const dd = String(datePart.getDate()).padStart(2, '0');
-      const hh = String(date.getHours()).padStart(2, '0');
-      const min = String(date.getMinutes()).padStart(2, '0');
-      onTextChange(q.id, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
-      pendingDatetimeRef.current = null;
-      setShowPicker(null);
-      return;
-    }
-    if (showPicker === 'date') {
-      const yyyy = String(date.getFullYear()).padStart(4, '0');
-      const mm = String(date.getMonth() + 1).padStart(2, '0');
-      const dd = String(date.getDate()).padStart(2, '0');
-      onTextChange(q.id, `${yyyy}-${mm}-${dd}`);
-    } else if (showPicker === 'time') {
-      const hh = String(date.getHours()).padStart(2, '0');
-      const min = String(date.getMinutes()).padStart(2, '0');
-      onTextChange(q.id, `${hh}:${min}`);
-    }
-    setShowPicker(null);
+    if (date && !isNaN(date.getTime())) setPickerDate(date);
   };
 
   const handleDismiss = () => {

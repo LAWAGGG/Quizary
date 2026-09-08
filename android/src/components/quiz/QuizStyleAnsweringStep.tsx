@@ -467,9 +467,9 @@ export function QuizStyleAnsweringStep({
   const isTimeType = rawType === 'time';
   const isDatetimeType = rawType === 'datetime';
   const isPasswordType = rawType === 'password';
+  const isShortAnswerType = rawType === 'short_answer';
   const isEssayType = rawType === 'essay' || rawType === 'long_text';
   const isFileUploadType = rawType === 'file_upload' || rawType === 'file';
-  const isTextType = !isOptionType && !isDropdownType && !isDateType && !isTimeType && !isDatetimeType && !isPasswordType && !isFileUploadType;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -788,15 +788,16 @@ export function QuizStyleAnsweringStep({
                     );
                   })()}
 
-                  {/* Short Answer / General Text Input */}
-                  {isTextType && (
+                  {/* Short Answer */}
+                  {isShortAnswerType && (
                     <View style={styles.textInputBox}>
                       <TextInput
-                        style={[styles.shortAnswerInput, { color: '#FFF', fontSize: 16 * fontSizeScale }]}
-                        placeholder="Tap to answer"
+                        style={[styles.shortAnswerInput, { height: 110, textAlignVertical: 'top', color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                        placeholder="Write your answer here..."
                         placeholderTextColor="#64748B"
                         value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                         onChangeText={(text) => onTextChange(currentQ.id, text)}
+                        multiline
                       />
                     </View>
                   )}
