@@ -37,6 +37,8 @@ export default function Register() {
     if (!form.password) errors.password = t('auth.passwordRequired')
     else if (form.password.length < 8)
       errors.password = t('auth.passwordMin')
+    else if (!/^[!-~]+$/.test(form.password))
+      errors.password = t('auth.passwordInvalid')
     if (!form.password_confirmation)
       errors.password_confirmation = t('auth.confirmRequired')
     else if (form.password !== form.password_confirmation)

@@ -418,7 +418,6 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                   min={0}
                   max={999}
                   disabled={!form.is_scored || scoringMode === 'auto'}
-                  helper={scoringMode === 'auto' ? t('questionBuilder.pointsAutoHint') : (form.is_scored ? t('questionBuilder.pointsManualHint') : t('questionBuilder.scoringInactiveHint'))}
                   error={ferr('points')}
                 />
               ) : (
@@ -427,9 +426,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                   <p className="input-field cursor-default flex items-center text-sm text-gray-600 dark:text-gray-300">
                     {scoringMode === 'auto' ? t('questionBuilder.pointsAuto', { points: projectedAutoPoints }) : t('questionBuilder.pointsAuto', { points: form.points })}
                   </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                    {scoringMode === 'auto' ? t('questionBuilder.pointsAutoHint') : t('questionBuilder.pointsManualHint')}
-                  </p>
+
                 </div>
               )}
             </div>
@@ -2318,7 +2315,6 @@ export default function QuestionBuilder() {
                 : t('questionBuilder.activeSubmissionsMessage', { title: deleteWarning?.questionName || '', count: deleteWarning?.activeCount })
               }
             </p>
-            <p className="mt-2 text-sm">Menghapus soal ini akan membuat submission yang sedang berjalan kehilangan data ini. Tetap hapus?</p>
           </div>
         }
         onConfirm={() => {
@@ -2330,7 +2326,7 @@ export default function QuestionBuilder() {
           setDeleteWarning(null)
         }}
         onCancel={() => setDeleteWarning(null)}
-        confirmText="Tetap Hapus"
+        confirmText="Delete Anyway"
         variant="danger"
       />
 

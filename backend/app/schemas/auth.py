@@ -1,6 +1,12 @@
+import re
 from typing import Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# Password hanya ASCII printable tanpa spasi (0x21-0x7E): huruf, angka,
+# karakter spesial boleh; spasi, emoji, ikon non-ASCII ditolak.
+_PASSWORD_RE = re.compile(r"^[!-~]+$")
+_PASSWORD_MSG = "Password may only contain letters, numbers, and special characters"
 
 
 class RegisterRequest(BaseModel):
@@ -9,6 +15,13 @@ class RegisterRequest(BaseModel):
     # bcrypt hanya memproses 72 byte pertama — batasi di sini supaya tidak 500.
     password: str = Field(min_length=8, max_length=72)
     password_confirmation: str
+
+    @field_validator("password")
+    @classmethod
+    def password_charset(cls, v: str) -> str:
+        if not _PASSWORD_RE.fullmatch(v):
+            raise ValueError(_PASSWORD_MSG)
+        return v
 
     @model_validator(mode="after")
     def passwords_match(self):
@@ -55,6 +68,13 @@ class PasswordUpdateRequest(BaseModel):
     old_password: str = Field(..., min_length=1, max_length=72)
     new_password: str = Field(min_length=8, max_length=72)
     new_password_confirmation: str
+
+    @field_validator("new_password")
+    @classmethod
+    def new_password_charset(cls, v: str) -> str:
+        if not _PASSWORD_RE.fullmatch(v):
+            raise ValueError(_PASSWORD_MSG)
+        return v
 
     @model_validator(mode="after")
     def passwords_match_and_different(self):

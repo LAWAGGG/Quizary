@@ -10,16 +10,25 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+function clearStaleAuth() {
+  if (!localStorage.getItem('token') && !localStorage.getItem('user')) return
+  localStorage.removeItem('token')
+  localStorage.removeItem('user')
+  window.dispatchEvent(new Event('quizary:auth-cleared'))
+}
+
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    // Public pages (FormLanding / AnswerQuiz) handle 401 themselves (e.g.
-    // require_login gate). Don't bounce them to /login and lose form context.
+    if (err.response?.status !== 401) return Promise.reject(err)
+    // Token basi/invalid → selalu bersihkan agar PublicRoute tidak bounce
+    // balik ke /q/... (loop login). Public pages handle 401 sendiri,
+    // jadi jangan redirect dan hilangkan konteks form.
+    clearStaleAuth()
     const path = window.location.pathname
     const isPublic = path.startsWith('/q/') || path.startsWith('/s/')
-    if (err.response?.status === 401 && !isPublic && !path.includes('/login')) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
+    const isAuth = path.includes('/login') || path.includes('/register') || path.includes('/otp')
+    if (!isPublic && !isAuth) {
       const next = encodeURIComponent(path + window.location.search)
       window.location.href = `/login?next=${next}`
     }

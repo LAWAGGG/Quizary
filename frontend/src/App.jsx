@@ -24,8 +24,9 @@ import MySubmissions from './pages/profile/MySubmissions'
 import Settings from './pages/profile/Settings'
 
 function ProtectedRoute({ children }) {
-  const { user } = useAuth()
+  const { user, ready } = useAuth()
   const location = useLocation()
+  if (!ready) return null
   if (!user) {
     const from = location.pathname + location.search
     return <Navigate to={`/login?next=${encodeURIComponent(from)}`} state={{ from }} replace />
@@ -34,12 +35,15 @@ function ProtectedRoute({ children }) {
 }
 
 function PublicRoute({ children }) {
-  const { user } = useAuth()
+  const { user, ready } = useAuth()
   const location = useLocation()
+  // Tunggu validasi /me dulu — user basi belum dibersihkan bikin bounce
+  // /login → /q/... → /login (loop di Chrome desktop bertoken expired).
+  if (!ready) return null
   if (user) {
     const from = location.state?.from || new URLSearchParams(location.search).get('next')
     // cegah loop jika from masih halaman auth
-    const safe = from && !from.startsWith('/login') && !from.startsWith('/register') ? from : '/'
+    const safe = from && !from.startsWith('/login') && !from.startsWith('/register') && !from.startsWith('/otp') ? from : '/'
     return <Navigate to={safe} replace />
   }
   return children

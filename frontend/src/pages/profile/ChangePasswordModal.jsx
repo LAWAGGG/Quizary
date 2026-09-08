@@ -67,6 +67,7 @@ export default function ChangePasswordModal({ show, onClose }) {
     const next = { old: '', pw: '', confirm: '' }
     if (!values.old.trim()) next.old = t('profile.password.oldRequired')
     if (values.pw.length < 8) next.pw = t('profile.password.tooShort')
+    else if (!/^[!-~]+$/.test(values.pw)) next.pw = t('auth.passwordInvalid')
     if (!values.confirm.trim()) next.confirm = t('profile.password.confirmRequired')
     if (next.old || next.pw || next.confirm) {
       setErrors(next)
@@ -103,6 +104,8 @@ export default function ChangePasswordModal({ show, onClose }) {
         setErrors((prev) => ({ ...prev, pw: t('profile.password.sameAsOld') }))
       } else if (joined.includes('match')) {
         setErrors((prev) => ({ ...prev, confirm: t('profile.password.mismatch') }))
+      } else if (joined.includes('emoji') || joined.includes('spaces') || joined.includes('only contain') || joined.includes('spasi')) {
+        setErrors((prev) => ({ ...prev, pw: t('auth.passwordInvalid') }))
       } else if (joined.includes('least') || fields.new_password) {
         setErrors((prev) => ({ ...prev, pw: t('profile.password.tooShort') }))
       } else {
