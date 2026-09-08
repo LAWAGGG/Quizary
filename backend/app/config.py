@@ -27,6 +27,24 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = _secret_or_env("SMTP_PASSWORD")
 SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER)
 
+
+def get_smtp_config() -> dict[str, str | int]:
+    """Baca SMTP config fresh per-request (hot-reload .env tanpa restart).
+
+    load_dotenv(override=True) memuat ulang file .env yang barusan di-edit
+    user agar ganti akun langsung terbaca tanpa restart. Cache lama di
+    modul (SMTP_USER dll) tetap ada untuk kompatibilitas, tapi pengirim
+    email WAJIB pakai fungsi ini.
+    """
+    load_dotenv(override=True)
+    host = os.getenv("SMTP_HOST", "")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    user = os.getenv("SMTP_USER", "")
+    # SMTP_PASSWORD bisa via file secret
+    pwd = _secret_or_env("SMTP_PASSWORD")
+    from_addr = os.getenv("SMTP_FROM", user)
+    return {"host": host, "port": port, "user": user, "password": pwd, "from": from_addr}
+
 GEMINI_API_KEY = _secret_or_env("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")

@@ -453,7 +453,7 @@ export default function FormList() {
               className={`group inline-flex items-center gap-2 px-4 h-9 rounded-full text-sm font-medium border transition-all duration-200 ${activeCategory === null ? 'bg-ink text-white border-ink shadow-md dark:bg-white dark:text-ink scale-[1.02]' : 'bg-white dark:bg-ink-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-primary-200 hover:bg-primary-50/50 dark:hover:bg-ink-700 hover:shadow-sm hover:-translate-y-0.5'}`}
             >
               {t('forms.allCategories')}
-              <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold ${activeCategory===null ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-ink-700 text-gray-500'}`}>{meta.total}</span>
+              <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold ${activeCategory===null ? 'bg-gray-600 text-white' : 'bg-gray-100 dark:bg-ink-700 text-gray-500'}`}>{meta.total}</span>
             </button>
 
             {categories.map((cat) => (

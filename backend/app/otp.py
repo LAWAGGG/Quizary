@@ -17,13 +17,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import parseaddr
 
-from app.config import (
-    SMTP_FROM,
-    SMTP_HOST,
-    SMTP_PASSWORD,
-    SMTP_PORT,
-    SMTP_USER,
-)
+import app.config as _cfg
 
 logger = logging.getLogger("quizary")
 
@@ -98,18 +92,21 @@ account, you can ignore this email.</p>"""
 
 def send_reset_email(to_email: str, code: str) -> None:
     """Send password-reset OTP (separate copy so users can distinguish flows)."""
-    if not SMTP_HOST:
+    cfg = _cfg.get_smtp_config()
+    host, port, user, pwd, from_addr = cfg["host"], cfg["port"], cfg["user"], cfg["password"], cfg["from"]
+    if not host:
         logger.info("[OTP dev mode] Reset code for %s: %s", to_email, code)
         print(f"[OTP dev mode] Reset code for {to_email}: {code}")
         return
-    sender = SMTP_FROM.strip() if SMTP_FROM else ""
+    sender = from_addr.strip() if from_addr else ""
     if not _valid_sender(sender):
-        sender = SMTP_USER.strip() if SMTP_USER else ""
+        sender = user.strip() if user else ""
     if not _valid_sender(sender):
         raise RuntimeError(
             "SMTP_FROM must be a valid email address, or SMTP_USER must be set "
             "to a valid email address"
         )
+    logger.info("Sending reset OTP to %s via %s as %s (host=%s)", to_email, user, sender, host)
     text, html = _render_reset(code)
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "Your Quizary password reset code"
@@ -117,16 +114,18 @@ def send_reset_email(to_email: str, code: str) -> None:
     msg["To"] = to_email
     msg.attach(MIMEText(text, "plain"))
     msg.attach(MIMEText(html, "html"))
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+    with smtplib.SMTP(host, port, timeout=10) as server:
         server.starttls()
-        if SMTP_USER:
-            server.login(SMTP_USER, SMTP_PASSWORD)
+        if user:
+            server.login(user, pwd)
         server.sendmail(sender, [to_email], msg.as_string())
 
 
 def send_otp_email(to_email: str, code: str) -> None:
     """Send the OTP. Logs the code when SMTP is not configured (dev mode)."""
-    if not SMTP_HOST:
+    cfg = _cfg.get_smtp_config()
+    host, port, user, pwd, from_addr = cfg["host"], cfg["port"], cfg["user"], cfg["password"], cfg["from"]
+    if not host:
         logger.info("[OTP dev mode] Code for %s: %s", to_email, code)
         print(f"[OTP dev mode] Code for {to_email}: {code}")
         return
@@ -134,14 +133,15 @@ def send_otp_email(to_email: str, code: str) -> None:
     # Authenticated SMTP providers generally only permit a sender owned by
     # the authenticated account. Fall back to SMTP_USER when SMTP_FROM is
     # empty or malformed (for example, ``no-reply@Quizary``).
-    sender = SMTP_FROM.strip() if SMTP_FROM else ""
+    sender = from_addr.strip() if from_addr else ""
     if not _valid_sender(sender):
-        sender = SMTP_USER.strip() if SMTP_USER else ""
+        sender = user.strip() if user else ""
     if not _valid_sender(sender):
         raise RuntimeError(
             "SMTP_FROM must be a valid email address, or SMTP_USER must be set "
             "to a valid email address"
         )
+    logger.info("Sending OTP to %s via %s as %s (host=%s)", to_email, user, sender, host)
 
     text, html = _render(code)
     msg = MIMEMultipart("alternative")
@@ -151,8 +151,8 @@ def send_otp_email(to_email: str, code: str) -> None:
     msg.attach(MIMEText(text, "plain"))
     msg.attach(MIMEText(html, "html"))
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+    with smtplib.SMTP(host, port, timeout=10) as server:
         server.starttls()
-        if SMTP_USER:
-            server.login(SMTP_USER, SMTP_PASSWORD)
+        if user:
+            server.login(user, pwd)
         server.sendmail(sender, [to_email], msg.as_string())

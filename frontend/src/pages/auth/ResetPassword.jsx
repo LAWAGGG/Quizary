@@ -263,10 +263,7 @@ export default function ResetPassword() {
                 </div>
               ) : (
                 <form onSubmit={handleReset} className="space-y-4">
-                  <div className="flex items-center gap-2 rounded-xl bg-correct-soft border border-correct/20 px-3 py-2.5 text-sm text-correct">
-                    <Check className="w-4 h-4 shrink-0" /> {t('auth.codeVerified')} <span className="font-mono font-bold">{verifiedCode}</span>
-                    <button type="button" onClick={() => { setVerifiedCode(''); setShowOtp(true) }} className="ml-auto text-xs font-semibold underline hover:no-underline">{t('auth.changeCode')}</button>
-                  </div>
+                
                   <div className="relative">
                     <Input label={t('auth.newPassword')} type={showPw ? 'text' : 'password'} placeholder={t('auth.passwordHint')} value={password} onChange={(e) => { setPassword(e.target.value); if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: '' })) }} error={fieldErrors.password} className="pl-10 pr-10" />
                     <Lock className="pointer-events-none absolute left-3.5 top-12 -translate-y-1/2 w-[18px] h-[18px] text-gray-400 dark:text-gray-500" />
