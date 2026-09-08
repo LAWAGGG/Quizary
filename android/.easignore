@@ -1,0 +1,6 @@
+# Ignore root files outside android directory
+../*
+.expo/
+node_modules/
+dist/
+*.log
