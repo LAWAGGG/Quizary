@@ -795,26 +795,7 @@ export function QuizStyleAnsweringStep({
                     </View>
                   )}
 
-                  {showPicker && (
-                    <Modal transparent animationType="fade" visible={!!showPicker} onRequestClose={cancelPicker}>
-                      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16 }}>
-                        <View style={{ backgroundColor: isDark ? '#1E293B' : '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: isDark ? '#334155' : '#E2E8F0' }}>
-                          <Text style={{ fontWeight: '700', fontSize: 14, color: isDark ? '#FFF' : '#0F172A', textAlign: 'center', marginBottom: 8 }}>
-                            {showPicker.mode === 'date' ? (isDatetimeType && !pendingDatetimeRef.current ? 'Pilih Tanggal' : 'Pilih Tanggal') : isDatetimeType ? 'Pilih Waktu' : 'Pilih Waktu'}
-                          </Text>
-                          <DateTimePicker value={pickerDate} mode={showPicker.mode} display="spinner" is24Hour={true} onChange={handlePickerChange} />
-                          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 12 }}>
-                            <TouchableOpacity onPress={cancelPicker} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: isDark ? '#334155' : '#F1F5F9', borderWidth: 1, borderColor: isDark ? '#475569' : '#E2E8F0' }}>
-                              <Text style={{ color: isDark ? '#FFF' : '#0F172A', fontWeight: '700' }}>BATAL</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={confirmPicker} style={{ paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10, backgroundColor: themeColor }}>
-                              <Text style={{ color: '#FFF', fontWeight: '700' }}>{isDatetimeType && showPicker.mode === 'date' ? 'LANJUT' : 'OK'}</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      </View>
-                    </Modal>
-                  )}
+
 
                   {/* Password Input — blocked until correct */}
                   {isPasswordType && (
@@ -872,6 +853,28 @@ export function QuizStyleAnsweringStep({
           </TouchableWithoutFeedback>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* DATE/TIME/DATETIME PICKER MODAL — outside ScrollView/Animated to avoid behind header + gap + Keyboard.dismiss swallow */}
+      {showPicker && (
+        <Modal transparent animationType="fade" visible={!!showPicker} onRequestClose={cancelPicker} statusBarTranslucent>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16 }}>
+            <View style={{ backgroundColor: isDark ? '#1E293B' : '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: isDark ? '#334155' : '#E2E8F0', elevation: 20 }}>
+              <Text style={{ fontWeight: '700', fontSize: 14, color: isDark ? '#FFF' : '#0F172A', textAlign: 'center', marginBottom: 8 }}>
+                {showPicker.mode === 'date' ? 'Pilih Tanggal' : 'Pilih Waktu'}
+              </Text>
+              <DateTimePicker value={pickerDate} mode={showPicker.mode} display="spinner" is24Hour={true} onChange={handlePickerChange} textColor={isDark ? '#FFF' : '#0F172A'} themeVariant={isDark ? 'dark' : 'light'} />
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
+                <TouchableOpacity onPress={cancelPicker} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: isDark ? '#334155' : '#F1F5F9', borderWidth: 1, borderColor: isDark ? '#475569' : '#E2E8F0' }}>
+                  <Text style={{ color: isDark ? '#FFF' : '#0F172A', fontWeight: '700' }}>BATAL</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={confirmPicker} style={{ marginLeft: 12, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10, backgroundColor: themeColor }}>
+                  <Text style={{ color: '#FFF', fontWeight: '700' }}>{(() => { const qForId = questions.find((qq: any) => qq.id === showPicker.qId); const t = String(qForId?.type || qForId?.question_type || '').toLowerCase(); return t === 'datetime' && showPicker.mode === 'date' ? 'LANJUT' : 'OK'; })()}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* BOTTOM ACTION BAR (Matching Web Screenshot 1 with Previous Text & Bright Green Next Button) */}
       <View style={styles.bottomActionBar}>
