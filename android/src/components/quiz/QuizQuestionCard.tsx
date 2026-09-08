@@ -134,21 +134,68 @@ function QuizQuestionCardComponent({
     setShowPicker(mode);
   };
 
-  const handlePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (event.type === 'dismissed') {
+  const handlePickerChange = (event: any, selectedDate?: Date) => {
+    if (event?.type === 'dismissed') {
       pendingDatetimeRef.current = null;
       setShowPicker(null);
       return;
     }
-    // Keep controlled value in sync live — no snap
+    if (event?.type === 'set' || event?.type === 'neutralButtonPressed') {
+      let dateToSave = selectedDate;
+      if (!dateToSave && event?.nativeEvent?.timestamp) {
+        const ts = Number(event.nativeEvent.timestamp);
+        if (!isNaN(ts)) dateToSave = new Date(ts);
+      }
+      if (!dateToSave || isNaN(dateToSave.getTime())) dateToSave = pickerDate;
+      // 2 native Set for datetime: date Set → time picker, time Set → commit
+      if (q.type === 'datetime' && showPicker === 'date') {
+        pendingDatetimeRef.current = new Date(dateToSave);
+        setPickerDate(dateToSave);
+        setShowPicker('time');
+        return;
+      }
+      if (q.type === 'datetime' && showPicker === 'time' && pendingDatetimeRef.current) {
+        const datePart = pendingDatetimeRef.current;
+        const yyyy = String(datePart.getFullYear()).padStart(4, '0');
+        const mm = String(datePart.getMonth() + 1).padStart(2, '0');
+        const dd = String(datePart.getDate()).padStart(2, '0');
+        const hh = String(dateToSave.getHours()).padStart(2, '0');
+        const min = String(dateToSave.getMinutes()).padStart(2, '0');
+        onTextChange(q.id, `${yyyy}-${mm}-${dd}T${hh}:${min}`);
+        pendingDatetimeRef.current = null;
+        setShowPicker(null);
+        return;
+      }
+      setPickerDate(dateToSave);
+      if (showPicker === 'date') {
+        const yyyy = String(dateToSave.getFullYear()).padStart(4, '0');
+        const mm = String(dateToSave.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateToSave.getDate()).padStart(2, '0');
+        onTextChange(q.id, `${yyyy}-${mm}-${dd}`);
+      } else if (showPicker === 'time') {
+        const hh = String(dateToSave.getHours()).padStart(2, '0');
+        const min = String(dateToSave.getMinutes()).padStart(2, '0');
+        onTextChange(q.id, `${hh}:${min}`);
+      }
+      setShowPicker(null);
+      return;
+    }
+    // Live sync for spinner without commit
     let next = selectedDate;
-    if (!next && (event as any)?.nativeEvent?.timestamp) {
-      const ts = Number((event as any).nativeEvent.timestamp);
+    if (!next && event?.nativeEvent?.timestamp) {
+      const ts = Number(event.nativeEvent.timestamp);
       if (!isNaN(ts)) next = new Date(ts);
     }
-    if (next && !isNaN(next.getTime())) {
-      setPickerDate(next);
-    }
+    if (next && !isNaN(next.getTime())) setPickerDate(next);
+  };
+
+  const handleValueChange = (_event: any, date: Date) => {
+    if (date && !isNaN(date.getTime())) setPickerDate(date);
+  };
+
+  const handleDismiss = () => {
+    pendingDatetimeRef.current = null;
+    setShowPicker(null);
   };
 
   const confirmPicker = () => {
@@ -483,24 +530,16 @@ function QuizQuestionCardComponent({
       )}
 
       {showPicker && (
-        <Modal transparent animationType="fade" visible={!!showPicker} onRequestClose={cancelPicker}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16 }}>
-            <View style={{ backgroundColor: isDark ? '#1E293B' : '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.cardBorder }}>
-              <Text style={{ fontWeight: '700', fontSize: 14, color: colors.text, textAlign: 'center', marginBottom: 8 }}>
-                {showPicker === 'date' ? (q.type === 'datetime' && !pendingDatetimeRef.current ? 'Pilih Tanggal' : 'Pilih Tanggal') : q.type === 'datetime' ? 'Pilih Waktu' : 'Pilih Waktu'}
-              </Text>
-              <DateTimePicker value={pickerDate} mode={showPicker} display="spinner" is24Hour={true} onChange={handlePickerChange} />
-              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 12 }}>
-                <TouchableOpacity onPress={cancelPicker} style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.cardBorder }}>
-                  <Text style={{ color: colors.text, fontWeight: '700' }}>BATAL</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={confirmPicker} style={{ paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10, backgroundColor: activeColor }}>
-                  <Text style={{ color: '#FFF', fontWeight: '700' }}>{q.type === 'datetime' && showPicker === 'date' ? 'LANJUT' : 'OK'}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+        <DateTimePicker
+          key={showPicker}
+          value={pickerDate}
+          mode={showPicker}
+          display="spinner"
+          is24Hour={true}
+          onChange={handlePickerChange}
+          onValueChange={handleValueChange}
+          onDismiss={handleDismiss}
+        />
       )}
 
       {/* Password Input */}
