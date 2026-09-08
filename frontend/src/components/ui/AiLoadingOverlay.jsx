@@ -67,7 +67,6 @@ export function AiLoadingOverlay({ open, mode = 'generate' }) {
                   {steps[stage]}
                 </motion.p>
               </AnimatePresence>
-              <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">{t('aiGenerate.overlayWait')}</p>
             </div>
           </motion.div>
         </motion.div>

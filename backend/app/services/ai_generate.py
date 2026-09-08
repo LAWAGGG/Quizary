@@ -90,9 +90,12 @@ Bentuk:
    "is_required": true, "points": 1, "group_id": null,
    "options": [{"option_text": "teks opsi", "is_correct": true}],
    "password_keyword": null, "answer_key": null, "allow_other": false}
-]]}], "settings": {"shuffle_questions": false, "shuffle_options": false, "timer_minutes": null, "require_login": false, "submission_limit": "unlimited", "show_leaderboard": false, "is_restricted": false, "show_in_history": true, "reveal_score": true, "reveal_answers": true, "starts_at": null, "ends_at": null}}
+]}]}], "settings": {"shuffle_questions": false, "shuffle_options": false, "timer_minutes": null, "require_login": false, "submission_limit": "unlimited", "show_leaderboard": false, "is_restricted": false, "show_in_history": true, "reveal_score": true, "reveal_answers": true, "starts_at": null, "ends_at": null}}
 
-Aturan:
+Aturan WAJIB (B-light: tanpa group/wacana):
+- SETIAP soal WAJIB standalone & mandiri — tidak bergantung soal lain. DILARANG pakai group_id (selalu null), DILARANG pakai delimiter "---" atau "--", DILARANG buat wacana/passage bersama untuk banyak soal. Jika prompt minta cerita, buat tiap soal lengkap sendiri tanpa mengulang cerita yang sama di soal lain.
+- Contoh SALAH (jangan ditiru): "Saat sidang BPUPKI ... --- Pada tanggal 18 Agustus ..." (2 topik beda disambung ---, cerita tidak nyambung dengan pertanyaan). Contoh BENAR: 2 soal terpisah lengkap tanpa ---, masing-masing pertanyaan jelas.
+- Kualitas: question_text ringkas, jelas, langsung ke inti, hindari pengulangan frasa. Untuk HOTS/story: pastikan cerita/stimulus RELEVAN langsung dengan pertanyaan yang mengikutinya. Jangan karang fakta sejarah/tanggal/nama jika tidak yakin — pakai fakta dari file referensi jika ada, atau buat soal konseptual tanpa tanggal spesifik. Jangan halusinasi.
 - options HANYA untuk multiple_choice/checkbox/dropdown (2-4 opsi); tipe lain: options [] dan password_keyword null.
 - password_keyword HANYA untuk type password (isi kata sandinya), selain itu null.
 - answer_key SELALU null — JANGAN mengarang kunci jawaban (creator mengisinya saat review; kunci salah = penilaian otomatis salah).
@@ -102,11 +105,10 @@ Aturan:
 - submission_limit: "unlimited" atau "once" (once = wajib login, auto-coerce).
 - starts_at/ends_at: ISO "YYYY-MM-DDTHH:MM:SS" atau null; starts_at harus sebelum ends_at.
 - question_text/option_text = teks polos, TANPA tag HTML (HTML mentah tampil sebagai teks, bukan render).
-- Rumus/simbol: tulis LaTeX dengan delimiter \(...\) inline atau \[...\] display. JANGAN art Unicode (√½) dan JANGAN ejaan kata ("akar kuadrat dari").
+- Rumus/simbol: tulis LaTeX dengan delimiter \\(...\\) inline atau \\[...\\] display. JANGAN art Unicode (√½) dan JANGAN ejaan kata ("akar kuadrat dari").
 - Kode: fence ```bahasa ... ``` (satu blok per snippet, bahasa opsional: python, javascript, java, sql, cpp, html). Kode inline: `satu backtick`.
 - Link: [teks](https://...) — hanya http(s); jangan link lain.
-- Maksimal 10 sections, total maksimal 30 soal. question_text ringkas.
-- Hemat token: bila user minta passage yang sama di awal banyak question_text (mis. 5 soal per passage), cukup taruh passage lengkap di soal pertama tiap grup + set group_id sama (mis. "p1") untuk 5 soal se-passage. JANGAN duplikasi passage di 4 soal lain — server akan duplikasi otomatis saat accept. Ini menghemat output token.
+- Maksimal 10 sections, total maksimal 30 soal. Hemat token: jangan ulang teks yang sama di banyak soal, tiap soal beda.
 """ % (", ".join(QUESTION_TYPES))
 
 
@@ -399,6 +401,12 @@ def _coerce_question(raw: dict) -> dict | None:
     text = str(raw.get("question_text") or "").strip()
     if not q_type or not text:
         return None
+    # B-light: bersihkan delimiter wacana yang bandel ("---"/"--") — ambil stem terakhir saja
+    if "\n\n---\n\n" in text:
+        text = text.split("\n\n---\n\n")[-1].strip()
+    if " --- " in text:
+        # kasus AI nakal: "cerita --- soal" dalam 1 baris
+        text = text.split(" --- ")[-1].strip()
     text = _rich_lite_to_html(text[:5000 - _RICH_HEADROOM])
     opts: list[dict] = []
     if q_type in OPTION_TYPES:
@@ -419,8 +427,8 @@ def _coerce_question(raw: dict) -> dict | None:
     # paksa null agar soal tak gugur validasi; creator mengisi saat review.
     # allow_other: teruskan hanya untuk MC/checkbox, selain itu False.
     allow_other = bool(raw.get("allow_other", False)) and q_type in ("multiple_choice", "checkbox")
-    # ponytail: group_id hemat token — AI boleh set group_id untuk 5 soal se-passage
-    raw_gid = str(raw.get("group_id") or "").strip()[:36] or None
+    # B-light: nonaktifkan group/wacana total — selalu null, hemat token & anti-duplikasi
+    raw_gid = None
     try:
         q = QuestionCreate(
             type=q_type,
@@ -457,11 +465,8 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
     if not sections:
         raise AiFailed("AI tidak menghasilkan soal yang valid. Coba perjelas prompt lalu generate ulang.")
 
-    # ponytail: hemat token — auto group per 5 jika AI tidak set group_id (untuk 20 soal passage)
-    all_qs = [q for s in sections for q in s["questions"]]
-    if all_qs and all(q.get("group_id") is None for q in all_qs) and len(all_qs) >= 15:
-        for idx, q in enumerate(all_qs):
-            q["group_id"] = f"p{idx//5+1}"
+    # B-light: group/wacana dinonaktifkan total — jangan auto-group
+    # (legacy auto-group per 5 dihapus, semua soal standalone)
 
     settings = raw.get("settings") or {}
     try:

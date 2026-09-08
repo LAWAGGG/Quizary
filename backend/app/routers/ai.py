@@ -167,21 +167,15 @@ def ai_accept(body: AiAcceptRequest, user: User = Depends(get_current_user), db:
         created_at=now,
         updated_at=now,
     )
-    # ponytail: hemat token — inject passage duplikat per group_id (AI hemat 1 passage + group_id, DB tetap duplikat per soal)
-    group_passage: dict[str, str] = {}
+    # B-light: group/wacana nonaktif — tidak ada inject passage duplikat
+    # (semua soal standalone, --- dilarang di prompt & di-strip di _coerce_question)
     for sec in body.sections:
         for q in sec.questions:
-            if q.group_id and q.group_id not in group_passage:
-                if "\n\n---\n\n" in q.question_text:
-                    group_passage[q.group_id] = q.question_text.split("\n\n---\n\n")[0]
-                else:
-                    group_passage[q.group_id] = q.question_text[:2000]
-    for sec in body.sections:
-        for q in sec.questions:
-            if q.group_id and q.group_id in group_passage:
-                passage = group_passage[q.group_id]
-                if "\n\n---\n\n" not in q.question_text:
-                    q.question_text = passage + "\n\n---\n\n" + q.question_text
+            q.group_id = None
+            if "\n\n---\n\n" in q.question_text:
+                q.question_text = q.question_text.split("\n\n---\n\n")[-1].strip()
+            if " --- " in q.question_text:
+                q.question_text = q.question_text.split(" --- ")[-1].strip()
 
     try:
         db.add(form)

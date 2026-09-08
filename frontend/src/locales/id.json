@@ -706,9 +706,6 @@
     "correctWrongRate": "Rasio Benar / Salah",
     "correctRate": "Benar",
     "wrongRate": "Salah",
-    "paceDiagnostics": "Kecepatan & Diagnosis Soal",
-    "avgCompletion": "Rata-rata Penyelesaian",
-    "fastestTime": "Waktu Tercepat",
     "easiest": "Soal Termudah",
     "hardest": "Soal Tersulit",
     "noQuestionData": "Belum ada data soal",
@@ -720,9 +717,7 @@
     "questionBreakdown": "Rincian Pertanyaan",
     "tapToExpand": "{{count}} soal · ketuk untuk buka",
     "noResponses": "Belum ada jawaban",
-    "moreResponses": "+{{count}} lainnya",
-    "avgCompletionDesc": "Rata-rata waktu penyelesaian",
-    "fastestCompletionDesc": "Penyelesaian tercepat"
+    "moreResponses": "+{{count}} lainnya"
   },
   "results": {
     "eyebrow": "Jawaban",

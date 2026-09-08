@@ -711,9 +711,6 @@
     "correctWrongRate": "Correct / Wrong Rate",
     "correctRate": "Correct",
     "wrongRate": "Wrong",
-    "paceDiagnostics": "Pace & Question Diagnostics",
-    "avgCompletion": "Avg Completion",
-    "fastestTime": "Fastest Time",
     "easiest": "Easiest Question",
     "hardest": "Hardest Question",
     "noQuestionData": "No question data yet",
@@ -725,9 +722,7 @@
     "questionBreakdown": "Question Breakdown",
     "tapToExpand": "{{count}} questions · tap to expand",
     "noResponses": "No responses",
-    "moreResponses": "+{{count}} more",
-    "avgCompletionDesc": "Average completion time",
-    "fastestCompletionDesc": "Fastest completion"
+    "moreResponses": "+{{count}} more"
   },
   "results": {
     "eyebrow": "Responses",

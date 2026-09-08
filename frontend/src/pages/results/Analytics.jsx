@@ -1,18 +1,10 @@
 import { useState, useEffect, memo } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Users, Trophy, TrendingUp, TrendingDown, ArrowLeft, BarChart3, ClipboardList, ChevronDown, CheckCircle2, Clock, Zap, AlertCircle, Timer } from 'lucide-react'
+import { Users, Trophy, TrendingUp, TrendingDown, ArrowLeft, BarChart3, ClipboardList, ChevronDown, CheckCircle2, AlertCircle } from 'lucide-react'
 import api from '../../api/client'
 import { Card, Button, PageHeader, FormSubNav, CardSkeleton, RichText } from '../../components/ui'
 import { useTranslation } from 'react-i18next'
-
-function formatDuration(seconds) {
-  if (seconds == null || seconds < 0) return '-'
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  if (mins === 0) return `${secs}s`
-  return `${mins}m ${secs}s`
-}
 
 function StatCard({ label, value, icon: Icon, tint, delay }) {
   return (
@@ -250,33 +242,7 @@ function QuizAnalytics({ data }) {
 
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
           <Card className="h-full">
-            <div className="flex items-center gap-2 mb-5">
-              <Timer className="w-4 h-4 text-primary" />
-              <h2 className="font-display font-semibold text-ink dark:text-gray-100">{t('analytics.paceDiagnostics')}</h2>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-xl bg-gray-50 dark:bg-ink-800/50 border border-gray-100 dark:border-gray-800 p-4">
-                <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  <Clock className="w-3.5 h-3.5 text-primary" />
-                  <span className="font-medium truncate">{t('analytics.avgCompletion')}</span>
-                </div>
-                <p className="font-display text-2xl font-bold tabular-nums text-ink dark:text-gray-100">
-                  {formatDuration(data.avg_duration_seconds)}
-                </p>
-                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 truncate">{t('analytics.avgCompletionDesc')}</p>
-              </div>
-
-              <div className="rounded-xl bg-gray-50 dark:bg-ink-800/50 border border-gray-100 dark:border-gray-800 p-4">
-                <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  <Zap className="w-3.5 h-3.5 text-amber-500" />
-                  <span className="font-medium truncate">{t('analytics.fastestTime')}</span>
-                </div>
-                <p className="font-display text-2xl font-bold tabular-nums text-ink dark:text-gray-100">
-                  {formatDuration(data.fastest_duration_seconds)}
-                </p>
-                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 truncate">{t('analytics.fastestCompletionDesc')}</p>
-              </div>
-
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="rounded-xl bg-correct-soft border border-correct/20 p-4 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between gap-1 mb-1">
