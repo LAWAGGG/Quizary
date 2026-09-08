@@ -31,7 +31,11 @@ function RootStack() {
       try {
         const token = await getToken();
         if (token) {
-          await getMe();
+          const user = await getMe();
+          // Cek jika user belum verifikasi OTP, jangan biarkan otomatis masuk
+          if (user && user.email_verified_at === null) {
+            await removeToken();
+          }
         }
       } catch (e) {
         await removeToken();
@@ -59,7 +63,13 @@ function RootStack() {
   return (
     <ThemeProvider value={isDark ? DarkTheme : DefaultTheme}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false }} />
+      {/* Daftarkan rute secara eksplisit di sini */}
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="register" />
+        <Stack.Screen name="verify-otp" />
+        <Stack.Screen name="(tabs)" />
+      </Stack>
     </ThemeProvider>
   );
 }

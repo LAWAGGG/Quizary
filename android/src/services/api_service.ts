@@ -1,18 +1,25 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const getHost = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
-  if (envUrl && !envUrl.includes('loca.lt')) return envUrl;
+
+  if (envUrl) {
+    return envUrl;
+  }
+
   const hostUri =
     Constants.expoConfig?.hostUri ||
     (Constants.manifest as any)?.debuggerHost ||
     (Constants.manifest2 as any)?.extra?.expoGo?.developer?.tool;
+
   if (hostUri) {
     const ip = String(hostUri).split(':')[0];
     if (ip && ip !== 'localhost' && ip !== '127.0.0.1') return `http://${ip}:8000/api`;
   }
+
   if (Platform.OS === 'android') return 'http://10.0.2.2:8000/api';
   return 'http://localhost:8000/api';
 };
@@ -193,6 +200,67 @@ export async function apiRegister(body: {
   }
 }
 
+// FUNGSI VERIFIKASI OTP
+export async function verifyOtpApi(body: { email: string; code: string }) {
+  try {
+    console.log('[DEBUG AUTH] Sending POST /otp/verify for:', body.email);
+    const res = await fetch(`${BASE_URL}/otp/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.log('[DEBUG AUTH] POST /otp/verify failed:', res.status, err);
+      throw new Error(extractErrorMessage(err, 'Verifikasi OTP gagal. Kode salah atau sudah kadaluarsa.'));
+    }
+    const data = await res.json();
+    console.log('[DEBUG AUTH] POST /otp/verify response data:', JSON.stringify(data));
+    if (data.token) await saveToken(data.token);
+    if (data.user) await saveUser(data.user);
+    return data;
+  } catch (err: any) {
+    if (
+      err.message === 'Network request failed' ||
+      err.name === 'TypeError' ||
+      String(err).includes('Network')
+    )
+      throw new Error('Gagal terhubung ke server.');
+    throw err;
+  }
+}
+
+// FUNGSI KIRIM ULANG OTP
+// CATATAN: nama endpoint '/auth/resend-otp' ini tebakan berdasarkan pola
+// '/auth/verify-otp' yang sudah ada. Konfirmasi ke temen yang pegang backend,
+// kalau ternyata beda, cukup ganti string URL di baris fetch() di bawah ini.
+export async function resendOtpApi(body: { email: string }) {
+  try {
+    console.log('[DEBUG AUTH] Sending POST /otp/resend for:', body.email);
+    const res = await fetch(`${BASE_URL}/otp/resend`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.log('[DEBUG AUTH] POST /otp/resend failed:', res.status, err);
+      throw new Error(extractErrorMessage(err, 'Gagal mengirim ulang kode OTP.'));
+    }
+    const data = await res.json();
+    console.log('[DEBUG AUTH] POST /auth/resend-otp response data:', JSON.stringify(data));
+    return data;
+  } catch (err: any) {
+    if (
+      err.message === 'Network request failed' ||
+      err.name === 'TypeError' ||
+      String(err).includes('Network')
+    )
+      throw new Error('Gagal terhubung ke server.');
+    throw err;
+  }
+}
+
 export async function apiLogout() {
   try { await fetchWithAuth('/logout', { method: 'POST' }); } catch {}
   await removeToken();
@@ -205,10 +273,7 @@ export async function getMe() {
   return data;
 }
 
-import * as FileSystem from 'expo-file-system/legacy';
-
 export async function updateProfile(body: { name?: string; avatar?: string }) {
-  // Kalau ADA avatar baru, upload pakai FileSystem.uploadAsync (lebih tahan koneksi tidak stabil)
   if (body.avatar) {
     const token = await getToken();
     const rawName = body.avatar.split('/').pop() || 'avatar.jpg';
@@ -247,7 +312,6 @@ export async function updateProfile(body: { name?: string; avatar?: string }) {
     return res;
   }
 
-  // Kalau CUMA update nama (tanpa avatar), tetap pakai cara lama (JSON via FormData biasa)
   const formData = new FormData();
   if (body.name !== undefined) {
     formData.append('name', body.name);
@@ -450,7 +514,6 @@ export async function lockSubmission(submissionId: string | number, reason?: str
     return null;
   }
   const payload = { reason: reason || 'window-blur' };
-  // 1) coba endpoint /lock terbaru (backend lokal sudah ada)
   try {
     return await fetchWithAuth(`/submissions/${submissionId}/lock`, {
       method: 'POST',
@@ -458,9 +521,6 @@ export async function lockSubmission(submissionId: string | number, reason?: str
     });
   } catch (err: any) {
     const msg = String(err?.message || '');
-    // 2) fallback untuk backend deploy lama yang belum punya /lock: pakai /tab-exit
-    //    tab-exit butuh 3x untuk jadi locked, jadi panggil sampai locked supaya
-    //    management web (Image 3) langsung lihat status locked + cheat_reason window-blur
     const isNotFound = msg.includes('Not Found') || msg.toLowerCase().includes('not found');
     if (isNotFound) {
       try {
@@ -477,13 +537,20 @@ export async function lockSubmission(submissionId: string | number, reason?: str
         return null;
       }
     }
-    // error lain (mis. sudah locked 409) -> jangan spam LogBox, silent
     return null;
   }
 }
 
 export async function finalizeSubmission(submissionId: string | number) {
   return fetchWithAuth(`/submissions/${submissionId}/submit`, { method: 'POST' });
+}
+
+// ANTI-CHEAT
+export async function reportTabExit(submissionId: string | number, reason?: string) {
+  return fetchWithAuth(`/submissions/${submissionId}/tab-exit`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
 }
 
 export async function getSubmissionDetail(submissionId: string | number) {
