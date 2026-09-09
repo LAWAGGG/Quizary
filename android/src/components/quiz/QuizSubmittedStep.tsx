@@ -46,32 +46,29 @@ function AnimatedScoreCircle({
   const animatedValue = useRef(new Animated.Value(0)).current;
   const [displayScore, setDisplayScore] = useState(0);
 
-  const percentage = maxScore > 0 ? Math.min(100, Math.max(0, Math.round((score / maxScore) * 100))) : 0;
+  const targetScore = Math.round(score);
+  const percentage = maxScore > 0 ? Math.min(100, Math.max(0, Math.round((targetScore / maxScore) * 100))) : 0;
 
   useEffect(() => {
-    animatedValue.setValue(0);
+    const listenerId = animatedValue.addListener(({ value }) => {
+      const currentPct = Math.min(100, Math.max(0, value));
+      const currentVal = maxScore > 0
+        ? Math.round((currentPct / 100) * maxScore)
+        : Math.round((currentPct / 100) * targetScore);
+      setDisplayScore(currentVal);
+    });
+
     Animated.timing(animatedValue, {
       toValue: percentage,
-      duration: 1400,
+      duration: 1200,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
 
-    let current = 0;
-    const targetScore = Math.round(score);
-    const step = Math.max(1, Math.ceil(targetScore / 35));
-    const interval = setInterval(() => {
-      current += step;
-      if (current >= targetScore) {
-        setDisplayScore(targetScore);
-        clearInterval(interval);
-      } else {
-        setDisplayScore(current);
-      }
-    }, 35);
-
-    return () => clearInterval(interval);
-  }, [score, percentage]);
+    return () => {
+      animatedValue.removeListener(listenerId);
+    };
+  }, [percentage, targetScore, maxScore]);
 
   const firstHalfRotate = animatedValue.interpolate({
     inputRange: [0, 50, 100],
@@ -222,7 +219,6 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
   const [subDetail, setSubDetail] = useState<any>(null);
   const [leaderboard, setLeaderboard] = useState<any>(null);
   const [showReview, setShowReview] = useState<boolean>(false);
-  const [countedScore, setCountedScore] = useState<number>(0);
 
   const sid = submissionId || resultData?.submission_id;
   const formCode = publicForm?.short_code;
@@ -258,22 +254,6 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
   const rawScore = subDetail?.score ?? resultData?.score;
   const maxScore = subDetail?.max_score ?? resultData?.max_score ?? 100;
   const finalScore = rawScore != null ? Math.round(Number(rawScore)) : null;
-
-  useEffect(() => {
-    if (!isQuiz || finalScore == null) return;
-    let current = 0;
-    const step = Math.max(1, Math.ceil(finalScore / 20));
-    const interval = setInterval(() => {
-      current += step;
-      if (current >= finalScore) {
-        setCountedScore(finalScore);
-        clearInterval(interval);
-      } else {
-        setCountedScore(current);
-      }
-    }, 30);
-    return () => clearInterval(interval);
-  }, [isQuiz, finalScore]);
 
   const answersList = subDetail?.answers || [];
   const correctCount = answersList.filter((a: any) => a.is_correct === true).length;
