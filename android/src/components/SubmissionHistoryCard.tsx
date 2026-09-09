@@ -18,7 +18,7 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
 
   const getStatusLabel = () => {
     if (isCheating) {
-      return language === 'ID' ? 'Terdeteksi Curang' : 'Cheating Detected';
+      return 'Cheating';
     }
     if (isLocked) {
       return language === 'ID' ? 'Terkunci' : 'Locked';

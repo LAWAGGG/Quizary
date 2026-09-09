@@ -57,7 +57,7 @@ export function SubmissionDetailModal({
                 <Text style={[styles.detailMetaText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
                   Status: {
                     (selectedSubItem?.status === 'cheating' || subDetail?.status === 'cheating')
-                      ? (language === 'ID' ? 'Terdeteksi Curang' : 'Cheating Detected')
+                      ? 'Cheating'
                       : (selectedSubItem?.status === 'locked' || subDetail?.status === 'locked')
                       ? (language === 'ID' ? 'Terkunci (Pelanggaran)' : 'Locked (Violation)')
                       : (selectedSubItem?.status === 'submitted' || subDetail?.status === 'submitted')
@@ -70,7 +70,7 @@ export function SubmissionDetailModal({
                 {((subDetail?.cheat_reason || selectedSubItem?.cheat_reason || subDetail?.status === 'cheating' || selectedSubItem?.status === 'cheating') && (
                   <View style={{ backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2', borderColor: '#EF4444', borderWidth: 1, borderRadius: 8, padding: 10, marginTop: 4 }}>
                     <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 12 * fontSizeScale }}>
-                      ⚠️ {language === 'ID' ? 'Status: Terdeteksi Curang / Violations' : 'Status: Cheating Detected / Violations'}
+                      ⚠️ Status: Cheating
                     </Text>
                     {(subDetail?.cheat_reason || selectedSubItem?.cheat_reason) ? (
                       <Text style={{ color: colors.text, fontSize: 11 * fontSizeScale, marginTop: 2 }}>
