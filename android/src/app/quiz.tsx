@@ -956,7 +956,13 @@ export default function QuizScreen() {
 
   // Submitted view
   if (submission?.result) {
-    return <QuizSubmittedStep resultData={submission.result} />;
+    return (
+      <QuizSubmittedStep
+        resultData={submission.result}
+        submissionId={submission.submission_id || submission.id}
+        publicForm={publicForm}
+      />
+    );
   }
 
   // Landing step

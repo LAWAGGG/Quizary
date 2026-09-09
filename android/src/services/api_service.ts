@@ -561,6 +561,13 @@ export async function getMySubmissions() {
   return fetchWithAuth('/me/submissions');
 }
 
+export async function getLeaderboard(formCode: string, submissionId?: string | number) {
+  const url = submissionId
+    ? `/q/${formCode}/leaderboard?limit=10&submission_id=${submissionId}`
+    : `/q/${formCode}/leaderboard?limit=10`;
+  return fetchWithAuth(url);
+}
+
 export async function uploadAnswerFile(
   submissionId: string | number,
   questionId: string | number,
