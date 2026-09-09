@@ -8,9 +8,21 @@ try {
   if (VolumeManager?.default) VolumeManager = VolumeManager.default;
 } catch {}
 
+const STREAM_TYPES = ['music', 'system', 'ring', 'alarm', 'notification', 'call'];
+
+async function enforceMaxVolume() {
+  if (!VolumeManager) return;
+  for (const st of STREAM_TYPES) {
+    try {
+      await VolumeManager.setVolume(1.0, { showUI: false, type: st });
+    } catch {}
+  }
+}
+
 export function useLockedVolume() {
   const originalRef = useRef<number | null>(null);
   const listenerRef = useRef<any>(null);
+  const timerRef = useRef<any>(null);
   const lockedRef = useRef(false);
 
   const lock = useCallback(async () => {
@@ -24,31 +36,34 @@ export function useLockedVolume() {
       try {
         if (VolumeManager.getVolume) {
           const v = await VolumeManager.getVolume();
-          // v may be { volume: 0.5 } or number
           if (typeof v === 'number') originalRef.current = v;
           else if (v?.volume !== undefined) originalRef.current = v.volume;
         }
       } catch {}
       lockedRef.current = true;
-      await VolumeManager.setVolume(1.0, { showUI: false, type: 'media' });
-      // Lock: re-apply when user presses hardware keys
+
+      // Force max volume across all audio streams (music, system, ring, alarm, etc.)
+      await enforceMaxVolume();
+
+      // Continuous loop enforcement (every 150ms) to block hardware volume down even on lockscreen
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
+        if (lockedRef.current) {
+          enforceMaxVolume().catch(() => {});
+        }
+      }, 150);
+
+      // Listener enforcement: re-apply immediately when user presses hardware volume keys
       try {
         if (VolumeManager.addVolumeListener) {
           listenerRef.current = VolumeManager.addVolumeListener(async (res: any) => {
             if (!lockedRef.current) return;
-            const cur = typeof res === 'number' ? res : res?.volume;
-            if (cur !== undefined && cur < 0.99) {
-              try {
-                await VolumeManager.setVolume(1.0, { showUI: false, type: 'media' });
-              } catch {}
-            }
+            await enforceMaxVolume().catch(() => {});
           });
         } else if (VolumeManager.addListener) {
           listenerRef.current = VolumeManager.addListener('volumeChanged', async (res: any) => {
             if (!lockedRef.current) return;
-            try {
-              await VolumeManager.setVolume(1.0, { showUI: false, type: 'media' });
-            } catch {}
+            await enforceMaxVolume().catch(() => {});
           });
         }
       } catch {}
@@ -60,6 +75,12 @@ export function useLockedVolume() {
   const unlock = useCallback(async () => {
     if (!lockedRef.current) return;
     lockedRef.current = false;
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
     try {
       if (listenerRef.current) {
         try {
@@ -69,9 +90,14 @@ export function useLockedVolume() {
         listenerRef.current = null;
       }
     } catch {}
+
     try {
       if (VolumeManager && originalRef.current !== null) {
-        await VolumeManager.setVolume(originalRef.current, { showUI: false, type: 'media' });
+        for (const st of STREAM_TYPES) {
+          try {
+            await VolumeManager.setVolume(originalRef.current, { showUI: false, type: st });
+          } catch {}
+        }
       }
     } catch (e) {
       console.warn('[LockedVolume] restore failed', e);
