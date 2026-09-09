@@ -610,13 +610,15 @@ export function QuizStyleAnsweringStep({
                             activeOpacity={0.85}
                           >
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
-                              <View style={[styles.letterCircle, selected && isCheckbox && { backgroundColor: '#FFFFFF' }]}>
-                                {isCheckbox && selected ? (
-                                  <Ionicons name="checkmark" size={16} color={bgCol} />
-                                ) : (
+                              {isCheckbox ? (
+                                <View style={[styles.checkboxBox, selected && { backgroundColor: bgCol, borderColor: bgCol }]}>
+                                  {selected && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                                </View>
+                              ) : (
+                                <View style={styles.letterCircle}>
                                   <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
-                                )}
-                              </View>
+                                </View>
+                              )}
 
                               {optImgUrl && !optIsAudio && (
                                 <Image
@@ -1176,6 +1178,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 16,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
+  checkboxBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   optionTileText: {
     flex: 1,

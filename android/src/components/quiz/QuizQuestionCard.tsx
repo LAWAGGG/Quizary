@@ -166,13 +166,19 @@ function QuizQuestionCardComponent({
                 activeOpacity={0.7}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
-                  <View style={[styles.letterBubble, { backgroundColor: isDark ? '#334155' : '#E2E8F0' }, isSelected && { backgroundColor: activeColor }]}>
-                    <Text style={[styles.letterText, { color: colors.text }, isSelected && { color: '#FFF' }]}>{letter}</Text>
-                  </View>
+                  {q.type === 'checkbox' ? (
+                    <View style={[styles.checkboxBox, isSelected && { backgroundColor: activeColor, borderColor: activeColor }]}>
+                      {isSelected && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                    </View>
+                  ) : (
+                    <View style={[styles.letterBubble, { backgroundColor: isDark ? '#334155' : '#E2E8F0' }, isSelected && { backgroundColor: activeColor }]}>
+                      <Text style={[styles.letterText, { color: colors.text }, isSelected && { color: '#FFF' }]}>{letter}</Text>
+                    </View>
+                  )}
                   <View style={{ flex: 1, flexShrink: 1, paddingRight: 4 }}>
                     <RichTextRenderer html={opt.option_text || ''} style={{ fontSize: 14, color: isSelected ? activeColor : colors.text }} />
                   </View>
-                  {isSelected && <Ionicons name="checkmark-circle" size={20} color={activeColor} />}
+                  {isSelected && q.type !== 'checkbox' && <Ionicons name="checkmark-circle" size={20} color={activeColor} />}
                 </View>
                 {optIsAudio && optMedia && (
                   <View style={{ marginTop: 10 }} onTouchEnd={(e: any) => e.stopPropagation?.()}>
@@ -529,6 +535,16 @@ const styles = StyleSheet.create({
   optionCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, borderWidth: 1, gap: 12 },
   letterBubble: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   letterText: { fontSize: 13, fontWeight: 'bold' },
+  checkboxBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(148,163,184,0.4)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   textInput: { padding: 14, borderRadius: 12, borderWidth: 1, fontSize: 14, marginTop: 12 },
   textArea: { height: 110, textAlignVertical: 'top' },
