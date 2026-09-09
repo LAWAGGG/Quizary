@@ -483,18 +483,43 @@ export default function QuizScreen() {
       setSections(res.sections || []);
       setCurrentSectionIdx(0);
       // Init answers from resumed if any
-      if (res.answers) {
-        const init: Record<number, any> = {};
-        res.answers.forEach((a: any) => {
-          if (a.question_type === 'short_answer' || a.question_type === 'essay' || a.question_type === 'date' || a.question_type === 'time' || a.question_type === 'datetime' || a.question_type === 'password') {
-            init[a.question_id] = a.answer_text || '';
-          } else if (a.question_type === 'file_upload') {
-            if (a.answer_file) init[a.question_id] = a.answer_file;
+      let rawAnswers = res.answers;
+      const subId = res.submission_id || res.id;
+      if ((!rawAnswers || rawAnswers.length === 0) && subId) {
+        try {
+          const detail = await getSubmissionDetail(subId);
+          if (detail && detail.answers) {
+            rawAnswers = detail.answers;
+          }
+        } catch {}
+      }
+
+      if (rawAnswers && Array.isArray(rawAnswers)) {
+        const initAnswers: Record<number, any> = {};
+        const initFileAnswers: Record<number, any> = {};
+        rawAnswers.forEach((a: any) => {
+          const qtype = String(a.question_type || a.type || '').toLowerCase();
+          if (qtype === 'short_answer' || qtype === 'essay' || qtype === 'date' || qtype === 'time' || qtype === 'datetime' || qtype === 'password') {
+            initAnswers[a.question_id] = a.answer_text || '';
+          } else if (qtype === 'file_upload') {
+            if (a.answer_file) {
+              initAnswers[a.question_id] = a.answer_file;
+              const fname = typeof a.answer_file === 'string' ? a.answer_file.split('/').pop() : 'file';
+              initFileAnswers[a.question_id] = { url: a.answer_file, filename: fname };
+            }
           } else {
-            init[a.question_id] = a.selected_option_ids || [];
+            // Option types (multiple_choice, checkbox, dropdown, etc.)
+            if (a.answer_text) {
+              initAnswers[a.question_id] = {
+                ids: a.selected_option_ids || [],
+                text: a.answer_text,
+              };
+            } else {
+              initAnswers[a.question_id] = a.selected_option_ids || [];
+            }
           }
         });
-        setAnswers(init);
+        setAnswers(initAnswers);
       }
       answeringRef.current = true;
       if (publicForm.type === 'quiz' && publicForm.is_restricted) {
