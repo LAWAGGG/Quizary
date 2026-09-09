@@ -13,7 +13,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle } from 'react-native-svg';
 import { useAppTheme } from '../../context/ThemeContext';
 import { stripHtmlTags } from '../RichTextRenderer';
 import { getSubmissionDetail, getLeaderboard } from '../../services/api_service';
@@ -24,9 +23,6 @@ interface QuizSubmittedStepProps {
   publicForm?: any;
   onFillAgain?: () => void;
 }
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const CIRCUMFERENCE = 2 * Math.PI * 56; // ~351.858
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -78,9 +74,15 @@ function AnimatedScoreCircle({
     };
   }, [percentage, targetScore, maxScore, ready]);
 
-  const strokeDashoffset = animatedValue.interpolate({
-    inputRange: [0, 100],
-    outputRange: [CIRCUMFERENCE, 0],
+  const firstHalfRotate = animatedValue.interpolate({
+    inputRange: [0, 50, 100],
+    outputRange: ['0deg', '180deg', '180deg'],
+    extrapolate: 'clamp',
+  });
+
+  const secondHalfRotate = animatedValue.interpolate({
+    inputRange: [0, 50, 100],
+    outputRange: ['0deg', '0deg', '180deg'],
     extrapolate: 'clamp',
   });
 
@@ -88,34 +90,39 @@ function AnimatedScoreCircle({
 
   return (
     <View style={circleStyles.container}>
-      <Svg width="140" height="140" viewBox="0 0 128 128">
-        {/* Background Track Circle */}
-        <Circle
-          cx="64"
-          cy="64"
-          r="56"
-          fill="none"
-          stroke={trackColor}
-          strokeWidth="10"
+      {/* Background Track Circle */}
+      <View style={[circleStyles.trackCircle, { borderColor: trackColor }]} />
+
+      {/* First Half Progress (0 - 180 deg, Right Half) */}
+      <View style={circleStyles.rightMask}>
+        <Animated.View
+          style={[
+            circleStyles.halfCircleRight,
+            {
+              borderLeftColor: ringColor,
+              borderBottomColor: ringColor,
+              transform: [{ rotate: firstHalfRotate }],
+            },
+          ]}
         />
-        {/* Animated Score Progress Arc (Matching Web exactly) */}
-        <AnimatedCircle
-          cx="64"
-          cy="64"
-          r="56"
-          fill="none"
-          stroke={ringColor}
-          strokeWidth="10"
-          strokeLinecap="round"
-          strokeDasharray={`${CIRCUMFERENCE}`}
-          strokeDashoffset={strokeDashoffset}
-          origin="64, 64"
-          rotation="-90"
+      </View>
+
+      {/* Second Half Progress (180 - 360 deg, Left Half) */}
+      <View style={circleStyles.leftMask}>
+        <Animated.View
+          style={[
+            circleStyles.halfCircleLeft,
+            {
+              borderTopColor: ringColor,
+              borderRightColor: ringColor,
+              transform: [{ rotate: secondHalfRotate }],
+            },
+          ]}
         />
-      </Svg>
+      </View>
 
       {/* Inner Content Display (Score / MaxScore) */}
-      <View style={circleStyles.innerContentOverlay}>
+      <View style={[circleStyles.innerContent, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC' }]}>
         <Text style={[circleStyles.scoreText, { color: textColor }]}>{displayScore}</Text>
         {maxScore > 0 && (
           <Text style={[circleStyles.maxScoreText, { color: textSubColor }]}>/{Math.round(maxScore)}</Text>
@@ -134,12 +141,55 @@ const circleStyles = StyleSheet.create({
     position: 'relative',
     marginBottom: 16,
   },
-  innerContentOverlay: {
+  trackCircle: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 10,
+    position: 'absolute',
+  },
+  rightMask: {
+    width: 70,
+    height: 140,
+    position: 'absolute',
+    left: 70,
+    top: 0,
+    overflow: 'hidden',
+  },
+  leftMask: {
+    width: 70,
+    height: 140,
     position: 'absolute',
     left: 0,
-    right: 0,
     top: 0,
-    bottom: 0,
+    overflow: 'hidden',
+  },
+  halfCircleRight: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 10,
+    borderTopColor: 'transparent',
+    borderRightColor: 'transparent',
+    position: 'absolute',
+    left: -70,
+    top: 0,
+  },
+  halfCircleLeft: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 10,
+    borderBottomColor: 'transparent',
+    borderLeftColor: 'transparent',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+  innerContent: {
+    width: 116,
+    height: 116,
+    borderRadius: 58,
     justifyContent: 'center',
     alignItems: 'center',
   },
