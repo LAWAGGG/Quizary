@@ -336,6 +336,38 @@ def _build_questions_response(sub_id: int, request: Request, db: Session, includ
     return result
 
 
+def _build_saved_answers(sub_id: int, request: Request, db: Session) -> list[SavedAnswer]:
+    sub = db.get(Submission, sub_id)
+    if not sub:
+        return []
+    questions = (
+        db.query(Question)
+        .options(selectinload(Question.images))
+        .filter(Question.form_id == sub.form_id, Question.is_deleted.is_(False))
+        .all()
+    )
+    q_map = {q.id: q for q in questions}
+    answers_data: list[SavedAnswer] = []
+    for answer in db.query(Answer).options(selectinload(Answer.selected_options)).filter(Answer.submission_id == sub.id).all():
+        q = q_map.get(answer.question_id)
+        if not q:
+            continue
+        selected_ids = [ao.option_id for ao in answer.selected_options]
+        q_imgs = sorted(q.images, key=lambda i: i.order_index or 0)
+        q_image_url = file_url(request, q_imgs[0].path) if q_imgs else None
+
+        answers_data.append(SavedAnswer(
+            question_id=q.id,
+            question_text=q.question_text,
+            question_type=q.type.value,
+            question_image=q_image_url,
+            selected_option_ids=selected_ids,
+            answer_text=answer.answer_text,
+            answer_file=file_url(request, answer.answer_file),
+        ))
+    return answers_data
+
+
 # ── POST /submissions ─────────────────────────────────────────────────────────
 
 @router.post("/submissions", status_code=201)
@@ -439,6 +471,7 @@ def create_submission(
             expired_at=fmt_dt(display_deadline(existing, form)),
             questions=_build_questions_response(existing.id, request, db),
             sections=sections,
+            answers=_build_saved_answers(existing.id, request, db),
             resumed=True,
         )
 

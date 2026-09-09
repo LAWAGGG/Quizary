@@ -32,6 +32,12 @@ import {
   uploadAnswerFile,
   checkPassword,
 } from '../services/api_service';
+import {
+  saveLocalAnswerDraft,
+  enqueuePendingSubmission,
+  dequeuePendingSubmission,
+  clearLocalAnswerDraft,
+} from '../services/offline_sync_service';
 import { QuizLandingStep } from '../components/quiz/QuizLandingStep';
 import { QuizStyleAnsweringStep } from '../components/quiz/QuizStyleAnsweringStep';
 import { QuizQuestionCard } from '../components/quiz/QuizQuestionCard';
@@ -483,18 +489,43 @@ export default function QuizScreen() {
       setSections(res.sections || []);
       setCurrentSectionIdx(0);
       // Init answers from resumed if any
-      if (res.answers) {
-        const init: Record<number, any> = {};
-        res.answers.forEach((a: any) => {
-          if (a.question_type === 'short_answer' || a.question_type === 'essay' || a.question_type === 'date' || a.question_type === 'time' || a.question_type === 'datetime' || a.question_type === 'password') {
-            init[a.question_id] = a.answer_text || '';
-          } else if (a.question_type === 'file_upload') {
-            if (a.answer_file) init[a.question_id] = a.answer_file;
+      let rawAnswers = res.answers;
+      const subId = res.submission_id || res.id;
+      if ((!rawAnswers || rawAnswers.length === 0) && subId) {
+        try {
+          const detail = await getSubmissionDetail(subId);
+          if (detail && detail.answers) {
+            rawAnswers = detail.answers;
+          }
+        } catch {}
+      }
+
+      if (rawAnswers && Array.isArray(rawAnswers)) {
+        const initAnswers: Record<number, any> = {};
+        const initFileAnswers: Record<number, any> = {};
+        rawAnswers.forEach((a: any) => {
+          const qtype = String(a.question_type || a.type || '').toLowerCase();
+          if (qtype === 'short_answer' || qtype === 'essay' || qtype === 'date' || qtype === 'time' || qtype === 'datetime' || qtype === 'password') {
+            initAnswers[a.question_id] = a.answer_text || '';
+          } else if (qtype === 'file_upload') {
+            if (a.answer_file) {
+              initAnswers[a.question_id] = a.answer_file;
+              const fname = typeof a.answer_file === 'string' ? a.answer_file.split('/').pop() : 'file';
+              initFileAnswers[a.question_id] = { url: a.answer_file, filename: fname };
+            }
           } else {
-            init[a.question_id] = a.selected_option_ids || [];
+            // Option types (multiple_choice, checkbox, dropdown, etc.)
+            if (a.answer_text) {
+              initAnswers[a.question_id] = {
+                ids: a.selected_option_ids || [],
+                text: a.answer_text,
+              };
+            } else {
+              initAnswers[a.question_id] = a.selected_option_ids || [];
+            }
           }
         });
-        setAnswers(init);
+        setAnswers(initAnswers);
       }
       answeringRef.current = true;
       if (publicForm.type === 'quiz' && publicForm.is_restricted) {
@@ -557,25 +588,48 @@ export default function QuizScreen() {
   const handleSelectOption = async (questionId: number, optionId: number, isCheckbox: boolean) => {
     const q = questions.find((x) => x.id === questionId);
     if (!q) return;
-    let next: any;
+
+    const rawType = String(q.type || q.question_type || '').toLowerCase();
+    const isCb = isCheckbox || rawType === 'checkbox';
+
+    let next: number[] = [];
     setAnswers((prev) => {
       const cur = prev[questionId];
-      if (q.type === 'multiple_choice' || q.type === 'dropdown') {
-        const curArr: number[] = Array.isArray(cur) ? cur : [];
-        next = curArr[0] === optionId ? [] : [optionId];
-      } else if (q.type === 'checkbox') {
-        const curArr: number[] = Array.isArray(cur) ? cur : [];
-        next = curArr.includes(optionId) ? curArr.filter((id) => id !== optionId) : [...curArr, optionId];
+      const curArr: number[] = Array.isArray(cur)
+        ? cur
+        : typeof cur === 'number'
+        ? [cur]
+        : [];
+      if (isCb) {
+        next = curArr.includes(optionId)
+          ? curArr.filter((id) => id !== optionId)
+          : [...curArr, optionId];
       } else {
-        next = cur;
+        next = curArr[0] === optionId ? [] : [optionId];
       }
       return { ...prev, [questionId]: next };
     });
-    // Autosave debounce
+
     const sid = submissionIdRef.current;
     if (!sid) return;
+
+    // Compute synchronous next so autosave ALWAYS gets accurate option_ids
+    const curAns = answers[questionId];
+    const curArr: number[] = Array.isArray(curAns)
+      ? curAns
+      : typeof curAns === 'number'
+      ? [curAns]
+      : [];
+    const computedNext = isCb
+      ? curArr.includes(optionId)
+        ? curArr.filter((id) => id !== optionId)
+        : [...curArr, optionId]
+      : curArr[0] === optionId
+      ? []
+      : [optionId];
+
     try {
-      await autosaveAnswer(sid, { question_id: questionId, option_ids: next });
+      await autosaveAnswer(sid, { question_id: questionId, option_ids: computedNext });
     } catch {}
   };
 
@@ -593,17 +647,66 @@ export default function QuizScreen() {
     if (!sid) return;
     setFileUploading((p) => ({ ...p, [questionId]: true }));
     try {
-      const { default: ImgPicker } = await import('expo-image-picker');
-      const res = await ImgPicker.launchImageLibraryAsync({ mediaTypes: ImgPicker.MediaTypeOptions.All, quality: 0.8 });
-      if (res.canceled) return;
-      const asset = res.assets[0];
-      const uri = asset.uri;
-      const mime = asset.mimeType || 'image/jpeg';
-      await uploadAnswerFile(sid, questionId, uri, mime);
-      setAnswers((p) => ({ ...p, [questionId]: uri }));
+      let uri = '';
+      let mime = 'application/octet-stream';
+      let name = 'file';
+
+      // Try document picker first (supports documents, pdfs, images, etc.)
+      try {
+        const DocumentPicker = await import('expo-document-picker');
+        const res = await DocumentPicker.getDocumentAsync({
+          type: '*/*',
+          copyToCacheDirectory: true,
+        });
+        if (res.canceled) {
+          setFileUploading((p) => ({ ...p, [questionId]: false }));
+          return;
+        }
+        if (res.assets && res.assets.length > 0) {
+          const asset = res.assets[0];
+          uri = asset.uri;
+          mime = asset.mimeType || 'application/octet-stream';
+          name = asset.name || uri.split('/').pop() || 'upload_file';
+        }
+      } catch {
+        // Fallback to ImagePicker
+        const ImgPicker = await import('expo-image-picker');
+        const res = await ImgPicker.launchImageLibraryAsync({
+          mediaTypes: ImgPicker.MediaTypeOptions.All,
+          quality: 0.8,
+        });
+        if (res.canceled || !res.assets || !res.assets.length) {
+          setFileUploading((p) => ({ ...p, [questionId]: false }));
+          return;
+        }
+        const asset = res.assets[0];
+        uri = asset.uri;
+        mime = asset.mimeType || 'image/jpeg';
+        name = (asset as any).fileName || uri.split('/').pop() || 'upload_image.jpg';
+      }
+
+      if (!uri) {
+        setFileUploading((p) => ({ ...p, [questionId]: false }));
+        return;
+      }
+
+      const uploadRes = await uploadAnswerFile(sid, questionId, uri, mime, name);
+      const serverFilePath =
+        uploadRes?.answer_file ||
+        uploadRes?.file_path ||
+        uploadRes?.file_url ||
+        uploadRes?.url ||
+        uploadRes?.path ||
+        uploadRes?.data?.answer_file ||
+        uploadRes?.data?.file_path ||
+        uploadRes?.data?.url ||
+        uri;
+
+      setAnswers((p) => ({ ...p, [questionId]: serverFilePath }));
+      await autosaveAnswer(sid, { question_id: questionId, answer_text: serverFilePath }).catch(() => {});
       showAlert({ type: 'success', title: 'File terupload', message: 'File jawaban berhasil diupload.' });
     } catch (e: any) {
-      showAlert({ type: 'error', title: 'Upload gagal', message: e.message });
+      showAlert({ type: 'error', title: 'Upload gagal', message: e.message || 'Gagal mengunggah file' });
     } finally {
       setFileUploading((p) => ({ ...p, [questionId]: false }));
     }
@@ -773,24 +876,87 @@ export default function QuizScreen() {
     setPwWrong({});
     setSubmitting(true);
     try {
+      // 1. Fail-Safe: Always save submission to local offline queue FIRST
+      await enqueuePendingSubmission({
+        submission_id: sid,
+        form_id: publicForm?.id || 0,
+        form_title: publicForm?.title || '',
+        short_code: publicForm?.short_code,
+        form_type: publicForm?.type,
+        answers,
+        questions,
+      }).catch(() => {});
+
+      // 2. Sync answers to API
+      const syncPromises = questions.map(async (q) => {
+        const val = answers[q.id];
+        if (val === undefined || val === null) return;
+
+        const rawType = String(q.type || q.question_type || '').toLowerCase();
+        if (
+          rawType === 'multiple_choice' ||
+          rawType === 'checkbox' ||
+          rawType === 'dropdown' ||
+          rawType === 'select' ||
+          rawType === 'choice' ||
+          Array.isArray(val) ||
+          typeof val === 'number'
+        ) {
+          const option_ids = Array.isArray(val) ? val : typeof val === 'number' ? [val] : [];
+          if (option_ids.length > 0) {
+            await autosaveAnswer(sid, { question_id: q.id, option_ids });
+          }
+        } else if (rawType !== 'file_upload' && rawType !== 'file') {
+          const text = String(val).trim();
+          if (text) {
+            await autosaveAnswer(sid, { question_id: q.id, answer_text: text });
+          }
+        }
+      });
+
+      await Promise.all(syncPromises);
+
+      // 3. Finalize on API
       const res = await finalizeSubmission(sid);
       answeringRef.current = false;
       await unpin().catch(() => {});
       await unlockVolume().catch(() => {});
       await stopCheat().catch(() => {});
-      // Show submitted step briefly then go home
+
+      // 4. Success — dequeue & clear draft
+      await dequeuePendingSubmission(sid).catch(() => {});
+      await clearLocalAnswerDraft(publicForm?.id || 0, sid).catch(() => {});
+
       setSubmission((prev: any) => ({ ...prev, result: res }));
-      // Navigate to success view
-      // Keep answering false, show QuizSubmittedStep
       setQuestions([]); // trigger submitted view
     } catch (e: any) {
+      answeringRef.current = false;
+      await unpin().catch(() => {});
+      await unlockVolume().catch(() => {});
+      await stopCheat().catch(() => {});
+
       if (e.message?.includes('waktu') || e.message?.includes('expired')) {
-        answeringRef.current = false;
-        await unlockVolume().catch(() => {});
-        await stopCheat().catch(() => {});
         router.replace({ pathname: '/(tabs)/home' } as any);
       } else {
-        showAlert({ type: 'error', title: 'Gagal submit', message: e.message });
+        // Network error / Offline mode fallback
+        showAlert({
+          type: 'info',
+          title: language === 'ID' ? 'Koneksi Terganggu (Offline)' : 'Network Interrupted (Offline)',
+          message: language === 'ID'
+            ? 'Koneksi terganggu. Jawaban Anda telah disimpan dengan aman dan akan otomatis terkirim begitu koneksi kembali.'
+            : 'Network connection lost. Your response has been saved locally and will auto-sync when online.',
+        });
+
+        const offlineResult = {
+          submission_id: sid,
+          form_title: publicForm?.title,
+          type: publicForm?.type,
+          is_offline_pending: true,
+          submitted_at: new Date().toISOString(),
+          questions,
+        };
+        setSubmission((prev: any) => ({ ...prev, result: offlineResult }));
+        setQuestions([]);
       }
     } finally {
       setSubmitting(false);
@@ -877,9 +1043,26 @@ export default function QuizScreen() {
     );
   }
 
+  const handleFillAgain = () => {
+    setSubmission(null);
+    setQuestions([]);
+    setAnswers({});
+    setAlreadySubmitted(false);
+    setStarting(false);
+    setSubmitting(false);
+    setCurrentSectionIdx(0);
+  };
+
   // Submitted view
   if (submission?.result) {
-    return <QuizSubmittedStep resultData={submission.result} />;
+    return (
+      <QuizSubmittedStep
+        resultData={submission.result}
+        submissionId={submission.submission_id || submission.id}
+        publicForm={publicForm}
+        onFillAgain={handleFillAgain}
+      />
+    );
   }
 
   // Landing step
@@ -944,17 +1127,19 @@ export default function QuizScreen() {
       ) : (
         <SafeAreaView style={{ flex: 1 }} edges={['top']}>
           <View style={[styles.formHeader, { borderBottomColor: colors.inputBorder, backgroundColor: colors.cardBg }]}>
-            <TouchableOpacity
-              onPress={async () => {
-                await unpin().catch(() => {});
-                await unlockVolume().catch(() => {});
-                await stopCheat().catch(() => {});
-                router.replace('/(tabs)/home' as any);
-              }}
-              style={{ padding: 6 }}
-            >
-              <Ionicons name="close" size={22} color={colors.text} />
-            </TouchableOpacity>
+            {!publicForm?.is_restricted && (
+              <TouchableOpacity
+                onPress={async () => {
+                  await unpin().catch(() => {});
+                  await unlockVolume().catch(() => {});
+                  await stopCheat().catch(() => {});
+                  router.replace('/(tabs)/home' as any);
+                }}
+                style={{ padding: 6 }}
+              >
+                <Ionicons name="close" size={22} color={colors.text} />
+              </TouchableOpacity>
+            )}
             <Text style={[styles.formHeaderTitle, { color: colors.text }]} numberOfLines={1}>
               {publicForm.title?.replace(/<[^>]*>/g, '') || 'Form'}
             </Text>

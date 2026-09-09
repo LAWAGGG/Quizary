@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-// Inline audio — mirip web <audio controls> Image 1 (0:00 / 0:09)
+// Inline audio — mirip web <audio controls>
 // pakai expo-audio (SDK 57) supaya putar di dalam app, bukan Linking ke browser
 let useAudioPlayer: any = null;
 let useAudioPlayerStatus: any = null;
@@ -19,6 +19,8 @@ interface Props {
 }
 
 export function AudioPlayer({ uri, themeColor = '#0EA5E9', compact }: Props) {
+  const [isMuted, setIsMuted] = useState(false);
+
   if (!useAudioPlayer || !useAudioPlayerStatus) {
     return (
       <View style={[styles.container, compact && styles.compact, { backgroundColor: '#FFF', borderColor: '#E2E8F0' }]}>
@@ -32,7 +34,6 @@ export function AudioPlayer({ uri, themeColor = '#0EA5E9', compact }: Props) {
   const isPlaying = !!status?.playing;
   const currentTime = status?.currentTime ?? 0;
   const duration = status?.duration ?? 0;
-  const isLoaded = status?.isLoaded ?? false;
 
   const fmt = (s: number) => {
     if (!s || isNaN(s)) return '0:00';
@@ -47,6 +48,24 @@ export function AudioPlayer({ uri, themeColor = '#0EA5E9', compact }: Props) {
     if (!player) return;
     if (isPlaying) player.pause();
     else player.play();
+  };
+
+  const toggleMute = () => {
+    if (!player) return;
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+
+    try {
+      if ('muted' in player) {
+        player.muted = nextMuted;
+      }
+      if (typeof player.setMuted === 'function') {
+        player.setMuted(nextMuted);
+      }
+      if ('volume' in player) {
+        player.volume = nextMuted ? 0 : 1;
+      }
+    } catch {}
   };
 
   return (
@@ -64,11 +83,13 @@ export function AudioPlayer({ uri, themeColor = '#0EA5E9', compact }: Props) {
         </View>
       </View>
 
-      <TouchableOpacity onPress={() => { if (player) player.seekTo(0); }} style={styles.volBtn}>
-        <Ionicons name="volume-high-outline" size={18} color="#0F172A" />
+      <TouchableOpacity onPress={toggleMute} style={styles.volBtn} activeOpacity={0.7}>
+        <Ionicons
+          name={isMuted ? 'volume-mute-outline' : 'volume-high-outline'}
+          size={18}
+          color={isMuted ? '#EF4444' : '#0F172A'}
+        />
       </TouchableOpacity>
-
-      <Ionicons name="ellipsis-vertical" size={16} color="#64748B" />
     </View>
   );
 }

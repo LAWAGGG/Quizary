@@ -13,8 +13,16 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
 
   const isSubmitted = item.status === 'submitted';
   const isAutoSubmitted = item.status === 'auto_submitted';
+  const isCheating = item.status === 'cheating';
+  const isLocked = item.status === 'locked';
 
   const getStatusLabel = () => {
+    if (isCheating) {
+      return 'Cheating';
+    }
+    if (isLocked) {
+      return language === 'ID' ? 'Terkunci' : 'Locked';
+    }
     if (isSubmitted) {
       return language === 'ID' ? 'Selesai' : 'Submitted';
     }
@@ -30,7 +38,10 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
   let statusBg = isDark ? '#1E293B' : '#F1F5F9';
   let statusColor = colors.textMuted;
 
-  if (isSubmitted) {
+  if (isCheating || isLocked) {
+    statusBg = isDark ? 'rgba(220, 38, 38, 0.2)' : '#FEE2E2';
+    statusColor = isDark ? '#FCA5A5' : '#DC2626';
+  } else if (isSubmitted) {
     statusBg = isDark ? '#064E3B' : '#DCFCE7';
     statusColor = isDark ? '#34D399' : '#059669';
   } else if (isAutoSubmitted) {

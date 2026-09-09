@@ -124,17 +124,29 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
 
 async function fetchMultipart(endpoint: string, method: string, formData: FormData) {
   const token = await getToken();
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (activeSubmissionToken) headers['X-Submission-Token'] = activeSubmissionToken;
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, { method, headers, body: formData });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(extractErrorMessage(err, `Request failed (${response.status})`));
+  try {
+    const response = await fetch(`${BASE_URL}${endpoint}`, { method, headers, body: formData });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(extractErrorMessage(err, `Upload failed (${response.status})`));
+    }
+    return response.json();
+  } catch (err: any) {
+    if (
+      err.message === 'Network request failed' ||
+      err.name === 'TypeError' ||
+      String(err).includes('Network')
+    ) {
+      throw new Error('Gagal terhubung ke server saat mengunggah file.');
+    }
+    throw err;
   }
-  return response.json();
 }
 
 export async function apiLogin(body: { email: string; password: string }) {
@@ -561,16 +573,79 @@ export async function getMySubmissions() {
   return fetchWithAuth('/me/submissions');
 }
 
+export async function getLeaderboard(formCode: string, submissionId?: string | number) {
+  const url = submissionId
+    ? `/q/${formCode}/leaderboard?limit=10&submission_id=${submissionId}`
+    : `/q/${formCode}/leaderboard?limit=10`;
+  return fetchWithAuth(url);
+}
+
 export async function uploadAnswerFile(
   submissionId: string | number,
   questionId: string | number,
   fileUri: string,
-  mimeType = 'image/jpeg'
+  mimeType = 'application/octet-stream',
+  fileName?: string
 ) {
+  const token = await getToken();
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (activeSubmissionToken) headers['X-Submission-Token'] = activeSubmissionToken;
+
+  const endpointUrl = `${BASE_URL}/submissions/${submissionId}/answers/${questionId}/file`;
+
+  try {
+    if (FileSystem?.uploadAsync) {
+      const uploadRes = await FileSystem.uploadAsync(endpointUrl, fileUri, {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: 'file',
+        mimeType: mimeType || 'application/octet-stream',
+        headers,
+      });
+
+      if (uploadRes.status >= 200 && uploadRes.status < 300) {
+        let parsed = {};
+        try {
+          parsed = JSON.parse(uploadRes.body);
+        } catch {
+          parsed = { answer_file: uploadRes.body };
+        }
+        return parsed;
+      } else {
+        let errJson = {};
+        try {
+          errJson = JSON.parse(uploadRes.body);
+        } catch {}
+        throw new Error(extractErrorMessage(errJson, `Upload failed (${uploadRes.status})`));
+      }
+    }
+  } catch (err: any) {
+    if (err.message && !err.message.includes('uploadAsync')) {
+      throw err;
+    }
+  }
+
+  // Fallback to fetchMultipart
   const fd = new FormData();
-  const filename = fileUri.split('/').pop() || 'answer_file.jpg';
-  fd.append('file', { uri: fileUri, name: filename, type: mimeType } as any);
-  return fetchMultipart(`/submissions/${submissionId}/questions/${questionId}/upload`, 'POST', fd);
+  const name = fileName || fileUri.split('/').pop() || 'answer_file';
+  fd.append('file', {
+    uri: fileUri,
+    name,
+    type: mimeType || 'application/octet-stream',
+  } as any);
+  return fetchMultipart(`/submissions/${submissionId}/answers/${questionId}/file`, 'POST', fd);
+}
+
+export async function deleteAnswerFile(
+  submissionId: string | number,
+  questionId: string | number
+) {
+  return fetchWithAuth(`/submissions/${submissionId}/answers/${questionId}/file`, {
+    method: 'DELETE',
+  });
 }
 
 // RESULTS & ANALYTICS 

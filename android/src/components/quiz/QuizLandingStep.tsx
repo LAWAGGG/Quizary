@@ -150,7 +150,7 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
           </View>
         ) : (
           /* DESIGN FORM: Card Layout */
-          <ScrollView contentContainerStyle={styles.scrollContentForm} showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContentForm} showsVerticalScrollIndicator={false}>
             {bannerUri ? (
               <Image source={{ uri: bannerUri }} style={styles.heroBannerForm} resizeMode="cover" />
             ) : null}
@@ -236,13 +236,19 @@ const styles = StyleSheet.create({
   bubbleDot: { width: 14, height: 14, borderRadius: 7, borderWidth: 2 },
 
   /* FORM STYLE */
-  scrollContentForm: { padding: 20, paddingBottom: 40, justifyContent: 'center' },
-  heroBannerForm: { width: '100%', height: 180, borderRadius: 20, marginBottom: 16 },
-  titleCardForm: { width: '100%', borderRadius: 20, padding: 24, borderWidth: 1, marginBottom: 16 },
+  scrollContentForm: {
+    flexGrow: 1,
+    padding: 20,
+    paddingBottom: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heroBannerForm: { width: '100%', maxWidth: 440, height: 180, borderRadius: 20, marginBottom: 16 },
+  titleCardForm: { width: '100%', maxWidth: 440, borderRadius: 20, padding: 24, borderWidth: 1, marginBottom: 16 },
   quizTitleForm: { fontWeight: '800', marginBottom: 10 },
   startButtonForm: { width: '100%', paddingVertical: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   startButtonTextForm: { color: '#FFF', fontWeight: 'bold' },
-  metaPillsRowForm: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 4 },
+  metaPillsRowForm: { flexDirection: 'row', justifyContent: 'center', gap: 12, marginTop: 4, width: '100%', maxWidth: 440 },
   pillBadgeForm: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24, borderWidth: 1 },
   pillBadgeTextForm: { fontWeight: '600' },
 });
