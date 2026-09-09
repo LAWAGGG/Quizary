@@ -5,7 +5,7 @@ import { Stack, router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider as AppThemeProvider, useAppTheme } from '../context/ThemeContext';
-import { getMe, getToken, removeToken } from '../services/api_service';
+import { getMe, getToken, getStoredUser, removeToken } from '../services/api_service';
 import { AlertProvider } from '../context/AlertContext';
 
 import { processPendingSubmissions } from '../services/offline_sync_service';
@@ -33,14 +33,42 @@ function RootStack() {
       try {
         const token = await getToken();
         if (token) {
-          const user = await getMe();
-          // Cek jika user belum verifikasi OTP, jangan biarkan otomatis masuk
-          if (user && user.email_verified_at === null) {
-            await removeToken();
+          try {
+            const user = await getMe();
+            // Jika user belum verifikasi OTP, arahkan ke verify_otp tapi jangan hapus token
+            if (user && user.email_verified_at === null) {
+              if (mounted) router.replace({ pathname: '/verify_otp', params: { email: user.email } } as any);
+            } else if (user) {
+              // User valid dan terverifikasi -> auto remember me ke home jika masih di index
+              // Jangan paksa redirect jika sudah di tabs, biar deep link tetap jalan
+            }
+          } catch (e: any) {
+            const msg = String(e?.message || '');
+            const isNetwork = msg.includes('Gagal terhubung') || msg.includes('Network');
+            const is401 = msg.includes('401') || msg.toLowerCase().includes('unauthorized') || msg.includes('Invalid token');
+            // Network error: keep token for offline, allow auto login via stored user
+            if (isNetwork) {
+              const stored = await getStoredUser();
+              if (stored) {
+                // Biarkan tetap login meski offline
+              } else {
+                // Tidak ada stored user tapi ada token, anggap masih valid offline
+              }
+            } else if (is401 || msg.includes('Token') || msg.toLowerCase().includes('sesi')) {
+              await removeToken();
+            } else if (msg.includes('404') || msg.toLowerCase().includes('not found')) {
+              // /me 404 jarang, jangan hapus token dulu
+            } else {
+              // Untuk error lain, jangan hapus token otomatis; biarkan user tetap terlogin
+              // Hanya hapus jika benar-benar 401
+              const looksLikeAuth = msg.toLowerCase().includes('auth') || msg.includes('401');
+              if (looksLikeAuth) await removeToken();
+            }
           }
         }
       } catch (e) {
-        await removeToken();
+        // Jangan hapus token di sini, sudah ditangani di dalam
+        console.log('[CHECK AUTH] outer error', e);
       } finally {
         if (mounted) {
           setCheckingSession(false);
