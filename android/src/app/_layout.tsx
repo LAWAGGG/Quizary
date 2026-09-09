@@ -67,7 +67,7 @@ function RootStack() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="register" />
-        <Stack.Screen name="verify-otp" />
+        <Stack.Screen name="verify_otp" />
         <Stack.Screen name="(tabs)" />
       </Stack>
     </ThemeProvider>
