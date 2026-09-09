@@ -127,6 +127,13 @@ export default function QuizScreen() {
 
   const isQuizStyle = (publicForm?.display_style || 'card') === 'quiz';
 
+  const cardScrollRef = useRef<ScrollView>(null);
+
+  // Auto scroll to top when switching sections
+  useEffect(() => {
+    cardScrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [currentSectionIdx]);
+
   // Keep refs updated
   useEffect(() => {
     submissionIdRef.current = submission?.submission_id || submission?.id || null;
@@ -1244,7 +1251,7 @@ export default function QuizScreen() {
             </View>
           </View>
 
-          <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView ref={cardScrollRef} contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
             {currentCardPage && (
               <>
                 {currentCardPage.title && (

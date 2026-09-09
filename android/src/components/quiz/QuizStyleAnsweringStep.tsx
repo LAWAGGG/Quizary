@@ -71,7 +71,13 @@ export function QuizStyleAnsweringStep({
   const [pwChecking, setPwChecking] = useState(false);
   const [pickerDate, setPickerDate] = useState<Date>(new Date());
 
+  const mainScrollRef = useRef<ScrollView>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
+
+  // Reset scroll to top on question change
+  useEffect(() => {
+    mainScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [currentIdx]);
   const [reviewed, setReviewed] = useState<Record<number, boolean>>({});
   const [showMapModal, setShowMapModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
@@ -471,6 +477,7 @@ export function QuizStyleAnsweringStep({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
+          ref={mainScrollRef}
           style={{ flex: 1 }}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
