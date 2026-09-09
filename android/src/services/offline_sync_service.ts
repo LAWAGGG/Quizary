@@ -208,8 +208,15 @@ export async function processPendingSubmissions(): Promise<{ synced: number; fai
 
       syncedCount++;
     } catch (err: any) {
-      console.warn(`[OfflineSync] Sync failed for submission ${item.submission_id}:`, err?.message);
-      await updatePendingItemStatus(item.submission_id, 'PENDING_SYNC', err?.message || 'Network error');
+      const errMsg = err?.message || '';
+      console.warn(`[OfflineSync] Sync failed for submission ${item.submission_id}:`, errMsg);
+
+      // If backend permanently denied access or item no longer exists, remove from queue to prevent log spam
+      if (/access denied|forbidden|not found|403|404/i.test(errMsg)) {
+        await dequeuePendingSubmission(item.submission_id);
+      } else {
+        await updatePendingItemStatus(item.submission_id, 'PENDING_SYNC', errMsg || 'Network error');
+      }
       failedCount++;
     }
   }
