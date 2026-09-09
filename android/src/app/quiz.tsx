@@ -50,6 +50,7 @@ import { useAppPinning } from '../hooks/useAppPinning';
 import { useCheatSound } from '../hooks/useCheatSound';
 import { useLockedVolume } from '../hooks/useLockedVolume';
 import { useFloatingBlock } from '../hooks/useFloatingBlock';
+import { stripHtmlTags } from '../components/RichTextRenderer';
 
 function parseWibDate(dateStr: string): Date | null {
   if (!dateStr) return null;
@@ -828,7 +829,7 @@ export default function QuizScreen() {
           ? val.length > 0
           : !!val && String(val).trim().length > 0;
       if (!has) {
-        const clean = String(q.question_text || '').replace(/<[^>]*>/g, '').trim().slice(0, 60) || `Soal`;
+        const clean = stripHtmlTags(q.question_text || '').slice(0, 60) || `Soal`;
         showAlert({
           type: 'warning',
           title: language === 'ID' ? 'Soal wajib belum diisi' : 'Required question missing',
@@ -900,10 +901,11 @@ export default function QuizScreen() {
           ? val.length > 0
           : !!val && String(val).trim().length > 0;
       if (!has) {
+        const cleanSubmit = stripHtmlTags(q.question_text || '').slice(0, 40) || 'Soal';
         showAlert({
           type: 'warning',
           title: language === 'ID' ? 'Soal wajib belum diisi' : 'Required missing',
-          message: `${language === 'ID' ? 'Soal' : 'Question'} "${(q.question_text || '').replace(/<[^>]*>/g, '').slice(0, 40)}" ${language === 'ID' ? 'wajib diisi.' : 'is required.'}`,
+          message: `${language === 'ID' ? 'Soal' : 'Question'} "${cleanSubmit}" ${language === 'ID' ? 'wajib diisi.' : 'is required.'}`,
         });
         // arahkan ke section yang mengandung soal kosong (card)
         if (!isQuizStyle && cardPages.length) {
