@@ -56,13 +56,29 @@ export function SubmissionDetailModal({
                 </Text>
                 <Text style={[styles.detailMetaText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
                   Status: {
-                    selectedSubItem?.status === 'submitted'
+                    (selectedSubItem?.status === 'cheating' || subDetail?.status === 'cheating')
+                      ? (language === 'ID' ? 'Terdeteksi Curang' : 'Cheating Detected')
+                      : (selectedSubItem?.status === 'locked' || subDetail?.status === 'locked')
+                      ? (language === 'ID' ? 'Terkunci (Pelanggaran)' : 'Locked (Violation)')
+                      : (selectedSubItem?.status === 'submitted' || subDetail?.status === 'submitted')
                       ? (language === 'ID' ? 'Selesai' : 'Completed')
-                      : selectedSubItem?.status === 'auto_submitted'
+                      : (selectedSubItem?.status === 'auto_submitted' || subDetail?.status === 'auto_submitted')
                       ? (language === 'ID' ? 'Waktu Habis' : 'Time Up')
                       : (language === 'ID' ? 'Dalam Proses' : 'In Progress')
                   }
                 </Text>
+                {((subDetail?.cheat_reason || selectedSubItem?.cheat_reason || subDetail?.status === 'cheating' || selectedSubItem?.status === 'cheating') && (
+                  <View style={{ backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2', borderColor: '#EF4444', borderWidth: 1, borderRadius: 8, padding: 10, marginTop: 4 }}>
+                    <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 12 * fontSizeScale }}>
+                      ⚠️ {language === 'ID' ? 'Status: Terdeteksi Curang / Violations' : 'Status: Cheating Detected / Violations'}
+                    </Text>
+                    {(subDetail?.cheat_reason || selectedSubItem?.cheat_reason) ? (
+                      <Text style={{ color: colors.text, fontSize: 11 * fontSizeScale, marginTop: 2 }}>
+                        {language === 'ID' ? 'Catatan: ' : 'Note: '}{subDetail?.cheat_reason || selectedSubItem?.cheat_reason}
+                      </Text>
+                    ) : null}
+                  </View>
+                ))}
                 {((subDetail?.score !== null && subDetail?.score !== undefined) || (selectedSubItem?.score !== null && selectedSubItem?.score !== undefined)) && (
                   <View style={styles.detailScoreBox}>
                     <Text style={[styles.detailScoreVal, { fontSize: 14 * fontSizeScale }]}>
