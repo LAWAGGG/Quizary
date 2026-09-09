@@ -221,9 +221,9 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
                       </Text>
                       <Text style={[styles.yourAnsText, { color: colors.text }]}>
                         {a.selected_options && a.selected_options.length > 0
-                          ? a.selected_options.join(', ')
+                          ? a.selected_options.map((opt: string) => stripHtmlTags(opt)).join(', ')
                           : a.answer_text
-                          ? a.answer_text
+                          ? stripHtmlTags(a.answer_text)
                           : a.answer_file
                           ? 'File uploaded'
                           : (language === 'ID' ? '(Tidak dijawab)' : '(Not answered)')}
