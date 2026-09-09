@@ -86,39 +86,65 @@ function AnimatedScoreCircle({
     extrapolate: 'clamp',
   });
 
+  const tipRotate = animatedValue.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0deg', '360deg'],
+    extrapolate: 'clamp',
+  });
+
   const trackColor = isDark ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0';
 
   return (
     <View style={circleStyles.container}>
-      {/* Background Track Circle */}
-      <View style={[circleStyles.trackCircle, { borderColor: trackColor }]} />
+      {/* Rotated Ring Wrapper starting at 12 o'clock (TOP) */}
+      <View style={circleStyles.ringWrapper}>
+        {/* Background Track Circle */}
+        <View style={[circleStyles.trackCircle, { borderColor: trackColor }]} />
 
-      {/* First Half Progress (0 - 180 deg, Right Half) */}
-      <View style={circleStyles.rightMask}>
-        <Animated.View
-          style={[
-            circleStyles.halfCircleRight,
-            {
-              borderLeftColor: ringColor,
-              borderBottomColor: ringColor,
-              transform: [{ rotate: firstHalfRotate }],
-            },
-          ]}
-        />
-      </View>
+        {/* First Half Progress (0 - 180 deg) */}
+        <View style={circleStyles.rightMask}>
+          <Animated.View
+            style={[
+              circleStyles.halfCircleRight,
+              {
+                borderLeftColor: ringColor,
+                borderBottomColor: ringColor,
+                transform: [{ rotate: firstHalfRotate }],
+              },
+            ]}
+          />
+        </View>
 
-      {/* Second Half Progress (180 - 360 deg, Left Half) */}
-      <View style={circleStyles.leftMask}>
-        <Animated.View
-          style={[
-            circleStyles.halfCircleLeft,
-            {
-              borderTopColor: ringColor,
-              borderRightColor: ringColor,
-              transform: [{ rotate: secondHalfRotate }],
-            },
-          ]}
-        />
+        {/* Second Half Progress (180 - 360 deg) */}
+        <View style={circleStyles.leftMask}>
+          <Animated.View
+            style={[
+              circleStyles.halfCircleLeft,
+              {
+                borderTopColor: ringColor,
+                borderRightColor: ringColor,
+                transform: [{ rotate: secondHalfRotate }],
+              },
+            ]}
+          />
+        </View>
+
+        {/* Start Cap Dot (Fixed at 12 o'clock) */}
+        {percentage > 0 && (
+          <View style={[circleStyles.capDot, circleStyles.startCapDot, { backgroundColor: ringColor }]} />
+        )}
+
+        {/* Leading Tip Cap Dot (Rotates with Progress) */}
+        {percentage > 0 && (
+          <Animated.View
+            style={[
+              circleStyles.tipRotator,
+              { transform: [{ rotate: tipRotate }] },
+            ]}
+          >
+            <View style={[circleStyles.capDot, { backgroundColor: ringColor }]} />
+          </Animated.View>
+        )}
       </View>
 
       {/* Inner Content Display (Score / MaxScore) */}
@@ -140,6 +166,12 @@ const circleStyles = StyleSheet.create({
     alignItems: 'center',
     position: 'relative',
     marginBottom: 16,
+  },
+  ringWrapper: {
+    width: 140,
+    height: 140,
+    position: 'absolute',
+    transform: [{ rotate: '-90deg' }],
   },
   trackCircle: {
     width: 140,
@@ -186,12 +218,33 @@ const circleStyles = StyleSheet.create({
     left: 0,
     top: 0,
   },
+  startCapDot: {
+    position: 'absolute',
+    top: 0,
+    left: 65,
+  },
+  tipRotator: {
+    width: 140,
+    height: 140,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    alignItems: 'center',
+  },
+  capDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    position: 'absolute',
+    top: 0,
+  },
   innerContent: {
     width: 116,
     height: 116,
     borderRadius: 58,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
   },
   scoreText: {
     fontSize: 34,
