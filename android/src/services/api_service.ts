@@ -124,17 +124,29 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
 
 async function fetchMultipart(endpoint: string, method: string, formData: FormData) {
   const token = await getToken();
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (activeSubmissionToken) headers['X-Submission-Token'] = activeSubmissionToken;
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, { method, headers, body: formData });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(extractErrorMessage(err, `Request failed (${response.status})`));
+  try {
+    const response = await fetch(`${BASE_URL}${endpoint}`, { method, headers, body: formData });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(extractErrorMessage(err, `Upload failed (${response.status})`));
+    }
+    return response.json();
+  } catch (err: any) {
+    if (
+      err.message === 'Network request failed' ||
+      err.name === 'TypeError' ||
+      String(err).includes('Network')
+    ) {
+      throw new Error('Gagal terhubung ke server saat mengunggah file.');
+    }
+    throw err;
   }
-  return response.json();
 }
 
 export async function apiLogin(body: { email: string; password: string }) {
@@ -572,11 +584,16 @@ export async function uploadAnswerFile(
   submissionId: string | number,
   questionId: string | number,
   fileUri: string,
-  mimeType = 'image/jpeg'
+  mimeType = 'application/octet-stream',
+  fileName?: string
 ) {
   const fd = new FormData();
-  const filename = fileUri.split('/').pop() || 'answer_file.jpg';
-  fd.append('file', { uri: fileUri, name: filename, type: mimeType } as any);
+  const name = fileName || fileUri.split('/').pop() || 'answer_file';
+  fd.append('file', {
+    uri: fileUri,
+    name,
+    type: mimeType || 'application/octet-stream',
+  } as any);
   return fetchMultipart(`/submissions/${submissionId}/questions/${questionId}/upload`, 'POST', fd);
 }
 

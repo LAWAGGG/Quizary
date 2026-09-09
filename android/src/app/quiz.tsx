@@ -647,17 +647,64 @@ export default function QuizScreen() {
     if (!sid) return;
     setFileUploading((p) => ({ ...p, [questionId]: true }));
     try {
-      const { default: ImgPicker } = await import('expo-image-picker');
-      const res = await ImgPicker.launchImageLibraryAsync({ mediaTypes: ImgPicker.MediaTypeOptions.All, quality: 0.8 });
-      if (res.canceled) return;
-      const asset = res.assets[0];
-      const uri = asset.uri;
-      const mime = asset.mimeType || 'image/jpeg';
-      await uploadAnswerFile(sid, questionId, uri, mime);
-      setAnswers((p) => ({ ...p, [questionId]: uri }));
+      let uri = '';
+      let mime = 'application/octet-stream';
+      let name = 'file';
+
+      // Try document picker first (supports documents, pdfs, images, etc.)
+      try {
+        const DocumentPicker = await import('expo-document-picker');
+        const res = await DocumentPicker.getDocumentAsync({
+          type: '*/*',
+          copyToCacheDirectory: true,
+        });
+        if (res.canceled) {
+          setFileUploading((p) => ({ ...p, [questionId]: false }));
+          return;
+        }
+        if (res.assets && res.assets.length > 0) {
+          const asset = res.assets[0];
+          uri = asset.uri;
+          mime = asset.mimeType || 'application/octet-stream';
+          name = asset.name || uri.split('/').pop() || 'upload_file';
+        }
+      } catch {
+        // Fallback to ImagePicker
+        const ImgPicker = await import('expo-image-picker');
+        const res = await ImgPicker.launchImageLibraryAsync({
+          mediaTypes: ImgPicker.MediaTypeOptions.All,
+          quality: 0.8,
+        });
+        if (res.canceled || !res.assets || !res.assets.length) {
+          setFileUploading((p) => ({ ...p, [questionId]: false }));
+          return;
+        }
+        const asset = res.assets[0];
+        uri = asset.uri;
+        mime = asset.mimeType || 'image/jpeg';
+        name = (asset as any).fileName || uri.split('/').pop() || 'upload_image.jpg';
+      }
+
+      if (!uri) {
+        setFileUploading((p) => ({ ...p, [questionId]: false }));
+        return;
+      }
+
+      const uploadRes = await uploadAnswerFile(sid, questionId, uri, mime, name);
+      const serverFilePath =
+        uploadRes?.file_path ||
+        uploadRes?.file_url ||
+        uploadRes?.url ||
+        uploadRes?.path ||
+        uploadRes?.data?.file_path ||
+        uploadRes?.data?.url ||
+        uri;
+
+      setAnswers((p) => ({ ...p, [questionId]: serverFilePath }));
+      await autosaveAnswer(sid, { question_id: questionId, answer_text: serverFilePath }).catch(() => {});
       showAlert({ type: 'success', title: 'File terupload', message: 'File jawaban berhasil diupload.' });
     } catch (e: any) {
-      showAlert({ type: 'error', title: 'Upload gagal', message: e.message });
+      showAlert({ type: 'error', title: 'Upload gagal', message: e.message || 'Gagal mengunggah file' });
     } finally {
       setFileUploading((p) => ({ ...p, [questionId]: false }));
     }
