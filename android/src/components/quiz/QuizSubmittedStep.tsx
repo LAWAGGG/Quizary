@@ -100,7 +100,7 @@ function AnimatedScoreCircle({
             circleStyles.halfCircleRight,
             {
               borderLeftColor: ringColor,
-              borderTopColor: ringColor,
+              borderBottomColor: ringColor,
               transform: [{ rotate: firstHalfRotate }],
             },
           ]}
@@ -113,8 +113,8 @@ function AnimatedScoreCircle({
           style={[
             circleStyles.halfCircleLeft,
             {
+              borderTopColor: ringColor,
               borderRightColor: ringColor,
-              borderBottomColor: ringColor,
               transform: [{ rotate: secondHalfRotate }],
             },
           ]}
@@ -169,8 +169,8 @@ const circleStyles = StyleSheet.create({
     height: 140,
     borderRadius: 70,
     borderWidth: 8,
+    borderTopColor: 'transparent',
     borderRightColor: 'transparent',
-    borderBottomColor: 'transparent',
     position: 'absolute',
     left: -70,
     top: 0,
@@ -180,8 +180,8 @@ const circleStyles = StyleSheet.create({
     height: 140,
     borderRadius: 70,
     borderWidth: 8,
+    borderBottomColor: 'transparent',
     borderLeftColor: 'transparent',
-    borderTopColor: 'transparent',
     position: 'absolute',
     left: 0,
     top: 0,
