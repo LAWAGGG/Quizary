@@ -57,7 +57,21 @@ export const CustomDateTimePickerModal: React.FC<CustomDateTimePickerModalProps>
   const hourScrollRef = useRef<ScrollView>(null);
   const minuteScrollRef = useRef<ScrollView>(null);
 
-  // Initialize values when modal opens
+  // Max days in current month/year
+  const daysInMonth = new Date(year, month, 0).getDate();
+  useEffect(() => {
+    if (day > daysInMonth) {
+      setDay(daysInMonth);
+    }
+  }, [month, year, daysInMonth, day]);
+
+  // Generate lists (1970 to 2070)
+  const years = Array.from({ length: 101 }, (_, i) => 1970 + i);
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const minutes = Array.from({ length: 60 }, (_, i) => i);
+
+  // Initialize values and scroll wheels when modal opens
   useEffect(() => {
     if (!visible) return;
 
@@ -114,23 +128,26 @@ export const CustomDateTimePickerModal: React.FC<CustomDateTimePickerModalProps>
     setDay(initDay);
     setHour(initHour);
     setMinute(initMin);
+
+    const timer = setTimeout(() => {
+      const targetStep = mode === 'time' ? 'time' : 'date';
+      if (targetStep === 'date') {
+        monthScrollRef.current?.scrollTo({ y: (initMonth - 1) * ITEM_HEIGHT, animated: false });
+        dayScrollRef.current?.scrollTo({ y: (initDay - 1) * ITEM_HEIGHT, animated: false });
+        const yIndex = years.indexOf(initYear);
+        if (yIndex >= 0) {
+          yearScrollRef.current?.scrollTo({ y: yIndex * ITEM_HEIGHT, animated: false });
+        }
+      } else {
+        hourScrollRef.current?.scrollTo({ y: initHour * ITEM_HEIGHT, animated: false });
+        minuteScrollRef.current?.scrollTo({ y: initMin * ITEM_HEIGHT, animated: false });
+      }
+    }, 120);
+
+    return () => clearTimeout(timer);
   }, [visible, mode, initialValue]);
 
-  // Max days in current month/year
-  const daysInMonth = new Date(year, month, 0).getDate();
-  useEffect(() => {
-    if (day > daysInMonth) {
-      setDay(daysInMonth);
-    }
-  }, [month, year, daysInMonth, day]);
-
-  // Generate lists (1970 to 2070)
-  const years = Array.from({ length: 101 }, (_, i) => 1970 + i);
-  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const hours = Array.from({ length: 24 }, (_, i) => i);
-  const minutes = Array.from({ length: 60 }, (_, i) => i);
-
-  // Auto scroll to selected position precisely on layout
+  // Auto scroll to selected position when switching steps (datetime mode)
   useEffect(() => {
     if (!visible) return;
     const timer = setTimeout(() => {
@@ -147,7 +164,7 @@ export const CustomDateTimePickerModal: React.FC<CustomDateTimePickerModalProps>
       }
     }, 120);
     return () => clearTimeout(timer);
-  }, [visible, step]);
+  }, [step]);
 
   const handleNextOrConfirm = () => {
     const pad = (n: number) => String(n).padStart(2, '0');
