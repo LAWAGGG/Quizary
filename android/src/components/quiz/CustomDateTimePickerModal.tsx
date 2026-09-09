@@ -148,15 +148,16 @@ export const CustomDateTimePickerModal: React.FC<CustomDateTimePickerModalProps>
       // Mark initialized after initial scroll position is locked
       setTimeout(() => {
         isInitializedRef.current = true;
-      }, 100);
-    }, 120);
+      }, 150);
+    }, 250);
 
     return () => clearTimeout(timer);
   }, [visible, mode, initialValue]);
 
-  // Auto scroll to selected position when switching steps (datetime mode)
+  // Auto scroll to selected position when switching steps (datetime mode) — only after user taps Lanjut, not on initial open
   useEffect(() => {
     if (!visible) return;
+    if (!isInitializedRef.current) return;
     const timer = setTimeout(() => {
       if (step === 'date') {
         monthScrollRef.current?.scrollTo({ y: (month - 1) * ITEM_HEIGHT, animated: false });
