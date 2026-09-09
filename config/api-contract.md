@@ -281,7 +281,7 @@ Auth: Bearer Token (pemilik) — kirim field yang berubah saja
 - `submission_limit="once"` ⇒ `require_login` dipaksa `true` (identitas akun, bukan IP).
 - Nilai yang ter-coerce langsung tersimpan di DB dan terlihat di respons. Creator tidak perlu mengaturnya manual.
 
-**Penilaian quiz:** `scoring_mode` bernilai `auto` (default, pool 100 dibagi rata) atau `manual` (poin tiap soal mengikuti input creator). Mode manual menyimpan total bobot mentah, tetapi hasil akhir selalu dinormalisasi: `poin_diperoleh / total_bobot × 100`.
+**Penilaian quiz:** `scoring_mode` bernilai `auto` (default, pool 100 dibagi rata) atau `manual` (poin tiap soal mengikuti input creator). Mode manual memakai skor mentah: `score` = jumlah poin diperoleh, `max_score` = jumlah bobot creator (tanpa normalisasi ke 100).
 
 ### `DELETE /forms/{id}`
 Auth: Bearer Token (pemilik)

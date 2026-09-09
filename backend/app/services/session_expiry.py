@@ -130,7 +130,6 @@ def auto_submit_expired_for_form(db: Session, form: Form) -> int:
                     from app.services.grading import grade_answer, max_score_for as _max
                     from decimal import Decimal as _Dec
                     scoring_mode = form.scoring_mode.value if form.scoring_mode else "auto"
-                    raw_max = _max(questions, scoring_mode=None)
                     max_sc = _max(questions, scoring_mode=scoring_mode)
                     total = 0.0
                     for ans in answers_by_sub.get(s.id, []):
@@ -141,8 +140,6 @@ def auto_submit_expired_for_form(db: Session, form: Form) -> int:
                         ans.is_correct = correct
                         ans.points_earned = pts
                         total += float(pts)
-                    if scoring_mode == "manual" and raw_max:
-                        total = round(total / raw_max * 100, 2)
                     s.score = _Dec(str(total))
                     s.max_score = _Dec(str(max_sc))
                 else:
