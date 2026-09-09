@@ -692,10 +692,12 @@ export default function QuizScreen() {
 
       const uploadRes = await uploadAnswerFile(sid, questionId, uri, mime, name);
       const serverFilePath =
+        uploadRes?.answer_file ||
         uploadRes?.file_path ||
         uploadRes?.file_url ||
         uploadRes?.url ||
         uploadRes?.path ||
+        uploadRes?.data?.answer_file ||
         uploadRes?.data?.file_path ||
         uploadRes?.data?.url ||
         uri;

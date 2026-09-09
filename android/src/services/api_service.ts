@@ -594,7 +594,7 @@ export async function uploadAnswerFile(
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (activeSubmissionToken) headers['X-Submission-Token'] = activeSubmissionToken;
 
-  const endpointUrl = `${BASE_URL}/submissions/${submissionId}/questions/${questionId}/upload`;
+  const endpointUrl = `${BASE_URL}/submissions/${submissionId}/answers/${questionId}/file`;
 
   try {
     if (FileSystem?.uploadAsync) {
@@ -611,7 +611,7 @@ export async function uploadAnswerFile(
         try {
           parsed = JSON.parse(uploadRes.body);
         } catch {
-          parsed = { file_path: uploadRes.body };
+          parsed = { answer_file: uploadRes.body };
         }
         return parsed;
       } else {
@@ -636,7 +636,16 @@ export async function uploadAnswerFile(
     name,
     type: mimeType || 'application/octet-stream',
   } as any);
-  return fetchMultipart(`/submissions/${submissionId}/questions/${questionId}/upload`, 'POST', fd);
+  return fetchMultipart(`/submissions/${submissionId}/answers/${questionId}/file`, 'POST', fd);
+}
+
+export async function deleteAnswerFile(
+  submissionId: string | number,
+  questionId: string | number
+) {
+  return fetchWithAuth(`/submissions/${submissionId}/answers/${questionId}/file`, {
+    method: 'DELETE',
+  });
 }
 
 // RESULTS & ANALYTICS 
