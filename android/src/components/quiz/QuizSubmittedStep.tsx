@@ -106,9 +106,9 @@ function AnimatedScoreCircle({
     extrapolate: 'clamp',
   });
 
-  const tipRotate = animatedValue.interpolate({
-    inputRange: [0, 100],
-    outputRange: ['0deg', '360deg'],
+  const secondHalfOpacity = animatedValue.interpolate({
+    inputRange: [0, 49.9, 50, 100],
+    outputRange: [0, 0, 1, 1],
     extrapolate: 'clamp',
   });
 
@@ -143,7 +143,7 @@ function AnimatedScoreCircle({
         </View>
 
         {/* Left Half Mask (6 o'clock -> 12 o'clock) */}
-        <View style={circleStyles.leftMask}>
+        <Animated.View style={[circleStyles.leftMask, { opacity: secondHalfOpacity }]}>
           <Animated.View
             style={[
               circleStyles.halfCircleLeft,
@@ -153,7 +153,7 @@ function AnimatedScoreCircle({
               },
             ]}
           />
-        </View>
+        </Animated.View>
       </View>
 
       {/* Inner Content Display (Score / MaxScore) */}
