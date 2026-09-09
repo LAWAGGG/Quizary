@@ -9,7 +9,6 @@ import {
   Animated,
   Easing,
 } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
@@ -17,8 +16,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { stripHtmlTags } from '../RichTextRenderer';
 import { getSubmissionDetail, getLeaderboard } from '../../services/api_service';
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 interface QuizSubmittedStepProps {
   resultData: any;
@@ -55,7 +52,6 @@ function AnimatedScoreCircle({
 
   const targetScore = Math.round(score);
   const percentage = maxScore > 0 ? Math.min(100, Math.max(0, Math.round((targetScore / maxScore) * 100))) : 0;
-  const CIRCUMFERENCE = 377; // 2 * PI * 60
 
   useEffect(() => {
     if (!ready) return;
@@ -98,9 +94,21 @@ function AnimatedScoreCircle({
     };
   }, [percentage, targetScore, maxScore, ready]);
 
-  const strokeDashoffset = animatedValue.interpolate({
+  const firstHalfRotate = animatedValue.interpolate({
+    inputRange: [0, 50, 100],
+    outputRange: ['-180deg', '0deg', '0deg'],
+    extrapolate: 'clamp',
+  });
+
+  const secondHalfRotate = animatedValue.interpolate({
+    inputRange: [0, 50, 100],
+    outputRange: ['-180deg', '-180deg', '0deg'],
+    extrapolate: 'clamp',
+  });
+
+  const tipRotate = animatedValue.interpolate({
     inputRange: [0, 100],
-    outputRange: [CIRCUMFERENCE, 0],
+    outputRange: ['0deg', '360deg'],
     extrapolate: 'clamp',
   });
 
@@ -116,35 +124,63 @@ function AnimatedScoreCircle({
         },
       ]}
     >
-      <View style={circleStyles.svgWrapper}>
-        <Svg width={140} height={140} viewBox="0 0 140 140">
-          {/* Background Track Circle */}
-          <Circle
-            cx="70"
-            cy="70"
-            r="60"
-            fill="none"
-            stroke={trackColor}
-            strokeWidth="10"
+      {/* Outer Ring Container starting from 12 o'clock */}
+      <View style={circleStyles.ringWrapper}>
+        {/* Background Track Circle */}
+        <View style={[circleStyles.trackCircle, { borderColor: trackColor }]} />
+
+        {/* Right Half Mask (12 o'clock -> 6 o'clock) */}
+        <View style={circleStyles.rightMask}>
+          <Animated.View
+            style={[
+              circleStyles.halfCircleRight,
+              {
+                borderTopColor: ringColor,
+                borderRightColor: ringColor,
+                borderBottomColor: 'transparent',
+                borderLeftColor: 'transparent',
+                transform: [{ rotate: firstHalfRotate }],
+              },
+            ]}
           />
-          {/* Animated Progress Circle Ring */}
-          <AnimatedCircle
-            cx="70"
-            cy="70"
-            r="60"
-            fill="none"
-            stroke={ringColor}
-            strokeWidth="10"
-            strokeLinecap="round"
-            strokeDasharray={`${CIRCUMFERENCE}`}
-            strokeDashoffset={strokeDashoffset}
-            transform="rotate(-90 70 70)"
+        </View>
+
+        {/* Left Half Mask (6 o'clock -> 12 o'clock) */}
+        <View style={circleStyles.leftMask}>
+          <Animated.View
+            style={[
+              circleStyles.halfCircleLeft,
+              {
+                borderBottomColor: ringColor,
+                borderLeftColor: ringColor,
+                borderTopColor: 'transparent',
+                borderRightColor: 'transparent',
+                transform: [{ rotate: secondHalfRotate }],
+              },
+            ]}
           />
-        </Svg>
+        </View>
+
+        {/* Round Cap Dot at 12 o'clock Start */}
+        {percentage > 0 && (
+          <View style={[circleStyles.capDot, circleStyles.startCapDot, { backgroundColor: ringColor }]} />
+        )}
+
+        {/* Leading Tip Cap Dot rotating with progress */}
+        {percentage > 0 && (
+          <Animated.View
+            style={[
+              circleStyles.tipRotator,
+              { transform: [{ rotate: tipRotate }] },
+            ]}
+          >
+            <View style={[circleStyles.capDot, circleStyles.startCapDot, { backgroundColor: ringColor }]} />
+          </Animated.View>
+        )}
       </View>
 
       {/* Inner Content Display (Score / MaxScore) */}
-      <View style={circleStyles.innerContent}>
+      <View style={[circleStyles.innerContent, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC' }]}>
         <Text style={[circleStyles.scoreText, { color: textColor }]}>{displayScore}</Text>
         {maxScore > 0 && (
           <Text style={[circleStyles.maxScoreText, { color: textSubColor }]}>/{Math.round(maxScore)}</Text>
@@ -163,14 +199,78 @@ const circleStyles = StyleSheet.create({
     position: 'relative',
     marginBottom: 16,
   },
-  svgWrapper: {
+  ringWrapper: {
     width: 140,
     height: 140,
     position: 'absolute',
+    transform: [{ rotate: '-90deg' }],
+  },
+  trackCircle: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 10,
+    position: 'absolute',
+  },
+  rightMask: {
+    width: 70,
+    height: 140,
+    position: 'absolute',
+    left: 70,
+    top: 0,
+    overflow: 'hidden',
+  },
+  leftMask: {
+    width: 70,
+    height: 140,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    overflow: 'hidden',
+  },
+  halfCircleRight: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 10,
+    position: 'absolute',
+    left: -70,
+    top: 0,
+  },
+  halfCircleLeft: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 10,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+  startCapDot: {
+    position: 'absolute',
+    top: 0,
+    left: 65,
+  },
+  tipRotator: {
+    width: 140,
+    height: 140,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  capDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    position: 'absolute',
   },
   innerContent: {
-    alignItems: 'center',
+    width: 116,
+    height: 116,
+    borderRadius: 58,
     justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
   scoreText: {
     fontSize: 34,
