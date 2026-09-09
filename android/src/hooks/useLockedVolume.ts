@@ -15,7 +15,9 @@ async function enforceMaxVolume() {
   for (const st of STREAM_TYPES) {
     try {
       await VolumeManager.setVolume(1.0, { showUI: false, type: st });
-    } catch {}
+    } catch (e) {
+      // Safe catch for Android ContextImpl startActivity exception
+    }
   }
 }
 

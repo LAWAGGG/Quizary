@@ -438,9 +438,11 @@ export function QuizStyleAnsweringStep({
               </View>
             ) : null}
 
-            <TouchableOpacity style={styles.closeHeaderBtn} onPress={onCloseQuiz} activeOpacity={0.7}>
-              <Ionicons name="close-outline" size={20} color="#FFF" />
-            </TouchableOpacity>
+            {!publicForm?.is_restricted && (
+              <TouchableOpacity style={styles.closeHeaderBtn} onPress={onCloseQuiz} activeOpacity={0.7}>
+                <Ionicons name="close-outline" size={20} color="#FFF" />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 

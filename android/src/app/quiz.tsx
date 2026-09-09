@@ -1078,17 +1078,19 @@ export default function QuizScreen() {
       ) : (
         <SafeAreaView style={{ flex: 1 }} edges={['top']}>
           <View style={[styles.formHeader, { borderBottomColor: colors.inputBorder, backgroundColor: colors.cardBg }]}>
-            <TouchableOpacity
-              onPress={async () => {
-                await unpin().catch(() => {});
-                await unlockVolume().catch(() => {});
-                await stopCheat().catch(() => {});
-                router.replace('/(tabs)/home' as any);
-              }}
-              style={{ padding: 6 }}
-            >
-              <Ionicons name="close" size={22} color={colors.text} />
-            </TouchableOpacity>
+            {!publicForm?.is_restricted && (
+              <TouchableOpacity
+                onPress={async () => {
+                  await unpin().catch(() => {});
+                  await unlockVolume().catch(() => {});
+                  await stopCheat().catch(() => {});
+                  router.replace('/(tabs)/home' as any);
+                }}
+                style={{ padding: 6 }}
+              >
+                <Ionicons name="close" size={22} color={colors.text} />
+              </TouchableOpacity>
+            )}
             <Text style={[styles.formHeaderTitle, { color: colors.text }]} numberOfLines={1}>
               {publicForm.title?.replace(/<[^>]*>/g, '') || 'Form'}
             </Text>
