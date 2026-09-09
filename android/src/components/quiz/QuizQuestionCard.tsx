@@ -74,6 +74,7 @@ function QuizQuestionCardComponent({
   const [zoomUri, setZoomUri] = useState<string | null>(null);
   const isReq = q.is_required !== false;
 
+  const [showPassword, setShowPassword] = useState(false);
   const [showPicker, setShowPicker] = useState<'date' | 'time' | 'datetime' | null>(null);
   const [showDropdownModal, setShowDropdownModal] = useState(false);
 
@@ -264,7 +265,6 @@ function QuizQuestionCardComponent({
                   <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
                     {optionsList.map((opt: any, i: number) => {
                       const isSel = selectedOpt?.id === opt.id;
-                      const letter = LETTERS[i % LETTERS.length];
 
                       return (
                         <TouchableOpacity
@@ -400,18 +400,36 @@ function QuizQuestionCardComponent({
 
       {/* Password Input */}
       {q.type === 'password' && (
-        <TextInput
+        <View
           style={[
-            styles.textInput,
-            { backgroundColor: colors.inputBg, color: colors.text, borderColor: hasError ? '#EF4444' : colors.inputBorder },
+            styles.passwordContainer,
+            {
+              backgroundColor: colors.inputBg,
+              borderColor: hasError ? '#EF4444' : colors.inputBorder,
+            },
             hasError && { borderWidth: 2 },
           ]}
-          placeholder="Enter password"
-          placeholderTextColor={colors.textMuted}
-          secureTextEntry
-          value={typeof userAnswer === 'string' ? userAnswer : ''}
-          onChangeText={(txt) => onTextChange(q.id, txt)}
-        />
+        >
+          <TextInput
+            style={[styles.passwordInput, { color: colors.text }]}
+            placeholder="Enter password"
+            placeholderTextColor={colors.textMuted}
+            secureTextEntry={!showPassword}
+            value={typeof userAnswer === 'string' ? userAnswer : ''}
+            onChangeText={(txt) => onTextChange(q.id, txt)}
+          />
+          <TouchableOpacity
+            style={styles.eyeBtn}
+            onPress={() => setShowPassword(!showPassword)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons
+              name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+              size={20}
+              color={colors.textMuted}
+            />
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* File Upload Input */}
@@ -555,4 +573,22 @@ const styles = StyleSheet.create({
   fileBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 14, borderRadius: 12, borderWidth: 1, marginTop: 12 },
   fileBtnText: { fontWeight: 'bold', fontSize: 14 },
   fileAttachedText: { fontSize: 12, fontWeight: '600', marginTop: 4 },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 12,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 14,
+    fontSize: 14,
+  },
+  eyeBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });

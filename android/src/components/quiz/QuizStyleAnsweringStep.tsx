@@ -67,6 +67,7 @@ export function QuizStyleAnsweringStep({
 }: QuizStyleAnsweringStepProps) {
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
   const { showAlert } = useAppAlert();
+  const [showPassword, setShowPassword] = useState(false);
   const [pwWrong, setPwWrong] = useState<Record<number, boolean>>({});
   const [pwChecking, setPwChecking] = useState(false);
   const [pickerDate, setPickerDate] = useState<Date>(new Date());
@@ -826,21 +827,42 @@ export function QuizStyleAnsweringStep({
                   {/* Password Input — blocked until correct */}
                   {isPasswordType && (
                     <View style={styles.textInputBox}>
-                      <TextInput
+                      <View
                         style={[
-                          styles.shortAnswerInput,
-                          { color: '#FFF', fontSize: 16 * fontSizeScale },
-                          pwWrong[currentQ.id] && { borderColor: '#EF4444', borderWidth: 2 },
+                          styles.passwordContainer,
+                          {
+                            backgroundColor: '#1E293B',
+                            borderColor: pwWrong[currentQ.id] ? '#EF4444' : 'rgba(255, 255, 255, 0.15)',
+                          },
+                          pwWrong[currentQ.id] && { borderWidth: 2 },
                         ]}
-                        placeholder="Enter password"
-                        placeholderTextColor="#64748B"
-                        secureTextEntry
-                        value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
-                        onChangeText={(text) => {
-                          if (pwWrong[currentQ.id]) setPwWrong((p) => { const n = { ...p }; delete n[currentQ.id]; return n; });
-                          onTextChange(currentQ.id, text);
-                        }}
-                      />
+                      >
+                        <TextInput
+                          style={[
+                            styles.passwordInput,
+                            { color: '#FFF', fontSize: 16 * fontSizeScale },
+                          ]}
+                          placeholder="Enter password"
+                          placeholderTextColor="#64748B"
+                          secureTextEntry={!showPassword}
+                          value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
+                          onChangeText={(text) => {
+                            if (pwWrong[currentQ.id]) setPwWrong((p) => { const n = { ...p }; delete n[currentQ.id]; return n; });
+                            onTextChange(currentQ.id, text);
+                          }}
+                        />
+                        <TouchableOpacity
+                          style={styles.eyeBtn}
+                          onPress={() => setShowPassword(!showPassword)}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Ionicons
+                            name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+                            size={20}
+                            color="#94A3B8"
+                          />
+                        </TouchableOpacity>
+                      </View>
                       {pwWrong[currentQ.id] && (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
                           <Ionicons name="warning-outline" size={14} color="#EF4444" />
@@ -1206,6 +1228,25 @@ const styles = StyleSheet.create({
   /* INPUT FIELDS */
   textInputBox: { width: '100%', marginTop: 10 },
   shortAnswerInput: { width: '100%', minHeight: 56, borderRadius: 18, backgroundColor: '#1E293B', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', paddingHorizontal: 18, paddingVertical: 14 },
+  passwordContainer: {
+    width: '100%',
+    minHeight: 56,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  eyeBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   fileUploadBox: { width: '100%', marginTop: 10 },
   fileUploadBtn: { width: '100%', height: 60, borderRadius: 18, backgroundColor: '#1E293B', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   fileUploadBtnText: { color: '#FFF', fontWeight: 'bold' },
