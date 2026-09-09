@@ -11,8 +11,6 @@ import {
   AppStateStatus,
   Platform,
   BackHandler,
-  KeyboardAvoidingView,
-  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -105,26 +103,6 @@ export default function QuizScreen() {
   const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
   const [pwWrong, setPwWrong] = useState<Record<number, boolean>>({});
   const [pwChecking, setPwChecking] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSub = Keyboard.addListener(showEvent, (e) => {
-      const kh = e.endCoordinates.height || 280;
-      setKeyboardHeight(kh);
-    });
-
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
 
   const warningTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef = useRef(5);
@@ -1273,14 +1251,7 @@ export default function QuizScreen() {
             </View>
           </View>
 
-          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <ScrollView
-              ref={cardScrollRef}
-              contentContainerStyle={[styles.formScroll, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 80 : 32 }]}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              automaticallyAdjustKeyboardInsets={true}
-            >
+          <ScrollView ref={cardScrollRef} contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
             {currentCardPage && (
               <>
                 {currentCardPage.title && (
@@ -1350,7 +1321,6 @@ export default function QuizScreen() {
               )}
             </View>
           </ScrollView>
-        </KeyboardAvoidingView>
         </SafeAreaView>
       )}
 

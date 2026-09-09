@@ -74,36 +74,6 @@ export function QuizStyleAnsweringStep({
 
   const mainScrollRef = useRef<ScrollView>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSub = Keyboard.addListener(showEvent, (e) => {
-      const kh = e.endCoordinates.height || 280;
-      setKeyboardHeight(kh);
-      setTimeout(() => {
-        mainScrollRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    });
-
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-      mainScrollRef.current?.scrollTo({ y: 0, animated: true });
-    });
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  const handleInputFocus = () => {
-    setTimeout(() => {
-      mainScrollRef.current?.scrollToEnd({ animated: true });
-    }, 150);
-  };
 
   // Reset scroll to top on question change
   useEffect(() => {
@@ -505,14 +475,14 @@ export function QuizStyleAnsweringStep({
       {/* MAIN QUESTION CONTAINER */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >        <ScrollView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
           ref={mainScrollRef}
           style={{ flex: 1 }}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 60 : 40 }]}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          automaticallyAdjustKeyboardInsets={true}
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <Animated.View
@@ -559,17 +529,14 @@ export function QuizStyleAnsweringStep({
                     </TouchableOpacity>
                   </View>
 
-                  {/* Centered WYSIWYG Question Title — renders rich HTML with code-block background like web */}
-                  <View style={[styles.qTitleCenterWrapper, { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 4 }]}>
-                    <View style={{ flex: 1 }}>
-                      <RichTextRenderer
-                        html={currentQ.question_text || ''}
-                        style={{ color: '#FFFFFF', fontSize: 22 * fontSizeScale, fontWeight: '800', textAlign: 'center', lineHeight: Math.round(22 * fontSizeScale * 1.45) }}
-                      />
-                    </View>
-                    {currentQ.is_required !== false ? (
-                      <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 22 * fontSizeScale, lineHeight: Math.round(22 * fontSizeScale * 1.45) }}>*</Text>
-                    ) : null}
+                  {/* Centered Large Question Title */}
+                  <View style={styles.qTitleCenterWrapper}>
+                    <Text style={[styles.qTitleText, { color: '#FFFFFF', fontSize: 22 * fontSizeScale }]}>
+                      {stripHtmlTags(currentQ.question_text)}
+                      {currentQ.is_required !== false ? (
+                        <Text style={{ color: '#EF4444', fontWeight: 'bold' }}> *</Text>
+                      ) : null}
+                    </Text>
                   </View>
 
                   {/* Question Media: image OR audio (listening) */}
@@ -662,12 +629,9 @@ export function QuizStyleAnsweringStep({
                                 />
                               )}
 
-                              <View style={{ flex: 1 }}>
-                                <RichTextRenderer
-                                  html={opt.option_text || opt.text || ''}
-                                  style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
-                                />
-                              </View>
+                              <Text style={[styles.optionTileText, { fontSize: 16 * fontSizeScale, flex: 1 }]}>
+                                {stripHtmlTags(opt.option_text || opt.text || '')}
+                              </Text>
 
                               {selected && !isCheckbox && (
                                 <View style={styles.selectedBadgeCircle}>
@@ -782,7 +746,6 @@ export function QuizStyleAnsweringStep({
                         placeholderTextColor="#64748B"
                         value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                         onChangeText={(text) => onTextChange(currentQ.id, text)}
-                        onFocus={handleInputFocus}
                         multiline
                       />
                     </View>
@@ -797,7 +760,6 @@ export function QuizStyleAnsweringStep({
                         placeholderTextColor="#64748B"
                         value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                         onChangeText={(text) => onTextChange(currentQ.id, text)}
-                        onFocus={handleInputFocus}
                         multiline
                       />
                     </View>
@@ -814,7 +776,6 @@ export function QuizStyleAnsweringStep({
                           placeholderTextColor="#64748B"
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                           onChangeText={(text) => onTextChange(currentQ.id, text)}
-                          onFocus={handleInputFocus}
                         />
                         <TouchableOpacity
                           style={styles.pickerTriggerBtnStyle}
@@ -838,7 +799,6 @@ export function QuizStyleAnsweringStep({
                           placeholderTextColor="#64748B"
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                           onChangeText={(text) => onTextChange(currentQ.id, text)}
-                          onFocus={handleInputFocus}
                         />
                         <TouchableOpacity
                           style={styles.pickerTriggerBtnStyle}
@@ -861,6 +821,8 @@ export function QuizStyleAnsweringStep({
                       onDismiss={() => setShowPicker(null)}
                     />
                   )}
+
+
 
                   {/* Password Input — blocked until correct */}
                   {isPasswordType && (
@@ -888,8 +850,7 @@ export function QuizStyleAnsweringStep({
                             if (pwWrong[currentQ.id]) setPwWrong((p) => { const n = { ...p }; delete n[currentQ.id]; return n; });
                             onTextChange(currentQ.id, text);
                           }}
-                          onFocus={handleInputFocus}
-                        />              />
+                        />
                         <TouchableOpacity
                           style={styles.eyeBtn}
                           onPress={() => setShowPassword(!showPassword)}
