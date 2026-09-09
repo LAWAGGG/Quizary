@@ -50,6 +50,7 @@ import { useAppPinning } from '../hooks/useAppPinning';
 import { useCheatSound } from '../hooks/useCheatSound';
 import { useLockedVolume } from '../hooks/useLockedVolume';
 import { useFloatingBlock } from '../hooks/useFloatingBlock';
+import { stripHtmlTags } from '../components/RichTextRenderer';
 
 function parseWibDate(dateStr: string): Date | null {
   if (!dateStr) return null;
@@ -68,8 +69,9 @@ function formatTimer(ms: number | null) {
 }
 
 export default function QuizScreen() {
-  const params = useLocalSearchParams<{ shortCode?: string; formId?: string }>();
+  const params = useLocalSearchParams<{ shortCode?: string; formId?: string; submissionId?: string; resumeSubmissionId?: string }>();
   const shortCode = (params.shortCode as string) || '';
+  const resumeId = (params.resumeSubmissionId as string) || (params.submissionId as string) || '';
   const { colors, language } = useAppTheme();
   const { showAlert } = useAppAlert();
 
@@ -151,9 +153,67 @@ export default function QuizScreen() {
     }
   }, [shortCode]);
 
+  // Resume via submissionId (khusus in_progress dari submission list)
+  useEffect(() => {
+    if (!resumeId) return;
+    (async () => {
+      setLoading(true);
+      try {
+        const detail: any = await getSubmissionDetail(resumeId);
+        // Public form untuk tema/header — fallback minimal jika getPublicForm gagal (mis. form draft/privat)
+        if (detail.short_code) {
+          try {
+            const form = await getPublicForm(detail.short_code);
+            setPublicForm(form);
+          } catch {
+            setPublicForm({ id: detail.form_id, title: detail.form_title || 'Form', short_code: detail.short_code, type: detail.type || 'form', display_style: 'card', theme_color: null } as any);
+          }
+        } else if (detail.form_id) {
+          setPublicForm({ id: detail.form_id, title: detail.form_title || 'Form', short_code: detail.short_code, type: detail.type || 'form', display_style: 'card', theme_color: null } as any);
+        } else {
+          setPublicForm({ id: 0, title: detail.form_title || 'Form', type: 'form', display_style: 'card' } as any);
+        }
+        // Set submission langsung tanpa landing
+        setSubmission({ submission_id: detail.id, id: detail.id, ...detail, access_token: detail.access_token });
+        if (detail.access_token) setSubmissionToken(detail.access_token);
+        setQuestions(detail.questions || []);
+        setSections(detail.sections || []);
+        setCurrentSectionIdx(0);
+        if (detail.answers && Array.isArray(detail.answers)) {
+          const init: Record<number, any> = {};
+          detail.answers.forEach((a: any) => {
+            const qtype = String(a.question_type || a.type || '').toLowerCase();
+            if (['short_answer', 'essay', 'date', 'time', 'datetime', 'password'].includes(qtype)) init[a.question_id] = a.answer_text || '';
+            else if (qtype === 'file_upload') { if (a.answer_file) init[a.question_id] = a.answer_file; }
+            else init[a.question_id] = a.selected_option_ids || [];
+          });
+          setAnswers(init);
+        }
+        answeringRef.current = true;
+        submissionIdRef.current = Number(resumeId);
+        // Jika restricted, pin/volume akan aktif via AppState/polling; trigger pin sekarang jika bisa
+        // Delay sedikit biar publicForm ter-set dulu
+        setTimeout(async () => {
+          if (isRestrictedRef.current && canPin) {
+            lockVolume().catch(() => {});
+            await pin().catch(() => {});
+          }
+        }, 500);
+      } catch (e: any) {
+        showAlert({ type: 'error', title: 'Gagal memuat', message: e.message });
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [resumeId]);
+
   // Fetch public form + canStart
   useEffect(() => {
     (async () => {
+      if (resumeId) {
+        // Sudah handle via resumeId di atas
+        return;
+      }
       if (!shortCode) {
         setLoading(false);
         return;
@@ -769,7 +829,7 @@ export default function QuizScreen() {
           ? val.length > 0
           : !!val && String(val).trim().length > 0;
       if (!has) {
-        const clean = String(q.question_text || '').replace(/<[^>]*>/g, '').trim().slice(0, 60) || `Soal`;
+        const clean = stripHtmlTags(q.question_text || '').slice(0, 60) || `Soal`;
         showAlert({
           type: 'warning',
           title: language === 'ID' ? 'Soal wajib belum diisi' : 'Required question missing',
@@ -841,10 +901,11 @@ export default function QuizScreen() {
           ? val.length > 0
           : !!val && String(val).trim().length > 0;
       if (!has) {
+        const cleanSubmit = stripHtmlTags(q.question_text || '').slice(0, 40) || 'Soal';
         showAlert({
           type: 'warning',
           title: language === 'ID' ? 'Soal wajib belum diisi' : 'Required missing',
-          message: `${language === 'ID' ? 'Soal' : 'Question'} "${(q.question_text || '').replace(/<[^>]*>/g, '').slice(0, 40)}" ${language === 'ID' ? 'wajib diisi.' : 'is required.'}`,
+          message: `${language === 'ID' ? 'Soal' : 'Question'} "${cleanSubmit}" ${language === 'ID' ? 'wajib diisi.' : 'is required.'}`,
         });
         // arahkan ke section yang mengandung soal kosong (card)
         if (!isQuizStyle && cardPages.length) {
@@ -972,22 +1033,28 @@ export default function QuizScreen() {
   }
 
   if (!publicForm) {
-    return (
-      <SafeAreaView style={[styles.center, { backgroundColor: colors.bg }]}>
-        <StatusBar style="dark" />
-        <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>Form tidak ditemukan</Text>
-        <TouchableOpacity
-          style={[styles.backBtn, { backgroundColor: colors.primary }]}
-          onPress={async () => {
-            await unpin().catch(() => {});
-            router.replace('/(tabs)/home' as any);
-          }}
-        >
-          <Text style={styles.backBtnText}>Kembali</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
+    // Jika resumeId ada dan submission sudah dimuat, jangan anggap Form tidak ditemukan
+    // Fallback publicForm minimal sudah di-set di resume effect, tapi jaga-jaga
+    if (resumeId && submission) {
+      // Biarkan lanjut ke answering/landing, jangan block
+    } else {
+      return (
+        <SafeAreaView style={[styles.center, { backgroundColor: colors.bg }]}>
+          <StatusBar style="dark" />
+          <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>Form tidak ditemukan</Text>
+          <TouchableOpacity
+            style={[styles.backBtn, { backgroundColor: colors.primary }]}
+            onPress={async () => {
+              await unpin().catch(() => {});
+              router.replace('/(tabs)/home' as any);
+            }}
+          >
+            <Text style={styles.backBtnText}>Kembali</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      );
+    }
   }
 
   // Themed blocked screen — for already_submitted use Image 1 design (cyan + check)

@@ -981,6 +981,8 @@ def get_submission(
 
     return SubmissionDetailResponse(
         id=sub.id,
+        form_id=sub.form_id,
+        short_code=form.short_code,
         status=sub.status.value,
         started_at=fmt_dt(sub.started_at),
         expired_at=fmt_dt(display_deadline(sub, form)),
@@ -1021,6 +1023,9 @@ def my_submissions(user: User = Depends(get_current_user), db: Session = Depends
             score=float(s.score) if s.score is not None else None,
             reveal_score=s.form.reveal_score if s.form else True,
             submitted_at=fmt_dt(s.submitted_at),
+            form_id=s.form_id,
+            short_code=s.form.short_code if s.form else None,
+            created_at=fmt_dt(s.created_at),
         )
         for s in subs
     ]

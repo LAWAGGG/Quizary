@@ -56,6 +56,28 @@ export default function HomeScreen() {
   };
 
   const openSubDetail = async (subItem: any) => {
+    // Khusus in_progress: langsung lanjut mengerjakan
+    if (subItem.status === 'in_progress') {
+      // Jika ada short_code langsung pakai, jika tidak fetch detail dulu untuk dapat short_code/form
+      const shortCode = subItem.short_code;
+      if (shortCode) {
+        router.push({ pathname: '/quiz', params: { shortCode: shortCode, resumeSubmissionId: String(subItem.id) } } as any);
+      } else {
+        try {
+          const detail: any = await getSubmissionDetail(subItem.id);
+          const code = detail?.short_code;
+          if (code) {
+            router.push({ pathname: '/quiz', params: { shortCode: code, resumeSubmissionId: String(subItem.id) } } as any);
+          } else {
+            // Fallback: langsung pakai submissionId saja, quiz akan fetch detail
+            router.push({ pathname: '/quiz', params: { submissionId: String(subItem.id) } } as any);
+          }
+        } catch {
+          router.push({ pathname: '/quiz', params: { submissionId: String(subItem.id) } } as any);
+        }
+      }
+      return;
+    }
     setSelectedSubItem(subItem);
     setSelectedSubId(subItem.id);
     setLoadingDetail(true);
@@ -74,6 +96,17 @@ export default function HomeScreen() {
     setSelectedSubId(null);
     setSelectedSubItem(null);
     setSubDetail(null);
+  };
+
+  const handleContinue = (item: any, detail: any) => {
+    const sid = item?.id || detail?.id;
+    const code = item?.short_code || detail?.short_code;
+    closeModal();
+    if (code) {
+      router.push({ pathname: '/quiz', params: { shortCode: code, resumeSubmissionId: String(sid) } } as any);
+    } else if (sid) {
+      router.push({ pathname: '/quiz', params: { submissionId: String(sid) } } as any);
+    }
   };
 
   const firstName = user?.name ? user.name.split(' ')[0] : (language === 'ID' ? 'Responden' : 'Respondent');
@@ -175,6 +208,7 @@ export default function HomeScreen() {
         loadingDetail={loadingDetail}
         user={user}
         onClose={closeModal}
+        onContinue={handleContinue}
       />
     </View>
   );

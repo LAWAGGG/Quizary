@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Image } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { apiLogin, saveToken } from '../services/api_service';
+import { apiLogin, saveToken, getToken, getStoredUser } from '../services/api_service';
 import { useAppTheme } from '../context/ThemeContext'; 
 import { ThemeToggleBtn } from '../components/ThemeToggleBtn';
 import { useAppAlert } from '../context/AlertContext';
@@ -14,6 +14,22 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const token = await getToken();
+      if (token) {
+        const stored = await getStoredUser();
+        if (stored && stored.email_verified_at === null && stored.email) {
+          router.replace({ pathname: '/verify_otp', params: { email: stored.email } } as any);
+        } else {
+          router.replace('/(tabs)/home' as any);
+        }
+      }
+      setChecking(false);
+    })();
+  }, []);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -36,6 +52,14 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
+
+  if (checking) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
