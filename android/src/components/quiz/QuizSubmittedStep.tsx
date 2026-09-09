@@ -94,21 +94,15 @@ function AnimatedScoreCircle({
     };
   }, [percentage, targetScore, maxScore, ready]);
 
-  const firstHalfRotate = animatedValue.interpolate({
+  const firstCoverRotate = animatedValue.interpolate({
     inputRange: [0, 50, 100],
-    outputRange: ['-180deg', '0deg', '0deg'],
+    outputRange: ['0deg', '180deg', '180deg'],
     extrapolate: 'clamp',
   });
 
-  const secondHalfRotate = animatedValue.interpolate({
+  const secondCoverRotate = animatedValue.interpolate({
     inputRange: [0, 50, 100],
-    outputRange: ['-180deg', '-180deg', '0deg'],
-    extrapolate: 'clamp',
-  });
-
-  const secondHalfOpacity = animatedValue.interpolate({
-    inputRange: [0, 49.9, 50, 100],
-    outputRange: [0, 0, 1, 1],
+    outputRange: ['0deg', '0deg', '180deg'],
     extrapolate: 'clamp',
   });
 
@@ -126,34 +120,34 @@ function AnimatedScoreCircle({
     >
       {/* Outer Ring Container starting from 12 o'clock */}
       <View style={circleStyles.ringWrapper}>
-        {/* Background Track Circle */}
-        <View style={[circleStyles.trackCircle, { borderColor: trackColor }]} />
+        {/* Single Seamless Solid Colored Ring Circle Underneath */}
+        <View style={[circleStyles.coloredCircle, { borderColor: ringColor }]} />
 
-        {/* Right Half Mask (12 o'clock -> 6 o'clock) */}
+        {/* Right Cover Mask (Uncovers 12 o'clock to 6 o'clock) */}
         <View style={circleStyles.rightMask}>
           <Animated.View
             style={[
               circleStyles.halfCircleRight,
               {
-                borderColor: ringColor,
-                transform: [{ rotate: firstHalfRotate }],
+                borderColor: trackColor,
+                transform: [{ rotate: firstCoverRotate }],
               },
             ]}
           />
         </View>
 
-        {/* Left Half Mask (6 o'clock -> 12 o'clock) */}
-        <Animated.View style={[circleStyles.leftMask, { opacity: secondHalfOpacity }]}>
+        {/* Left Cover Mask (Uncovers 6 o'clock to 12 o'clock) */}
+        <View style={circleStyles.leftMask}>
           <Animated.View
             style={[
               circleStyles.halfCircleLeft,
               {
-                borderColor: ringColor,
-                transform: [{ rotate: secondHalfRotate }],
+                borderColor: trackColor,
+                transform: [{ rotate: secondCoverRotate }],
               },
             ]}
           />
-        </Animated.View>
+        </View>
       </View>
 
       {/* Inner Content Display (Score / MaxScore) */}
@@ -182,7 +176,7 @@ const circleStyles = StyleSheet.create({
     position: 'absolute',
     transform: [{ rotate: '-90deg' }],
   },
-  trackCircle: {
+  coloredCircle: {
     width: 140,
     height: 140,
     borderRadius: 70,
