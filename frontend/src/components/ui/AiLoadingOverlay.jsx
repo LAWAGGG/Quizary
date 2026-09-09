@@ -39,7 +39,7 @@ export function AiLoadingOverlay({ open, mode = 'generate' }) {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.94, opacity: 0, y: 10 }}
             transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-            className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-white dark:bg-ink-900 shadow-lift px-8 py-10 text-center"
+            className="relative border dark:border-ink-800 w-full max-w-sm overflow-hidden rounded-3xl bg-white dark:bg-ink-900 shadow-lift px-8 py-10 text-center"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="dot-grid pointer-events-none absolute inset-0 opacity-60" aria-hidden="true" />

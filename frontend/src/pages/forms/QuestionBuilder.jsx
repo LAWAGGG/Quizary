@@ -151,8 +151,10 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   const questionFileRef = useRef(null)
   const [qImgLoading, setQImgLoading] = useState(false)
 
-  const handleQuestionFileChange = async () => {
-    const file = questionFileRef.current?.files?.[0]
+  const handleQuestionFileChange = async (event) => {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    const file = event?.target?.files?.[0] || questionFileRef.current?.files?.[0]
     if (!file) return
     if (file.size > MAX_Q_MEDIA) {
       toast.error(t('questionBuilder.fileTooLarge', { size: fmtMB(file.size) }))
@@ -202,7 +204,14 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
       setForm((prev) => ({ ...prev, image: null }))
       toast.success('Gambar soal dihapus')
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Gagal menghapus gambar')
+      if (err.response?.status === 404) {
+        // Parent question list can still contain stale image metadata after
+        // cancel/reopen; backend already removed it, so treat delete as done.
+        setForm((prev) => ({ ...prev, image: null }))
+        toast.success('Gambar soal dihapus')
+        return
+      }
+      toast.error(err.response?.data?.detail || err.response?.data?.message || 'Gagal menghapus gambar')
     }
   }
 
@@ -231,7 +240,15 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
       }))
       toast.success('Gambar opsi dihapus')
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Gagal menghapus gambar')
+      if (err.response?.status === 404) {
+        setForm((prev) => ({
+          ...prev,
+          options: prev.options.map((o, idx) => idx === i ? { ...o, image: null } : o),
+        }))
+        toast.success('Gambar opsi dihapus')
+        return
+      }
+      toast.error(err.response?.data?.detail || err.response?.data?.message || 'Gagal menghapus gambar')
     }
   }
 
@@ -380,6 +397,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     accept="image/*,audio/*,.mp3,.wav,.m4a,.ogg,.aac,.webm"
     className="hidden"
     onChange={handleQuestionFileChange}
+    onClick={(e) => e.stopPropagation()}
   />
   {form.image?.path ? (
     <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-ink-800/50">
@@ -402,7 +420,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     <div className="flex gap-2">
       <button
         type="button"
-        onClick={(e) => { e.preventDefault(); questionFileRef.current?.click() }}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); questionFileRef.current?.click() }}
         disabled={qImgLoading}
         title="Upload image or audio (mp3)"
         className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 h-9 rounded-xl text-xs font-semibold border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:text-primary hover:border-primary hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-colors"
@@ -549,8 +567,9 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                       type="file"
                       accept="image/*,audio/*,.mp3,.wav,.m4a,.ogg,.aac,.webm"
                       className="hidden"
-                      onChange={() => uploadOptionImage(opt, i)}
-                    />
+                       onChange={(e) => { e.stopPropagation(); uploadOptionImage(opt, i) }}
+                       onClick={(e) => e.stopPropagation()}
+                     />
                     {!opt.image?.path && (
                       <button
                         type="button"

@@ -549,7 +549,6 @@ export default function AIGenerate() {
                 {t('aiGenerate.regenerate')}
               </Button>
             </div>
-            <p className="field-hint text-center">{t('aiGenerate.regenerateHint')}</p>
           </div>
         )}
       </motion.div>
