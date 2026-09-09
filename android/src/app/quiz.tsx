@@ -954,6 +954,16 @@ export default function QuizScreen() {
     );
   }
 
+  const handleFillAgain = () => {
+    setSubmission(null);
+    setQuestions([]);
+    setAnswers({});
+    setAlreadySubmitted(false);
+    setStarting(false);
+    setSubmitting(false);
+    setCurrentSectionIdx(0);
+  };
+
   // Submitted view
   if (submission?.result) {
     return (
@@ -961,6 +971,7 @@ export default function QuizScreen() {
         resultData={submission.result}
         submissionId={submission.submission_id || submission.id}
         publicForm={publicForm}
+        onFillAgain={handleFillAgain}
       />
     );
   }

@@ -19,6 +19,7 @@ interface QuizSubmittedStepProps {
   resultData: any;
   submissionId?: string | number;
   publicForm?: any;
+  onFillAgain?: () => void;
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -37,7 +38,7 @@ function formatSubmitted(str?: string) {
   return str;
 }
 
-export function QuizSubmittedStep({ resultData, submissionId, publicForm }: QuizSubmittedStepProps) {
+export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFillAgain }: QuizSubmittedStepProps) {
   const { colors, isDark, language } = useAppTheme();
 
   const [subDetail, setSubDetail] = useState<any>(null);
@@ -185,7 +186,9 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
               <TouchableOpacity
                 style={[styles.fillAgainBtn, { backgroundColor: themeColor }]}
                 onPress={() => {
-                  if (formCode) {
+                  if (onFillAgain) {
+                    onFillAgain();
+                  } else if (formCode) {
                     router.replace(`/quiz?code=${formCode}` as any);
                   }
                 }}
@@ -440,14 +443,34 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
           </Text>
         </View>
 
+        {/* Fill Again Button if allowed */}
+        {canRefill && (
+          <TouchableOpacity
+            style={[styles.fillAgainBtn, { backgroundColor: themeColor, marginBottom: 12 }]}
+            onPress={() => {
+              if (onFillAgain) {
+                onFillAgain();
+              } else if (formCode) {
+                router.replace(`/quiz?code=${formCode}` as any);
+              }
+            }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="arrow-forward" size={18} color="#FFF" />
+            <Text style={styles.fillAgainBtnText}>
+              {language === 'ID' ? 'Isi Lagi' : 'Fill Again'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* Back to Home Button */}
         <TouchableOpacity
-          style={[styles.backHomeBtn, { backgroundColor: themeColor }]}
+          style={[styles.backHomeBtn, { backgroundColor: canRefill ? (isDark ? '#1E293B' : '#F1F5F9') : themeColor }]}
           onPress={() => router.replace('/(tabs)/home')}
           activeOpacity={0.85}
         >
-          <Ionicons name="home-outline" size={18} color="#FFF" />
-          <Text style={styles.backHomeBtnText}>
+          <Ionicons name="home-outline" size={18} color={canRefill ? colors.text : '#FFF'} />
+          <Text style={[styles.backHomeBtnText, { color: canRefill ? colors.text : '#FFF' }]}>
             {language === 'ID' ? 'Kembali ke Dashboard' : 'Back to Dashboard'}
           </Text>
         </TouchableOpacity>
