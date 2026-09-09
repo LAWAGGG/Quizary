@@ -4,11 +4,12 @@ import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system/legacy';
 
 const getHost = () => {
-  let envUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  let envUrl = process.env.EXPO_PUBLIC_API_URL?.trim() || process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
 
   if (envUrl) {
-    if (!envUrl.endsWith('/api') && !envUrl.endsWith('/api/')) {
-      envUrl = envUrl.replace(/\/+$/, '') + '/api';
+    envUrl = envUrl.replace(/\/+$/, '');
+    if (!envUrl.endsWith('/api')) {
+      envUrl += '/api';
     }
     return envUrl;
   }
