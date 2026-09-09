@@ -11,6 +11,7 @@ import {
   AppStateStatus,
   Platform,
   BackHandler,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -103,6 +104,28 @@ export default function QuizScreen() {
   const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
   const [pwWrong, setPwWrong] = useState<Record<number, boolean>>({});
   const [pwChecking, setPwChecking] = useState(false);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setIsKeyboardOpen(true);
+      }
+    );
+
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setIsKeyboardOpen(false);
+      }
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const warningTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef = useRef(5);
@@ -1251,7 +1274,12 @@ export default function QuizScreen() {
             </View>
           </View>
 
-          <ScrollView ref={cardScrollRef} contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            ref={cardScrollRef}
+            contentContainerStyle={[styles.formScroll, isKeyboardOpen && { paddingBottom: 280 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             {currentCardPage && (
               <>
                 {currentCardPage.title && (
