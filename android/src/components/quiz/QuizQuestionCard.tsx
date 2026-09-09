@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Platform, Modal, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
-import { RichTextRenderer } from '../RichTextRenderer';
+import { RichTextRenderer, stripHtmlTags } from '../RichTextRenderer';
 import { ImageZoomModal } from '../ImageZoomModal';
 import { AudioPlayer } from '../AudioPlayer';
 import { isAudioUrl } from '../../utils/media';
@@ -224,7 +224,7 @@ function QuizQuestionCardComponent({
             >
               <Text style={{ color: selectedOpt ? colors.text : colors.textMuted, fontSize: 15, fontWeight: '500', flex: 1, paddingRight: 8 }} numberOfLines={1}>
                 {selectedOpt
-                  ? (selectedOpt.option_text || selectedOpt.text || '').replace(/<[^>]*>/g, '').trim()
+                  ? stripHtmlTags(selectedOpt.option_text || selectedOpt.text || '')
                   : (language === 'ID' ? '— Pilih jawaban —' : '— Select an answer —')}
               </Text>
               <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
@@ -286,7 +286,7 @@ function QuizQuestionCardComponent({
                           activeOpacity={0.7}
                         >
                           <Text style={{ fontSize: 15, fontWeight: '500', color: isSel ? activeColor : colors.text, flex: 1, paddingRight: 8 }}>
-                            {(opt.option_text || opt.text || '').replace(/<[^>]*>/g, '').trim()}
+                            {stripHtmlTags(opt.option_text || opt.text || '')}
                           </Text>
                           {isSel && <Ionicons name="checkmark" size={18} color={activeColor} />}
                         </TouchableOpacity>

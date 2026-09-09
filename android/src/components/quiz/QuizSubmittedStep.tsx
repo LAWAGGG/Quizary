@@ -354,13 +354,26 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
                       </Text>
                       <Text style={[styles.yourAnsText, { color: colors.text }]}>
                         {a.selected_options && a.selected_options.length > 0
-                          ? a.selected_options.map((opt: string) => stripHtmlTags(opt)).join(', ')
+                          ? (() => {
+                              const t = a.question_type;
+                              // dropdown & checkbox review shouldn't show A/B/C prefix (nilai asli dropdown, checkbox tanpa ABC)
+                              // multiple_choice tetap pakai huruf seperti saat menjawab gamified
+                              if (t === 'dropdown' || t === 'checkbox') {
+                                return a.selected_options.map((opt: string) => stripHtmlTags(opt).replace(/^[A-H]\.\s*/, '').trim()).join(', ');
+                              }
+                              return a.selected_options.map((opt: string) => stripHtmlTags(opt)).join(', ');
+                            })()
                           : a.answer_text
                           ? stripHtmlTags(a.answer_text)
                           : a.answer_file
                           ? 'File uploaded'
                           : (language === 'ID' ? '(Tidak dijawab)' : '(Not answered)')}
                       </Text>
+                      {a.selected_options?.length > 0 && a.answer_text ? (
+                        <Text style={[styles.yourAnsText, { color: colors.textSub, fontSize: 12, marginTop: 4 }]}>
+                          {language === 'ID' ? `Lainnya: ${stripHtmlTags(a.answer_text)}` : `Other: ${stripHtmlTags(a.answer_text)}`}
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
                 </View>
