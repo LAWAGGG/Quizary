@@ -223,7 +223,7 @@ function QuizQuestionCardComponent({
             >
               <Text style={{ color: selectedOpt ? colors.text : colors.textMuted, fontSize: 15, fontWeight: '500', flex: 1, paddingRight: 8 }} numberOfLines={1}>
                 {selectedOpt
-                  ? `${LETTERS[selectedOptIdx >= 0 ? selectedOptIdx % LETTERS.length : 0]}. ${(selectedOpt.option_text || selectedOpt.text || '').replace(/<[^>]*>/g, '').trim()}`
+                  ? (selectedOpt.option_text || selectedOpt.text || '').replace(/<[^>]*>/g, '').trim()
                   : (language === 'ID' ? '— Pilih jawaban —' : '— Select an answer —')}
               </Text>
               <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
@@ -286,7 +286,7 @@ function QuizQuestionCardComponent({
                           activeOpacity={0.7}
                         >
                           <Text style={{ fontSize: 15, fontWeight: '500', color: isSel ? activeColor : colors.text, flex: 1, paddingRight: 8 }}>
-                            {letter}. {(opt.option_text || opt.text || '').replace(/<[^>]*>/g, '').trim()}
+                            {(opt.option_text || opt.text || '').replace(/<[^>]*>/g, '').trim()}
                           </Text>
                           {isSel && <Ionicons name="checkmark" size={18} color={activeColor} />}
                         </TouchableOpacity>

@@ -671,7 +671,7 @@ export function QuizStyleAnsweringStep({
                         >
                           <Text style={[styles.dropdownTriggerText, { color: selectedOpt ? '#FFFFFF' : '#94A3B8', fontSize: 16 * fontSizeScale }]}>
                             {selectedOpt
-                              ? `${LETTERS[selectedOptIdx >= 0 ? selectedOptIdx % LETTERS.length : 0]}. ${stripHtmlTags(selectedOpt.option_text || selectedOpt.text || '')}`
+                              ? stripHtmlTags(selectedOpt.option_text || selectedOpt.text || '')
                               : (language === 'ID' ? '— Pilih jawaban —' : '— Select an answer —')}
                           </Text>
                           <Ionicons name="chevron-down" size={20} color="#94A3B8" />
@@ -707,7 +707,6 @@ export function QuizStyleAnsweringStep({
                               <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
                                 {qOptions.map((opt: any, i: number) => {
                                   const isSel = selectedOpt?.id === opt.id;
-                                  const letter = LETTERS[i % LETTERS.length];
 
                                   return (
                                     <TouchableOpacity
@@ -723,7 +722,7 @@ export function QuizStyleAnsweringStep({
                                       activeOpacity={0.7}
                                     >
                                       <Text style={[styles.dropdownOptionText, { color: isSel ? '#60A5FA' : '#FFFFFF', fontSize: 15 * fontSizeScale }]}>
-                                        {letter}. {stripHtmlTags(opt.option_text || opt.text || '')}
+                                        {stripHtmlTags(opt.option_text || opt.text || '')}
                                       </Text>
                                       {isSel && <Ionicons name="checkmark" size={18} color="#60A5FA" />}
                                     </TouchableOpacity>
