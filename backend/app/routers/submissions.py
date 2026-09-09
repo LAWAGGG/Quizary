@@ -208,16 +208,6 @@ def delete_answer_file(
     return {"message": "File jawaban dihapus", "question_id": question_id}
 
 
-def _clean_question_text(raw: str | None) -> str:
-    if not raw or not isinstance(raw, str):
-        return "Soal"
-    # Decode entities &lt; &gt; etc, then strip tags, collapse whitespace
-    t = html.unescape(raw)
-    t = re.sub(r"<[^>]+>", "", t)
-    t = re.sub(r"\s+", " ", t).strip()
-    return t or "Soal"
-
-
 def _missing_required(sub: Submission, form: Form, db: Session) -> list[str]:
     """Return question texts of required questions left unanswered (FR-10)."""
     questions = db.query(Question).filter(
@@ -239,7 +229,7 @@ def _missing_required(sub: Submission, form: Form, db: Session) -> list[str]:
         q = q_map.get(a.question_id)
         if not q:
             continue
-        text = _clean_question_text(q.question_text)
+        text = re.sub(r"<[^>]+>", "", q.question_text).strip() or "Soal"
         if q.type in (QuestionType.multiple_choice, QuestionType.checkbox, QuestionType.dropdown):
             if not a.selected_options and not (a.answer_text or "").strip():
                 missing.append(text)
@@ -252,7 +242,7 @@ def _missing_required(sub: Submission, form: Form, db: Session) -> list[str]:
     answered_ids = {a.question_id for a in answers}
     for q in questions:
         if q.id not in answered_ids:
-            missing.append(_clean_question_text(q.question_text))
+            missing.append(re.sub(r"<[^>]+>", "", q.question_text).strip() or "Soal")
     return missing
 
 
