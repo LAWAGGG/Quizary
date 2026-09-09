@@ -10,6 +10,8 @@ import {
   RefreshControl,
   Image,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -327,6 +329,7 @@ export default function ProfileScreen() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets
     >
       {/* Top Workspace Header */}
       <View style={styles.topWorkspaceRow}>
@@ -489,7 +492,7 @@ export default function ProfileScreen() {
         </Text>
       </TouchableOpacity>
 
-      {/* Modal Ubah Kata Sandi */}
+      {/* Modal Ubah Kata Sandi — keyboard aware */}
       <Modal
         visible={showPasswordModal}
         transparent
@@ -501,27 +504,38 @@ export default function ProfileScreen() {
           }
         }}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => {
-            if (!passwordLoading) {
-              setShowPasswordModal(false);
-              resetPasswordForm();
-            }
-          }}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
         >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={[
-              styles.modalCard,
-              {
-                backgroundColor: colors.cardBg,
-                borderColor: colors.cardBorder,
-              },
-            ]}
-            onPress={(e) => e.stopPropagation()}
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets
           >
+            <TouchableOpacity
+              style={styles.modalOverlay}
+              activeOpacity={1}
+              onPress={() => {
+                if (!passwordLoading) {
+                  setShowPasswordModal(false);
+                  resetPasswordForm();
+                }
+              }}
+            >
+              <TouchableOpacity
+                activeOpacity={1}
+                style={[
+                  styles.modalCard,
+                  {
+                    backgroundColor: colors.cardBg,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+                onPress={(e) => e.stopPropagation()}
+              >
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <View style={[styles.modalLockIconBox, { backgroundColor: colors.primarySoft }]}>
@@ -692,8 +706,10 @@ export default function ProfileScreen() {
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
-      </Modal>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  </Modal>
+</ScrollView>
   );
 }
 

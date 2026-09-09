@@ -29,6 +29,7 @@ import { AudioPlayer } from '../AudioPlayer';
 import { isAudioUrl } from '../../utils/media';
 import { CustomDateTimePickerModal } from './CustomDateTimePickerModal';
 import { checkPassword } from '../../services/api_service';
+import { useKeyboardHeight } from '../../hooks/useKeyboardHeight';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 interface QuizStyleAnsweringStepProps {
@@ -74,6 +75,16 @@ export function QuizStyleAnsweringStep({
 
   const mainScrollRef = useRef<ScrollView>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
+  const { keyboardHeight, isVisible: isKeyboardOpen } = useKeyboardHeight();
+
+  // Auto scroll to end when keyboard opens so bottom inputs (short_answer/essay) stay visible
+  useEffect(() => {
+    if (isKeyboardOpen) {
+      setTimeout(() => {
+        mainScrollRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [isKeyboardOpen]);
 
   // Reset scroll to top on question change
   useEffect(() => {
@@ -472,17 +483,24 @@ export function QuizStyleAnsweringStep({
         </View>
       </LinearGradient>
 
-      {/* MAIN QUESTION CONTAINER */}
+      {/* MAIN QUESTION CONTAINER — keyboard aware: behavior height on Android + dynamic padding */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <ScrollView
           ref={mainScrollRef}
           style={{ flex: 1 }}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isKeyboardOpen
+              ? { justifyContent: 'flex-start', paddingBottom: Math.max(keyboardHeight, 280) }
+              : null,
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <Animated.View
@@ -529,14 +547,17 @@ export function QuizStyleAnsweringStep({
                     </TouchableOpacity>
                   </View>
 
-                  {/* Centered Large Question Title */}
-                  <View style={styles.qTitleCenterWrapper}>
-                    <Text style={[styles.qTitleText, { color: '#FFFFFF', fontSize: 22 * fontSizeScale }]}>
-                      {stripHtmlTags(currentQ.question_text)}
-                      {currentQ.is_required !== false ? (
-                        <Text style={{ color: '#EF4444', fontWeight: 'bold' }}> *</Text>
-                      ) : null}
-                    </Text>
+                  {/* Centered WYSIWYG Question Title — renders rich HTML with code-block background & KaTeX like web */}
+                  <View style={[styles.qTitleCenterWrapper, { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 4 }]}>
+                    <View style={{ flex: 1 }}>
+                      <RichTextRenderer
+                        html={currentQ.question_text || ''}
+                        style={{ color: '#FFFFFF', fontSize: 22 * fontSizeScale, fontWeight: '800', textAlign: 'center', lineHeight: Math.round(22 * fontSizeScale * 1.45) }}
+                      />
+                    </View>
+                    {currentQ.is_required !== false ? (
+                      <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 22 * fontSizeScale, lineHeight: Math.round(22 * fontSizeScale * 1.45) }}>*</Text>
+                    ) : null}
                   </View>
 
                   {/* Question Media: image OR audio (listening) */}
@@ -629,9 +650,12 @@ export function QuizStyleAnsweringStep({
                                 />
                               )}
 
-                              <Text style={[styles.optionTileText, { fontSize: 16 * fontSizeScale, flex: 1 }]}>
-                                {stripHtmlTags(opt.option_text || opt.text || '')}
-                              </Text>
+                              <View style={{ flex: 1 }}>
+                                <RichTextRenderer
+                                  html={opt.option_text || opt.text || ''}
+                                  style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
+                                />
+                              </View>
 
                               {selected && !isCheckbox && (
                                 <View style={styles.selectedBadgeCircle}>
@@ -670,7 +694,7 @@ export function QuizStyleAnsweringStep({
                           onPress={() => setShowDropdownModal(currentQ.id)}
                           activeOpacity={0.8}
                         >
-                          <Text style={[styles.dropdownTriggerText, { color: selectedOpt ? '#FFFFFF' : '#94A3B8', fontSize: 16 * fontSizeScale }]}>
+                          <Text style={[styles.dropdownTriggerText, { color: selectedOpt ? '#FFFFFF' : '#94A3B8', fontSize: 16 * fontSizeScale }]} numberOfLines={1} ellipsizeMode="tail">
                             {selectedOpt
                               ? stripHtmlTags(selectedOpt.option_text || selectedOpt.text || '')
                               : (language === 'ID' ? '— Pilih jawaban —' : '— Select an answer —')}

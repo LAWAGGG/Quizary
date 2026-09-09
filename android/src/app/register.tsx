@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, ScrollView, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRegister } from '../services/api_service';
@@ -89,8 +89,18 @@ export default function RegisterScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-      <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: '#0F172A' }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets
+      >
+        <View style={styles.container}>
         <View style={styles.header}>
           <Image
             source={require('../../assets/images/Quizary_Logo_White.png')}
@@ -204,12 +214,13 @@ export default function RegisterScreen() {
           </View>
         </View>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContainer: { flexGrow: 1, backgroundColor: '#0F172A', justifyContent: 'center' },
+  scrollContainer: { flexGrow: 1, backgroundColor: '#0F172A', justifyContent: 'center', paddingBottom: 32 },
   container: { padding: 24 },
   header: { alignItems: 'center', marginBottom: 32 },
   logoImage: { width: 220, height: 75, marginBottom: 8 },
