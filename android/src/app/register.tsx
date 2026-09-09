@@ -54,11 +54,11 @@ export default function RegisterScreen() {
         password_confirmation: passwordConfirmation,
       });
 
-      showAlert({
-        type: 'success',
-        title: language === 'ID' ? 'Sukses 🎉' : 'Success 🎉',
-        message: language === 'ID' ? 'Registrasi berhasil! Silakan login dengan akun baru Anda.' : 'Registration successful! Please login with your new account.',
-        onConfirm: () => router.replace('/'),
+      // Langsung pindah ke halaman verifikasi OTP, tanpa alert sukses +
+      // tombol OK dulu — sama seperti alur di web.
+      router.push({
+        pathname: '/verify_otp',
+        params: { email: email.trim() },
       });
     } catch (e: any) {
       showAlert({
