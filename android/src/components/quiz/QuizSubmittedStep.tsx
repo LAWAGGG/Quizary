@@ -5,8 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Linking,
-  ActivityIndicator,
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,34 +21,46 @@ interface QuizSubmittedStepProps {
   publicForm?: any;
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function formatSubmitted(str?: string) {
+  if (!str) return '—';
+  const parts = str.split(/[\s:-]+/);
+  if (parts.length >= 3) {
+    const d = Number(parts[0]);
+    const m = Number(parts[1]);
+    const y = Number(parts[2]);
+    if (d && m && y) {
+      return `${d} ${MONTHS[m - 1] || m} ${y}`;
+    }
+  }
+  return str;
+}
+
 export function QuizSubmittedStep({ resultData, submissionId, publicForm }: QuizSubmittedStepProps) {
   const { colors, isDark, language } = useAppTheme();
 
   const [subDetail, setSubDetail] = useState<any>(null);
   const [leaderboard, setLeaderboard] = useState<any>(null);
-  const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
   const [showReview, setShowReview] = useState<boolean>(false);
   const [countedScore, setCountedScore] = useState<number>(0);
 
   const sid = submissionId || resultData?.submission_id;
   const formCode = publicForm?.short_code;
-  const formType = publicForm?.type || 'quiz';
+  const formType = publicForm?.type || resultData?.type || subDetail?.type || 'quiz';
   const isQuiz = formType === 'quiz';
+  const canRefill = publicForm?.submission_limit === 'unlimited';
 
   useEffect(() => {
     let isMounted = true;
     if (sid) {
-      setLoadingDetail(true);
       getSubmissionDetail(sid)
         .then((detail) => {
           if (isMounted && detail) {
             setSubDetail(detail);
           }
         })
-        .catch(() => {})
-        .finally(() => {
-          if (isMounted) setLoadingDetail(false);
-        });
+        .catch(() => {});
     }
 
     if (isQuiz && formCode && publicForm?.show_leaderboard) {
@@ -71,7 +81,7 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
   const finalScore = rawScore != null ? Math.round(Number(rawScore)) : null;
 
   useEffect(() => {
-    if (finalScore == null) return;
+    if (!isQuiz || finalScore == null) return;
     let current = 0;
     const step = Math.max(1, Math.ceil(finalScore / 20));
     const interval = setInterval(() => {
@@ -84,7 +94,7 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
       }
     }, 30);
     return () => clearInterval(interval);
-  }, [finalScore]);
+  }, [isQuiz, finalScore]);
 
   const answersList = subDetail?.answers || [];
   const correctCount = answersList.filter((a: any) => a.is_correct === true).length;
@@ -97,7 +107,114 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
   const formTitle = publicForm?.title || resultData?.form_title || '';
   const cleanTitle = stripHtmlTags(formTitle);
   const isCheating = subDetail?.status === 'cheating' || resultData?.status === 'cheating';
+  const submittedAt = subDetail?.submitted_at || resultData?.submitted_at;
+  const totalQuestions = answersList.length || publicForm?.questions?.length || resultData?.questions?.length || 0;
 
+  // ==========================================
+  // FORM MODE DESIGN (Non-Quiz / Survey / Form)
+  // Matches Web Screenshot 2
+  // ==========================================
+  if (!isQuiz) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <ScrollView contentContainerStyle={styles.scrollContentCenter} showsVerticalScrollIndicator={false}>
+          
+          <View style={[styles.formCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+            {/* Checkmark Icon Circle */}
+            <View style={[styles.checkOuterRing, { backgroundColor: isDark ? 'rgba(236, 72, 153, 0.15)' : '#FCE7F3' }]}>
+              <View style={[styles.checkCircleBg, { backgroundColor: colors.primary }]}>
+                <Ionicons name="checkmark" size={32} color="#FFF" />
+              </View>
+            </View>
+
+            {/* Eyebrow Label */}
+            <Text style={[styles.formEyebrow, { color: colors.primary }]}>
+              {language === 'ID' ? 'SUBMITTED' : 'SUBMITTED'}
+            </Text>
+
+            {/* Title */}
+            <Text style={[styles.formMainTitle, { color: colors.text }]}>
+              {language === 'ID'
+                ? `Form ${cleanTitle || 'soal'} submitted successfully!`
+                : `Form ${cleanTitle || 'form'} submitted successfully!`}
+            </Text>
+
+            {/* Description Subtext */}
+            <Text style={[styles.formDescText, { color: colors.textSub }]}>
+              {language === 'ID'
+                ? `Jawaban Anda untuk "${cleanTitle}" telah berhasil disimpan.`
+                : `Your response to "${cleanTitle}" has been recorded.`}
+            </Text>
+
+            {/* MetaChips Row (QUESTIONS | SUBMITTED) */}
+            <View style={styles.formMetaRow}>
+              <View style={[styles.formMetaChip, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.cardBorder }]}>
+                <Text style={styles.formMetaLabel}>
+                  {language === 'ID' ? 'QUESTIONS' : 'QUESTIONS'}
+                </Text>
+                <Text style={[styles.formMetaValue, { color: colors.text }]}>
+                  {totalQuestions}
+                </Text>
+              </View>
+
+              <View style={[styles.formMetaChip, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.cardBorder }]}>
+                <Text style={styles.formMetaLabel}>
+                  {language === 'ID' ? 'SUBMITTED' : 'SUBMITTED'}
+                </Text>
+                <Text style={[styles.formMetaValue, { color: colors.text }]} numberOfLines={1}>
+                  {formatSubmitted(submittedAt)}
+                </Text>
+              </View>
+            </View>
+
+            {/* Fill Again Button if allowed */}
+            {canRefill && (
+              <TouchableOpacity
+                style={[styles.fillAgainBtn, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  if (formCode) {
+                    router.replace(`/quiz?code=${formCode}` as any);
+                  }
+                }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="arrow-forward" size={18} color="#FFF" />
+                <Text style={styles.fillAgainBtnText}>
+                  {language === 'ID' ? 'Isi Lagi' : 'Fill Again'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Back to Dashboard Button */}
+            <TouchableOpacity
+              style={[styles.backHomeBtn, { backgroundColor: canRefill ? (isDark ? '#1E293B' : '#F1F5F9') : colors.primary, marginTop: 12 }]}
+              onPress={() => router.replace('/(tabs)/home')}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="home-outline" size={18} color={canRefill ? colors.text : '#FFF'} />
+              <Text style={[styles.backHomeBtnText, { color: canRefill ? colors.text : '#FFF' }]}>
+                {language === 'ID' ? 'Kembali ke Dashboard' : 'Back to Dashboard'}
+              </Text>
+            </TouchableOpacity>
+
+            {!canRefill && (
+              <Text style={[styles.closePageSubtext, { color: colors.textMuted }]}>
+                {language === 'ID' ? 'You can close this page.' : 'You can close this page.'}
+              </Text>
+            )}
+
+          </View>
+
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // ==========================================
+  // QUIZ MODE DESIGN (Quiz / Exam with score)
+  // Matches Web Screenshot 1
+  // ==========================================
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -149,21 +266,15 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
             {answersList.length > 0 && (
               <View style={styles.statsRow}>
                 <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-                  <Text style={styles.statLabel}>
-                    {language === 'ID' ? 'CORRECT' : 'CORRECT'}
-                  </Text>
+                  <Text style={styles.statLabel}>CORRECT</Text>
                   <Text style={[styles.statValue, { color: '#10B981' }]}>{correctCount}</Text>
                 </View>
                 <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-                  <Text style={styles.statLabel}>
-                    {language === 'ID' ? 'WRONG' : 'WRONG'}
-                  </Text>
+                  <Text style={styles.statLabel}>WRONG</Text>
                   <Text style={[styles.statValue, { color: '#EF4444' }]}>{wrongCount}</Text>
                 </View>
                 <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-                  <Text style={styles.statLabel}>
-                    {language === 'ID' ? 'SKIPPED' : 'SKIPPED'}
-                  </Text>
+                  <Text style={styles.statLabel}>SKIPPED</Text>
                   <Text style={[styles.statValue, { color: colors.textSub }]}>{unansweredCount}</Text>
                 </View>
               </View>
@@ -337,6 +448,104 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { padding: 20, alignItems: 'center', paddingBottom: 40 },
+  scrollContentCenter: { padding: 20, alignItems: 'center', justifyContent: 'center', minHeight: '100%' },
+  
+  // Form Mode Styles (Web Screenshot 2)
+  formCard: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  checkOuterRing: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  checkCircleBg: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#EC4899',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  formEyebrow: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  formMainTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 10,
+    lineHeight: 26,
+  },
+  formDescText: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 18,
+  },
+  formMetaRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+    marginBottom: 24,
+  },
+  formMetaChip: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  formMetaLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#94A3B8',
+    marginBottom: 4,
+  },
+  formMetaValue: {
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  fillAgainBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    width: '100%',
+  },
+  fillAgainBtnText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  closePageSubtext: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+
+  // Quiz Mode Styles
   eyebrow: { fontSize: 12, fontWeight: '700', letterSpacing: 1.2, marginBottom: 8, textAlign: 'center' },
   mainTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginBottom: 16, lineHeight: 28 },
   cheatingBadge: {
