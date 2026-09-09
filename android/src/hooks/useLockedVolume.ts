@@ -4,11 +4,11 @@ import { Platform } from 'react-native';
 let VolumeManager: any = null;
 try {
   VolumeManager = require('react-native-volume-manager');
-  // some versions export default
   if (VolumeManager?.default) VolumeManager = VolumeManager.default;
 } catch {}
 
-const STREAM_TYPES = ['music', 'system', 'ring', 'alarm', 'notification', 'call'];
+// Only target 'music' stream to prevent Android DND permission startActivity crashes
+const STREAM_TYPES = ['music'];
 
 async function enforceMaxVolume() {
   if (!VolumeManager) return;
@@ -29,33 +29,26 @@ export function useLockedVolume() {
 
   const lock = useCallback(async () => {
     if (Platform.OS !== 'android' || lockedRef.current) return;
-    if (!VolumeManager) {
-      console.warn('[LockedVolume] VolumeManager not available');
-      return;
-    }
+    if (!VolumeManager) return;
     try {
-      // Save original
       try {
         if (VolumeManager.getVolume) {
-          const v = await VolumeManager.getVolume();
+          const v = await VolumeManager.getVolume({ type: 'music' });
           if (typeof v === 'number') originalRef.current = v;
           else if (v?.volume !== undefined) originalRef.current = v.volume;
         }
       } catch {}
       lockedRef.current = true;
 
-      // Force max volume across all audio streams (music, system, ring, alarm, etc.)
       await enforceMaxVolume();
 
-      // Continuous loop enforcement (every 150ms) to block hardware volume down even on lockscreen
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = setInterval(() => {
         if (lockedRef.current) {
           enforceMaxVolume().catch(() => {});
         }
-      }, 150);
+      }, 500);
 
-      // Listener enforcement: re-apply immediately when user presses hardware volume keys
       try {
         if (VolumeManager.addVolumeListener) {
           listenerRef.current = VolumeManager.addVolumeListener(async (res: any) => {
