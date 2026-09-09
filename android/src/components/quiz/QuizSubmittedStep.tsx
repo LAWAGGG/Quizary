@@ -46,6 +46,8 @@ function AnimatedScoreCircle({
   ready = true,
 }: AnimatedScoreCircleProps) {
   const animatedValue = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.6)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
   const [displayScore, setDisplayScore] = useState(0);
 
   const targetScore = Math.round(score);
@@ -55,22 +57,37 @@ function AnimatedScoreCircle({
     if (!ready) return;
 
     animatedValue.setValue(0);
+    scaleAnim.setValue(0.6);
+    opacityAnim.setValue(0);
     setDisplayScore(0);
 
     const listenerId = animatedValue.addListener(({ value }) => {
       const currentPct = Math.min(100, Math.max(0, value));
-      const currentVal = maxScore > 0
-        ? Math.round((currentPct / 100) * targetScore)
-        : Math.round((currentPct / 100) * targetScore);
+      const currentVal = percentage > 0
+        ? Math.round((currentPct / percentage) * targetScore)
+        : 0;
       setDisplayScore(currentVal);
     });
 
-    Animated.timing(animatedValue, {
-      toValue: percentage,
-      duration: 1300,
-      easing: Easing.bezier(0.16, 1, 0.3, 1),
-      useNativeDriver: false,
-    }).start();
+    Animated.parallel([
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 600,
+        easing: Easing.out(Easing.back(1.4)),
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.timing(animatedValue, {
+        toValue: percentage,
+        duration: 1200,
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
+        useNativeDriver: false,
+      }),
+    ]).start();
 
     return () => {
       animatedValue.removeListener(listenerId);
@@ -98,7 +115,15 @@ function AnimatedScoreCircle({
   const trackColor = isDark ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0';
 
   return (
-    <View style={circleStyles.container}>
+    <Animated.View
+      style={[
+        circleStyles.container,
+        {
+          opacity: opacityAnim,
+          transform: [{ scale: scaleAnim }],
+        },
+      ]}
+    >
       {/* Rotated Ring Wrapper starting at 12 o'clock (TOP) */}
       <View style={circleStyles.ringWrapper}>
         {/* Background Track Circle */}
@@ -155,7 +180,7 @@ function AnimatedScoreCircle({
           <Text style={[circleStyles.maxScoreText, { color: textSubColor }]}>/{Math.round(maxScore)}</Text>
         )}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
