@@ -937,21 +937,21 @@ export function QuizStyleAnsweringStep({
                 let bg = isDark ? '#334155' : '#F1F5F9';
                 let textCol = colors.text;
 
-                if (isCurrent) {
-                  bg = themeColor;
+                if (answered) {
+                  bg = '#22C55E';
                   textCol = '#FFFFFF';
                 } else if (isMarked) {
                   bg = '#F59E0B';
                   textCol = '#FFFFFF';
-                } else if (answered) {
-                  bg = '#22C55E';
+                } else if (isCurrent) {
+                  bg = themeColor;
                   textCol = '#FFFFFF';
                 }
 
                 return (
                   <TouchableOpacity
                     key={q.id || idx}
-                    style={[styles.mapGridItem, { backgroundColor: bg }]}
+                    style={[styles.mapGridItem, { backgroundColor: bg }, isCurrent && { borderWidth: 2.5, borderColor: '#FFFFFF' }]}
                     onPress={async () => {
                       if (idx > currentIdx) {
                         // cegah skip password: validasi semua password dari current sampai idx-1

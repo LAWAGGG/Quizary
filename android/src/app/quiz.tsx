@@ -557,25 +557,48 @@ export default function QuizScreen() {
   const handleSelectOption = async (questionId: number, optionId: number, isCheckbox: boolean) => {
     const q = questions.find((x) => x.id === questionId);
     if (!q) return;
-    let next: any;
+
+    const rawType = String(q.type || q.question_type || '').toLowerCase();
+    const isCb = isCheckbox || rawType === 'checkbox';
+
+    let next: number[] = [];
     setAnswers((prev) => {
       const cur = prev[questionId];
-      if (q.type === 'multiple_choice' || q.type === 'dropdown') {
-        const curArr: number[] = Array.isArray(cur) ? cur : [];
-        next = curArr[0] === optionId ? [] : [optionId];
-      } else if (q.type === 'checkbox') {
-        const curArr: number[] = Array.isArray(cur) ? cur : [];
-        next = curArr.includes(optionId) ? curArr.filter((id) => id !== optionId) : [...curArr, optionId];
+      const curArr: number[] = Array.isArray(cur)
+        ? cur
+        : typeof cur === 'number'
+        ? [cur]
+        : [];
+      if (isCb) {
+        next = curArr.includes(optionId)
+          ? curArr.filter((id) => id !== optionId)
+          : [...curArr, optionId];
       } else {
-        next = cur;
+        next = curArr[0] === optionId ? [] : [optionId];
       }
       return { ...prev, [questionId]: next };
     });
-    // Autosave debounce
+
     const sid = submissionIdRef.current;
     if (!sid) return;
+
+    // Compute synchronous next so autosave ALWAYS gets accurate option_ids
+    const curAns = answers[questionId];
+    const curArr: number[] = Array.isArray(curAns)
+      ? curAns
+      : typeof curAns === 'number'
+      ? [curAns]
+      : [];
+    const computedNext = isCb
+      ? curArr.includes(optionId)
+        ? curArr.filter((id) => id !== optionId)
+        : [...curArr, optionId]
+      : curArr[0] === optionId
+      ? []
+      : [optionId];
+
     try {
-      await autosaveAnswer(sid, { question_id: questionId, option_ids: next });
+      await autosaveAnswer(sid, { question_id: questionId, option_ids: computedNext });
     } catch {}
   };
 
@@ -773,6 +796,35 @@ export default function QuizScreen() {
     setPwWrong({});
     setSubmitting(true);
     try {
+      // Sync all client-side answers to backend before finalizing submission
+      const syncPromises = questions.map(async (q) => {
+        const val = answers[q.id];
+        if (val === undefined || val === null) return;
+
+        const rawType = String(q.type || q.question_type || '').toLowerCase();
+        if (
+          rawType === 'multiple_choice' ||
+          rawType === 'checkbox' ||
+          rawType === 'dropdown' ||
+          rawType === 'select' ||
+          rawType === 'choice' ||
+          Array.isArray(val) ||
+          typeof val === 'number'
+        ) {
+          const option_ids = Array.isArray(val) ? val : typeof val === 'number' ? [val] : [];
+          if (option_ids.length > 0) {
+            await autosaveAnswer(sid, { question_id: q.id, option_ids }).catch(() => {});
+          }
+        } else if (rawType !== 'file_upload' && rawType !== 'file') {
+          const text = String(val).trim();
+          if (text) {
+            await autosaveAnswer(sid, { question_id: q.id, answer_text: text }).catch(() => {});
+          }
+        }
+      });
+
+      await Promise.all(syncPromises);
+
       const res = await finalizeSubmission(sid);
       answeringRef.current = false;
       await unpin().catch(() => {});
