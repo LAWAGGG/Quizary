@@ -110,6 +110,18 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
   const submittedAt = subDetail?.submitted_at || resultData?.submitted_at;
   const totalQuestions = answersList.length || publicForm?.questions?.length || resultData?.questions?.length || 0;
 
+  const themeColor =
+    publicForm?.theme_color ||
+    publicForm?.color ||
+    publicForm?.themeColor ||
+    publicForm?.settings?.theme_color ||
+    resultData?.theme_color ||
+    colors.primary;
+
+  const ringOuterBg = themeColor.startsWith('#')
+    ? `${themeColor}22`
+    : (isDark ? 'rgba(236, 72, 153, 0.15)' : '#FCE7F3');
+
   // ==========================================
   // FORM MODE DESIGN (Non-Quiz / Survey / Form)
   // Matches Web Screenshot 2
@@ -122,14 +134,14 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
           
           <View style={[styles.formCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
             {/* Checkmark Icon Circle */}
-            <View style={[styles.checkOuterRing, { backgroundColor: isDark ? 'rgba(236, 72, 153, 0.15)' : '#FCE7F3' }]}>
-              <View style={[styles.checkCircleBg, { backgroundColor: colors.primary }]}>
+            <View style={[styles.checkOuterRing, { backgroundColor: ringOuterBg }]}>
+              <View style={[styles.checkCircleBg, { backgroundColor: themeColor, shadowColor: themeColor }]}>
                 <Ionicons name="checkmark" size={32} color="#FFF" />
               </View>
             </View>
 
             {/* Eyebrow Label */}
-            <Text style={[styles.formEyebrow, { color: colors.primary }]}>
+            <Text style={[styles.formEyebrow, { color: themeColor }]}>
               {language === 'ID' ? 'SUBMITTED' : 'SUBMITTED'}
             </Text>
 
@@ -171,7 +183,7 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
             {/* Fill Again Button if allowed */}
             {canRefill && (
               <TouchableOpacity
-                style={[styles.fillAgainBtn, { backgroundColor: colors.primary }]}
+                style={[styles.fillAgainBtn, { backgroundColor: themeColor }]}
                 onPress={() => {
                   if (formCode) {
                     router.replace(`/quiz?code=${formCode}` as any);
@@ -188,7 +200,7 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
 
             {/* Back to Dashboard Button */}
             <TouchableOpacity
-              style={[styles.backHomeBtn, { backgroundColor: canRefill ? (isDark ? '#1E293B' : '#F1F5F9') : colors.primary, marginTop: 12 }]}
+              style={[styles.backHomeBtn, { backgroundColor: canRefill ? (isDark ? '#1E293B' : '#F1F5F9') : themeColor, marginTop: 12 }]}
               onPress={() => router.replace('/(tabs)/home')}
               activeOpacity={0.85}
             >
@@ -222,7 +234,7 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
         
         {/* Eyebrow Form Title */}
         {cleanTitle ? (
-          <Text style={[styles.eyebrow, { color: colors.primary }]}>
+          <Text style={[styles.eyebrow, { color: themeColor }]}>
             {cleanTitle.toUpperCase()}
           </Text>
         ) : null}
@@ -430,7 +442,7 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm }: Quiz
 
         {/* Back to Home Button */}
         <TouchableOpacity
-          style={[styles.backHomeBtn, { backgroundColor: colors.primary }]}
+          style={[styles.backHomeBtn, { backgroundColor: themeColor }]}
           onPress={() => router.replace('/(tabs)/home')}
           activeOpacity={0.85}
         >
