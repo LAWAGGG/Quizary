@@ -178,9 +178,12 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
                 {starting ? (
                   <ActivityIndicator color="#FFF" />
                 ) : (
-                  <Text style={[styles.startButtonTextForm, { fontSize: 16 * fontSizeScale }]}>
-                    {language === 'ID' ? '→ Mulai' : '→ Start'}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Ionicons name="arrow-forward" size={18} color="#FFF" style={{ textAlignVertical: 'center' as any }} />
+                    <Text style={[styles.startButtonTextForm, { fontSize: 16 * fontSizeScale, includeFontPadding: false, textAlignVertical: 'center' } as any]}>
+                      {language === 'ID' ? 'Mulai' : 'Start'}
+                    </Text>
+                  </View>
                 )}
               </TouchableOpacity>
             </View>
