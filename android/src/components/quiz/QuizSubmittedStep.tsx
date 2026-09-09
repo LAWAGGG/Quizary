@@ -123,6 +123,8 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
     ? `${themeColor}22`
     : (isDark ? 'rgba(236, 72, 153, 0.15)' : '#FCE7F3');
 
+  const isOfflinePending = resultData?.is_offline_pending || subDetail?.is_offline_pending;
+
   // ==========================================
   // FORM MODE DESIGN (Non-Quiz / Survey / Form)
   // Matches Web Screenshot 2
@@ -152,6 +154,18 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
                 ? `Form ${cleanTitle || 'soal'} submitted successfully!`
                 : `Form ${cleanTitle || 'form'} submitted successfully!`}
             </Text>
+
+            {/* Offline Pending Sync Badge */}
+            {isOfflinePending && (
+              <View style={styles.offlinePendingBadge}>
+                <Ionicons name="cloud-offline-outline" size={16} color="#F59E0B" />
+                <Text style={styles.offlinePendingText}>
+                  {language === 'ID'
+                    ? 'Tersimpan di Lokal (Otomatis Kirim Saat Online)'
+                    : 'Saved Locally (Auto-Syncing When Online)'}
+                </Text>
+              </View>
+            )}
 
             {/* Description Subtext */}
             <Text style={[styles.formDescText, { color: colors.textSub }]}>
@@ -493,6 +507,23 @@ const styles = StyleSheet.create({
     padding: 24,
     borderWidth: 1,
     alignItems: 'center',
+  },
+  offlinePendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderColor: '#F59E0B',
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    marginVertical: 10,
+  },
+  offlinePendingText: {
+    color: '#F59E0B',
+    fontWeight: 'bold',
+    fontSize: 12,
   },
   checkOuterRing: {
     width: 80,

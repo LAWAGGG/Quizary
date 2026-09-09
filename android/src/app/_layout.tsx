@@ -8,6 +8,8 @@ import { ThemeProvider as AppThemeProvider, useAppTheme } from '../context/Theme
 import { getMe, getToken, removeToken } from '../services/api_service';
 import { AlertProvider } from '../context/AlertContext';
 
+import { processPendingSubmissions } from '../services/offline_sync_service';
+
 LogBox.ignoreLogs([
   'Cannot connect to Expo CLI',
   'DateTimePicker: `onChange` is deprecated',
@@ -47,8 +49,16 @@ function RootStack() {
       }
     }
     checkAuth();
+
+    // Background auto-sync worker for offline submissions
+    processPendingSubmissions().catch(() => {});
+    const interval = setInterval(() => {
+      processPendingSubmissions().catch(() => {});
+    }, 20000);
+
     return () => {
       mounted = false;
+      clearInterval(interval);
     };
   }, []);
 

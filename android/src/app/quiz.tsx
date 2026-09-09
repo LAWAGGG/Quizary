@@ -32,6 +32,12 @@ import {
   uploadAnswerFile,
   checkPassword,
 } from '../services/api_service';
+import {
+  saveLocalAnswerDraft,
+  enqueuePendingSubmission,
+  dequeuePendingSubmission,
+  clearLocalAnswerDraft,
+} from '../services/offline_sync_service';
 import { QuizLandingStep } from '../components/quiz/QuizLandingStep';
 import { QuizStyleAnsweringStep } from '../components/quiz/QuizStyleAnsweringStep';
 import { QuizQuestionCard } from '../components/quiz/QuizQuestionCard';
@@ -821,7 +827,18 @@ export default function QuizScreen() {
     setPwWrong({});
     setSubmitting(true);
     try {
-      // Sync all client-side answers to backend before finalizing submission
+      // 1. Fail-Safe: Always save submission to local offline queue FIRST
+      await enqueuePendingSubmission({
+        submission_id: sid,
+        form_id: publicForm?.id || 0,
+        form_title: publicForm?.title || '',
+        short_code: publicForm?.short_code,
+        form_type: publicForm?.type,
+        answers,
+        questions,
+      }).catch(() => {});
+
+      // 2. Sync answers to API
       const syncPromises = questions.map(async (q) => {
         const val = answers[q.id];
         if (val === undefined || val === null) return;
@@ -838,36 +855,59 @@ export default function QuizScreen() {
         ) {
           const option_ids = Array.isArray(val) ? val : typeof val === 'number' ? [val] : [];
           if (option_ids.length > 0) {
-            await autosaveAnswer(sid, { question_id: q.id, option_ids }).catch(() => {});
+            await autosaveAnswer(sid, { question_id: q.id, option_ids });
           }
         } else if (rawType !== 'file_upload' && rawType !== 'file') {
           const text = String(val).trim();
           if (text) {
-            await autosaveAnswer(sid, { question_id: q.id, answer_text: text }).catch(() => {});
+            await autosaveAnswer(sid, { question_id: q.id, answer_text: text });
           }
         }
       });
 
       await Promise.all(syncPromises);
 
+      // 3. Finalize on API
       const res = await finalizeSubmission(sid);
       answeringRef.current = false;
       await unpin().catch(() => {});
       await unlockVolume().catch(() => {});
       await stopCheat().catch(() => {});
-      // Show submitted step briefly then go home
+
+      // 4. Success — dequeue & clear draft
+      await dequeuePendingSubmission(sid).catch(() => {});
+      await clearLocalAnswerDraft(publicForm?.id || 0, sid).catch(() => {});
+
       setSubmission((prev: any) => ({ ...prev, result: res }));
-      // Navigate to success view
-      // Keep answering false, show QuizSubmittedStep
       setQuestions([]); // trigger submitted view
     } catch (e: any) {
+      answeringRef.current = false;
+      await unpin().catch(() => {});
+      await unlockVolume().catch(() => {});
+      await stopCheat().catch(() => {});
+
       if (e.message?.includes('waktu') || e.message?.includes('expired')) {
-        answeringRef.current = false;
-        await unlockVolume().catch(() => {});
-        await stopCheat().catch(() => {});
         router.replace({ pathname: '/(tabs)/home' } as any);
       } else {
-        showAlert({ type: 'error', title: 'Gagal submit', message: e.message });
+        // Network error / Offline mode fallback
+        showAlert({
+          type: 'info',
+          title: language === 'ID' ? 'Koneksi Terganggu (Offline)' : 'Network Interrupted (Offline)',
+          message: language === 'ID'
+            ? 'Koneksi terganggu. Jawaban Anda telah disimpan dengan aman dan akan otomatis terkirim begitu koneksi kembali.'
+            : 'Network connection lost. Your response has been saved locally and will auto-sync when online.',
+        });
+
+        const offlineResult = {
+          submission_id: sid,
+          form_title: publicForm?.title,
+          type: publicForm?.type,
+          is_offline_pending: true,
+          submitted_at: new Date().toISOString(),
+          questions,
+        };
+        setSubmission((prev: any) => ({ ...prev, result: offlineResult }));
+        setQuestions([]);
       }
     } finally {
       setSubmitting(false);
