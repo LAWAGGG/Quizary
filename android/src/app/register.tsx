@@ -36,11 +36,28 @@ export default function RegisterScreen() {
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       showAlert({
         type: 'warning',
         title: language === 'ID' ? 'Password Lemah' : 'Weak Password',
-        message: language === 'ID' ? 'Password minimal terdiri dari 6 karakter.' : 'Password must be at least 6 characters.',
+        message: language === 'ID' ? 'Password minimal 8 karakter.' : 'Password must be at least 8 characters.',
+      });
+      return;
+    }
+    if (password.length > 72) {
+      showAlert({
+        type: 'warning',
+        title: language === 'ID' ? 'Password Terlalu Panjang' : 'Password Too Long',
+        message: language === 'ID' ? 'Password maksimal 72 karakter.' : 'Password must be at most 72 characters.',
+      });
+      return;
+    }
+    const pwdRe = /^[!-~]+$/;
+    if (!pwdRe.test(password)) {
+      showAlert({
+        type: 'warning',
+        title: language === 'ID' ? 'Password Tidak Valid' : 'Invalid Password',
+        message: 'Password hanya boleh huruf, angka, dan karakter spesial tanpa spasi',
       });
       return;
     }

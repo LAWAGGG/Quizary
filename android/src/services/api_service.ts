@@ -77,14 +77,20 @@ export async function removeToken() {
 }
 
 function extractErrorMessage(err: any, defaultMsg: string): string {
-  if (typeof err.message === 'string') return err.message;
-  if (typeof err.detail === 'string') return err.detail;
+  if (Array.isArray(err.errors) && err.errors.length > 0) {
+    const first = err.errors[0];
+    const firstKey = Object.keys(first)[0];
+    const val = first[firstKey];
+    if (typeof val === 'string' && val) return val;
+    // Handle _schema errors (password_confirmation mismatch etc)
+    if (first['_schema'] || first['_errors']) return first['_schema'] || first['_errors'] || defaultMsg;
+  }
   if (Array.isArray(err.detail) && err.detail.length > 0 && err.detail[0].msg)
     return err.detail[0].msg;
-  if (Array.isArray(err.errors) && err.errors.length > 0) {
-    const firstKey = Object.keys(err.errors[0])[0];
-    return err.errors[0][firstKey] || defaultMsg;
-  }
+  if (typeof err.detail === 'string') return err.detail;
+  if (typeof err.message === 'string' && err.message !== 'Invalid fields') return err.message;
+  // Fallback: if message is generic Invalid fields but errors exist, show first error
+  if (typeof err.message === 'string') return err.message;
   return defaultMsg;
 }
 
