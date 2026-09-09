@@ -74,6 +74,36 @@ export function QuizStyleAnsweringStep({
 
   const mainScrollRef = useRef<ScrollView>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      const kh = e.endCoordinates.height || 280;
+      setKeyboardHeight(kh);
+      setTimeout(() => {
+        mainScrollRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    });
+
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+      mainScrollRef.current?.scrollTo({ y: 0, animated: true });
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const handleInputFocus = () => {
+    setTimeout(() => {
+      mainScrollRef.current?.scrollToEnd({ animated: true });
+    }, 150);
+  };
 
   // Reset scroll to top on question change
   useEffect(() => {
@@ -476,11 +506,10 @@ export function QuizStyleAnsweringStep({
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
+      >        <ScrollView
           ref={mainScrollRef}
           style={{ flex: 1 }}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: 180 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 60 : 40 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets={true}
@@ -753,6 +782,7 @@ export function QuizStyleAnsweringStep({
                         placeholderTextColor="#64748B"
                         value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                         onChangeText={(text) => onTextChange(currentQ.id, text)}
+                        onFocus={handleInputFocus}
                         multiline
                       />
                     </View>
@@ -767,6 +797,7 @@ export function QuizStyleAnsweringStep({
                         placeholderTextColor="#64748B"
                         value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                         onChangeText={(text) => onTextChange(currentQ.id, text)}
+                        onFocus={handleInputFocus}
                         multiline
                       />
                     </View>
@@ -783,6 +814,7 @@ export function QuizStyleAnsweringStep({
                           placeholderTextColor="#64748B"
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                           onChangeText={(text) => onTextChange(currentQ.id, text)}
+                          onFocus={handleInputFocus}
                         />
                         <TouchableOpacity
                           style={styles.pickerTriggerBtnStyle}
@@ -806,6 +838,7 @@ export function QuizStyleAnsweringStep({
                           placeholderTextColor="#64748B"
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                           onChangeText={(text) => onTextChange(currentQ.id, text)}
+                          onFocus={handleInputFocus}
                         />
                         <TouchableOpacity
                           style={styles.pickerTriggerBtnStyle}
@@ -828,8 +861,6 @@ export function QuizStyleAnsweringStep({
                       onDismiss={() => setShowPicker(null)}
                     />
                   )}
-
-
 
                   {/* Password Input — blocked until correct */}
                   {isPasswordType && (
@@ -857,7 +888,8 @@ export function QuizStyleAnsweringStep({
                             if (pwWrong[currentQ.id]) setPwWrong((p) => { const n = { ...p }; delete n[currentQ.id]; return n; });
                             onTextChange(currentQ.id, text);
                           }}
-                        />
+                          onFocus={handleInputFocus}
+                        />              />
                         <TouchableOpacity
                           style={styles.eyeBtn}
                           onPress={() => setShowPassword(!showPassword)}
