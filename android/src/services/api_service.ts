@@ -486,7 +486,8 @@ export async function getPublicForm(shortCode: string) {
     const err = await res.json().catch(() => ({}));
     throw new Error(extractErrorMessage(err, 'Quiz / Form tidak ditemukan atau belum dipublikasikan.'));
   }
-  return res.json();
+  const data = await res.json();
+  return { ...data, short_code: data.short_code || cleanCode.toUpperCase() };
 }
 
 export async function checkCanStart(shortCode: string) {
