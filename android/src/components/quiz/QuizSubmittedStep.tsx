@@ -135,10 +135,7 @@ function AnimatedScoreCircle({
             style={[
               circleStyles.halfCircleRight,
               {
-                borderTopColor: ringColor,
-                borderRightColor: ringColor,
-                borderBottomColor: 'transparent',
-                borderLeftColor: 'transparent',
+                borderColor: ringColor,
                 transform: [{ rotate: firstHalfRotate }],
               },
             ]}
@@ -151,32 +148,12 @@ function AnimatedScoreCircle({
             style={[
               circleStyles.halfCircleLeft,
               {
-                borderBottomColor: ringColor,
-                borderLeftColor: ringColor,
-                borderTopColor: 'transparent',
-                borderRightColor: 'transparent',
+                borderColor: ringColor,
                 transform: [{ rotate: secondHalfRotate }],
               },
             ]}
           />
         </View>
-
-        {/* Round Cap Dot at 12 o'clock Start */}
-        {percentage > 0 && (
-          <View style={[circleStyles.capDot, circleStyles.startCapDot, { backgroundColor: ringColor }]} />
-        )}
-
-        {/* Leading Tip Cap Dot rotating with progress */}
-        {percentage > 0 && (
-          <Animated.View
-            style={[
-              circleStyles.tipRotator,
-              { transform: [{ rotate: tipRotate }] },
-            ]}
-          >
-            <View style={[circleStyles.capDot, circleStyles.startCapDot, { backgroundColor: ringColor }]} />
-          </Animated.View>
-        )}
       </View>
 
       {/* Inner Content Display (Score / MaxScore) */}
