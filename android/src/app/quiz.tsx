@@ -1251,7 +1251,14 @@ export default function QuizScreen() {
             </View>
           </View>
 
-          <ScrollView ref={cardScrollRef} contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <ScrollView
+              ref={cardScrollRef}
+              contentContainerStyle={[styles.formScroll, { paddingBottom: 220 }]}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets={true}
+            >
             {currentCardPage && (
               <>
                 {currentCardPage.title && (
@@ -1321,6 +1328,7 @@ export default function QuizScreen() {
               )}
             </View>
           </ScrollView>
+        </KeyboardAvoidingView>
         </SafeAreaView>
       )}
 

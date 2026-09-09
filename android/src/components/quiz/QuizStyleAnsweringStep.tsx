@@ -475,14 +475,15 @@ export function QuizStyleAnsweringStep({
       {/* MAIN QUESTION CONTAINER */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
           ref={mainScrollRef}
           style={{ flex: 1 }}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 180 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={true}
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <Animated.View
@@ -529,14 +530,17 @@ export function QuizStyleAnsweringStep({
                     </TouchableOpacity>
                   </View>
 
-                  {/* Centered Large Question Title */}
-                  <View style={styles.qTitleCenterWrapper}>
-                    <Text style={[styles.qTitleText, { color: '#FFFFFF', fontSize: 22 * fontSizeScale }]}>
-                      {stripHtmlTags(currentQ.question_text)}
-                      {currentQ.is_required !== false ? (
-                        <Text style={{ color: '#EF4444', fontWeight: 'bold' }}> *</Text>
-                      ) : null}
-                    </Text>
+                  {/* Centered WYSIWYG Question Title — renders rich HTML with code-block background like web */}
+                  <View style={[styles.qTitleCenterWrapper, { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 4 }]}>
+                    <View style={{ flex: 1 }}>
+                      <RichTextRenderer
+                        html={currentQ.question_text || ''}
+                        style={{ color: '#FFFFFF', fontSize: 22 * fontSizeScale, fontWeight: '800', textAlign: 'center', lineHeight: Math.round(22 * fontSizeScale * 1.45) }}
+                      />
+                    </View>
+                    {currentQ.is_required !== false ? (
+                      <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 22 * fontSizeScale, lineHeight: Math.round(22 * fontSizeScale * 1.45) }}>*</Text>
+                    ) : null}
                   </View>
 
                   {/* Question Media: image OR audio (listening) */}
@@ -629,9 +633,12 @@ export function QuizStyleAnsweringStep({
                                 />
                               )}
 
-                              <Text style={[styles.optionTileText, { fontSize: 16 * fontSizeScale, flex: 1 }]}>
-                                {stripHtmlTags(opt.option_text || opt.text || '')}
-                              </Text>
+                              <View style={{ flex: 1 }}>
+                                <RichTextRenderer
+                                  html={opt.option_text || opt.text || ''}
+                                  style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
+                                />
+                              </View>
 
                               {selected && !isCheckbox && (
                                 <View style={styles.selectedBadgeCircle}>

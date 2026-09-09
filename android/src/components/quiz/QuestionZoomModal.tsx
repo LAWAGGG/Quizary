@@ -39,7 +39,7 @@ export function QuestionZoomModal({
       <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
             <View style={{ flex: 1 }}>
