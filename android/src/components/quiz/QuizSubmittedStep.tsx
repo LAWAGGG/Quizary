@@ -33,6 +33,7 @@ interface AnimatedScoreCircleProps {
   isDark: boolean;
   textColor: string;
   textSubColor: string;
+  ready?: boolean;
 }
 
 function AnimatedScoreCircle({
@@ -42,6 +43,7 @@ function AnimatedScoreCircle({
   isDark,
   textColor,
   textSubColor,
+  ready = true,
 }: AnimatedScoreCircleProps) {
   const animatedValue = useRef(new Animated.Value(0)).current;
   const [displayScore, setDisplayScore] = useState(0);
@@ -50,6 +52,8 @@ function AnimatedScoreCircle({
   const percentage = maxScore > 0 ? Math.min(100, Math.max(0, Math.round((targetScore / maxScore) * 100))) : 0;
 
   useEffect(() => {
+    if (!ready) return;
+
     const listenerId = animatedValue.addListener(({ value }) => {
       const currentPct = Math.min(100, Math.max(0, value));
       const currentVal = maxScore > 0
@@ -60,15 +64,15 @@ function AnimatedScoreCircle({
 
     Animated.timing(animatedValue, {
       toValue: percentage,
-      duration: 1200,
-      easing: Easing.out(Easing.cubic),
+      duration: 1300,
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
       useNativeDriver: false,
     }).start();
 
     return () => {
       animatedValue.removeListener(listenerId);
     };
-  }, [percentage, targetScore, maxScore]);
+  }, [percentage, targetScore, maxScore, ready]);
 
   const firstHalfRotate = animatedValue.interpolate({
     inputRange: [0, 50, 100],
@@ -216,11 +220,12 @@ function formatSubmitted(str?: string) {
 export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFillAgain }: QuizSubmittedStepProps) {
   const { colors, isDark, language } = useAppTheme();
 
+  const sid = submissionId || resultData?.submission_id;
   const [subDetail, setSubDetail] = useState<any>(null);
+  const [loadingDetail, setLoadingDetail] = useState<boolean>(!!sid);
   const [leaderboard, setLeaderboard] = useState<any>(null);
   const [showReview, setShowReview] = useState<boolean>(false);
 
-  const sid = submissionId || resultData?.submission_id;
   const formCode = publicForm?.short_code;
   const formType = publicForm?.type || resultData?.type || subDetail?.type || 'quiz';
   const isQuiz = formType === 'quiz';
@@ -235,7 +240,12 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
             setSubDetail(detail);
           }
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => {
+          if (isMounted) setLoadingDetail(false);
+        });
+    } else {
+      setLoadingDetail(false);
     }
 
     if (isQuiz && formCode && publicForm?.show_leaderboard) {
@@ -439,6 +449,7 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
               isDark={isDark}
               textColor={colors.text}
               textSubColor={colors.textSub}
+              ready={!loadingDetail}
             />
 
             <Text style={[styles.encouragementText, { color: colors.textSub }]}>
