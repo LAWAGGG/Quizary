@@ -159,14 +159,18 @@ export default function QuizScreen() {
       setLoading(true);
       try {
         const detail: any = await getSubmissionDetail(resumeId);
-        // Public form untuk tema/header
+        // Public form untuk tema/header — fallback minimal jika getPublicForm gagal (mis. form draft/privat)
         if (detail.short_code) {
           try {
             const form = await getPublicForm(detail.short_code);
             setPublicForm(form);
-          } catch {}
+          } catch {
+            setPublicForm({ id: detail.form_id, title: detail.form_title || 'Form', short_code: detail.short_code, type: detail.type || 'form', display_style: 'card', theme_color: null } as any);
+          }
         } else if (detail.form_id) {
-          // Fallback: tidak ada short_code, tetap lanjut tanpa publicForm lengkap
+          setPublicForm({ id: detail.form_id, title: detail.form_title || 'Form', short_code: detail.short_code, type: detail.type || 'form', display_style: 'card', theme_color: null } as any);
+        } else {
+          setPublicForm({ id: 0, title: detail.form_title || 'Form', type: 'form', display_style: 'card' } as any);
         }
         // Set submission langsung tanpa landing
         setSubmission({ submission_id: detail.id, id: detail.id, ...detail, access_token: detail.access_token });
@@ -1027,22 +1031,28 @@ export default function QuizScreen() {
   }
 
   if (!publicForm) {
-    return (
-      <SafeAreaView style={[styles.center, { backgroundColor: colors.bg }]}>
-        <StatusBar style="dark" />
-        <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>Form tidak ditemukan</Text>
-        <TouchableOpacity
-          style={[styles.backBtn, { backgroundColor: colors.primary }]}
-          onPress={async () => {
-            await unpin().catch(() => {});
-            router.replace('/(tabs)/home' as any);
-          }}
-        >
-          <Text style={styles.backBtnText}>Kembali</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
+    // Jika resumeId ada dan submission sudah dimuat, jangan anggap Form tidak ditemukan
+    // Fallback publicForm minimal sudah di-set di resume effect, tapi jaga-jaga
+    if (resumeId && submission) {
+      // Biarkan lanjut ke answering/landing, jangan block
+    } else {
+      return (
+        <SafeAreaView style={[styles.center, { backgroundColor: colors.bg }]}>
+          <StatusBar style="dark" />
+          <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>Form tidak ditemukan</Text>
+          <TouchableOpacity
+            style={[styles.backBtn, { backgroundColor: colors.primary }]}
+            onPress={async () => {
+              await unpin().catch(() => {});
+              router.replace('/(tabs)/home' as any);
+            }}
+          >
+            <Text style={styles.backBtnText}>Kembali</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      );
+    }
   }
 
   // Themed blocked screen — for already_submitted use Image 1 design (cyan + check)
