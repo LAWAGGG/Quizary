@@ -587,6 +587,48 @@ export async function uploadAnswerFile(
   mimeType = 'application/octet-stream',
   fileName?: string
 ) {
+  const token = await getToken();
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (activeSubmissionToken) headers['X-Submission-Token'] = activeSubmissionToken;
+
+  const endpointUrl = `${BASE_URL}/submissions/${submissionId}/questions/${questionId}/upload`;
+
+  try {
+    if (FileSystem?.uploadAsync) {
+      const uploadRes = await FileSystem.uploadAsync(endpointUrl, fileUri, {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: 'file',
+        mimeType: mimeType || 'application/octet-stream',
+        headers,
+      });
+
+      if (uploadRes.status >= 200 && uploadRes.status < 300) {
+        let parsed = {};
+        try {
+          parsed = JSON.parse(uploadRes.body);
+        } catch {
+          parsed = { file_path: uploadRes.body };
+        }
+        return parsed;
+      } else {
+        let errJson = {};
+        try {
+          errJson = JSON.parse(uploadRes.body);
+        } catch {}
+        throw new Error(extractErrorMessage(errJson, `Upload failed (${uploadRes.status})`));
+      }
+    }
+  } catch (err: any) {
+    if (err.message && !err.message.includes('uploadAsync')) {
+      throw err;
+    }
+  }
+
+  // Fallback to fetchMultipart
   const fd = new FormData();
   const name = fileName || fileUri.split('/').pop() || 'answer_file';
   fd.append('file', {
