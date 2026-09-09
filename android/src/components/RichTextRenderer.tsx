@@ -124,29 +124,6 @@ export function hasMathFormulas(html?: string | null): boolean {
   );
 }
 
-/**
- * Checks if an HTML string contains rich content such as code blocks, math formulas,
- * or HTML formatting that requires WebView rendering.
- */
-export function hasRichHTML(html?: string | null): boolean {
-  if (!html || typeof html !== 'string') return false;
-  return (
-    hasMathFormulas(html) ||
-    html.includes('ql-syntax') ||
-    html.includes('ql-code-block') ||
-    html.includes('ql-formula') ||
-    html.includes('<pre') ||
-    html.includes('<code') ||
-    html.includes('blockquote') ||
-    html.includes('<ul') ||
-    html.includes('<ol') ||
-    html.includes('<h1') ||
-    html.includes('<h2') ||
-    html.includes('<h3') ||
-    /<[a-z][\s\S]*>/i.test(html)
-  );
-}
-
 interface RichTextRendererProps {
   html?: string | null;
   style?: StyleProp<TextStyle>;
@@ -159,14 +136,14 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
 
   if (!html) return null;
 
-  const isRich = hasRichHTML(html);
+  const isMath = hasMathFormulas(html);
 
   // Extract fontSize and color from passed style if available
   const flattenedStyle = StyleSheet.flatten(style) || {};
   const textColor = (flattenedStyle.color as string) || colors.text;
   const fontSize = (flattenedStyle.fontSize as number) || 14;
 
-  if (isRich) {
+  if (isMath) {
     const katexHtml = `
       <!DOCTYPE html>
       <html>
@@ -191,63 +168,6 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
           }
           p { margin: 0 0 6px 0; }
           p:last-child { margin-bottom: 0; }
-
-          /* Terminal / Code Block Styling (matching Web index.css) */
-          .ql-syntax,
-          .ql-code-block-container,
-          .ql-code-block,
-          pre,
-          div.ql-code-block {
-            background-color: #0f0f0f !important;
-            color: #f5f5f5 !important;
-            border: 1px solid #27272a !important;
-            border-radius: 8px !important;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Courier New", monospace !important;
-            font-size: 13px !important;
-            line-height: 1.6 !important;
-            padding: 10px 14px !important;
-            margin: 8px 0 !important;
-            white-space: pre-wrap !important;
-            word-break: break-word !important;
-            box-sizing: border-box !important;
-            display: block !important;
-            text-align: left !important;
-          }
-
-          code {
-            background-color: #0f0f0f !important;
-            color: #f5f5f5 !important;
-            border: 1px solid #27272a !important;
-            border-radius: 6px !important;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Courier New", monospace !important;
-            font-size: 13px !important;
-            padding: 2px 6px !important;
-            display: inline-block !important;
-          }
-
-          pre code,
-          .ql-code-block code,
-          .ql-syntax code {
-            background: transparent !important;
-            border: none !important;
-            padding: 0 !important;
-            color: inherit !important;
-            display: inline !important;
-          }
-
-          blockquote {
-            border-left: 4px solid #6C5CE7;
-            padding-left: 12px;
-            margin: 8px 0;
-            color: ${isDark ? '#94A3B8' : '#64748B'};
-            font-style: italic;
-          }
-
-          ul, ol {
-            margin: 6px 0;
-            padding-left: 20px;
-          }
-
           .katex-display {
             margin: 8px 0;
             overflow-x: auto;
@@ -326,7 +246,7 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
     );
   }
 
-  // Fast Native Text Rendering for non-rich plain text
+  // Fast Native Text Rendering for non-math rich text
   const textContent = stripHtmlTags(html);
 
   return (
