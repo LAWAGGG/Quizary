@@ -50,12 +50,13 @@ export const CustomDateTimePickerModal: React.FC<CustomDateTimePickerModalProps>
   const [hour, setHour] = useState<number>(new Date().getHours()); // 0-23
   const [minute, setMinute] = useState<number>(new Date().getMinutes()); // 0-59
 
-  // ScrollView Refs
+  // ScrollView Refs & Initialization Flag
   const monthScrollRef = useRef<ScrollView>(null);
   const dayScrollRef = useRef<ScrollView>(null);
   const yearScrollRef = useRef<ScrollView>(null);
   const hourScrollRef = useRef<ScrollView>(null);
   const minuteScrollRef = useRef<ScrollView>(null);
+  const isInitializedRef = useRef<boolean>(false);
 
   // Max days in current month/year
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -74,6 +75,7 @@ export const CustomDateTimePickerModal: React.FC<CustomDateTimePickerModalProps>
   // Initialize values and scroll wheels when modal opens
   useEffect(() => {
     if (!visible) return;
+    isInitializedRef.current = false;
 
     if (mode === 'time') {
       setStep('time');
@@ -142,6 +144,11 @@ export const CustomDateTimePickerModal: React.FC<CustomDateTimePickerModalProps>
         hourScrollRef.current?.scrollTo({ y: initHour * ITEM_HEIGHT, animated: false });
         minuteScrollRef.current?.scrollTo({ y: initMin * ITEM_HEIGHT, animated: false });
       }
+
+      // Mark initialized after initial scroll position is locked
+      setTimeout(() => {
+        isInitializedRef.current = true;
+      }, 100);
     }, 120);
 
     return () => clearTimeout(timer);
@@ -189,6 +196,7 @@ export const CustomDateTimePickerModal: React.FC<CustomDateTimePickerModalProps>
   };
 
   const handleQuickToday = () => {
+    isInitializedRef.current = true;
     const now = new Date();
     setYear(now.getFullYear());
     setMonth(now.getMonth() + 1);
@@ -217,6 +225,7 @@ export const CustomDateTimePickerModal: React.FC<CustomDateTimePickerModalProps>
     setter: (val: number) => void,
     getValue: (idx: number) => number
   ) => {
+    if (!isInitializedRef.current) return;
     const y = e.nativeEvent.contentOffset.y;
     const idx = Math.max(0, Math.min(Math.round(y / ITEM_HEIGHT), maxLen - 1));
     const targetY = idx * ITEM_HEIGHT;
@@ -235,6 +244,7 @@ export const CustomDateTimePickerModal: React.FC<CustomDateTimePickerModalProps>
     setter: (val: number) => void,
     getValue: (idx: number) => number
   ) => {
+    if (!isInitializedRef.current) return;
     const vy = e.nativeEvent.velocity?.y || 0;
     if (Math.abs(vy) < 0.1) {
       handleScrollEnd(scrollRef, e, maxLen, setter, getValue);
