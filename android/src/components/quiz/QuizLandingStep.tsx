@@ -150,7 +150,7 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
           </View>
         ) : (
           /* DESIGN FORM: Card Layout */
-          <ScrollView contentContainerStyle={styles.scrollContentForm} showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContentForm} showsVerticalScrollIndicator={false}>
             {bannerUri ? (
               <Image source={{ uri: bannerUri }} style={styles.heroBannerForm} resizeMode="cover" />
             ) : null}
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
   scrollContentForm: {
     flexGrow: 1,
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
