@@ -207,7 +207,7 @@ export default function QuizScreen() {
     })();
   }, [resumeId]);
 
-  // Fetch public form + canStart
+  // Fetch public form + canStart (initial landing — jangan blok not_started di landing, hanya draft/closed)
   useEffect(() => {
     (async () => {
       if (resumeId) {
@@ -223,10 +223,15 @@ export default function QuizScreen() {
         setPublicForm(form);
         try {
           const can = await checkCanStart(shortCode);
-          setCanStartInfo(can);
-          if (can && !can.can_start && can.reason === 'already_submitted') setAlreadySubmitted(true);
-          if (can && can.can_start && can.require_identity) {
+          // Hanya set already_submitted di landing; not_started/closed ditangani setelah Start (via handleStart) biar QR scan tetap ke landing dulu
+          if (can && !can.can_start && can.reason === 'already_submitted') {
+            setCanStartInfo(can);
+            setAlreadySubmitted(true);
+          } else if (can && can.can_start && can.require_identity) {
             setShowIdentityForm(true);
+          } else if (can && can.can_start) {
+            // Simpan can yang bisa start untuk identity check, tapi jangan auto block not_started
+            setCanStartInfo(can);
           }
         } catch {}
       } catch (e: any) {
@@ -528,10 +533,12 @@ export default function QuizScreen() {
         return;
       }
     }
-    // Re-check limit once immediately before creating (race: user re-scan after submit)
+    // Re-check server gate (already_submitted, not_started, closed, draft, etc) before creating
     const freshCan = await refreshCanStart();
-    if (freshCan && !freshCan.can_start && freshCan.reason === 'already_submitted') {
-      setAlreadySubmitted(true);
+    if (freshCan && !freshCan.can_start) {
+      setCanStartInfo(freshCan);
+      if (freshCan.reason === 'already_submitted') setAlreadySubmitted(true);
+      // Jangan langsung createSubmission jika belum bisa mulai — biarkan UI blocked yang handle (theme + i18n)
       return;
     }
 
@@ -1088,25 +1095,46 @@ export default function QuizScreen() {
         </View>
       );
     }
-    const map: any = {
+    const isNotStarted = reason === 'not_started';
+    const blockedGradient = getThemeGradientColors(themeColor);
+    const iconName = isNotStarted ? 'time-outline' as const : 'lock-closed-outline' as const;
+    // Web pakai t('landing.notStarted') = "Not yet opened" untuk title & desc not_started
+    const blockedTitleMap: any = {
+      draft: language === 'ID' ? 'Form belum dipublikasikan.' : 'Form is not published.',
+      closed: language === 'ID' ? 'Form sudah ditutup.' : 'Form is closed.',
+      not_started: language === 'ID' ? 'Form belum dibuka.' : 'Not yet opened',
+    };
+    const blockedDescMap: any = {
       draft: language === 'ID' ? 'Form masih draft — belum dipublikasikan.' : 'Form is still draft.',
       closed: language === 'ID' ? 'Form sudah ditutup.' : 'Form is closed.',
-      not_started: language === 'ID' ? 'Form belum dibuka.' : 'Form has not started yet.',
+      not_started: language === 'ID' ? 'Form belum dibuka.' : 'Not yet opened',
     };
+    // Web: Not yet opened pakai "Not yet opened" untuk title & desc sama (Image 1 blue solid)
+    const title = blockedTitleMap[reason] || (language === 'ID' ? 'Tidak dapat memulai' : 'Cannot start');
+    const desc = blockedDescMap[reason] || title;
+    // QR scan flow: landing tetap Start, blocked hanya setelah Start ditekan — jadi di sini kita tampilkan themed blocked
     return (
-      <SafeAreaView style={[styles.center, { backgroundColor: colors.bg }]}>
-        <Ionicons name="lock-closed-outline" size={48} color={colors.textMuted} />
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>{map[reason] || 'Tidak dapat memulai'}</Text>
-        <TouchableOpacity
-          style={[styles.backBtn, { backgroundColor: colors.primary }]}
-          onPress={async () => {
-            await unpin().catch(() => {});
-            router.replace('/(tabs)/home' as any);
-          }}
-        >
-          <Text style={styles.backBtnText}>{language === 'ID' ? 'Kembali' : 'Back'}</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
+      <View style={{ flex: 1 }}>
+        <LinearGradient colors={blockedGradient} style={StyleSheet.absoluteFill} />
+        <SafeAreaView style={styles.blockedContainer}>
+          <View style={styles.blockedIconCircle}>
+            <Ionicons name={iconName} size={32} color="#FFF" />
+          </View>
+          <Text style={styles.blockedTitle}>{title}</Text>
+          <Text style={styles.blockedDesc}>{desc}</Text>
+          <TouchableOpacity
+            style={[styles.blockedBackBtn, { backgroundColor: '#FFF' }]}
+            onPress={async () => {
+              await unpin().catch(() => {});
+              router.replace('/(tabs)/home' as any);
+            }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="arrow-back" size={16} color={themeColor} />
+            <Text style={[styles.blockedBackText, { color: themeColor }]}>{language === 'ID' ? 'Kembali' : 'Back to home'}</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </View>
     );
   }
 
@@ -1337,6 +1365,12 @@ const styles = StyleSheet.create({
   alreadySub: { color: 'rgba(255,255,255,0.82)', fontSize: 13, textAlign: 'center', marginTop: 8 },
   alreadyBack: { marginTop: 24, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 24 },
   alreadyBackText: { fontWeight: '800', fontSize: 14 },
+  blockedContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28 },
+  blockedIconCircle: { width: 64, height: 64, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  blockedTitle: { color: '#FFF', fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  blockedDesc: { color: 'rgba(255,255,255,0.75)', fontSize: 13, textAlign: 'center', marginTop: 6, marginBottom: 20 },
+  blockedBackBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#FFF', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 24 },
+  blockedBackText: { fontWeight: '700', fontSize: 14 },
   identityBar: {
     position: 'absolute',
     bottom: 0,
