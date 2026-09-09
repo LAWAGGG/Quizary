@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   ScrollView,
   StyleSheet,
   Image,
+  Animated,
+  Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -23,6 +25,182 @@ interface QuizSubmittedStepProps {
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+interface AnimatedScoreCircleProps {
+  score: number;
+  maxScore: number;
+  ringColor: string;
+  isDark: boolean;
+  textColor: string;
+  textSubColor: string;
+}
+
+function AnimatedScoreCircle({
+  score,
+  maxScore,
+  ringColor,
+  isDark,
+  textColor,
+  textSubColor,
+}: AnimatedScoreCircleProps) {
+  const animatedValue = useRef(new Animated.Value(0)).current;
+  const [displayScore, setDisplayScore] = useState(0);
+
+  const percentage = maxScore > 0 ? Math.min(100, Math.max(0, Math.round((score / maxScore) * 100))) : 0;
+
+  useEffect(() => {
+    animatedValue.setValue(0);
+    Animated.timing(animatedValue, {
+      toValue: percentage,
+      duration: 1400,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+
+    let current = 0;
+    const targetScore = Math.round(score);
+    const step = Math.max(1, Math.ceil(targetScore / 35));
+    const interval = setInterval(() => {
+      current += step;
+      if (current >= targetScore) {
+        setDisplayScore(targetScore);
+        clearInterval(interval);
+      } else {
+        setDisplayScore(current);
+      }
+    }, 35);
+
+    return () => clearInterval(interval);
+  }, [score, percentage]);
+
+  const firstHalfRotate = animatedValue.interpolate({
+    inputRange: [0, 50, 100],
+    outputRange: ['0deg', '180deg', '180deg'],
+    extrapolate: 'clamp',
+  });
+
+  const secondHalfRotate = animatedValue.interpolate({
+    inputRange: [0, 50, 100],
+    outputRange: ['0deg', '0deg', '180deg'],
+    extrapolate: 'clamp',
+  });
+
+  const trackColor = isDark ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0';
+
+  return (
+    <View style={circleStyles.container}>
+      {/* Background Track Circle */}
+      <View style={[circleStyles.trackCircle, { borderColor: trackColor }]} />
+
+      {/* First Half Progress (0 - 180 deg, Right Half) */}
+      <View style={circleStyles.rightMask}>
+        <Animated.View
+          style={[
+            circleStyles.halfCircleRight,
+            {
+              borderLeftColor: ringColor,
+              borderTopColor: ringColor,
+              transform: [{ rotate: firstHalfRotate }],
+            },
+          ]}
+        />
+      </View>
+
+      {/* Second Half Progress (180 - 360 deg, Left Half) */}
+      <View style={circleStyles.leftMask}>
+        <Animated.View
+          style={[
+            circleStyles.halfCircleLeft,
+            {
+              borderRightColor: ringColor,
+              borderBottomColor: ringColor,
+              transform: [{ rotate: secondHalfRotate }],
+            },
+          ]}
+        />
+      </View>
+
+      {/* Inner Content Display (Score / MaxScore) */}
+      <View style={[circleStyles.innerContent, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC' }]}>
+        <Text style={[circleStyles.scoreText, { color: textColor }]}>{displayScore}</Text>
+        {maxScore > 0 && (
+          <Text style={[circleStyles.maxScoreText, { color: textSubColor }]}>/{Math.round(maxScore)}</Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const circleStyles = StyleSheet.create({
+  container: {
+    width: 140,
+    height: 140,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    marginBottom: 16,
+  },
+  trackCircle: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 8,
+    position: 'absolute',
+  },
+  rightMask: {
+    width: 70,
+    height: 140,
+    position: 'absolute',
+    left: 70,
+    top: 0,
+    overflow: 'hidden',
+  },
+  leftMask: {
+    width: 70,
+    height: 140,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    overflow: 'hidden',
+  },
+  halfCircleRight: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 8,
+    borderRightColor: 'transparent',
+    borderBottomColor: 'transparent',
+    position: 'absolute',
+    left: -70,
+    top: 0,
+  },
+  halfCircleLeft: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 8,
+    borderLeftColor: 'transparent',
+    borderTopColor: 'transparent',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+  innerContent: {
+    width: 116,
+    height: 116,
+    borderRadius: 58,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scoreText: {
+    fontSize: 34,
+    fontWeight: 'bold',
+  },
+  maxScoreText: {
+    fontSize: 13,
+    marginTop: -2,
+  },
+});
 
 function formatSubmitted(str?: string) {
   if (!str) return '—';
@@ -274,14 +452,14 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
         {/* Score Ring Gauge */}
         {finalScore != null && (
           <View style={styles.scoreGaugeContainer}>
-            <View style={[styles.outerRing, { borderColor: ringColor }]}>
-              <View style={[styles.innerRingBg, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC' }]}>
-                <Text style={[styles.scoreValue, { color: colors.text }]}>{countedScore}</Text>
-                {maxScore > 0 && (
-                  <Text style={[styles.maxScoreVal, { color: colors.textSub }]}>/{Math.round(maxScore)}</Text>
-                )}
-              </View>
-            </View>
+            <AnimatedScoreCircle
+              score={finalScore}
+              maxScore={maxScore}
+              ringColor={ringColor}
+              isDark={isDark}
+              textColor={colors.text}
+              textSubColor={colors.textSub}
+            />
 
             <Text style={[styles.encouragementText, { color: colors.textSub }]}>
               {percentage >= 70
