@@ -678,12 +678,12 @@ def dashboard_summary(user: User = Depends(get_current_user), db: Session = Depe
 
     # Submission trend per form (bukan per hari) — tiap bar menampilkan satu
     # form, sehingga di chart langsung terlihat form mana yang paling banyak
-    # mendapat jawaban. Dibatasi 10 teratas agar tidak penuh.
+    # mendapat jawaban. Dibatasi 5 teratas agar tidak penuh/sempit.
     form_count = Counter(s.form_id for s in subs)
     title_by_id = {f.id: _strip_html(f.title) for f in forms}
     trend = [
         SubmissionTrend(form_id=fid, title=title_by_id.get(fid, "(deleted)"), count=c)
-        for fid, c in sorted(form_count.items(), key=lambda x: -x[1])[:10]
+        for fid, c in sorted(form_count.items(), key=lambda x: -x[1])[:5]
     ]
     return DashboardResponse(
         total_forms=len(forms),

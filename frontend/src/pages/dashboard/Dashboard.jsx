@@ -167,8 +167,8 @@ export default function Dashboard() {
               </div>
             ) : (
               <>
-                <div className="flex items-end gap-2 h-40">
-                  {data?.submission_trend?.map((e, i) => {
+                 <div className="flex items-end gap-2 h-40">
+                   {data?.submission_trend?.slice(0, 5).map((e, i) => {
                     const height = Math.max((e.count / maxTrend) * 100, 4)
                     return (
                       <motion.div
@@ -187,7 +187,7 @@ export default function Dashboard() {
                   })}
                 </div>
                 <div className="flex gap-2 mt-2">
-                  {data?.submission_trend?.map((st) => (
+                  {data?.submission_trend?.slice(0, 5).map((st) => (
                     <span key={st.form_id} className="flex-1 min-w-0 text-center" title={`${st.title} — ${st.count} answer${st.count !== 1 ? 's' : ''}`}>
                       <span className="block text-[10px] text-gray-400 dark:text-gray-500 truncate"><RichText html={st.title} /></span>
                     </span>
