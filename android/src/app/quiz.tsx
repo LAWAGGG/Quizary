@@ -68,8 +68,9 @@ function formatTimer(ms: number | null) {
 }
 
 export default function QuizScreen() {
-  const params = useLocalSearchParams<{ shortCode?: string; formId?: string }>();
+  const params = useLocalSearchParams<{ shortCode?: string; formId?: string; submissionId?: string; resumeSubmissionId?: string }>();
   const shortCode = (params.shortCode as string) || '';
+  const resumeId = (params.resumeSubmissionId as string) || (params.submissionId as string) || '';
   const { colors, language } = useAppTheme();
   const { showAlert } = useAppAlert();
 
@@ -151,9 +152,63 @@ export default function QuizScreen() {
     }
   }, [shortCode]);
 
+  // Resume via submissionId (khusus in_progress dari submission list)
+  useEffect(() => {
+    if (!resumeId) return;
+    (async () => {
+      setLoading(true);
+      try {
+        const detail: any = await getSubmissionDetail(resumeId);
+        // Public form untuk tema/header
+        if (detail.short_code) {
+          try {
+            const form = await getPublicForm(detail.short_code);
+            setPublicForm(form);
+          } catch {}
+        } else if (detail.form_id) {
+          // Fallback: tidak ada short_code, tetap lanjut tanpa publicForm lengkap
+        }
+        // Set submission langsung tanpa landing
+        setSubmission({ submission_id: detail.id, id: detail.id, ...detail, access_token: detail.access_token });
+        if (detail.access_token) setSubmissionToken(detail.access_token);
+        setQuestions(detail.questions || []);
+        setSections(detail.sections || []);
+        setCurrentSectionIdx(0);
+        if (detail.answers && Array.isArray(detail.answers)) {
+          const init: Record<number, any> = {};
+          detail.answers.forEach((a: any) => {
+            const qtype = String(a.question_type || a.type || '').toLowerCase();
+            if (['short_answer', 'essay', 'date', 'time', 'datetime', 'password'].includes(qtype)) init[a.question_id] = a.answer_text || '';
+            else if (qtype === 'file_upload') { if (a.answer_file) init[a.question_id] = a.answer_file; }
+            else init[a.question_id] = a.selected_option_ids || [];
+          });
+          setAnswers(init);
+        }
+        answeringRef.current = true;
+        submissionIdRef.current = Number(resumeId);
+        // Jika restricted, pin/volume akan aktif via AppState/polling; trigger pin sekarang jika bisa
+        // Delay sedikit biar publicForm ter-set dulu
+        setTimeout(async () => {
+          if (isRestrictedRef.current && canPin) {
+            lockVolume().catch(() => {});
+            await pin().catch(() => {});
+          }
+        }, 500);
+      } catch (e: any) {
+        showAlert({ type: 'error', title: 'Gagal memuat', message: e.message });
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [resumeId]);
+
   // Fetch public form + canStart
   useEffect(() => {
     (async () => {
+      if (resumeId) {
+        // Sudah handle via resumeId di atas
+        return;
+      }
       if (!shortCode) {
         setLoading(false);
         return;

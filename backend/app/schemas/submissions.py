@@ -91,6 +91,8 @@ class SavedAnswer(BaseModel):
 
 class SubmissionDetailResponse(BaseModel):
     id: int
+    form_id: Optional[int] = None
+    short_code: Optional[str] = None
     status: str
     started_at: Optional[str] = None
     expired_at: Optional[str] = None
@@ -121,6 +123,9 @@ class SubmissionListItem(BaseModel):
     score: Optional[float] = None
     reveal_score: bool = True
     submitted_at: Optional[str] = None
+    form_id: Optional[int] = None
+    short_code: Optional[str] = None
+    created_at: Optional[str] = None
 
 
 class SubmissionListResponse(BaseModel):

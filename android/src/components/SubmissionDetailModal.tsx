@@ -11,6 +11,7 @@ interface SubmissionDetailModalProps {
   loadingDetail: boolean;
   user: any;
   onClose: () => void;
+  onContinue?: (item: any, detail: any) => void;
 }
 
 export function SubmissionDetailModal({
@@ -20,6 +21,7 @@ export function SubmissionDetailModal({
   loadingDetail,
   user,
   onClose,
+  onContinue,
 }: SubmissionDetailModalProps) {
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
 
@@ -87,6 +89,19 @@ export function SubmissionDetailModal({
                   </View>
                 )}
               </View>
+
+              {(selectedSubItem?.status === 'in_progress' || subDetail?.status === 'in_progress') && (
+                <TouchableOpacity
+                  style={{ backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginBottom: 16, flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                  onPress={() => onContinue && onContinue(selectedSubItem, subDetail)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="play" size={18} color="#FFF" />
+                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 14 * fontSizeScale }}>
+                    {language === 'ID' ? 'Lanjutkan Mengerjakan' : 'Continue'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {/* Questions & Answers review */}
               <Text style={[styles.reviewHeading, { color: colors.text, fontSize: 14 * fontSizeScale }]}>
