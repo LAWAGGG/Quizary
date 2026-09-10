@@ -57,6 +57,10 @@ class AutosaveRequest(BaseModel):
         return self
 
 
+class BulkAutosaveRequest(BaseModel):
+    answers: list[AutosaveRequest] = Field(min_length=1, max_length=200)
+
+
 class PasswordCheckRequest(BaseModel):
     answer: str = Field(max_length=10_000)
 
@@ -130,3 +134,4 @@ class SubmissionListItem(BaseModel):
 
 class SubmissionListResponse(BaseModel):
     data: list[SubmissionListItem]
+    meta: dict = {"total": 0, "page": 1, "per_page": 20}

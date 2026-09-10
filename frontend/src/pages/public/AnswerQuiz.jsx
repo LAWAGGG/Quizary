@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle, Info, ZoomIn, ZoomOut, X, Lock, FileUp, RefreshCw, PenLine } from 'lucide-react'
@@ -80,9 +80,9 @@ const OptionTile = memo(function OptionTile({ letter, color, selected, checkbox,
 
       {image && (
         isAudioUrl(image.path) ? (
-          <audio controls src={resolveMediaUrl(image.path)} preload="metadata" className="w-full max-h-16 rounded-lg" onClick={(e) => e.stopPropagation()} />
+          <audio controls src={resolveMediaUrl(image.path)} preload="none" className="w-full max-h-16 rounded-lg" onClick={(e) => e.stopPropagation()} />
         ) : (
-          <img src={resolveMediaUrl(image.path)} alt="" className="max-h-24 w-auto rounded-lg object-contain" />
+          <img loading="lazy" decoding="async" src={resolveMediaUrl(image.path)} alt="" className="max-h-24 w-auto rounded-lg object-contain" />
         )
       )}
 
@@ -215,16 +215,24 @@ export default function AnswerQuiz() {
 
   const timerRef = useRef(null)
   const questionRefs = useRef({})   // { [qId]: HTMLElement } untuk scroll ke soal bermasalah
-  // ponytail: cheat alert — loop infinite selama grace 5s
+  // ponytail: cheat alert — loop infinite selama grace 5s, lazy hanya untuk quiz restricted
   const alertAudioRef = useRef(null)
   useEffect(() => {
+    if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data?.id) {
+      if (alertAudioRef.current) {
+        alertAudioRef.current.pause()
+        alertAudioRef.current.currentTime = 0
+        alertAudioRef.current = null
+      }
+      return
+    }
     const a = new Audio('/sounds/cheat-alert.mp3')
     a.preload = 'auto'
     a.loop = true
     a.volume = 1
     alertAudioRef.current = a
     return () => { a.pause(); a.currentTime = 0 }
-  }, [])
+  }, [effectiveType, publicForm?.is_restricted, data?.id])
   // ponytail: grace controls — butuh diakses dari pinToFullscreen saat sudah fullscreen tapi overlay masih nongol (Windows-key case)
   const graceTimerRef = useRef(null)
   const graceIntervalRef = useRef(null)
@@ -358,11 +366,11 @@ export default function AnswerQuiz() {
     setTimeout(() => flushAll(restored).catch(() => {}), 800)
   }, [data, submissionId, flushAll])
 
-  // Koneksi kembali / tab fokus → dorong semua jawaban sekali lagi;
-  // yang sudah tersimpan cuma kena autosave idempoten, yang gagal akhirnya jalan.
+  // Koneksi kembali / tab fokus → hanya kirim yang belum 'saved' (bulk 1 request + 30s guard)
+  // cegah N×PATCH sekuensial tiap alt-tab (sebelumnya >100 request per sesi).
   useEffect(() => {
     if (!submissionId) return
-    const retry = () => flushAll(answersRef.current).catch(() => {})
+    const retry = () => flushAll(answersRef.current, { onlyUnsaved: true }).catch(() => {})
     window.addEventListener('online', retry)
     window.addEventListener('focus', retry)
     return () => {
@@ -1210,6 +1218,28 @@ export default function AnswerQuiz() {
     setShowConfirm(true)
   }
 
+  // formPages di-memo sebelum early return (hindari hitung ulang tiap ketik — 100 soal lag)
+  const isOneByOneMemo = effectiveStyle === 'quiz'
+  const formPages = useMemo(() => {
+    if (!data) return []
+    const qs = data.questions || []
+    const secs = data.sections || []
+    const ordered = []
+    const seen = new Set()
+    secs.forEach((s) => {
+      qs.filter((q) => q.section_id === s.id && !seen.has(q.id)).forEach((q) => { ordered.push(q); seen.add(q.id) })
+    })
+    qs.filter((q) => !seen.has(q.id)).forEach((q) => { ordered.push(q); seen.add(q.id) })
+    if (isOneByOneMemo) return ordered.map((q) => ({ title: null, questions: [q] }))
+    const pages = []
+    ordered.forEach((q) => {
+      const last = pages[pages.length - 1]
+      if (last && last.key === (q.section_id ?? 'none')) last.questions.push(q)
+      else pages.push({ key: q.section_id ?? 'none', title: secs.find((s) => s.id === q.section_id)?.title || null, questions: [q] })
+    })
+    return pages.length ? pages : [{ title: null, questions: qs }]
+  }, [data, isOneByOneMemo])
+
   if (loading) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-paper dark:bg-ink-950">
@@ -1234,8 +1264,8 @@ export default function AnswerQuiz() {
 
   if (!data) return null
 
-  const isQuizStyle = effectiveStyle === 'quiz'
-  const isOneByOne = effectiveStyle === 'quiz'
+  const isQuizStyle = isOneByOneMemo
+  const isOneByOne = isOneByOneMemo
   const palette = themePalette(publicForm?.theme_color, theme === 'dark')
   const isOwnerPreview = publicForm?.is_owner === true && publicForm?.status !== 'published'
   const sectionsById = Object.fromEntries((data.sections || []).map((s) => [s.id, s.title]))
@@ -1276,30 +1306,8 @@ export default function AnswerQuiz() {
     }
   }
 
-  // Mode form: satu section = satu halaman. Quiz style: satu soal = satu halaman.
-  // KEDUA mode wajib group per section (urutan section selalu berurutan sesuai
-  // desain; shuffle hanya mengacak soal DI DALAM section). Array mentah
-  // data.questions bisa tidak sinkron dgn section — soal yang ditambahkan
-  // setelah sesi mulai selalu nempel di ekor snapshot.
-  // ponytail: IIFE tetap — useMemo di sini langgar rules-of-hooks karena setelah early return, skip untuk Fase 3
-  const formPages = (() => {
-    if (!data) return []
-    const ordered = []
-    const seen = new Set()
-    ;(data.sections || []).forEach((s) => {
-      questions.filter((q) => q.section_id === s.id && !seen.has(q.id)).forEach((q) => { ordered.push(q); seen.add(q.id) })
-    })
-    questions.filter((q) => !seen.has(q.id)).forEach((q) => { ordered.push(q); seen.add(q.id) })
-
-    if (isOneByOne) return ordered.map((q) => ({ title: null, questions: [q] }))
-    const pages = []
-    ;ordered.forEach((q) => {
-      const last = pages[pages.length - 1]
-      if (last && last.key === (q.section_id ?? 'none')) last.questions.push(q)
-      else pages.push({ key: q.section_id ?? 'none', title: (data.sections || []).find((s) => s.id === q.section_id)?.title || null, questions: [q] })
-    })
-    return pages.length ? pages : [{ title: null, questions }]
-  })()
+  // formPages sudah di-memo sebelum early return (anti hitung ulang tiap ketik)
+  // alias untuk code lama yang pakai isOneByOne/isQuizStyle setelah return
   const formPage = formPages[Math.min(currentIdx, Math.max(0, formPages.length - 1))] || { title: null, questions: [] }
 
   // Helper shared by both quiz and form modes
@@ -1466,9 +1474,9 @@ export default function AnswerQuiz() {
                   </p>
                 )} */}
                 {current.image && (isAudioUrl(current.image.path) ? (
-                  <audio controls src={resolveMediaUrl(current.image.path)} preload="metadata" className="w-full max-w-sm mx-auto mb-4" />
+                  <audio controls src={resolveMediaUrl(current.image.path)} preload="none" className="w-full max-w-sm mx-auto mb-4" />
                 ) : (
-                  <img
+                  <img loading="lazy" decoding="async"
                     src={resolveMediaUrl(current.image.path)}
                     alt=""
                     onClick={() => { setZoomTarget(current); setZoomScale(1) }}
@@ -1767,7 +1775,7 @@ export default function AnswerQuiz() {
       {isOwnerPreview && <PreviewNotice />}
       <div className="max-w-2xl mx-auto p-4 pb-28 overflow-x-hidden">
         {bannerPath && (
-          <img src={resolveMediaUrl(bannerPath)} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
+          <img loading="lazy" decoding="async" src={resolveMediaUrl(bannerPath)} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
         <div className="flex items-center justify-between gap-3 mb-6">
           <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={effectiveTitle} className="rich-text" /></h1>
@@ -1840,9 +1848,9 @@ export default function AnswerQuiz() {
                     </p>
                   )}
                   {q.image && (isAudioUrl(q.image.path) ? (
-                    <audio controls src={resolveMediaUrl(q.image.path)} preload="metadata" className="w-full max-w-sm mx-auto mb-4" />
+                    <audio controls src={resolveMediaUrl(q.image.path)} preload="none" className="w-full max-w-sm mx-auto mb-4" />
                   ) : (
-                    <img
+                    <img loading="lazy" decoding="async"
                       src={resolveMediaUrl(q.image.path)}
                       alt=""
                       onClick={() => { setZoomTarget(q); setZoomScale(1) }}
@@ -1879,9 +1887,9 @@ export default function AnswerQuiz() {
                             </div>
                             {opt.image && (
                               isAudioUrl(opt.image.path) ? (
-                                <audio controls src={resolveMediaUrl(opt.image.path)} preload="metadata" className="w-full max-w-xs mx-auto rounded-lg" onClick={(e) => e.stopPropagation()} />
+                                <audio controls src={resolveMediaUrl(opt.image.path)} preload="none" className="w-full max-w-xs mx-auto rounded-lg" onClick={(e) => e.stopPropagation()} />
                               ) : (
-                                <img src={resolveMediaUrl(opt.image.path)} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
+                                <img loading="lazy" decoding="async" src={resolveMediaUrl(opt.image.path)} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
                               )
                             )}
                           </label>
@@ -1932,9 +1940,9 @@ export default function AnswerQuiz() {
                             </div>
                             {opt.image && (
                               isAudioUrl(opt.image.path) ? (
-                                <audio controls src={resolveMediaUrl(opt.image.path)} preload="metadata" className="w-full max-w-xs mx-auto rounded-lg" onClick={(e) => e.stopPropagation()} />
+                                <audio controls src={resolveMediaUrl(opt.image.path)} preload="none" className="w-full max-w-xs mx-auto rounded-lg" onClick={(e) => e.stopPropagation()} />
                               ) : (
-                                <img src={resolveMediaUrl(opt.image.path)} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
+                                <img loading="lazy" decoding="async" src={resolveMediaUrl(opt.image.path)} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
                               )
                             )}
                           </label>
@@ -2050,7 +2058,7 @@ export default function AnswerQuiz() {
         </AnimatePresence>
       </div>
 
-      <footer className="fixed bottom-0 left-0 right-0 bg-white dark:bg-ink-900 border-t border-gray-200 dark:border-gray-800 p-4">
+      <footer className="fixed bottom-0 left-0 right-0 bg-white dark:bg-ink-900 border-t border-gray-200 dark:border-ink-700 p-4">
         <div className="max-w-lg mx-auto">
           {submitError && (
             <p className="text-sm text-red-500 text-center mb-2 flex items-center justify-center gap-1.5">
@@ -2176,7 +2184,7 @@ function QuestionMapDrawer({ show, onClose, total, current, answered, reviewed, 
             animate={{ x: 0, scale: 1, opacity: 1, y: 0 }}
             exit={{ x: 0, scale: 0.96, opacity: 0, y: 8 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="relative z-10 bg-white dark:bg-ink-900 rounded-2xl p-6 w-full max-w-md shadow-lift max-h-[85vh] flex flex-col"
+            className="relative z-10 border dark:border-ink-800 bg-white dark:bg-ink-900 rounded-2xl p-6 w-full max-w-md shadow-lift max-h-[85vh] flex flex-col"
             role="dialog"
             aria-label={t('answerQuiz.questionMap')}
           >
@@ -2428,7 +2436,7 @@ function ExamInfoDrawer({ show, onClose, form, data }) {
 
             <div className="flex-1 overflow-y-auto px-5 py-5">
               {banner && (
-                <img src={resolveMediaUrl(banner)} alt="" className="w-full h-28 object-cover rounded-2xl mb-5 shadow-card" />
+                <img loading="lazy" decoding="async" src={resolveMediaUrl(banner)} alt="" className="w-full h-28 object-cover rounded-2xl mb-5 shadow-card" />
               )}
               <h4 className="font-display font-semibold text-ink dark:text-gray-100 text-lg leading-snug">
                 <RichText html={form?.title} />
@@ -2523,7 +2531,7 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
           onClick={onClose}
         >
           <div
-            className="w-full max-w-3xl max-h-[90dvh] flex flex-col overflow-hidden rounded-3xl bg-white dark:bg-ink-900 shadow-lift relative"
+            className="w-full max-w-3xl max-h-[90dvh] border dark:border-ink-800 flex flex-col overflow-hidden rounded-3xl bg-white dark:bg-ink-900 shadow-lift relative"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -2564,7 +2572,7 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                       <RichText html={target.question_text} className="rich-text" />
                     </h3>
                     {target.image && (
-                      <img
+                      <img loading="lazy" decoding="async"
                         src={resolveMediaUrl(target.image.path)}
                         alt=""
                         className="w-full max-h-[40dvh] object-contain rounded-2xl shadow-card"
@@ -2587,9 +2595,9 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                             </span>
                             {opt.image && (
                               isAudioUrl(opt.image.path) ? (
-                                <audio controls src={resolveMediaUrl(opt.image.path)} preload="metadata" className="max-h-20 w-32 rounded-lg shrink-0" onClick={(e) => e.stopPropagation()} />
+                                <audio controls src={resolveMediaUrl(opt.image.path)} preload="none" className="max-h-20 w-32 rounded-lg shrink-0" onClick={(e) => e.stopPropagation()} />
                               ) : (
-                                <img src={resolveMediaUrl(opt.image.path)} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                                <img loading="lazy" decoding="async" src={resolveMediaUrl(opt.image.path)} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
                               )
                             )}
                           </div>
@@ -2609,9 +2617,9 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                             <span className="flex-1 leading-snug text-left"><RichText html={opt.option_text} className="rich-text" /></span>
                             {opt.image && (
                               isAudioUrl(opt.image.path) ? (
-                                <audio controls src={resolveMediaUrl(opt.image.path)} preload="metadata" className="max-h-20 w-32 rounded-lg shrink-0" onClick={(e) => e.stopPropagation()} />
+                                <audio controls src={resolveMediaUrl(opt.image.path)} preload="none" className="max-h-20 w-32 rounded-lg shrink-0" onClick={(e) => e.stopPropagation()} />
                               ) : (
-                                <img src={resolveMediaUrl(opt.image.path)} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                                <img loading="lazy" decoding="async" src={resolveMediaUrl(opt.image.path)} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
                               )
                             )}
                           </div>

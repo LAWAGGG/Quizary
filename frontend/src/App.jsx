@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { MotionConfig } from 'framer-motion'
+import { Suspense, lazy } from 'react'
 import { PreferencesProvider } from './context/PreferencesContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { useAuth } from './hooks/useAuth'
@@ -16,14 +17,24 @@ import FormCreate from './pages/forms/FormCreate'
 import AIGenerate from './pages/forms/AIGenerate'
 import FormEdit from './pages/forms/FormEdit'
 import QuestionBuilder from './pages/forms/QuestionBuilder'
-import FormLanding from './pages/public/FormLanding'
-import AnswerQuiz from './pages/public/AnswerQuiz'
-import QuizResult from './pages/public/QuizResult'
 import Results from './pages/results/Results'
 import Analytics from './pages/results/Analytics'
 import Profile from './pages/profile/Profile'
 import MySubmissions from './pages/profile/MySubmissions'
 import Settings from './pages/profile/Settings'
+
+// ponytail: public routes di-lazy — responden /q & /s tidak unduh 1.6MB dashboard/builder
+const FormLanding = lazy(() => import('./pages/public/FormLanding'))
+const AnswerQuiz = lazy(() => import('./pages/public/AnswerQuiz'))
+const QuizResult = lazy(() => import('./pages/public/QuizResult'))
+
+function PublicFallback() {
+  return (
+    <div className="min-h-dvh flex items-center justify-center bg-paper dark:bg-ink-950">
+      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
 
 function ProtectedRoute({ children }) {
   const { user, ready } = useAuth()
@@ -59,9 +70,9 @@ function AppRoutes() {
       <Route path="/otp" element={<VerifyOtp />} />
       <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
       <Route path="/reset-password" element={<PublicRoute><ResetPassword /></PublicRoute>} />
-      <Route path="/q/:shortCode" element={<FormLanding />} />
-      <Route path="/s/:submissionId" element={<AnswerQuiz />} />
-      <Route path="/s/:submissionId/result" element={<QuizResult />} />
+      <Route path="/q/:shortCode" element={<Suspense fallback={<PublicFallback />}><FormLanding /></Suspense>} />
+      <Route path="/s/:submissionId" element={<Suspense fallback={<PublicFallback />}><AnswerQuiz /></Suspense>} />
+      <Route path="/s/:submissionId/result" element={<Suspense fallback={<PublicFallback />}><QuizResult /></Suspense>} />
       <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/forms" element={<FormList />} />

@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { BarChart3, Download, ClipboardList, X, Check, AlertTriangle, Trash2 } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
+import { useInfiniteScroll } from '../../hooks/useInfiniteScroll'
 import { stripTags } from '../../lib/sanitize'
 import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichText, ConfirmModal, sanitizeHtml } from '../../components/ui'
 import { isAudioUrl, resolveMediaUrl } from '../../lib/media'
@@ -53,8 +54,11 @@ export default function Results() {
   const [isQuiz, setIsQuiz] = useState(true)
   const [status, setStatus] = useState('')
   const [sort, setSort] = useState('')
-  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const pageRef = useRef(1)
+  const totalRef = useRef(0)
+  const pendingRef = useRef(false)
   const [detail, setDetail] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
@@ -100,7 +104,7 @@ export default function Results() {
       toast.success(res.data.message || t('results.deleted', { count: res.data.deleted }))
       setShowDelete(false)
       setSelected(new Set())
-      fetchResults()
+      fetchResults(1, { reset: true })
     } catch (err) {
       toast.error(err.response?.data?.message || t('results.deleteFailed'))
     } finally {
@@ -120,7 +124,7 @@ export default function Results() {
       toast.success(res.data.message || t('results.statusUpdated'))
       setStatusTarget(null)
       setDetail((prev) => (prev && prev.id === id ? { ...prev, status: res.data.status, score: res.data.score } : prev))
-      fetchResults()
+      fetchResults(1, { reset: true })
     } catch (err) {
       toast.error(err.response?.data?.message || err.response?.data?.detail || t('results.deleteFailed'))
     } finally {
@@ -147,7 +151,7 @@ export default function Results() {
       toast.success(res.data.message || t('results.statusUpdated'))
       setBulkStatusTarget(null)
       setSelected(new Set())
-      fetchResults()
+      fetchResults(1, { reset: true })
     } catch (err) {
       toast.error(err.response?.data?.message || err.response?.data?.detail || t('results.deleteFailed'))
     } finally {
@@ -176,21 +180,52 @@ export default function Results() {
     </Select>
   )
 
-  const fetchResults = useCallback(async () => {
-    setLoading(true)
+  const fetchResults = useCallback(async (pageNum, { reset = false } = {}) => {
+    if (pendingRef.current) return
+    pendingRef.current = true
+    if (reset) setLoading(true)
+    else setLoadingMore(true)
     try {
-      const params = { page, per_page: 20 }
+      const params = { page: pageNum, per_page: 20 }
       if (status) params.status = status
       if (sort) params.sort = sort
       const res = await api.get(`/forms/${formId}/results`, { params })
-      setData(res.data.data)
-      setMeta(res.data.meta)
+      const rows = res.data.data || []
+      const m = res.data.meta || {}
+      totalRef.current = m.total ?? rows.length
+      pageRef.current = m.page ?? pageNum
+      setMeta({ total: totalRef.current, page: pageRef.current, per_page: m.per_page ?? 20 })
+      setData((prev) => {
+        const merged = reset ? [] : [...prev]
+        const seen = new Set(merged.map((r) => r.submission_id))
+        for (const row of rows) {
+          if (!seen.has(row.submission_id)) {
+            merged.push(row)
+            seen.add(row.submission_id)
+          }
+        }
+        return merged
+      })
     } catch (err) {
       console.error(err)
     } finally {
+      pendingRef.current = false
       setLoading(false)
+      setLoadingMore(false)
     }
-  }, [formId, status, sort, page])
+  }, [formId, status, sort])
+
+  const dataRef = useRef([])
+  dataRef.current = data
+
+  const loadMore = useCallback(() => {
+    if (pendingRef.current) return
+    if (dataRef.current.length >= totalRef.current) return
+    fetchResults(pageRef.current + 1)
+  }, [fetchResults])
+
+  const hasMore = !loading && data.length < meta.total
+  const sentinelRef = useInfiniteScroll({ loading, loadingMore, hasMore, onLoadMore: loadMore })
 
   useEffect(() => {
     api.get(`/forms/${formId}`).then((res) => {
@@ -200,7 +235,11 @@ export default function Results() {
   }, [formId])
 
   useEffect(() => {
-    fetchResults()
+    setData([])
+    setSelected(new Set())
+    pageRef.current = 1
+    totalRef.current = 0
+    fetchResults(1, { reset: true })
   }, [fetchResults])
 
   const handleExport = async () => {
@@ -244,8 +283,6 @@ export default function Results() {
       setDetailLoading(false)
     }
   }
-
-  const totalPages = Math.ceil(meta.total / meta.per_page)
 
   // Semua soal dikelompokkan per section — soal yang tidak dijawab tetap tampil ("-").
   // ponytail: memoize biar tidak hitung ulang tiap ketik di modal detail (100 soal → lag)
@@ -292,13 +329,13 @@ export default function Results() {
 
       <div className="flex flex-wrap gap-3 mt-6 mb-6">
         <div className="w-full sm:w-48">
-          <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }} aria-label="Filter by status">
+          <Select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status">
             {statusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </Select>
         </div>
         {isQuiz && (
           <div className="w-full sm:w-48">
-            <Select value={sort} onChange={(e) => { setSort(e.target.value); setPage(1) }} aria-label="Sort results">
+            <Select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort results">
               {sortOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </Select>
           </div>
@@ -456,14 +493,20 @@ export default function Results() {
            </motion.div>
 
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-6">
-              <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>{t('common.previous')}</Button>
-              <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
-                {t('forms.page', { page, total: totalPages })}
-              </span>
-              <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>{t('common.next')}</Button>
-            </div>
+          {!loading && data.length > 0 && (
+            <>
+              <div ref={sentinelRef} aria-hidden="true" className="h-1" />
+              {loadingMore && (
+                <div className="space-y-3 mt-4">
+                  {[1, 2, 3].map((i) => <CardSkeleton key={i} />)}
+                </div>
+              )}
+              {!hasMore && meta.total > meta.per_page && (
+                <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-6">
+                  {t('results.allLoaded', { count: meta.total })}
+                </p>
+              )}
+            </>
           )}
         </>
       )}
@@ -572,9 +615,9 @@ export default function Results() {
                                       <RichText html={q.question_text} className="rich-text" />
                                     </div>
                                     {q.image && (isAudioUrl(q.image.path) ? (
-                                      <audio controls src={resolveMediaUrl(q.image.path)} preload="metadata" className="w-full max-w-sm mt-3" />
+                                      <audio controls src={resolveMediaUrl(q.image.path)} preload="none" className="w-full max-w-sm mt-3" />
                                     ) : (
-                                      <img src={resolveMediaUrl(q.image.path)} alt="" className="max-h-32 w-auto rounded-lg object-cover mt-3" />
+                                      <img src={resolveMediaUrl(q.image.path)} alt="" loading="lazy" decoding="async" className="max-h-32 w-auto rounded-lg object-cover mt-3" />
                                     ))}
                                     <div className="mt-3">
                                       <div className="flex items-center gap-2 mb-1.5">

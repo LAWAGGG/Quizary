@@ -5,7 +5,7 @@ import uuid
 from decimal import Decimal
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status, UploadFile, File
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status, UploadFile, File
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, selectinload
 
@@ -30,6 +30,7 @@ from app.schemas.submissions import (
     QuestionWithOptions,
     OptionPublic,
     AutosaveRequest,
+    BulkAutosaveRequest,
     PasswordCheckRequest,
     SubmitResponse,
     TabExitRequest,
@@ -690,6 +691,89 @@ def autosave(
     return {"message": "Answer saved", "question_id": body.question_id}
 
 
+@router.patch("/submissions/{submission_id}/autosave/bulk")
+def bulk_autosave(
+    submission_id: int,
+    body: BulkAutosaveRequest,
+    request: Request,
+    x_submission_token: str | None = Header(None, alias="X-Submission-Token"),
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    """Bulk autosave — satu request untuk banyak soal (ganti N PATCH sekuensial)."""
+    sub = _get_sub_or_404(submission_id, db)
+    _verify_submission_access(sub, request, user, db, x_submission_token)
+    form = db.get(Form, sub.form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    if form.require_login and not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required to access this form")
+
+    if sub.status == SubmissionStatus.locked:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ujian dikunci — menunggu keputusan pengawas")
+    if sub.status != SubmissionStatus.in_progress:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
+
+    if is_expired(sub, form):
+        sub.status = SubmissionStatus.auto_submitted
+        sub.submitted_at = _now()
+        grade_submission(db, sub, form)
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Submission time has expired")
+
+    saved_ids: list[int] = []
+    for item in body.answers:
+        question = _get_question_for_submission(item.question_id, sub, db)
+        if item.option_ids:
+            _validate_option_ids(item.option_ids, question)
+        if item.answer_text is not None:
+            if question.type == QuestionType.file_upload:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Soal file upload dijawab melalui unggah file",
+                )
+            _validate_date_time(question, item.answer_text)
+            _validate_text_length(question, item.answer_text)
+
+        answer = db.query(Answer).filter(
+            Answer.submission_id == sub.id,
+            Answer.question_id == item.question_id,
+        ).first()
+        if not answer:
+            answer = Answer(submission_id=sub.id, question_id=item.question_id, created_at=_now())
+            db.add(answer)
+            db.flush()
+
+        if item.option_ids is not None:
+            db.query(AnswerOption).filter(AnswerOption.answer_id == answer.id).delete()
+            for oid in item.option_ids:
+                db.add(AnswerOption(answer_id=answer.id, option_id=oid))
+            if item.answer_text:
+                if question.type not in (QuestionType.multiple_choice, QuestionType.checkbox) or not question.allow_other:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="Soal ini tidak mengizinkan jawaban lainnya",
+                    )
+                if len(item.answer_text) > 500:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="Jawaban lainnya maksimal 500 karakter",
+                    )
+                answer.answer_text = item.answer_text
+            else:
+                answer.answer_text = None
+        elif item.answer_text is not None:
+            answer.answer_text = item.answer_text
+            db.query(AnswerOption).filter(AnswerOption.answer_id == answer.id).delete()
+
+        answer.updated_at = _now()
+        saved_ids.append(item.question_id)
+
+    db.commit()
+    return {"saved": len(saved_ids), "question_ids": saved_ids}
+
+
 # ── POST /submissions/{id}/questions/{question_id}/check-password ─────────────
 # Gerbang section: klien tidak punya keyword (tidak pernah dikirim ke publik),
 # jadi pencocokan terjadi di sini. Constant-time compare.
@@ -1003,8 +1087,13 @@ def get_submission(
 # ── GET /me/submissions ───────────────────────────────────────────────────────
 
 @router.get("/me/submissions", response_model=SubmissionListResponse)
-def my_submissions(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    subs = (
+def my_submissions(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+):
+    q = (
         db.query(Submission)
         .join(Form, Submission.form_id == Form.id)
         .filter(
@@ -1012,8 +1101,9 @@ def my_submissions(user: User = Depends(get_current_user), db: Session = Depends
             Form.show_in_history == True,  # noqa: E712 — form yang disetel agar tidak tampil di riwayat disaring
         )
         .order_by(Submission.created_at.desc())
-        .all()
     )
+    total = q.count()
+    subs = q.offset((page - 1) * per_page).limit(per_page).all()
     data = [
         SubmissionListItem(
             id=s.id,
@@ -1029,4 +1119,7 @@ def my_submissions(user: User = Depends(get_current_user), db: Session = Depends
         )
         for s in subs
     ]
-    return SubmissionListResponse(data=data)
+    return SubmissionListResponse(
+        data=data,
+        meta={"total": total, "page": page, "per_page": per_page},
+    )

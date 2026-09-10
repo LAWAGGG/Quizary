@@ -345,11 +345,13 @@ export default function QuizResult() {
 
                             {/* Gambar soal — ditampilkan jika ada */}
                             {answer.question_image && (isAudioUrl(answer.question_image) ? (
-                              <audio controls src={resolveMediaUrl(answer.question_image)} preload="metadata" className="w-full max-w-sm mb-3" />
+                              <audio controls src={resolveMediaUrl(answer.question_image)} preload="none" className="w-full max-w-sm mb-3" />
                             ) : (
                               <img
                                 src={resolveMediaUrl(answer.question_image)}
                                 alt=""
+                                loading="lazy"
+                                decoding="async"
                                 className="max-h-40 w-auto rounded-xl object-cover mb-3 shadow-card"
                               />
                             ))}

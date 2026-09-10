@@ -432,7 +432,8 @@
     "backToDashboard": "Back to Dashboard",
     "scoreLabel": "Score: {{score}}",
     "submittedAt": "Submitted: {{date}}",
-    "notSubmitted": "Not submitted yet"
+    "notSubmitted": "Not submitted yet",
+    "allLoaded": "All {{count}} submissions loaded"
   },
   "profile": {
     "eyebrow": "Account",
@@ -802,7 +803,8 @@
     "exportFailed": "Failed to export Excel",
     "deleted": "{{count}} result(s) deleted",
     "deleteFailed": "Failed to delete",
-    "statusUpdated": "Status updated"
+    "statusUpdated": "Status updated",
+    "allLoaded": "All {{count}} results loaded"
   },
   "violation": {
     "leftFullscreen": "Left fullscreen",

@@ -1,23 +1,73 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ExternalLink, ClipboardList } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
+import { useInfiniteScroll } from '../../hooks/useInfiniteScroll'
 import { Card, Button, StatusBadge, PageHeader, EmptyState, CardSkeleton, RichText } from '../../components/ui'
+
+const PER_PAGE = 20
 
 export default function MySubmissions() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [data, setData] = useState([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const pageRef = useRef(1)
+  const totalRef = useRef(0)
+  const pendingRef = useRef(false)
+
+  const loadPage = useCallback(async (pageNum, { reset = false } = {}) => {
+    if (pendingRef.current) return
+    pendingRef.current = true
+    if (reset) setLoading(true)
+    else setLoadingMore(true)
+    try {
+      const res = await api.get('/me/submissions', { params: { page: pageNum, per_page: PER_PAGE } })
+      const rows = res.data.data || []
+      const meta = res.data.meta || {}
+      totalRef.current = meta.total ?? rows.length
+      pageRef.current = meta.page ?? pageNum
+      setTotal(totalRef.current)
+      setData((prev) => {
+        const merged = reset ? [] : [...prev]
+        const seen = new Set(merged.map((s) => s.id))
+        for (const row of rows) {
+          if (!seen.has(row.id)) {
+            merged.push(row)
+            seen.add(row.id)
+          }
+        }
+        return merged
+      })
+    } catch (err) {
+      console.error(err)
+    } finally {
+      pendingRef.current = false
+      setLoading(false)
+      setLoadingMore(false)
+    }
+  }, [])
 
   useEffect(() => {
-    api.get('/me/submissions')
-      .then((res) => setData(res.data.data || []))
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }, [])
+    setData([])
+    setTotal(0)
+    pageRef.current = 1
+    totalRef.current = 0
+    loadPage(1, { reset: true })
+  }, [loadPage])
+
+  const loadMore = useCallback(() => {
+    if (pendingRef.current) return
+    if (data.length >= totalRef.current) return
+    loadPage(pageRef.current + 1)
+  }, [data.length, loadPage])
+
+  const hasMore = !loading && data.length < total
+  const sentinelRef = useInfiniteScroll({ loading, loadingMore, hasMore, onLoadMore: loadMore })
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -81,6 +131,21 @@ export default function MySubmissions() {
             </motion.div>
           ))}
         </motion.div>
+      )}
+      {!loading && data.length > 0 && (
+        <>
+          <div ref={sentinelRef} aria-hidden="true" className="h-1" />
+          {loadingMore && (
+            <div className="space-y-4 mt-3">
+              {[1, 2].map((i) => <CardSkeleton key={i} />)}
+            </div>
+          )}
+          {!hasMore && total > PER_PAGE && (
+            <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-6">
+              {t('mySubs.allLoaded', { count: total })}
+            </p>
+          )}
+        </>
       )}
     </div>
   )
