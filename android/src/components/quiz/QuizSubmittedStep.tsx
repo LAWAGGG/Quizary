@@ -17,13 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { stripHtmlTags } from '../RichTextRenderer';
 import { getSubmissionDetail, getLeaderboard } from '../../services/api_service';
-<<<<<<< HEAD
 import { isAudioUrl, extractMediaUrl } from '../../utils/media';
 import { AudioPlayer } from '../AudioPlayer';
 import { QuizBackground } from './QuizBackground';
-=======
-import AnimatedScoreCircle from '../AnimatedScoreCircle';
->>>>>>> 46c41d34e48c5b7fcff1d96438485d3f9ab566c4
 
 interface QuizSubmittedStepProps {
   resultData: any;
@@ -34,7 +30,6 @@ interface QuizSubmittedStepProps {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-<<<<<<< HEAD
 interface AnimatedScoreCircleProps {
   score: number;
   maxScore: number;
@@ -258,8 +253,6 @@ const circleStyles = StyleSheet.create({
   },
 });
 
-=======
->>>>>>> 46c41d34e48c5b7fcff1d96438485d3f9ab566c4
 function formatSubmitted(str?: string) {
   if (!str) return '—';
   const parts = str.split(/[\s:-]+/);
@@ -645,8 +638,10 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
                               {language === 'ID' ? 'Jawaban kamu' : 'Your answer'}
                             </Text>
                             <Text style={[styles.yourAnsText, { color: colors.text }]}>
-                              {a.selected_options && a.selected_options.length > 0
-                                ? a.selected_options.map((opt: string) => stripHtmlTags(opt)).join(', ')
+                            {a.selected_options && a.selected_options.length > 0
+                                ? (a.question_type === 'dropdown' || a.question_type === 'checkbox'
+                                ? a.selected_options.map((opt: string) => stripHtmlTags(opt).replace(/^[A-H]\.\s*/, '').trim()).join(', ')
+                                : a.selected_options.map((opt: string) => stripHtmlTags(opt)).join(', '))
                                 : a.answer_text
                                 ? stripHtmlTags(a.answer_text)
                                 : a.answer_file
@@ -833,278 +828,7 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
 
         </ScrollView>
       </SafeAreaView>
-<<<<<<< HEAD
     </QuizBackground>
-=======
-    );
-  }
-
-  // ==========================================
-  // QUIZ MODE DESIGN (Quiz / Exam with score)
-  // Matches Web Screenshot 1
-  // ==========================================
-  return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
-        {/* Eyebrow Form Title */}
-        {cleanTitle ? (
-          <Text style={[styles.eyebrow, { color: themeColor }]}>
-            {cleanTitle.toUpperCase()}
-          </Text>
-        ) : null}
-
-        {/* Main Success Title */}
-        <Text style={[styles.mainTitle, { color: colors.text }]}>
-          {language === 'ID'
-            ? `Form ${cleanTitle || 'soal'} submitted successfully!`
-            : `Form ${cleanTitle || 'quiz'} submitted successfully!`}
-        </Text>
-
-        {/* Cheating Warning Badge if applicable */}
-        {isCheating && (
-          <View style={styles.cheatingBadge}>
-            <Ionicons name="warning-outline" size={16} color="#EF4444" />
-            <Text style={styles.cheatingText}>⚠️ Status: Cheating</Text>
-          </View>
-        )}
-
-        {/* Score Ring Gauge */}
-        {finalScore != null && (
-          <View style={styles.scoreGaugeContainer}>
-            <AnimatedScoreCircle
-              score={finalScore}
-              maxScore={maxScore}
-              ringColor={ringColor}
-              isDark={isDark}
-              textColor={colors.text}
-              textSubColor={colors.textSub}
-              ready={!loadingDetail}
-            />
-
-            <Text style={[styles.encouragementText, { color: colors.textSub }]}>
-              {percentage >= 70
-                ? (language === 'ID' ? 'Kerja bagus! Hasil yang luar biasa.' : 'Great job — outstanding result!')
-                : percentage >= 40
-                ? (language === 'ID' ? 'Good effort — keep practicing.' : 'Good effort — keep practicing.')
-                : (language === 'ID' ? 'Terus berlatih untuk hasil yang lebih baik.' : 'Keep practicing to improve.')}
-            </Text>
-
-            {/* Stats Chips (CORRECT | WRONG | SKIPPED) */}
-            {answersList.length > 0 && (
-              <View style={styles.statsRow}>
-                <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-                  <Text style={styles.statLabel}>CORRECT</Text>
-                  <Text style={[styles.statValue, { color: '#10B981' }]}>{correctCount}</Text>
-                </View>
-                <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-                  <Text style={styles.statLabel}>WRONG</Text>
-                  <Text style={[styles.statValue, { color: '#EF4444' }]}>{wrongCount}</Text>
-                </View>
-                <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-                  <Text style={styles.statLabel}>SKIPPED</Text>
-                  <Text style={[styles.statValue, { color: colors.textSub }]}>{unansweredCount}</Text>
-                </View>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* View Answer Review Button */}
-        {answersList.length > 0 && (
-          <TouchableOpacity
-            style={[styles.reviewBtn, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.cardBorder }]}
-            onPress={() => setShowReview(!showReview)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name={showReview ? "eye-off-outline" : "eye-outline"} size={18} color={colors.text} />
-            <Text style={[styles.reviewBtnText, { color: colors.text }]}>
-              {showReview
-                ? (language === 'ID' ? 'Sembunyikan Review' : 'Hide Answer Review')
-                : (language === 'ID' ? 'View Answer Review' : 'View Answer Review')}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Answer Review Accordion Section */}
-        {showReview && (
-          <View style={styles.reviewList}>
-            {answersList.map((a: any, i: number) => {
-              const isCorrect = a.is_correct;
-              const cleanQText = stripHtmlTags(a.question_text || '');
-              return (
-                <View
-                  key={a.question_id || i}
-                  style={[styles.answerCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}
-                >
-                  <View style={styles.answerCardHeader}>
-                    {isCorrect === true ? (
-                      <Ionicons name="checkmark-circle" size={24} color="#10B981" />
-                    ) : isCorrect === false ? (
-                      <Ionicons name="close-circle" size={24} color="#EF4444" />
-                    ) : (
-                      <Ionicons name="remove-circle" size={24} color={colors.textSub} />
-                    )}
-                    <View style={styles.answerCardContent}>
-                      <Text style={[styles.qIndexText, { color: colors.textSub }]}>
-                        {language === 'ID' ? `Soal #${i + 1}` : `Question #${i + 1}`}
-                      </Text>
-                      <Text style={[styles.qText, { color: colors.text }]}>{cleanQText}</Text>
-                      
-                      {a.question_image && (
-                        <Image source={{ uri: a.question_image }} style={styles.qImg} resizeMode="contain" />
-                      )}
-
-                      <Text style={[styles.yourAnsLabel, { color: colors.textSub }]}>
-                        {language === 'ID' ? 'Jawaban Anda:' : 'Your Answer:'}
-                      </Text>
-                      <Text style={[styles.yourAnsText, { color: colors.text }]}>
-                        {a.selected_options && a.selected_options.length > 0
-                          ? (() => {
-                              const t = a.question_type;
-                              // dropdown & checkbox review shouldn't show A/B/C prefix (nilai asli dropdown, checkbox tanpa ABC)
-                              // multiple_choice tetap pakai huruf seperti saat menjawab gamified
-                              if (t === 'dropdown' || t === 'checkbox') {
-                                return a.selected_options.map((opt: string) => stripHtmlTags(opt).replace(/^[A-H]\.\s*/, '').trim()).join(', ');
-                              }
-                              return a.selected_options.map((opt: string) => stripHtmlTags(opt)).join(', ');
-                            })()
-                          : a.answer_text
-                          ? stripHtmlTags(a.answer_text)
-                          : a.answer_file
-                          ? 'File uploaded'
-                          : (language === 'ID' ? '(Tidak dijawab)' : '(Not answered)')}
-                      </Text>
-                      {a.selected_options?.length > 0 && a.answer_text ? (
-                        <Text style={[styles.yourAnsText, { color: colors.textSub, fontSize: 12, marginTop: 4 }]}>
-                          {language === 'ID' ? `Lainnya: ${stripHtmlTags(a.answer_text)}` : `Other: ${stripHtmlTags(a.answer_text)}`}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Leaderboard Card Section */}
-        {leaderboard && leaderboard.data && leaderboard.data.length > 0 && (
-          <View style={[styles.leaderboardCard, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-            <View style={styles.lbHeader}>
-              <View style={styles.trophyCircle}>
-                <Ionicons name="trophy-outline" size={18} color="#F59E0B" />
-              </View>
-              <View>
-                <Text style={[styles.lbTitle, { color: colors.text }]}>
-                  {language === 'ID' ? 'Leaderboard' : 'Leaderboard'}
-                </Text>
-                <Text style={[styles.lbSub, { color: colors.textSub }]}>
-                  {language === 'ID' ? `${leaderboard.total || leaderboard.data.length} peserta` : `${leaderboard.total || leaderboard.data.length} participants`}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.lbList}>
-              {leaderboard.data.map((row: any) => {
-                const isMe = leaderboard.own && row.rank === leaderboard.own.rank;
-                return (
-                  <View
-                    key={row.rank}
-                    style={[
-                      styles.lbRow,
-                      { backgroundColor: isMe ? (isDark ? '#1E3A8A' : '#EFF6FF') : (isDark ? '#0F172A' : '#F8FAFC') },
-                      isMe && { borderColor: '#3B82F6', borderWidth: 1 }
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.rankBadge,
-                        {
-                          backgroundColor:
-                            row.rank === 1
-                              ? '#F59E0B'
-                              : row.rank === 2
-                              ? '#94A3B8'
-                              : row.rank === 3
-                              ? '#EA580C'
-                              : isDark
-                              ? '#334155'
-                              : '#E2E8F0',
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.rankBadgeText,
-                          { color: [1, 2, 3].includes(row.rank) ? '#FFF' : colors.text },
-                        ]}
-                      >
-                        {row.rank}
-                      </Text>
-                    </View>
-
-                    <Text style={[styles.lbName, { color: colors.text }]} numberOfLines={1}>
-                      {row.respondent_name}
-                      {isMe && (
-                        <Text style={{ color: colors.primary, fontWeight: 'bold' }}>
-                          {language === 'ID' ? ' (Anda)' : ' (You)'}
-                        </Text>
-                      )}
-                    </Text>
-
-                    <Text style={[styles.lbScore, { color: colors.text }]}>{row.score}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        )}
-
-        {/* Footer Hint */}
-        <View style={styles.footerHintRow}>
-          <Ionicons name="clipboard-outline" size={14} color={colors.textMuted} />
-          <Text style={[styles.footerHintText, { color: colors.textMuted }]}>
-            {language === 'ID' ? 'You can close this page.' : 'You can close this page.'}
-          </Text>
-        </View>
-
-        {/* Fill Again Button if allowed */}
-        {canRefill && (
-          <TouchableOpacity
-            style={[styles.fillAgainBtn, { backgroundColor: themeColor, marginBottom: 12 }]}
-            onPress={() => {
-              if (onFillAgain) {
-                onFillAgain();
-              } else if (formCode) {
-                router.replace(`/quiz?code=${formCode}` as any);
-              }
-            }}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="arrow-forward" size={18} color="#FFF" />
-            <Text style={styles.fillAgainBtnText}>
-              {language === 'ID' ? 'Isi Lagi' : 'Fill Again'}
-            </Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Back to Home Button */}
-        <TouchableOpacity
-          style={[styles.backHomeBtn, { backgroundColor: canRefill ? (isDark ? '#1E293B' : '#F1F5F9') : themeColor }]}
-          onPress={() => router.replace('/(tabs)/home')}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="home-outline" size={18} color={canRefill ? colors.text : '#FFF'} />
-          <Text style={[styles.backHomeBtnText, { color: canRefill ? colors.text : '#FFF' }]}>
-            {language === 'ID' ? 'Kembali ke Dashboard' : 'Back to Dashboard'}
-          </Text>
-        </TouchableOpacity>
-
-      </ScrollView>
-    </SafeAreaView>
->>>>>>> 46c41d34e48c5b7fcff1d96438485d3f9ab566c4
   );
 }
 
