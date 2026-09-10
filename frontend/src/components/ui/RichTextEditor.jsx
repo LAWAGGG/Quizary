@@ -357,12 +357,13 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
         </div>
       )}
       {formula && (
-        <div
-          className="absolute z-50 bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-3 w-[360px] max-w-[calc(100vw-2rem)]"
-          style={{ top: compact ? 38 : 52, left: 8 }}
-          role="dialog"
-          aria-label="Insert LaTeX formula"
-        >
+        <>
+          <div className="fixed inset-0 z-40 bg-ink/30 backdrop-blur-sm sm:hidden" onClick={() => setFormula(null)} aria-hidden="true" />
+          <div
+            className={`fixed inset-x-0 bottom-0 z-50 sm:absolute sm:inset-x-auto sm:bottom-auto bg-white dark:bg-ink-800 border-t sm:border border-gray-200 dark:border-gray-700 rounded-t-2xl sm:rounded-xl shadow-xl p-3 w-full sm:w-[360px] max-w-none sm:max-w-[calc(100vw-2rem)] max-h-[90dvh] overflow-y-auto sm:max-h-none sm:overflow-visible ${compact ? 'sm:top-[38px]' : 'sm:top-[52px]'} sm:left-2`}
+            role="dialog"
+            aria-label="Insert LaTeX formula"
+          >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Formula LaTeX</span>
             <button type="button" onClick={() => setFormula(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" aria-label="Close formula">
@@ -384,7 +385,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
           />
 
           <div
-            className={`mt-2 min-h-[64px] max-h-32 overflow-x-auto overflow-y-hidden flex items-center justify-center rounded-lg border px-3 py-2 ${
+            className={`mt-2 min-h-[64px] max-h-32 overflow-x-auto overflow-y-hidden flex items-center justify-start sm:justify-center rounded-lg border px-3 py-2 ${
               formulaPreview?.error
                 ? 'border-red-200 bg-red-50/60 dark:border-red-900/50 dark:bg-red-950/30'
                 : 'border-gray-200 bg-gray-50/70 dark:border-gray-700 dark:bg-ink-900/60'
@@ -431,6 +432,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
             </div>
           </div>
         </div>
+        </>
       )}
     </div>
     {hasMath && (

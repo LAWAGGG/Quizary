@@ -658,6 +658,23 @@ h2:has(pre.ql-code-block) {
   font-size: 1.1em;
 }
 
+/* Dropdown custom Select — rumus KaTeX di trigger & panel jangan melebar page */
+.select-katex .katex-display {
+  margin: 0.15em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  display: block;
+}
+.select-katex .katex {
+  font-size: 1em;
+  white-space: normal;
+  word-break: break-word;
+}
+.select-katex .katex-display > .katex {
+  white-space: nowrap;
+}
+
 /* Nested list indentation — mirror editor (.ql-indent-*) */
 .rich-text li.ql-indent-1 { padding-left: 4.5em; }
 .rich-text li.ql-indent-2 { padding-left: 7.5em; }

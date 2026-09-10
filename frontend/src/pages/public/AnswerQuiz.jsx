@@ -1620,11 +1620,11 @@ export default function AnswerQuiz() {
                       value={(answers[current.id] || [])[0] ?? ''}
                       onChange={(e) => handleSelect(current.id, e.target.value === '' ? null : Number(e.target.value))}
                       error={!!validationErrors[current.id]}
-                      className="text-base h-14"
+                      className="text-base min-h-14"
                     >
                       <option value="">{t('answerQuiz.selectAnswer')}</option>
                       {current.options.map((opt) => (
-                        <option key={opt.id} value={opt.id}>{opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
+                        <option key={opt.id} value={opt.id}><RichText html={opt.option_text} className="rich-text" /></option>
                       ))}
                     </Select>
                   </div>
@@ -2009,7 +2009,7 @@ export default function AnswerQuiz() {
                     >
                       <option value="">{t('answerQuiz.selectAnswer')}</option>
                       {q.options.map((opt) => (
-                        <option key={opt.id} value={opt.id}>{opt.option_text.replace(/<[^>]*>/g, '').trim()}</option>
+                        <option key={opt.id} value={opt.id}><RichText html={opt.option_text} className="rich-text" /></option>
                       ))}
                     </Select>
                   )}

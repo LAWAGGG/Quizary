@@ -117,7 +117,7 @@ const Select = forwardRef(({ label, error, helper, disabled, className = '', val
             error ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''
           } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          <span className={`truncate ${!selected || selected.value === '' ? 'text-gray-400 dark:text-gray-500' : ''}`}>
+          <span className={`flex-1 min-w-0 truncate flex items-center gap-1 select-katex ${!selected || selected.value === '' ? 'text-gray-400 dark:text-gray-500' : ''}`}>
             {selected ? selected.label : opts.length ? opts[0].label : '—'}
           </span>
           <ChevronDown className={`w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
@@ -140,12 +140,12 @@ const Select = forwardRef(({ label, error, helper, disabled, className = '', val
                 disabled={o.disabled}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => commit(o)}
-                className={`w-full flex items-center gap-2 px-3.5 h-9 text-left text-sm transition-colors ${
+                className={`w-full flex items-start gap-2 px-3.5 min-h-9 py-2 text-left text-sm transition-colors ${
                   o.disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
                 } ${i === active ? 'bg-primary/10 text-primary dark:text-primary-300' : 'text-ink dark:text-gray-200'}`}
               >
-                <span className="flex-1 truncate">{o.label}</span>
-                {isSel(o) && <Check className="w-3.5 h-3.5 shrink-0" strokeWidth={3} />}
+                <span className="flex-1 min-w-0 break-words whitespace-normal select-katex">{o.label}</span>
+                {isSel(o) && <Check className="w-3.5 h-3.5 shrink-0 mt-0.5" strokeWidth={3} />}
               </button>
             ))}
           </div>

@@ -436,62 +436,76 @@ export default function FormEdit() {
                 {errors.description && <p className="field-error">{errors.description}</p>}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Select label={t('formEdit.typeLabel')} name="type" value={form.type} onChange={handleChange} error={errors.type}>
-                  <option value="form">{t('formEdit.typeForm')}</option>
-                  <option value="quiz">{t('formEdit.typeQuiz')}</option>
-                </Select>
-                <div>
-                  <label className="field-label !mb-1.5">{t('formEdit.publicStatus')}</label>
-                  <div className="flex h-11 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, status: 'published' }))}
-                      className={`flex-1 text-sm font-semibold transition-colors ${form.status === 'published' ? 'bg-correct text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
-                        }`}
-                    >
-                      {t('formEdit.statusPublic')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, status: 'draft' }))}
-                      className={`flex-1 text-sm font-semibold transition-colors ${form.status !== 'published' && form.status !== 'closed' ? 'bg-gray-700 text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
-                        }`}
-                    >
-                      {t('formEdit.statusDraft')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, status: 'closed' }))}
-                      className={`flex-1 text-sm font-semibold transition-colors ${form.status === 'closed' ? 'bg-incorrect text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
-                        }`}
-                    >
-                      {t('formEdit.statusClosed')}
-                    </button>
-                  </div>
-                  {errors.status && (
-                    <p className="field-error">{errors.status}</p>
-                  )}
-                </div>
+              <div className="divide-y divide-gray-100 dark:divide-gray-800 border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden">
+                <SettingRow
+                  title={t('formEdit.makeQuiz')}
+                  desc={t('formEdit.makeQuizDesc')}
+                  control={
+                    <Toggle
+                      label={t('formEdit.makeQuiz')}
+                      checked={isQuiz}
+                      onChange={(v) => {
+                        const nt = v ? 'quiz' : 'form'
+                        if (nt === 'form') setForm((prev) => ({ ...prev, type: nt, show_leaderboard: false, is_restricted: false }))
+                        else setForm((prev) => ({ ...prev, type: nt }))
+                        setErrors((prev) => ({ ...prev, type: undefined }))
+                      }}
+                    />
+                  }
+                />
+                {errors.type && <p className="field-error px-4 pb-2 -mt-1">{errors.type}</p>}
               </div>
 
-              <Select
-                label={t('formEdit.submissionLimit')}
-                name="submission_limit"
-                value={isRestricted ? 'once' : form.submission_limit}
-                onChange={(e) => { handleChange(e); toggleSetting('submission_limit', e.target.value) }}
-                disabled={isRestricted}
-                error={errors.submission_limit}
-                helper={isRestricted ? t('formEdit.lockedOnceHint') : undefined}
-              >
-                <option value="unlimited">{t('formEdit.limitUnlimited')}</option>
-                <option value="once">{t('formEdit.limitOnce')}</option>
-              </Select>
+              <div>
+                <label className="field-label !mb-1.5">{t('formEdit.publicStatus')}</label>
+                <div className="flex h-11 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, status: 'published' }))}
+                    className={`flex-1 text-sm font-semibold transition-colors ${form.status === 'published' ? 'bg-correct text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
+                      }`}
+                  >
+                    {t('formEdit.statusPublic')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, status: 'draft' }))}
+                    className={`flex-1 text-sm font-semibold transition-colors ${form.status !== 'published' && form.status !== 'closed' ? 'bg-gray-700 text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
+                      }`}
+                  >
+                    {t('formEdit.statusDraft')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, status: 'closed' }))}
+                    className={`flex-1 text-sm font-semibold transition-colors ${form.status === 'closed' ? 'bg-incorrect text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
+                      }`}
+                  >
+                    {t('formEdit.statusClosed')}
+                  </button>
+                </div>
+                {errors.status && (
+                  <p className="field-error">{errors.status}</p>
+                )}
+              </div>
             </div>
           </CollapsibleCard>
 
           <CollapsibleCard title={t('formEdit.access')} icon={<Lock className="w-4 h-4" />}>
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              <SettingRow
+                title={t('formEdit.limitOneResponse')}
+                desc={isRestricted ? t('formEdit.lockedOnceHint') : t('formEdit.limitOneResponseDesc')}
+                control={
+                  <Toggle
+                    label={t('formEdit.limitOneResponse')}
+                    checked={isRestricted ? true : form.submission_limit === 'once'}
+                    disabled={isRestricted}
+                    onChange={(v) => toggleSetting('submission_limit', v ? 'once' : 'unlimited')}
+                  />
+                }
+              />
+              {errors.submission_limit && <p className="field-error px-4 pb-1 -mt-1">{errors.submission_limit}</p>}
               <SettingRow
                 title={t('formEdit.requireLogin')}
                 desc={onceLocked ? t('formEdit.requireLoginDescLocked') : t('formEdit.requireLoginDesc')}
