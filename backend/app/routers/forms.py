@@ -11,7 +11,7 @@ from app.models.form_category import FormCategory
 from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
 from app.models.image import Image
-from app.models.submission import Submission
+from app.models.submission import Submission, SubmissionStatus
 from app.models.answer import Answer
 from app.models.user import User
 from app.services.points import distribute_quiz_points
@@ -189,6 +189,7 @@ def list_forms(
 
     # Hitungan soal per form — satu query GROUP BY, dipetakan ke card list.
     counts: dict[int, int] = {}
+    resp_counts: dict[int, int] = {}
     cat_map: dict[int, FormCategory] = {}
     if forms:
         rows = (
@@ -198,6 +199,18 @@ def list_forms(
             .all()
         )
         counts = {fid: n for fid, n in rows}
+        # Responden = submission yang sudah masuk (bukan in_progress) — GROUP BY
+        # yang sama supaya list 20 card tetap 2 query tambahan, bukan N+1.
+        sub_rows = (
+            db.query(Submission.form_id, func.count(Submission.id))
+            .filter(
+                Submission.form_id.in_([f.id for f in forms]),
+                Submission.status != SubmissionStatus.in_progress,
+            )
+            .group_by(Submission.form_id)
+            .all()
+        )
+        resp_counts = {fid: n for fid, n in sub_rows}
         cat_ids = {f.category_id for f in forms if f.category_id}
         if cat_ids:
             cats = db.query(FormCategory).filter(FormCategory.id.in_(cat_ids)).all()
@@ -207,6 +220,7 @@ def list_forms(
         data=[
             FormListItem.model_validate(f).model_copy(update={
                 "question_count": counts.get(f.id, 0),
+                "respondent_count": resp_counts.get(f.id, 0),
                 "banner_path": file_url(request, f.banner_path),
                 "category": {"id": cat_map[f.category_id].id, "name": cat_map[f.category_id].name, "color": cat_map[f.category_id].color} if f.category_id and f.category_id in cat_map else None,
             })

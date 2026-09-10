@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, ClipboardList, Search, Trophy, HelpCircle, FolderOpen, Settings2, MoreVertical, Pencil, FolderInput, Trash2, CheckSquare, Check, X } from 'lucide-react'
+import { Plus, ClipboardList, Search, Trophy, HelpCircle, FolderOpen, Settings2, MoreVertical, FolderInput, Trash2, CheckSquare, Check, X, Users, Share2 } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
@@ -31,15 +31,15 @@ function themeVars(color) {
 }
 
 function FormTypeCluster({ form }) {
-  const isQuiz = form.type === 'quiz'
   return (
     <div className="absolute bottom-3 right-3 z-10 flex -space-x-2">
       <span
-        className="relative z-30 w-9 h-9 rounded-xl border-2 flex items-center justify-center shadow-chip transition-all duration-200 ease-in-out group-hover:-translate-y-1 group-hover:-rotate-6"
+        className="relative z-30 h-9 px-2.5 rounded-xl border-2 flex items-center gap-1 text-xs font-bold tabular-nums shadow-chip transition-all duration-200 ease-in-out group-hover:-translate-y-1 group-hover:-rotate-6"
         style={{ backgroundColor: 'var(--ts)', color: 'var(--tb)', borderColor: 'var(--ts)' }}
-        title={isQuiz ? 'Quiz' : 'Form'}
+        title={`${form.respondent_count ?? 0} respondent(s)`}
       >
-        {isQuiz ? <Trophy className="w-4 h-4" /> : <ClipboardList className="w-4 h-4" />}
+        <Users className="w-4 h-4" />
+        {form.respondent_count ?? 0}
       </span>
       <span
         className="relative z-20 h-9 px-2.5 rounded-xl border-2 flex items-center gap-1 text-xs font-bold tabular-nums shadow-chip bg-white dark:bg-ink-800 text-gray-600 dark:text-gray-300 transition-all duration-200 ease-in-out group-hover:-translate-y-2 delay-[40ms]"
@@ -113,7 +113,7 @@ function FormVisual({ form, onMenu, menuOpen, selectionMode, badgeOffset }) {
 // Kartu form yang bisa diseleksi — satu komponen per kartu agar hook
 // hold-select aman Rules of Hooks. Hold (mobile) masuk mode seleksi + haptic;
 // saat mode aktif tap = toggle, saat nonaktif tap = buka detail.
-function FormCardItem({ form, index, selected, selectedCount, selectionMode, onToggle, onOpen, menuOpen, onMenu, onEdit, onMove, onDelete }) {
+function FormCardItem({ form, index, selected, selectedCount, selectionMode, onToggle, onOpen, menuOpen, onMenu, onShare, onMove, onDelete }) {
   const { t } = useTranslation()
   const holdProps = useHoldSelect({ selectedCount, onToggle: () => onToggle(form.id), onTap: () => onOpen(form) })
   return (
@@ -165,8 +165,8 @@ function FormCardItem({ form, index, selected, selectedCount, selectionMode, onT
                   onClick={(e)=>e.stopPropagation()}
                 >
                   <div className="p-1.5">
-                    <button onClick={(e)=>{ e.stopPropagation(); onMenu(); onEdit(form)}} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-ink dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-ink-700 transition-colors">
-                      <Pencil className="w-4 h-4 text-gray-400" /> {t('forms.menuEdit')}
+                    <button onClick={(e)=>{ e.stopPropagation(); onMenu(); onShare(form)}} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-ink dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-ink-700 transition-colors">
+                      <Share2 className="w-4 h-4 text-gray-400" /> {t('forms.menuShare')}
                     </button>
                     <button onClick={(e)=>{ e.stopPropagation(); onMenu(); onMove(form)}} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-ink dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-ink-700 transition-colors">
                       <FolderInput className="w-4 h-4 text-primary" /> {t('forms.menuMoveCategory')}
@@ -328,6 +328,22 @@ export default function FormList() {
     setMeta((m) => ({ ...m, page: 1 }))
     // if a form currently shows menu, refresh to update badge count
     fetchForms()
+  }
+
+  // Share: HP (navigator.share) → sheet pilihan kirim; web → copy link.
+  // Format link sama dengan FormEdit (${origin}/q/${short_code}).
+  const handleShare = async (form) => {
+    const url = `${window.location.origin}/q/${form.short_code}`
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: stripTags(form.title), url })
+      } else {
+        await navigator.clipboard.writeText(url)
+        toast.success(t('forms.linkCopied'))
+      }
+    } catch (err) {
+      if (err?.name !== 'AbortError') toast.error(t('forms.linkCopyFailed'))
+    }
   }
 
   const handleDelete = async () => {
@@ -565,7 +581,7 @@ export default function FormList() {
                 onOpen={(f) => navigate(`/forms/${f.id}`)}
                 menuOpen={menuOpen===form.id}
                 onMenu={() => setMenuOpen(menuOpen===form.id ? null : form.id)}
-                onEdit={(f) => navigate(`/forms/${f.id}`)}
+                onShare={handleShare}
                 onMove={(f) => setMoveTarget(f)}
                 onDelete={(f) => setDeleteTarget(f)}
               />

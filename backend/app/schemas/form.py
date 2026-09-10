@@ -171,6 +171,7 @@ class FormListItem(BaseModel):
     theme_color: Optional[str] = None
     banner_path: Optional[str] = None
     question_count: int = 0
+    respondent_count: int = 0
     category_id: Optional[int] = None
     category: Optional[CategoryBrief] = None
 
