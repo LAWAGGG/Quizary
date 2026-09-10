@@ -7,6 +7,7 @@ import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { Button, Input, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, PageSkeleton, RichTextEditor, RichText, ScoringSettings } from '../../components/ui'
 import { stripTags } from '../../lib/sanitize'
+import { resolveMediaUrl } from '../../lib/media'
 import { useTranslation } from 'react-i18next'
 
 function ShareLink({ value }) {
@@ -708,7 +709,7 @@ export default function FormEdit() {
           </CollapsibleCard>
           <CollapsibleCard title={t('formEdit.banner')} icon={<ImageUp className="w-4 h-4" />} defaultOpen>
             {form.banner_path ? (
-              <img src={form.banner_path} alt="Banner" className="w-full h-36 object-cover rounded-xl mb-4" />
+              <img src={resolveMediaUrl(form.banner_path)} alt="Banner" className="w-full h-36 object-cover rounded-xl mb-4" />
             ) : (
               <button
                 type="button"

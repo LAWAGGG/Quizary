@@ -4,7 +4,9 @@ from fastapi import HTTPException, Request
 
 WIB = timezone(timedelta(hours=7))
 
-UPLOAD_DIR = "uploads"
+# Absolut ke backend/uploads — path relatif bikin split-brain (file ditulis di
+# satu CWD tapi diserve dari CWD lain) sehingga upload "tidak terlihat".
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
 
 # Batas ukuran upload — streaming per-chunk supaya file besar tidak
 # dimuat utuh ke memori sebelum ditolak.

@@ -6,7 +6,7 @@ import { Button, Input, Textarea, Card, Select, FallbackPage, QuestionMap, Confi
 import { useAutosave, loadDraft, clearDraft } from '../../hooks/useAutosave'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
-import { isAudioUrl } from '../../lib/media'
+import { isAudioUrl, resolveMediaUrl } from '../../lib/media'
 import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { sessionTokenHeaders } from '../../lib/sessionToken'
@@ -80,9 +80,9 @@ const OptionTile = memo(function OptionTile({ letter, color, selected, checkbox,
 
       {image && (
         isAudioUrl(image.path) ? (
-          <audio controls src={image.path} preload="metadata" className="w-full max-h-16 rounded-lg" onClick={(e) => e.stopPropagation()} />
+          <audio controls src={resolveMediaUrl(image.path)} preload="metadata" className="w-full max-h-16 rounded-lg" onClick={(e) => e.stopPropagation()} />
         ) : (
-          <img src={image.path} alt="" className="max-h-24 w-auto rounded-lg object-contain" />
+          <img src={resolveMediaUrl(image.path)} alt="" className="max-h-24 w-auto rounded-lg object-contain" />
         )
       )}
 
@@ -1466,10 +1466,10 @@ export default function AnswerQuiz() {
                   </p>
                 )} */}
                 {current.image && (isAudioUrl(current.image.path) ? (
-                  <audio controls src={current.image.path} preload="metadata" className="w-full max-w-sm mx-auto mb-4" />
+                  <audio controls src={resolveMediaUrl(current.image.path)} preload="metadata" className="w-full max-w-sm mx-auto mb-4" />
                 ) : (
                   <img
-                    src={current.image.path}
+                    src={resolveMediaUrl(current.image.path)}
                     alt=""
                     onClick={() => { setZoomTarget(current); setZoomScale(1) }}
                     className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card cursor-zoom-in"
@@ -1767,7 +1767,7 @@ export default function AnswerQuiz() {
       {isOwnerPreview && <PreviewNotice />}
       <div className="max-w-2xl mx-auto p-4 pb-28 overflow-x-hidden">
         {bannerPath && (
-          <img src={bannerPath} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
+          <img src={resolveMediaUrl(bannerPath)} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
         <div className="flex items-center justify-between gap-3 mb-6">
           <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={effectiveTitle} className="rich-text" /></h1>
@@ -1840,10 +1840,10 @@ export default function AnswerQuiz() {
                     </p>
                   )}
                   {q.image && (isAudioUrl(q.image.path) ? (
-                    <audio controls src={q.image.path} preload="metadata" className="w-full max-w-sm mx-auto mb-4" />
+                    <audio controls src={resolveMediaUrl(q.image.path)} preload="metadata" className="w-full max-w-sm mx-auto mb-4" />
                   ) : (
                     <img
-                      src={q.image.path}
+                      src={resolveMediaUrl(q.image.path)}
                       alt=""
                       onClick={() => { setZoomTarget(q); setZoomScale(1) }}
                       className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card cursor-zoom-in"
@@ -1879,9 +1879,9 @@ export default function AnswerQuiz() {
                             </div>
                             {opt.image && (
                               isAudioUrl(opt.image.path) ? (
-                                <audio controls src={opt.image.path} preload="metadata" className="w-full max-w-xs mx-auto rounded-lg" onClick={(e) => e.stopPropagation()} />
+                                <audio controls src={resolveMediaUrl(opt.image.path)} preload="metadata" className="w-full max-w-xs mx-auto rounded-lg" onClick={(e) => e.stopPropagation()} />
                               ) : (
-                                <img src={opt.image.path} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
+                                <img src={resolveMediaUrl(opt.image.path)} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
                               )
                             )}
                           </label>
@@ -1932,9 +1932,9 @@ export default function AnswerQuiz() {
                             </div>
                             {opt.image && (
                               isAudioUrl(opt.image.path) ? (
-                                <audio controls src={opt.image.path} preload="metadata" className="w-full max-w-xs mx-auto rounded-lg" onClick={(e) => e.stopPropagation()} />
+                                <audio controls src={resolveMediaUrl(opt.image.path)} preload="metadata" className="w-full max-w-xs mx-auto rounded-lg" onClick={(e) => e.stopPropagation()} />
                               ) : (
-                                <img src={opt.image.path} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
+                                <img src={resolveMediaUrl(opt.image.path)} alt="" className="max-h-60 w-auto rounded-lg object-contain mx-auto" />
                               )
                             )}
                           </label>
@@ -2216,7 +2216,7 @@ function FileAnswer({ value, uploading, removing, onFile, onRemove, error }) {
             <FileUp className="w-5 h-5" />
           </span>
           <span className="flex-1 min-w-0 text-sm font-medium text-ink dark:text-gray-100 truncate">{value.filename}</span>
-          <a href={value.url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[var(--t)] hover:underline shrink-0">{t('answerQuiz.viewFile')}</a>
+          <a href={resolveMediaUrl(value.url)} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-[var(--t)] hover:underline shrink-0">{t('answerQuiz.viewFile')}</a>
           <button type="button" onClick={onRemove} disabled={removing} className="min-h-11 min-w-11 px-2 text-xs font-medium text-gray-400 hover:text-incorrect disabled:opacity-50 shrink-0">
             {removing ? t('answerQuiz.removingFile') : t('answerQuiz.removeFile')}
           </button>
@@ -2428,7 +2428,7 @@ function ExamInfoDrawer({ show, onClose, form, data }) {
 
             <div className="flex-1 overflow-y-auto px-5 py-5">
               {banner && (
-                <img src={banner} alt="" className="w-full h-28 object-cover rounded-2xl mb-5 shadow-card" />
+                <img src={resolveMediaUrl(banner)} alt="" className="w-full h-28 object-cover rounded-2xl mb-5 shadow-card" />
               )}
               <h4 className="font-display font-semibold text-ink dark:text-gray-100 text-lg leading-snug">
                 <RichText html={form?.title} />
@@ -2565,7 +2565,7 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                     </h3>
                     {target.image && (
                       <img
-                        src={target.image.path}
+                        src={resolveMediaUrl(target.image.path)}
                         alt=""
                         className="w-full max-h-[40dvh] object-contain rounded-2xl shadow-card"
                       />
@@ -2587,9 +2587,9 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                             </span>
                             {opt.image && (
                               isAudioUrl(opt.image.path) ? (
-                                <audio controls src={opt.image.path} preload="metadata" className="max-h-20 w-32 rounded-lg shrink-0" onClick={(e) => e.stopPropagation()} />
+                                <audio controls src={resolveMediaUrl(opt.image.path)} preload="metadata" className="max-h-20 w-32 rounded-lg shrink-0" onClick={(e) => e.stopPropagation()} />
                               ) : (
-                                <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                                <img src={resolveMediaUrl(opt.image.path)} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
                               )
                             )}
                           </div>
@@ -2609,9 +2609,9 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                             <span className="flex-1 leading-snug text-left"><RichText html={opt.option_text} className="rich-text" /></span>
                             {opt.image && (
                               isAudioUrl(opt.image.path) ? (
-                                <audio controls src={opt.image.path} preload="metadata" className="max-h-20 w-32 rounded-lg shrink-0" onClick={(e) => e.stopPropagation()} />
+                                <audio controls src={resolveMediaUrl(opt.image.path)} preload="metadata" className="max-h-20 w-32 rounded-lg shrink-0" onClick={(e) => e.stopPropagation()} />
                               ) : (
-                                <img src={opt.image.path} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
+                                <img src={resolveMediaUrl(opt.image.path)} alt="" className="max-h-20 w-auto rounded-lg object-contain shrink-0" />
                               )
                             )}
                           </div>

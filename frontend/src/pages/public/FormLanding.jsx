@@ -9,6 +9,7 @@ import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 import { saveSessionToken } from '../../lib/sessionToken'
 import { stripTags } from '../../lib/sanitize'
+import { resolveMediaUrl } from '../../lib/media'
 
 const BUBBLES = Array.from({ length: 12 }, (_, i) => i)
 
@@ -275,7 +276,7 @@ export default function FormLanding() {
             <motion.img
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              src={form.banner_path}
+              src={resolveMediaUrl(form.banner_path)}
               alt=""
               className="w-full max-w-3xl h-52 md:h-64 object-cover rounded-2xl mb-10 shadow-lift border-4 border-white/20"
             />
@@ -351,7 +352,7 @@ export default function FormLanding() {
       {isPreview && <PreviewNotice />}
       <div className="flex-1 max-w-2xl mx-auto w-full p-6 relative">
         {form.banner_path && (
-          <img src={form.banner_path} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
+          <img src={resolveMediaUrl(form.banner_path)} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
         <SpotlightCard>
           <Card className="p-6 md:p-7 h-full" style={{ borderColor: palette.border }}>

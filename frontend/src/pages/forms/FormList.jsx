@@ -7,6 +7,7 @@ import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { stripTags } from '../../lib/sanitize'
+import { resolveMediaUrl } from '../../lib/media'
 import { Button, Input, Card, PageHeader, EmptyState, CardSkeleton, SpotlightCard, RichText, CategoryManager, ConfirmModal } from '../../components/ui'
 
 const TABS = ['All', 'Draft', 'Published', 'Closed']
@@ -60,7 +61,7 @@ function FormVisual({ form, onMenu, menuOpen, selectionMode, badgeOffset }) {
   const { t } = useTranslation()
   const visual = form.banner_path ? (
     <img
-      src={form.banner_path}
+      src={resolveMediaUrl(form.banner_path)}
       alt=""
       className="w-full h-44 object-cover"
       loading="lazy"

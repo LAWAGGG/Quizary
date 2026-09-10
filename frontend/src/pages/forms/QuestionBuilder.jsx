@@ -15,7 +15,7 @@ import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useTranslation } from 'react-i18next'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
-import { isAudioUrl } from '../../lib/media'
+import { isAudioUrl, resolveMediaUrl } from '../../lib/media'
 import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText, AnswerKeyEditor } from '../../components/ui'
 import SectionManager from '../../components/ui/SectionManager'
 
@@ -402,9 +402,9 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   {form.image?.path ? (
     <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-ink-800/50">
       {(form._pendingFile?.type?.startsWith('audio/') || isAudioUrl(form.image.path)) ? (
-        <audio controls src={form.image.path} preload="metadata" className="w-full p-3" />
+        <audio controls src={resolveMediaUrl(form.image.path)} preload="metadata" className="w-full p-3" />
       ) : (
-        <img src={form.image.path} alt="" className="w-full max-h-72 object-contain bg-white dark:bg-ink-900" />
+        <img src={resolveMediaUrl(form.image.path)} alt="" className="w-full max-h-72 object-contain bg-white dark:bg-ink-900" />
       )}
       <button
         type="button"
@@ -593,9 +593,9 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                   {opt.image?.path && (
                     <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900">
                       {(opt._pendingFile?.type?.startsWith('audio/') || isAudioUrl(opt.image.path)) ? (
-                        <audio controls src={opt.image.path} preload="metadata" className="w-full p-3" />
+                        <audio controls src={resolveMediaUrl(opt.image.path)} preload="metadata" className="w-full p-3" />
                       ) : (
-                        <img src={opt.image.path} alt="" className="w-full max-h-64 object-contain" />
+                        <img src={resolveMediaUrl(opt.image.path)} alt="" className="w-full max-h-64 object-contain" />
                       )}
                       <button
                         type="button"
@@ -733,9 +733,9 @@ const QuestionCard = memo(function QuestionCard({ question, index, onDelete, onD
         )}
       </div>
       {question.image && (isAudioUrl(question.image.path) ? (
-        <audio controls src={question.image.path} preload="metadata" className="w-full max-w-sm mb-3" />
+        <audio controls src={resolveMediaUrl(question.image.path)} preload="metadata" className="w-full max-w-sm mb-3" />
       ) : (
-        <img src={question.image.path} alt="" className="mb-3 max-h-32 rounded-xl object-cover" />
+        <img src={resolveMediaUrl(question.image.path)} alt="" className="mb-3 max-h-32 rounded-xl object-cover" />
       ))}
       {question.options?.length > 0 && (
         <div className="space-y-1.5">
@@ -757,9 +757,9 @@ const QuestionCard = memo(function QuestionCard({ question, index, onDelete, onD
               </span>
               {opt.image?.path && (
                 isAudioUrl(opt.image.path) ? (
-                  <audio controls src={opt.image.path} preload="metadata" className="w-24 h-7 rounded shrink-0" />
+                  <audio controls src={resolveMediaUrl(opt.image.path)} preload="metadata" className="w-24 h-7 rounded shrink-0" />
                 ) : (
-                  <img src={opt.image.path} alt="" className="w-6 h-6 object-cover rounded shrink-0" />
+                  <img src={resolveMediaUrl(opt.image.path)} alt="" className="w-6 h-6 object-cover rounded shrink-0" />
                 )
               )}
             </div>

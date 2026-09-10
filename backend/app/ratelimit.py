@@ -33,7 +33,7 @@ def _hit(key: str, max_calls: int) -> None:
     if count > max_calls:
         raise HTTPException(
             status_code=429,
-            detail="Terlalu banyak permintaan. Coba lagi sebentar lagi.",
+            detail="Too many requests. Please try again later.",
         )
 
 
@@ -43,8 +43,8 @@ def limit_login(request: Request) -> None:
 
 
 def limit_register(request: Request) -> None:
-    """5 pendaftaran akun / menit / IP."""
-    _hit(f"register:{_client_ip(request)}", 5)
+    """8 pendaftaran akun / menit / IP."""
+    _hit(f"register:{_client_ip(request)}", 8)
 
 
 def limit_submission_create(request: Request) -> None:

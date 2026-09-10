@@ -7,7 +7,7 @@ import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { stripTags } from '../../lib/sanitize'
 import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichText, ConfirmModal, sanitizeHtml } from '../../components/ui'
-import { isAudioUrl } from '../../lib/media'
+import { isAudioUrl, resolveMediaUrl } from '../../lib/media'
 import { formatCheatReason } from '../../lib/cheatReason'
 import { useTranslation } from 'react-i18next'
 
@@ -572,9 +572,9 @@ export default function Results() {
                                       <RichText html={q.question_text} className="rich-text" />
                                     </div>
                                     {q.image && (isAudioUrl(q.image.path) ? (
-                                      <audio controls src={q.image.path} preload="metadata" className="w-full max-w-sm mt-3" />
+                                      <audio controls src={resolveMediaUrl(q.image.path)} preload="metadata" className="w-full max-w-sm mt-3" />
                                     ) : (
-                                      <img src={q.image.path} alt="" className="max-h-32 w-auto rounded-lg object-cover mt-3" />
+                                      <img src={resolveMediaUrl(q.image.path)} alt="" className="max-h-32 w-auto rounded-lg object-cover mt-3" />
                                     ))}
                                     <div className="mt-3">
                                       <div className="flex items-center gap-2 mb-1.5">
@@ -586,7 +586,7 @@ export default function Results() {
                                           {!a || (!a.answer_text && !a.answer_file && !(a.selected_options || []).length) ? (
                                             <span className="text-gray-400 dark:text-gray-500">-</span>
                                           ) : a.question_type === 'file_upload' ? (
-                                            <a href={a.answer_file} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">{t('results.viewAnswerFile')}</a>
+                                            <a href={resolveMediaUrl(a.answer_file)} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">{t('results.viewAnswerFile')}</a>
                                           ) : ['multiple_choice', 'checkbox', 'dropdown'].includes(a.question_type) ? (
                                             <>
                                               <RichText html={a.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(' · ')} className="rich-text" />

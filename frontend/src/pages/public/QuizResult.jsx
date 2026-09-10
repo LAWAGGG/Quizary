@@ -5,7 +5,7 @@ import { Check, X, Minus, Eye, EyeOff, ArrowRight, ClipboardList, Trophy, AlertT
 import { useTranslation } from 'react-i18next'
 import { Button, Card, Badge, FallbackPage, DotCorner, AuroraBg, RichText } from '../../components/ui'
 import { sanitizeHtml, stripTags } from '../../lib/sanitize'
-import { isAudioUrl } from '../../lib/media'
+import { isAudioUrl, resolveMediaUrl } from '../../lib/media'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
@@ -345,10 +345,10 @@ export default function QuizResult() {
 
                             {/* Gambar soal — ditampilkan jika ada */}
                             {answer.question_image && (isAudioUrl(answer.question_image) ? (
-                              <audio controls src={answer.question_image} preload="metadata" className="w-full max-w-sm mb-3" />
+                              <audio controls src={resolveMediaUrl(answer.question_image)} preload="metadata" className="w-full max-w-sm mb-3" />
                             ) : (
                               <img
-                                src={answer.question_image}
+                                src={resolveMediaUrl(answer.question_image)}
                                 alt=""
                                 className="max-h-40 w-auto rounded-xl object-cover mb-3 shadow-card"
                               />
@@ -367,7 +367,7 @@ export default function QuizResult() {
                                 </>)
                                 : answer.question_type === 'file_upload'
                                   ? (answer.answer_file
-                                    ? <a href={answer.answer_file} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-primary dark:text-primary-300 underline">{t('quizResult.viewAnswerFile')}</a>
+                                    ? <a href={resolveMediaUrl(answer.answer_file)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-primary dark:text-primary-300 underline">{t('quizResult.viewAnswerFile')}</a>
                                     : <span className="text-gray-400 italic">{t('quizResult.notAnswered')}</span>)
                                   : (answer.answer_text || <span className="text-gray-400 italic">{t('quizResult.notAnswered')}</span>)}
                             </div>

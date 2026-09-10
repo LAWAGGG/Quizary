@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
 import { Card, Button, Input, PageHeader } from '../../components/ui'
 import ChangePasswordModal from './ChangePasswordModal'
+import { resolveMediaUrl } from '../../lib/media'
 
 export default function Profile() {
   const { user, updateUser } = useAuth()
@@ -85,7 +86,7 @@ export default function Profile() {
             <div className="relative mb-4">
               <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 dark:bg-ink-800 border-4 border-white dark:border-ink-800 shadow-lift">
                 {avatarPreview ? (
-                  <img src={avatarPreview} alt={t('profile.changeAvatar')} className="w-full h-full object-cover" />
+                  <img src={resolveMediaUrl(avatarPreview)} alt={t('profile.changeAvatar')} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center font-display text-3xl font-bold text-gray-400 dark:text-gray-300 bg-primary-50 dark:bg-primary-900/30">
                     {(user?.name || 'U')[0].toUpperCase()}

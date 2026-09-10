@@ -40,6 +40,7 @@ def _save_upload(file: UploadFile, subdir: str) -> str:
         raise HTTPException(status_code=422, detail="Unsupported file format, use JPG/PNG/GIF/WEBP")
     filename = f"{uuid.uuid4().hex}{ext}"
     dest = os.path.join(UPLOAD_DIR, subdir, filename)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
     write_limited(file.file, dest, MAX_IMAGE_BYTES)
     return f"{subdir}/{filename}"
 

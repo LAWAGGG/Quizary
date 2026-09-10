@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
 import { AppMark } from '../ui'
+import { resolveMediaUrl } from '../../lib/media'
 
 /* ── Mobile bottom nav ────────────────────────────────────── */
 function BottomNav({ hidden }) {
@@ -282,7 +283,7 @@ export default function DashboardLayout() {
                   >
                     <span className="w-8 h-8 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary dark:text-primary-300 flex items-center justify-center text-sm font-bold overflow-hidden">
                       {user?.avatar ? (
-                        <img src={user.avatar} alt="" className="w-full h-full object-cover" />
+                        <img src={resolveMediaUrl(user.avatar)} alt="" className="w-full h-full object-cover" />
                       ) : (
                         user?.name?.charAt(0)?.toUpperCase() || 'U'
                       )}

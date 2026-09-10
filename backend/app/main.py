@@ -7,15 +7,23 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.routers import auth, categories, forms, questions, profile, public_access, submissions, results, import_questions, ai
+from app.utils import UPLOAD_DIR
 
 app = FastAPI(title="Quizary API")
+
+# Hormati X-Forwarded-Proto/Host dari ngrok/nginx supaya request.base_url
+# (dipakai file_url) berskema https — tanpa ini URL file jadi http dan
+# diblokir browser sebagai mixed-content di halaman https.
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 logger = logging.getLogger("quizary")
 
 _CORS_ORIGIN_RE = re.compile(r"^https://[a-z0-9-]+\.trycloudflare\.com$")
 _CORS_LOCA_RE = re.compile(r"^https://[a-z0-9-]+\.loca\.lt$")
+_CORS_NGROK_RE = re.compile(r"^https://[a-z0-9-]+\.ngrok(-free)?\.(dev|io|app)$")
 _CORS_LAN_RE = re.compile(r"^https?://(192\.168|10\.|172\.(1[6-9]|2[0-9]|3[0-1]))\.\d{1,3}\.\d{1,3}(:\d+)?$")
 _CORS_LOCALHOST_RE = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$")
 _CORS_STATIC_ORIGINS = {
@@ -32,10 +40,15 @@ _CORS_STATIC_ORIGINS = {
     "exp://localhost:19006",
 }
 
+# Domain prod eksak via env (tanpa wildcard) — cth: CORS_EXTRA_ORIGINS=https://quizary.id,https://app.quizary.id
+_CORS_EXTRA_ORIGINS = frozenset(
+    o.strip().rstrip("/") for o in os.getenv("CORS_EXTRA_ORIGINS", "").split(",") if o.strip()
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list(_CORS_STATIC_ORIGINS),
-    allow_origin_regex=r"https://.*\.(trycloudflare\.com|loca\.lt)",
+    allow_origins=[*_CORS_STATIC_ORIGINS, *_CORS_EXTRA_ORIGINS],
+    allow_origin_regex=r"https://.*\.(trycloudflare\.com|loca\.lt|ngrok-free\.dev|ngrok\.io|ngrok\.app)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,8 +65,10 @@ def _cors_headers(request: Request) -> dict[str, str]:
     origin = request.headers.get("origin", "")
     if (
         origin in _CORS_STATIC_ORIGINS
+        or origin in _CORS_EXTRA_ORIGINS
         or _CORS_ORIGIN_RE.fullmatch(origin)
         or _CORS_LOCA_RE.fullmatch(origin)
+        or _CORS_NGROK_RE.fullmatch(origin)
         or _CORS_LAN_RE.fullmatch(origin)
         or _CORS_LOCALHOST_RE.fullmatch(origin)
     ):
@@ -64,7 +79,6 @@ def _cors_headers(request: Request) -> dict[str, str]:
         return headers
     return {}
         
-UPLOAD_DIR = "uploads"
 os.makedirs(os.path.join(UPLOAD_DIR, "banners"), exist_ok=True)
 os.makedirs(os.path.join(UPLOAD_DIR, "question-images"), exist_ok=True)
 os.makedirs(os.path.join(UPLOAD_DIR, "avatars"), exist_ok=True)
