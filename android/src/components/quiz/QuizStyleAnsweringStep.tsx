@@ -29,6 +29,7 @@ import { AudioPlayer } from '../AudioPlayer';
 import { isAudioUrl } from '../../utils/media';
 import { CustomDateTimePickerModal } from './CustomDateTimePickerModal';
 import { checkPassword } from '../../services/api_service';
+import { useKeyboardHeight } from '../../hooks/useKeyboardHeight';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 interface QuizStyleAnsweringStepProps {
@@ -67,11 +68,28 @@ export function QuizStyleAnsweringStep({
 }: QuizStyleAnsweringStepProps) {
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
   const { showAlert } = useAppAlert();
+  const [showPassword, setShowPassword] = useState(false);
   const [pwWrong, setPwWrong] = useState<Record<number, boolean>>({});
   const [pwChecking, setPwChecking] = useState(false);
   const [pickerDate, setPickerDate] = useState<Date>(new Date());
 
+  const mainScrollRef = useRef<ScrollView>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
+  const { keyboardHeight, isVisible: isKeyboardOpen } = useKeyboardHeight();
+
+  // Auto scroll to end when keyboard opens so bottom inputs (short_answer/essay) stay visible
+  useEffect(() => {
+    if (isKeyboardOpen) {
+      setTimeout(() => {
+        mainScrollRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [isKeyboardOpen]);
+
+  // Reset scroll to top on question change
+  useEffect(() => {
+    mainScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [currentIdx]);
   const [reviewed, setReviewed] = useState<Record<number, boolean>>({});
   const [showMapModal, setShowMapModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
@@ -465,16 +483,24 @@ export function QuizStyleAnsweringStep({
         </View>
       </LinearGradient>
 
-      {/* MAIN QUESTION CONTAINER */}
+      {/* MAIN QUESTION CONTAINER — keyboard aware: behavior height on Android + dynamic padding */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <ScrollView
+          ref={mainScrollRef}
           style={{ flex: 1 }}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            isKeyboardOpen
+              ? { justifyContent: 'flex-start', paddingBottom: Math.max(keyboardHeight, 280) }
+              : null,
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <Animated.View
@@ -521,14 +547,17 @@ export function QuizStyleAnsweringStep({
                     </TouchableOpacity>
                   </View>
 
-                  {/* Centered Large Question Title */}
-                  <View style={styles.qTitleCenterWrapper}>
-                    <Text style={[styles.qTitleText, { color: '#FFFFFF', fontSize: 22 * fontSizeScale }]}>
-                      {stripHtmlTags(currentQ.question_text)}
-                      {currentQ.is_required !== false ? (
-                        <Text style={{ color: '#EF4444', fontWeight: 'bold' }}> *</Text>
-                      ) : null}
-                    </Text>
+                  {/* Centered WYSIWYG Question Title — renders rich HTML with code-block background & KaTeX like web */}
+                  <View style={[styles.qTitleCenterWrapper, { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 4 }]}>
+                    <View style={{ flex: 1 }}>
+                      <RichTextRenderer
+                        html={currentQ.question_text || ''}
+                        style={{ color: '#FFFFFF', fontSize: 22 * fontSizeScale, fontWeight: '800', textAlign: 'center', lineHeight: Math.round(22 * fontSizeScale * 1.45) }}
+                      />
+                    </View>
+                    {currentQ.is_required !== false ? (
+                      <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 22 * fontSizeScale, lineHeight: Math.round(22 * fontSizeScale * 1.45) }}>*</Text>
+                    ) : null}
                   </View>
 
                   {/* Question Media: image OR audio (listening) */}
@@ -603,13 +632,15 @@ export function QuizStyleAnsweringStep({
                             activeOpacity={0.85}
                           >
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
-                              <View style={[styles.letterCircle, selected && isCheckbox && { backgroundColor: '#FFFFFF' }]}>
-                                {isCheckbox && selected ? (
-                                  <Ionicons name="checkmark" size={16} color={bgCol} />
-                                ) : (
+                              {isCheckbox ? (
+                                <View style={[styles.checkboxBox, selected && { backgroundColor: bgCol, borderColor: bgCol }]}>
+                                  {selected && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                                </View>
+                              ) : (
+                                <View style={styles.letterCircle}>
                                   <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
-                                )}
-                              </View>
+                                </View>
+                              )}
 
                               {optImgUrl && !optIsAudio && (
                                 <Image
@@ -619,9 +650,12 @@ export function QuizStyleAnsweringStep({
                                 />
                               )}
 
-                              <Text style={[styles.optionTileText, { fontSize: 16 * fontSizeScale, flex: 1 }]}>
-                                {stripHtmlTags(opt.option_text || opt.text || '')}
-                              </Text>
+                              <View style={{ flex: 1 }}>
+                                <RichTextRenderer
+                                  html={opt.option_text || opt.text || ''}
+                                  style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
+                                />
+                              </View>
 
                               {selected && !isCheckbox && (
                                 <View style={styles.selectedBadgeCircle}>
@@ -660,9 +694,9 @@ export function QuizStyleAnsweringStep({
                           onPress={() => setShowDropdownModal(currentQ.id)}
                           activeOpacity={0.8}
                         >
-                          <Text style={[styles.dropdownTriggerText, { color: selectedOpt ? '#FFFFFF' : '#94A3B8', fontSize: 16 * fontSizeScale }]}>
+                          <Text style={[styles.dropdownTriggerText, { color: selectedOpt ? '#FFFFFF' : '#94A3B8', fontSize: 16 * fontSizeScale }]} numberOfLines={1} ellipsizeMode="tail">
                             {selectedOpt
-                              ? `${LETTERS[selectedOptIdx >= 0 ? selectedOptIdx % LETTERS.length : 0]}. ${stripHtmlTags(selectedOpt.option_text || selectedOpt.text || '')}`
+                              ? stripHtmlTags(selectedOpt.option_text || selectedOpt.text || '')
                               : (language === 'ID' ? '— Pilih jawaban —' : '— Select an answer —')}
                           </Text>
                           <Ionicons name="chevron-down" size={20} color="#94A3B8" />
@@ -698,7 +732,6 @@ export function QuizStyleAnsweringStep({
                               <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
                                 {qOptions.map((opt: any, i: number) => {
                                   const isSel = selectedOpt?.id === opt.id;
-                                  const letter = LETTERS[i % LETTERS.length];
 
                                   return (
                                     <TouchableOpacity
@@ -714,7 +747,7 @@ export function QuizStyleAnsweringStep({
                                       activeOpacity={0.7}
                                     >
                                       <Text style={[styles.dropdownOptionText, { color: isSel ? '#60A5FA' : '#FFFFFF', fontSize: 15 * fontSizeScale }]}>
-                                        {letter}. {stripHtmlTags(opt.option_text || opt.text || '')}
+                                        {stripHtmlTags(opt.option_text || opt.text || '')}
                                       </Text>
                                       {isSel && <Ionicons name="checkmark" size={18} color="#60A5FA" />}
                                     </TouchableOpacity>
@@ -818,21 +851,42 @@ export function QuizStyleAnsweringStep({
                   {/* Password Input — blocked until correct */}
                   {isPasswordType && (
                     <View style={styles.textInputBox}>
-                      <TextInput
+                      <View
                         style={[
-                          styles.shortAnswerInput,
-                          { color: '#FFF', fontSize: 16 * fontSizeScale },
-                          pwWrong[currentQ.id] && { borderColor: '#EF4444', borderWidth: 2 },
+                          styles.passwordContainer,
+                          {
+                            backgroundColor: '#1E293B',
+                            borderColor: pwWrong[currentQ.id] ? '#EF4444' : 'rgba(255, 255, 255, 0.15)',
+                          },
+                          pwWrong[currentQ.id] && { borderWidth: 2 },
                         ]}
-                        placeholder="Enter password"
-                        placeholderTextColor="#64748B"
-                        secureTextEntry
-                        value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
-                        onChangeText={(text) => {
-                          if (pwWrong[currentQ.id]) setPwWrong((p) => { const n = { ...p }; delete n[currentQ.id]; return n; });
-                          onTextChange(currentQ.id, text);
-                        }}
-                      />
+                      >
+                        <TextInput
+                          style={[
+                            styles.passwordInput,
+                            { color: '#FFF', fontSize: 16 * fontSizeScale },
+                          ]}
+                          placeholder="Enter password"
+                          placeholderTextColor="#64748B"
+                          secureTextEntry={!showPassword}
+                          value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
+                          onChangeText={(text) => {
+                            if (pwWrong[currentQ.id]) setPwWrong((p) => { const n = { ...p }; delete n[currentQ.id]; return n; });
+                            onTextChange(currentQ.id, text);
+                          }}
+                        />
+                        <TouchableOpacity
+                          style={styles.eyeBtn}
+                          onPress={() => setShowPassword(!showPassword)}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Ionicons
+                            name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+                            size={20}
+                            color="#94A3B8"
+                          />
+                        </TouchableOpacity>
+                      </View>
                       {pwWrong[currentQ.id] && (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
                           <Ionicons name="warning-outline" size={14} color="#EF4444" />
@@ -1170,6 +1224,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
+  checkboxBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.4)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   optionTileText: {
     flex: 1,
     color: '#FFFFFF',
@@ -1188,6 +1252,25 @@ const styles = StyleSheet.create({
   /* INPUT FIELDS */
   textInputBox: { width: '100%', marginTop: 10 },
   shortAnswerInput: { width: '100%', minHeight: 56, borderRadius: 18, backgroundColor: '#1E293B', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', paddingHorizontal: 18, paddingVertical: 14 },
+  passwordContainer: {
+    width: '100%',
+    minHeight: 56,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  eyeBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   fileUploadBox: { width: '100%', marginTop: 10 },
   fileUploadBtn: { width: '100%', height: 60, borderRadius: 18, backgroundColor: '#1E293B', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   fileUploadBtnText: { color: '#FFF', fontWeight: 'bold' },

@@ -130,21 +130,32 @@ interface RichTextRendererProps {
   numberOfLines?: number;
 }
 
+function needsRichWebView(html: string): boolean {
+  if (hasMathFormulas(html)) return true;
+  // ONLY use WebView for math formulas, code blocks, tables, or images that cannot be rendered with native Text
+  return /<(pre|code|table|img)[\s>]/i.test(html)
+    || /class="[^"]*ql-(code-block|syntax)/i.test(html);
+}
+
 export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendererProps) {
   const { colors, isDark } = useAppTheme();
   const [webViewHeight, setWebViewHeight] = useState<number>(45);
 
   if (!html) return null;
 
-  const isMath = hasMathFormulas(html);
+  const needsWebView = needsRichWebView(html);
 
   // Extract fontSize and color from passed style if available
   const flattenedStyle = StyleSheet.flatten(style) || {};
   const textColor = (flattenedStyle.color as string) || colors.text;
   const fontSize = (flattenedStyle.fontSize as number) || 14;
+  const fontWeight = (flattenedStyle.fontWeight as any) || '400';
+  const textAlign = (flattenedStyle.textAlign as string) || 'left';
+  const lineHeight = (flattenedStyle.lineHeight as number) || Math.round(fontSize * 1.45);
 
-  if (isMath) {
-    const katexHtml = `
+  if (needsWebView) {
+    // Mirrors frontend/src/index.css rich-text section (code block dark bg, inline code, lists, blockquote, katex, etc)
+    const richHtml = `
       <!DOCTYPE html>
       <html>
       <head>
@@ -155,51 +166,66 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
         <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
         <style>
           * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-          body, html {
-            margin: 0;
-            padding: 0;
+          html, body {
+            margin: 0; padding: 0;
             background-color: transparent;
             color: ${textColor};
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Google Sans Flex", sans-serif;
             font-size: ${fontSize}px;
-            line-height: 1.5;
+            font-weight: ${fontWeight};
+            line-height: ${lineHeight}px;
+            text-align: ${textAlign};
             overflow: hidden;
             word-break: break-word;
           }
-          p { margin: 0 0 6px 0; }
-          p:last-child { margin-bottom: 0; }
-          .katex-display {
-            margin: 8px 0;
-            overflow-x: auto;
-            overflow-y: hidden;
+          .rich-text { display: block; }
+          .rich-text p { margin: 0; }
+          .rich-text p + p { margin-top: 0.5em; }
+          .rich-text a { color: #6C5CE7; text-decoration: underline; word-break: break-word; }
+          .rich-text h1, .rich-text h2, .rich-text h3 { font-weight: 600; line-height: 1.3; margin: 0.6em 0 0.3em; }
+          .rich-text h1 { font-size: 2em; } .rich-text h2 { font-size: 1.5em; } .rich-text h3 { font-size: 1.17em; }
+          .rich-text blockquote { border-left: 4px solid rgba(108,92,231,0.4); padding-left: 16px; margin: 0.5em 0; }
+          /* Code block — match frontend index.css dark #0f0f0f */
+          .rich-text .ql-code-block-container, .rich-text pre.ql-syntax, .rich-text pre.ql-code-block, .rich-text div.ql-code-block {
+            background: #0f0f0f !important; color: #f5f5f5 !important; border: 1px solid #27272a !important;
+            border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.8125rem; line-height: 1.6; padding: 0.75rem 1rem; margin: 0.6em 0;
+            white-space: pre-wrap; word-break: break-word; overflow-x: auto; tab-size: 4; display: block; text-align: left !important; width: 100%; box-sizing: border-box;
           }
-          .katex { font-size: 1.12em; color: ${textColor}; }
-          img { max-width: 100%; height: auto; border-radius: 8px; }
+          .rich-text .ql-code-block { background: transparent; border: none; padding: 0; margin: 0; border-radius: 0; white-space: pre-wrap; }
+          .rich-text code { background: #0f0f0f !important; border: 1px solid #27272a !important; border-radius: 0.375rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85em; padding: 0.15em 0.4em; color: #f5f5f5 !important; word-break: break-word; }
+          .rich-text pre code, .rich-text .ql-code-block code, .rich-text .ql-code-block-container code { background: transparent !important; border: none !important; padding: 0 !important; color: inherit !important; }
+          /* Lists — match frontend */
+          .rich-text ul, .rich-text ol { margin: 0.5em 0; padding-left: 0; }
+          .rich-text li { list-style-type: none; padding-left: 1.5em; position: relative; margin: 0.15em 0; }
+          .rich-text li::before { display: inline-block; margin-left: -1.5em; margin-right: 0.3em; text-align: right; width: 1.2em; }
+          .rich-text ol { counter-reset: list-0; } .rich-text li[data-list="ordered"] { counter-increment: list-0; }
+          .rich-text li[data-list="ordered"]::before { content: counter(list-0, decimal) '. '; }
+          .rich-text li[data-list="bullet"]::before { content: '\\2022'; }
+          .rich-text li[data-list="checked"]::before { content: '\\2611'; } .rich-text li[data-list="unchecked"]::before { content: '\\2610'; }
+          .rich-text .ql-align-center { text-align: center; } .rich-text .ql-align-right { text-align: right; } .rich-text .ql-align-justify { text-align: justify; }
+          .rich-text .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; padding: 0.15em 0; }
+          .rich-text .katex { font-size: 1.1em; color: ${textColor}; }
+          .rich-text img { max-width: 100%; height: auto; border-radius: 8px; }
         </style>
       </head>
       <body>
-        <div id="content">${html}</div>
+        <div class="rich-text" id="content">${html}</div>
         <script>
           function sendHeight() {
-            var h = Math.max(
-              document.body.scrollHeight,
-              document.documentElement.scrollHeight,
-              document.getElementById('content').offsetHeight
-            );
+            var el = document.getElementById('content');
+            var h = el ? Math.ceil(el.getBoundingClientRect().height) : 24;
             if (window.ReactNativeWebView && h > 0) {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'HEIGHT_CHANGE', height: h }));
             }
           }
-
           try {
             var formulas = document.querySelectorAll('.ql-formula');
             formulas.forEach(function(el) {
               var tex = el.getAttribute('data-value');
-              if (tex && window.katex) {
-                try { window.katex.render(tex, el, { throwOnError: false }); } catch(e) {}
-              }
+              if (tex && window.katex) { try { window.katex.render(tex, el, { throwOnError: false }); } catch(e) {} }
             });
-
             if (window.renderMathInElement) {
               window.renderMathInElement(document.body, {
                 delimiters: [
@@ -209,16 +235,14 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
                   {left: '$', right: '$', display: false}
                 ],
                 ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
-                throwOnError: false,
-                strict: false
+                throwOnError: false, strict: false
               });
             }
           } catch(e) {}
-
           sendHeight();
-          setTimeout(sendHeight, 100);
+          setTimeout(sendHeight, 80);
           setTimeout(sendHeight, 300);
-          setTimeout(sendHeight, 800);
+          setTimeout(sendHeight, 700);
         </script>
       </body>
       </html>
@@ -228,7 +252,7 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
       <View style={{ height: Math.max(webViewHeight, 30), width: '100%' }}>
         <WebView
           originWhitelist={['*']}
-          source={{ html: katexHtml }}
+          source={{ html: richHtml }}
           style={{ backgroundColor: 'transparent', flex: 1 }}
           scrollEnabled={false}
           showsVerticalScrollIndicator={false}
@@ -237,7 +261,7 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
             try {
               const data = JSON.parse(event.nativeEvent.data);
               if (data.type === 'HEIGHT_CHANGE' && data.height) {
-                setWebViewHeight(data.height + 4);
+                setWebViewHeight(data.height + 6);
               }
             } catch (e) {}
           }}
@@ -246,7 +270,7 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
     );
   }
 
-  // Fast Native Text Rendering for non-math rich text
+  // Fast Native Text Rendering for simple HTML (single <p> etc)
   const textContent = stripHtmlTags(html);
 
   return (

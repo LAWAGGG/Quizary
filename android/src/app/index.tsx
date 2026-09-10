@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { apiLogin, saveToken, getToken, getStoredUser } from '../services/api_service';
@@ -62,80 +62,96 @@ export default function LoginScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      <View style={styles.topBar}>
-        <ThemeToggleBtn />
-      </View>
-      
-      <View style={styles.header}>
-        <Image
-          source={isDark ? require('../../assets/images/Quizary_Logo_White.png') : require('../../assets/images/Quizary_Logo_Original.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-        <Text style={[styles.subtitle, { color: colors.textSub }]}>Platform Ujian & Kuis Modern</Text>
-      </View>
-
-      <View style={styles.form}>
-        <Text style={[styles.label, { color: colors.text }]}>Email</Text>
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.cardBg, color: colors.text, borderColor: colors.cardBorder }]}
-          placeholder="email@contoh.com"
-          placeholderTextColor={colors.textMuted}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={email}
-          onChangeText={setEmail}
-        />
-
-        <Text style={[styles.label, { color: colors.text }]}>Password</Text>
-        <View style={[styles.passwordContainer, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-          <TextInput
-            style={[styles.passwordInput, { color: colors.text }]}
-            placeholder="••••••••"
-            placeholderTextColor={colors.textMuted}
-            secureTextEntry={!showPassword}
-            value={password}
-            onChangeText={setPassword}
-          />
-          <TouchableOpacity
-            style={styles.eyeBtn}
-            onPress={() => setShowPassword(!showPassword)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons
-              name={showPassword ? 'eye-outline' : 'eye-off-outline'}
-              size={20}
-              color={colors.textMuted}
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { backgroundColor: colors.bg }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.container, { backgroundColor: colors.bg }]}>
+          <View style={styles.topBar}>
+            <ThemeToggleBtn />
+          </View>
+          
+          <View style={styles.header}>
+            <Image
+              source={isDark ? require('../../assets/images/Quizary_Logo_White.png') : require('../../assets/images/Quizary_Logo_Original.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
             />
-          </TouchableOpacity>
-        </View>
+            <Text style={[styles.subtitle, { color: colors.textSub }]}>Platform Ujian & Kuis Modern</Text>
+          </View>
 
-        <TouchableOpacity
-          style={[styles.loginBtn, { backgroundColor: colors.primary }, loading && styles.loginBtnDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
-          activeOpacity={0.85}
-        >
-          {loading ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <Text style={styles.loginBtnText}>Masuk ke Akun</Text>
-          )}
-        </TouchableOpacity>
+          <View style={styles.form}>
+            <Text style={[styles.label, { color: colors.text }]}>Email</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.cardBg, color: colors.text, borderColor: colors.cardBorder }]}
+              placeholder="email@contoh.com"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
+              returnKeyType="next"
+            />
 
-        <View style={styles.registerContainer}>
-          <Text style={[styles.registerText, { color: colors.textSub }]}>Belum punya akun? </Text>
-          <TouchableOpacity onPress={() => router.push('/register')}>
-            <Text style={[styles.registerLink, { color: colors.primary }]}>Daftar</Text>
-          </TouchableOpacity>
+            <Text style={[styles.label, { color: colors.text }]}>Password</Text>
+            <View style={[styles.passwordContainer, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+              <TextInput
+                style={[styles.passwordInput, { color: colors.text }]}
+                placeholder="••••••••"
+                placeholderTextColor={colors.textMuted}
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
+              <TouchableOpacity
+                style={styles.eyeBtn}
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons
+                  name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+                  size={20}
+                  color={colors.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.loginBtn, { backgroundColor: colors.primary }, loading && styles.loginBtnDisabled]}
+              onPress={handleLogin}
+              disabled={loading}
+              activeOpacity={0.85}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <Text style={styles.loginBtnText}>Masuk ke Akun</Text>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.registerContainer}>
+              <Text style={[styles.registerText, { color: colors.textSub }]}>Belum punya akun? </Text>
+              <TouchableOpacity onPress={() => router.push('/register')}>
+                <Text style={[styles.registerLink, { color: colors.primary }]}>Daftar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  scrollContent: { flexGrow: 1, justifyContent: 'center', paddingBottom: 24 },
   container: { flex: 1, padding: 24, justifyContent: 'center' },
   topBar: {
     position: 'absolute',

@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -12,6 +13,7 @@ function tabIcon(name: IoniconName) {
 
 export default function TabsLayout() {
   const { colors, language, fontSizeScale } = useAppTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -21,8 +23,8 @@ export default function TabsLayout() {
           backgroundColor: colors.cardBg,
           borderTopColor: colors.inputBorder,
           borderTopWidth: 1,
-          height: 84,
-          paddingBottom: 24,
+          height: 56 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
           paddingTop: 8,
           elevation: 4,
           shadowColor: '#000',

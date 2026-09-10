@@ -11,8 +11,11 @@ import {
   AppStateStatus,
   Platform,
   BackHandler,
+  Keyboard,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -103,6 +106,7 @@ export default function QuizScreen() {
   const [currentSectionIdx, setCurrentSectionIdx] = useState(0);
   const [pwWrong, setPwWrong] = useState<Record<number, boolean>>({});
   const [pwChecking, setPwChecking] = useState(false);
+  const { keyboardHeight, isVisible: isKeyboardOpen } = useKeyboardHeight();
 
   const warningTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef = useRef(5);
@@ -126,6 +130,13 @@ export default function QuizScreen() {
     colors.primary;
 
   const isQuizStyle = (publicForm?.display_style || 'card') === 'quiz';
+
+  const cardScrollRef = useRef<ScrollView>(null);
+
+  // Auto scroll to top when switching sections
+  useEffect(() => {
+    cardScrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [currentSectionIdx]);
 
   // Keep refs updated
   useEffect(() => {
@@ -1163,31 +1174,44 @@ export default function QuizScreen() {
   // Landing step
   if (!submission) {
     return (
-      <View style={{ flex: 1 }}>
-        <QuizLandingStep publicForm={publicForm} starting={starting} onStart={handleStart} />
-        {showIdentityForm && (
-          <View style={[styles.identityBar, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-            <Text style={[styles.identityLabel, { color: colors.text }]}>{language === 'ID' ? 'Nama (wajib)' : 'Name (required)'}</Text>
-            <TextInput
-              style={[styles.identityInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-              placeholder={language === 'ID' ? 'Masukkan nama' : 'Enter name'}
-              placeholderTextColor={colors.textMuted}
-              value={respondentName}
-              onChangeText={setRespondentName}
-            />
-            <Text style={[styles.identityLabel, { color: colors.text, marginTop: 10 }]}>Email (opsional)</Text>
-            <TextInput
-              style={[styles.identityInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
-              placeholder="email@example.com"
-              placeholderTextColor={colors.textMuted}
-              value={respondentEmail}
-              onChangeText={setRespondentEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-        )}
-      </View>
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: colors.bg }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: keyboardHeight > 0 ? keyboardHeight : 24 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          automaticallyAdjustKeyboardInsets
+        >
+          <QuizLandingStep publicForm={publicForm} starting={starting} onStart={handleStart} />
+          {showIdentityForm && (
+            <View style={[styles.identityBar, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
+              <Text style={[styles.identityLabel, { color: colors.text }]}>{language === 'ID' ? 'Nama (wajib)' : 'Name (required)'}</Text>
+              <TextInput
+                style={[styles.identityInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+                placeholder={language === 'ID' ? 'Masukkan nama' : 'Enter name'}
+                placeholderTextColor={colors.textMuted}
+                value={respondentName}
+                onChangeText={setRespondentName}
+                returnKeyType="next"
+              />
+              <Text style={[styles.identityLabel, { color: colors.text, marginTop: 10 }]}>Email (opsional)</Text>
+              <TextInput
+                style={[styles.identityInput, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+                placeholder="email@example.com"
+                placeholderTextColor={colors.textMuted}
+                value={respondentEmail}
+                onChangeText={setRespondentEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                returnKeyType="done"
+              />
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -1220,8 +1244,13 @@ export default function QuizScreen() {
           submissionId={submissionIdRef.current}
         />
       ) : (
-        <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-          <View style={[styles.formHeader, { borderBottomColor: colors.inputBorder, backgroundColor: colors.cardBg }]}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        >
+          <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+            <View style={[styles.formHeader, { borderBottomColor: colors.inputBorder, backgroundColor: colors.cardBg }]}>
             {!publicForm?.is_restricted && (
               <TouchableOpacity
                 onPress={async () => {
@@ -1244,7 +1273,13 @@ export default function QuizScreen() {
             </View>
           </View>
 
-          <ScrollView contentContainerStyle={styles.formScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            ref={cardScrollRef}
+            contentContainerStyle={[styles.formScroll, { paddingBottom: isKeyboardOpen ? Math.max(keyboardHeight, 280) : 24 }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
+          >
             {currentCardPage && (
               <>
                 {currentCardPage.title && (
@@ -1314,7 +1349,8 @@ export default function QuizScreen() {
               )}
             </View>
           </ScrollView>
-        </SafeAreaView>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       )}
 
       {/* Identity was already handled on landing; no extra UI here */}

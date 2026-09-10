@@ -4,9 +4,13 @@ import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system/legacy';
 
 const getHost = () => {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  let envUrl = process.env.EXPO_PUBLIC_API_URL?.trim() || process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
 
   if (envUrl) {
+    envUrl = envUrl.replace(/\/+$/, '');
+    if (!envUrl.endsWith('/api')) {
+      envUrl += '/api';
+    }
     return envUrl;
   }
 
@@ -483,7 +487,8 @@ export async function getPublicForm(shortCode: string) {
     const err = await res.json().catch(() => ({}));
     throw new Error(extractErrorMessage(err, 'Quiz / Form tidak ditemukan atau belum dipublikasikan.'));
   }
-  return res.json();
+  const data = await res.json();
+  return { ...data, short_code: data.short_code || cleanCode.toUpperCase() };
 }
 
 export async function checkCanStart(shortCode: string) {

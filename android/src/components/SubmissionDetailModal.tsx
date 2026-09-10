@@ -142,19 +142,37 @@ export function SubmissionDetailModal({
 
                   let userAnsText = '';
                   if (ans) {
-                    if (ans.answer_text) {
+                    if (ans.selected_options && ans.selected_options.length > 0) {
+                      // dropdown & checkbox: tampilkan nilai asli tanpa prefix huruf (A. B. C.)
+                      const rawOpts = ans.selected_options
+                        .map((opt: any) => (typeof opt === 'string' ? stripHtmlTags(opt) : stripHtmlTags(opt.option_text) || String(opt)));
+                      const qtype = ans.question_type || qOrAns.type || qOrAns.question_type;
+                      if (qtype === 'dropdown' || qtype === 'checkbox') {
+                        userAnsText = rawOpts.map((s: string) => s.replace(/^[A-H]\.\s*/, '').trim()).join(', ');
+                      } else {
+                        userAnsText = rawOpts.join(', ');
+                      }
+                      // tampilkan jawaban "Lainnya" jika ada
+                      if (ans.answer_text && ans.answer_text.trim()) {
+                        const other = stripHtmlTags(ans.answer_text).trim();
+                        if (other) userAnsText += (userAnsText ? `, ${language === 'ID' ? 'Lainnya: ' : 'Other: '}` : '') + other;
+                      }
+                    } else if (ans.answer_text) {
                       userAnsText = stripHtmlTags(ans.answer_text);
-                    } else if (ans.selected_options && ans.selected_options.length > 0) {
-                      userAnsText = ans.selected_options
-                        .map((opt: any) => (typeof opt === 'string' ? stripHtmlTags(opt) : stripHtmlTags(opt.option_text) || String(opt)))
-                        .join(', ');
                     } else if (ans.selected_option_ids && ans.selected_option_ids.length > 0) {
                       const opts = qOrAns.options?.filter((o: any) => ans.selected_option_ids.includes(o.id));
-                      userAnsText = opts && opts.length > 0
-                        ? opts.map((o: any) => stripHtmlTags(o.option_text)).join(', ')
-                        : (language === 'ID'
+                      const qtype2 = qOrAns.type || ans.question_type;
+                      if (opts && opts.length > 0) {
+                        let raw = opts.map((o: any) => stripHtmlTags(o.option_text));
+                        if (qtype2 === 'dropdown' || qtype2 === 'checkbox') {
+                          raw = raw.map((s: string) => s.replace(/^[A-H]\.\s*/, '').trim());
+                        }
+                        userAnsText = raw.join(', ');
+                      } else {
+                        userAnsText = language === 'ID'
                             ? `Opsi dipilih (${ans.selected_option_ids.length})`
-                            : `Selected options (${ans.selected_option_ids.length})`);
+                            : `Selected options (${ans.selected_option_ids.length})`;
+                      }
                     } else if (ans.answer_file) {
                       userAnsText = language === 'ID' ? '[File Terlampir]' : '[Attached File]';
                     }

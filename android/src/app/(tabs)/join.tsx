@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -93,19 +93,30 @@ export default function JoinScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      {/* Top Header */}
-      <View style={[styles.topHeader, { borderBottomColor: colors.inputBorder }]}>
-        <TouchableOpacity style={[styles.backBtn, { backgroundColor: colors.cardBg, borderColor: colors.inputBorder }]} onPress={() => router.push('/(tabs)/home')}>
-          <Ionicons name="arrow-back" size={20} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text, fontSize: 16 * fontSizeScale }]}>
-          {language === 'ID' ? 'Pindai QR / Masukkan Link' : 'Scan QR / Enter Link'}
-        </Text>
-      </View>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
+    >
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets
+      >
+        <View style={[styles.container, { backgroundColor: colors.bg }]}>
+          {/* Top Header */}
+          <View style={[styles.topHeader, { borderBottomColor: colors.inputBorder }]}>
+            <TouchableOpacity style={[styles.backBtn, { backgroundColor: colors.cardBg, borderColor: colors.inputBorder }]} onPress={() => router.push('/(tabs)/home')}>
+              <Ionicons name="arrow-back" size={20} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: colors.text, fontSize: 16 * fontSizeScale }]}>
+              {language === 'ID' ? 'Pindai QR / Masukkan Link' : 'Scan QR / Enter Link'}
+            </Text>
+          </View>
 
-      {/* Main Content Area */}
-      <View style={styles.content}>
+          {/* Main Content Area */}
+          <View style={styles.content}>
         {/* Live Camera Scanner Box */}
         {permission?.granted ? (
           <View style={[styles.cameraContainer, { borderColor: colors.primary }]}>
@@ -170,6 +181,8 @@ export default function JoinScreen() {
               value={linkOrCode}
               onChangeText={setLinkOrCode}
               autoCapitalize="none"
+              returnKeyType="done"
+              onSubmitEditing={() => handleJoin(linkOrCode)}
             />
             <TouchableOpacity
               style={[styles.joinBtn, { backgroundColor: colors.primary }, loading && { opacity: 0.6 }]}
@@ -183,6 +196,8 @@ export default function JoinScreen() {
         </View>
       </View>
     </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
