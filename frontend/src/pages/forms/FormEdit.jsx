@@ -495,7 +495,6 @@ export default function FormEdit() {
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               <SettingRow
                 title={t('formEdit.limitOneResponse')}
-                desc={isRestricted ? t('formEdit.lockedOnceHint') : t('formEdit.limitOneResponseDesc')}
                 control={
                   <Toggle
                     label={t('formEdit.limitOneResponse')}
