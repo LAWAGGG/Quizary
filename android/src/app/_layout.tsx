@@ -78,11 +78,11 @@ function RootStack() {
     }
     checkAuth();
 
-    // Background auto-sync worker for offline submissions
+    // Background auto-sync worker for offline submissions — cepat biar status langsung kekirim tanpa nunggu refresh manual
     processPendingSubmissions().catch(() => {});
     const interval = setInterval(() => {
       processPendingSubmissions().catch(() => {});
-    }, 20000);
+    }, 5000);
 
     return () => {
       mounted = false;
