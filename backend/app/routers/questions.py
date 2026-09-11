@@ -67,12 +67,36 @@ def _image_obj(img, request: Request) -> dict | None:
     return {"id": img.id, "path": file_url(request, img.path)}
 
 
+_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+_AUDIO_EXT = {".mp3", ".wav", ".m4a", ".ogg", ".aac", ".webm"}
+
+
+def _is_audio_path(path: str | None) -> bool:
+    return os.path.splitext(path or "")[1].lower() in _AUDIO_EXT
+
+
+def _media_pair(images, request: Request) -> tuple[dict | None, dict | None]:
+    """Pisah media soal jadi (image, audio) dari ekstensi path.
+
+    `image` = gambar pertama; bila tak ada gambar tapi ada audio legacy,
+    `image` fallback ke baris pertama agar klien lama (Android) tetap tampil.
+    `audio` = audio pertama atau None.
+    """
+    ordered = sorted(images, key=lambda i: i.order_index or 0)
+    img = next((im for im in ordered if not _is_audio_path(im.path)), None)
+    aud = next((im for im in ordered if _is_audio_path(im.path)), None)
+    image = _image_obj(img, request) if img else (_image_obj(ordered[0], request) if ordered else None)
+    audio = _image_obj(aud, request) if aud else None
+    return image, audio
+
+
 def _build_question(q: Question, request: Request) -> dict:
     """
     Serialize a Question.
     Fix #5: `image` is a single object (first image) on both question and each option.
+    Media soal pisah per-slot: `image` (gambar) + `audio` (opsional).
     """
-    q_img = sorted(q.images, key=lambda i: i.order_index or 0)
+    q_image, q_audio = _media_pair(q.images, request)
     opts = []
     for opt in sorted(q.options, key=lambda o: o.order_index or 0):
         opt_imgs = sorted(opt.images, key=lambda i: i.order_index or 0)
@@ -98,7 +122,8 @@ def _build_question(q: Question, request: Request) -> dict:
         "answer_key": q.answer_key if q.type.value in _KEYWORD_TYPES else None,
         "allow_other": bool(q.allow_other),
         "options": opts,
-        "image": _image_obj(q_img[0], request) if q_img else None,
+        "image": q_image,
+        "audio": q_audio,
     }
 
 
@@ -981,6 +1006,48 @@ def _replace_image(owner, subdir: str, file: UploadFile, db: Session, request: R
     return file_url(request, new_path)
 
 
+def _store_question_media(file: UploadFile, subdir: str, kind: str) -> str:
+    """Simpan media soal per-slot (`image` atau `audio`). Return relative path."""
+    allowed = _IMAGE_EXT if kind == "image" else _AUDIO_EXT
+    label = "image (JPG/PNG/GIF/WEBP)" if kind == "image" else "audio (MP3/WAV/M4A/OGG/AAC/WEBM)"
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in allowed:
+        raise HTTPException(status_code=422, detail=f"Unsupported file format, use {label}")
+    if getattr(file, "size", None) is not None and file.size > MAX_QUESTION_MEDIA_BYTES:
+        jenis = "gambar" if kind == "image" else "audio"
+        raise HTTPException(status_code=413, detail=f"Ukuran file terlalu besar ({file.size / (1024*1024):.1f}MB). Maksimal 10MB untuk {jenis} soal")
+    filename = f"{uuid.uuid4().hex}{ext}"
+    dest = os.path.join(UPLOAD_DIR, subdir, filename)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    write_limited(file.file, dest, MAX_QUESTION_MEDIA_BYTES)
+    return f"{subdir}/{filename}"
+
+
+def _replace_question_media(question: Question, kind: str, file: UploadFile, db: Session, request: Request):
+    """Upload (and replace) satu slot media soal; slot lain (`image`/`audio`) dibiarkan utuh."""
+    targets = [im for im in sorted(question.images, key=lambda i: i.order_index or 0)
+               if (_is_audio_path(im.path) if kind == "audio" else not _is_audio_path(im.path))]
+    new_path = _store_question_media(file, "questions", kind)
+    for img in targets:
+        _delete_file(img.path)
+        db.delete(img)
+    db.add(Image(question_id=question.id, path=new_path,
+                 order_index=0 if kind == "image" else 1, created_at=now_wib()))
+    db.commit()
+    return file_url(request, new_path)
+
+
+def _delete_question_media(question: Question, kind: str, db: Session) -> None:
+    targets = [im for im in sorted(question.images, key=lambda i: i.order_index or 0)
+               if (_is_audio_path(im.path) if kind == "audio" else not _is_audio_path(im.path))]
+    if not targets:
+        raise HTTPException(status_code=404, detail="Audio tidak ditemukan" if kind == "audio" else "Gambar tidak ditemukan")
+    for img in targets:
+        _delete_file(img.path)
+        db.delete(img)
+    db.commit()
+
+
 # ── Delete images ─────────────────────────────────────────────────────────────
 
 @router.delete("/questions/{question_id}/image")
@@ -991,14 +1058,20 @@ def delete_question_image(
 ):
     question = _get_question_or_404(question_id, db)
     _ensure_owner(question, user, db)
-    imgs = sorted(question.images, key=lambda i: i.order_index or 0)
-    if not imgs:
-        raise HTTPException(status_code=404, detail="Gambar tidak ditemukan")
-    for img in imgs:
-        _delete_file(img.path)
-        db.delete(img)
-    db.commit()
+    _delete_question_media(question, "image", db)
     return {"message": "Gambar soal dihapus"}
+
+
+@router.delete("/questions/{question_id}/audio")
+def delete_question_audio(
+    question_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    question = _get_question_or_404(question_id, db)
+    _ensure_owner(question, user, db)
+    _delete_question_media(question, "audio", db)
+    return {"message": "Audio soal dihapus"}
 
 
 @router.delete("/questions/{question_id}/option/{option_id}/image")
@@ -1053,5 +1126,19 @@ def upload_question_image(
 ):
     question = _get_question_or_404(question_id, db)
     _ensure_owner(question, user, db)
-    url = _replace_image(question, "questions", file, db, request)
+    url = _replace_question_media(question, "image", file, db, request)
     return {"message": "Question image uploaded", "image": {"path": url}}
+
+
+@router.post("/questions/{question_id}/audio", status_code=201)
+def upload_question_audio(
+    question_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    question = _get_question_or_404(question_id, db)
+    _ensure_owner(question, user, db)
+    url = _replace_question_media(question, "audio", file, db, request)
+    return {"message": "Question audio uploaded", "audio": {"path": url}}

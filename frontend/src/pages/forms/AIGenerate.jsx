@@ -153,10 +153,72 @@ export default function AIGenerate() {
     }
   }
 
+  const addFiles = (list) => {
+    const incoming = Array.from(list || [])
+    if (!incoming.length) return
+    const allowed = ACCEPT_EXT.split(',').map((s) => s.trim().toLowerCase())
+    const valid = []
+    let rejected = 0
+    for (const f of incoming) {
+      const ext = `.${String(f.name || '').split('.').pop().toLowerCase()}`
+      if (allowed.includes(ext)) valid.push(f)
+      else rejected += 1
+    }
+    if (rejected) toast.error(t('aiGenerate.invalidFile', { count: rejected }))
+    const room = MAX_FILES - files.length
+    if (room <= 0) {
+      if (valid.length) toast.error(t('aiGenerate.filesFull'))
+      return
+    }
+    if (valid.length > room) toast.error(t('aiGenerate.filesFull'))
+    const take = valid.slice(0, room)
+    if (take.length) setFiles((prev) => [...prev, ...take].slice(0, MAX_FILES))
+  }
+
   const pickFiles = (e) => {
-    const chosen = Array.from(e.target.files || []).slice(0, MAX_FILES - files.length)
-    if (chosen.length) setFiles((prev) => [...prev, ...chosen].slice(0, MAX_FILES))
+    addFiles(e.target.files)
     e.target.value = ''
+  }
+
+  const [dragActive, setDragActive] = useState(false)
+  const dragDepth = useRef(0)
+
+  // Cegah browser membuka file bila di-drop di luar komposer.
+  useEffect(() => {
+    const stop = (e) => e.preventDefault()
+    window.addEventListener('dragover', stop)
+    window.addEventListener('drop', stop)
+    return () => {
+      window.removeEventListener('dragover', stop)
+      window.removeEventListener('drop', stop)
+    }
+  }, [])
+
+  const onComposerDragEnter = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepth.current += 1
+    setDragActive(true)
+  }
+  const onComposerDragLeave = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepth.current -= 1
+    if (dragDepth.current <= 0) {
+      dragDepth.current = 0
+      setDragActive(false)
+    }
+  }
+  const onComposerDragOver = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+  const onComposerDrop = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragDepth.current = 0
+    setDragActive(false)
+    addFiles(e.dataTransfer?.files)
   }
 
   const handleGenerate = async (e) => {
@@ -349,7 +411,19 @@ export default function AIGenerate() {
             </div>
 
             {/* Komposer chat: mengikuti tema — terang di light, ink-900 di dark, aksen violet. */}
-            <div className="rounded-[1.75rem] border border-primary-100 bg-white p-4 shadow-lift transition-colors focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 dark:border-gray-700 dark:bg-ink-900 dark:focus-within:border-primary dark:focus-within:ring-primary/20">
+            <div
+              onDragEnter={onComposerDragEnter}
+              onDragLeave={onComposerDragLeave}
+              onDragOver={onComposerDragOver}
+              onDrop={onComposerDrop}
+              className={`relative rounded-[1.75rem] border bg-white p-4 shadow-lift transition-colors focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 dark:bg-ink-900 dark:focus-within:border-primary dark:focus-within:ring-primary/20 ${dragActive ? 'border-primary ring-4 ring-primary/15' : 'border-primary-100 dark:border-gray-700'}`}
+            >
+              {dragActive && (
+                <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[1.75rem] border-2 border-dashed border-primary bg-primary-50/90 backdrop-blur-sm dark:bg-primary-950/90" aria-hidden>
+                  <Paperclip className="h-6 w-6 text-primary-600 dark:text-primary-300" />
+                  <p className="text-sm font-semibold text-primary-700 dark:text-primary-200">{t('aiGenerate.dropFiles')}</p>
+                </div>
+              )}
               {files.length > 0 && (
                 <div className="mb-3 mt-2 flex flex-wrap gap-2">
                   {files.map((f, i) => (

@@ -254,6 +254,35 @@ def _image_obj(img, request: Request) -> dict | None:
     return {"id": img.id, "path": file_url(request, img.path)}
 
 
+_AUDIO_EXT = {".mp3", ".wav", ".m4a", ".ogg", ".aac", ".webm"}
+
+
+def _is_audio_path(path: str | None) -> bool:
+    import os
+    return os.path.splitext(path or "")[1].lower() in _AUDIO_EXT
+
+
+def _media_pair(images, request: Request) -> tuple[dict | None, dict | None]:
+    """Pisah media soal jadi (image, audio). `image` fallback ke baris
+    pertama bila tak ada gambar (kompatibel klien lama)."""
+    ordered = sorted(images, key=lambda i: i.order_index or 0)
+    img = next((im for im in ordered if not _is_audio_path(im.path)), None)
+    aud = next((im for im in ordered if _is_audio_path(im.path)), None)
+    image = _image_obj(img, request) if img else (_image_obj(ordered[0], request) if ordered else None)
+    audio = _image_obj(aud, request) if aud else None
+    return image, audio
+
+
+def _media_urls(images, request: Request) -> tuple[str | None, str | None]:
+    """Return (image_url, audio_url). image_url fallback ke baris pertama."""
+    ordered = sorted(images, key=lambda i: i.order_index or 0)
+    img = next((im for im in ordered if not _is_audio_path(im.path)), None)
+    aud = next((im for im in ordered if _is_audio_path(im.path)), None)
+    image_url = file_url(request, img.path) if img else (file_url(request, ordered[0].path) if ordered else None)
+    audio_url = file_url(request, aud.path) if aud else None
+    return image_url, audio_url
+
+
 def _build_questions_response(sub_id: int, request: Request, db: Session, include_deleted: bool = False) -> list[QuestionWithOptions]:
     """
     Ordered questions for a submission — respects per-submission shuffle.
@@ -313,7 +342,7 @@ def _build_questions_response(sub_id: int, request: Request, db: Session, includ
         else:
             opts = []
 
-        q_img = sorted(q.images, key=lambda i: i.order_index or 0)
+        q_image, q_audio = _media_pair(q.images, request)
         result.append(QuestionWithOptions(
             id=q.id,
             type=q.type.value,
@@ -323,7 +352,8 @@ def _build_questions_response(sub_id: int, request: Request, db: Session, includ
             section_id=q.section_id,
             group_id=q.group_id,
             allow_other=bool(q.allow_other),
-            image=_image_obj(q_img[0], request) if q_img else None,
+            image=q_image,
+            audio=q_audio,
             options=[
                 OptionPublic(
                     id=o.id,
@@ -354,14 +384,14 @@ def _build_saved_answers(sub_id: int, request: Request, db: Session) -> list[Sav
         if not q:
             continue
         selected_ids = [ao.option_id for ao in answer.selected_options]
-        q_imgs = sorted(q.images, key=lambda i: i.order_index or 0)
-        q_image_url = file_url(request, q_imgs[0].path) if q_imgs else None
+        q_image_url, q_audio_url = _media_urls(q.images, request)
 
         answers_data.append(SavedAnswer(
             question_id=q.id,
             question_text=q.question_text,
             question_type=q.type.value,
             question_image=q_image_url,
+            question_audio=q_audio_url,
             selected_option_ids=selected_ids,
             answer_text=answer.answer_text,
             answer_file=file_url(request, answer.answer_file),
@@ -1033,15 +1063,15 @@ def get_submission(
             for oid in selected_ids if oid in opt_text_map
         ]
 
-        # Resolve question image URL (first image if any)
-        q_imgs = sorted(q.images, key=lambda i: i.order_index or 0)
-        q_image_url = file_url(request, q_imgs[0].path) if q_imgs else None
+        # Resolve question media URLs (image + audio, per-slot)
+        q_image_url, q_audio_url = _media_urls(q.images, request)
 
         answers_data.append(SavedAnswer(
             question_id=q.id,
             question_text=q.question_text,
             question_type=q.type.value,
             question_image=q_image_url,
+            question_audio=q_audio_url,
             selected_option_ids=selected_ids,
             answer_text=answer.answer_text,
             answer_file=file_url(request, answer.answer_file),

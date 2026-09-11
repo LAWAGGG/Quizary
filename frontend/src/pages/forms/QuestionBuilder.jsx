@@ -148,72 +148,85 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     }
   }
 
-  const questionFileRef = useRef(null)
+  const questionImageRef = useRef(null)
+  const questionAudioRef = useRef(null)
   const [qImgLoading, setQImgLoading] = useState(false)
+  const [qAudLoading, setQAudLoading] = useState(false)
 
-  const handleQuestionFileChange = async (event) => {
+  // Media soal pisah per-slot: kind = 'image' | 'audio'.
+  const handleQuestionMediaChange = (kind) => async (event) => {
     event?.preventDefault?.()
     event?.stopPropagation?.()
-    const file = event?.target?.files?.[0] || questionFileRef.current?.files?.[0]
+    const inputRef = kind === 'image' ? questionImageRef : questionAudioRef
+    const file = event?.target?.files?.[0] || inputRef.current?.files?.[0]
     if (!file) return
     if (file.size > MAX_Q_MEDIA) {
       toast.error(t('questionBuilder.fileTooLarge', { size: fmtMB(file.size) }))
-      if (questionFileRef.current) questionFileRef.current.value = ''
+      if (inputRef.current) inputRef.current.value = ''
       return
     }
-    // ponytail: new question has no ID yet — queue file, upload after create
+    const slot = kind === 'image' ? 'image' : 'audio'
+    const pendingKey = kind === 'image' ? '_pendingImage' : '_pendingAudio'
+    const setLoading = kind === 'image' ? setQImgLoading : setQAudLoading
+    const successMsg = kind === 'image' ? t('questionBuilder.imageUploaded') : t('questionBuilder.audioUploaded')
+    // Legacy: soal baru tanpa ID — antre file, upload setelah create
     if (!questionId) {
+      // Kompatibel payload lama: _pendingFile ikut menunjuk file image bila ada,
+      // supaya alur save lama yang hanya kenal _pendingFile tetap jalan.
       const preview = URL.createObjectURL(file)
-      setForm((prev) => ({ ...prev, image: { path: preview }, _pendingFile: file }))
-      if (questionFileRef.current) questionFileRef.current.value = ''
+      setForm((prev) => ({ ...prev, [slot]: { path: preview }, [pendingKey]: file, ...(kind === 'image' ? { _pendingFile: file } : {}) }))
+      if (inputRef.current) inputRef.current.value = ''
       toast.success(t('questionBuilder.optionMediaQueued'))
       return
     }
     const fd = new FormData()
     fd.append('file', file)
-    setQImgLoading(true)
+    setLoading(true)
     try {
-      const res = await api.post(`/questions/${questionId}/image`, fd, {
+      const res = await api.post(`/questions/${questionId}/${slot}`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      toast.success('Media uploaded')
-      setForm((prev) => ({ ...prev, image: { path: res.data.image.path } }))
+      toast.success(successMsg)
+      setForm((prev) => ({ ...prev, [slot]: { path: res.data[slot].path }, [pendingKey]: null }))
     } catch (err) {
       toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to upload')
     } finally {
-      setQImgLoading(false)
-      if (questionFileRef.current) questionFileRef.current.value = ''
+      setLoading(false)
+      if (inputRef.current) inputRef.current.value = ''
     }
   }
 
-  const uploadQuestionImage = handleQuestionFileChange
-
-  const handleRemoveQuestionImage = async () => {
-    if (!form.image) return
+  const handleRemoveQuestionMedia = (kind) => async () => {
+    const slot = kind === 'image' ? 'image' : 'audio'
+    const pendingKey = kind === 'image' ? '_pendingImage' : '_pendingAudio'
+    if (!form[slot]) return
     // pending (belum disimpan) → hapus lokal saja
-    if (form._pendingFile) {
-      setForm((prev) => ({ ...prev, image: null, _pendingFile: null }))
+    if (form[pendingKey] || (kind === 'image' && form._pendingFile)) {
+      setForm((prev) => ({ ...prev, [slot]: null, [pendingKey]: null, ...(kind === 'image' ? { _pendingFile: null } : {}) }))
       return
     }
     if (!questionId) {
-      setForm((prev) => ({ ...prev, image: null }))
+      setForm((prev) => ({ ...prev, [slot]: null }))
       return
     }
     try {
-      await api.delete(`/questions/${questionId}/image`)
-      setForm((prev) => ({ ...prev, image: null }))
-      toast.success('Gambar soal dihapus')
+      await api.delete(`/questions/${questionId}/${slot}`)
+      setForm((prev) => ({ ...prev, [slot]: null }))
+      toast.success(kind === 'image' ? t('questionBuilder.imageRemoved') : t('questionBuilder.audioRemoved'))
     } catch (err) {
       if (err.response?.status === 404) {
-        // Parent question list can still contain stale image metadata after
+        // Parent question list can still contain stale media metadata after
         // cancel/reopen; backend already removed it, so treat delete as done.
-        setForm((prev) => ({ ...prev, image: null }))
-        toast.success('Gambar soal dihapus')
+        setForm((prev) => ({ ...prev, [slot]: null }))
+        toast.success(kind === 'image' ? t('questionBuilder.imageRemoved') : t('questionBuilder.audioRemoved'))
         return
       }
-      toast.error(err.response?.data?.detail || err.response?.data?.message || 'Gagal menghapus gambar')
+      toast.error(err.response?.data?.detail || err.response?.data?.message || t('questionBuilder.removeFailed'))
     }
   }
+
+  const handleRemoveQuestionImage = handleRemoveQuestionMedia('image')
+  const handleRemoveQuestionAudio = handleRemoveQuestionMedia('audio')
 
   const handleRemoveOptionImage = async (i) => {
     const opt = form.options[i]
@@ -392,20 +405,24 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
 
       <div className="space-y-3">
   <input
-    ref={questionFileRef}
+    ref={questionImageRef}
     type="file"
-    accept="image/*,audio/*,.mp3,.wav,.m4a,.ogg,.aac,.webm"
+    accept="image/*,.jpg,.jpeg,.png,.gif,.webp"
     className="hidden"
-    onChange={handleQuestionFileChange}
+    onChange={handleQuestionMediaChange('image')}
+    onClick={(e) => e.stopPropagation()}
+  />
+  <input
+    ref={questionAudioRef}
+    type="file"
+    accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.webm"
+    className="hidden"
+    onChange={handleQuestionMediaChange('audio')}
     onClick={(e) => e.stopPropagation()}
   />
   {form.image?.path ? (
     <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-ink-800/50">
-      {(form._pendingFile?.type?.startsWith('audio/') || isAudioUrl(form.image.path)) ? (
-        <audio controls src={resolveMediaUrl(form.image.path)} preload="metadata" className="w-full p-3" />
-      ) : (
-        <img src={resolveMediaUrl(form.image.path)} alt="" className="w-full max-h-72 object-contain bg-white dark:bg-ink-900" />
-      )}
+      <img src={resolveMediaUrl(form.image.path)} alt="" className="w-full max-h-72 object-contain bg-white dark:bg-ink-900" />
       <button
         type="button"
         onClick={handleRemoveQuestionImage}
@@ -420,9 +437,9 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     <div className="flex gap-2">
       <button
         type="button"
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); questionFileRef.current?.click() }}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); questionImageRef.current?.click() }}
         disabled={qImgLoading}
-        title="Upload image or audio (mp3)"
+        title={t('questionBuilder.addImageTitle')}
         className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 h-9 rounded-xl text-xs font-semibold border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:text-primary hover:border-primary hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-colors"
       >
         {qImgLoading ? (
@@ -430,7 +447,38 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
         ) : (
           <ImageIcon className="w-4 h-4" />
         )}
-        {qImgLoading ? t('questionBuilder.uploading') : t('questionBuilder.addMedia')}
+        {qImgLoading ? t('questionBuilder.uploading') : t('questionBuilder.addImage')}
+      </button>
+    </div>
+  )}
+  {form.audio?.path ? (
+    <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-ink-800/50">
+      <audio controls src={resolveMediaUrl(form.audio.path)} preload="metadata" className="w-full p-3" />
+      <button
+        type="button"
+        onClick={handleRemoveQuestionAudio}
+        className="absolute top-2 right-2 w-7 h-7 rounded-full bg-ink/70 hover:bg-incorrect text-white flex items-center justify-center backdrop-blur-sm transition-colors"
+        aria-label={t('questionBuilder.removeAudio')}
+        title={t('questionBuilder.removeAudio')}
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  ) : (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); questionAudioRef.current?.click() }}
+        disabled={qAudLoading}
+        title={t('questionBuilder.addAudioTitle')}
+        className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 h-9 rounded-xl text-xs font-semibold border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:text-primary hover:border-primary hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-colors"
+      >
+        {qAudLoading ? (
+          <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <Upload className="w-4 h-4" />
+        )}
+        {qAudLoading ? t('questionBuilder.uploading') : t('questionBuilder.addAudio')}
       </button>
     </div>
   )}
@@ -732,11 +780,12 @@ const QuestionCard = memo(function QuestionCard({ question, index, onDelete, onD
           <span className="text-incorrect text-lg font-bold leading-none mt-0.5 shrink-0" title={t('questionBuilder.required')}>*</span>
         )}
       </div>
-      {question.image && (isAudioUrl(question.image.path) ? (
-        <audio controls src={resolveMediaUrl(question.image.path)} preload="metadata" className="w-full max-w-sm mb-3" />
-      ) : (
+      {question.image?.path && (
         <img src={resolveMediaUrl(question.image.path)} alt="" className="mb-3 max-h-32 rounded-xl object-cover" />
-      ))}
+      )}
+      {(question.audio?.path || (question.image?.path && isAudioUrl(question.image.path))) && (
+        <audio controls src={resolveMediaUrl(question.audio?.path || question.image.path)} preload="metadata" className="w-full max-w-sm mb-3" />
+      )}
       {question.options?.length > 0 && (
         <div className="space-y-1.5">
           {question.options.map((opt, i) => (
@@ -1003,7 +1052,7 @@ const SortableGroupCard = memo(function SortableGroupCard({ groupId, questions: 
                               <span className="font-display font-semibold text-ink dark:text-gray-100 text-sm">Edit Soal {gIdx + 1}</span>
                               <button onClick={onCancel} className="p-1.5 rounded-lg text-gray-400 hover:text-ink hover:bg-gray-100 dark:hover:bg-ink-800"><X className="w-4 h-4" /></button>
                             </div>
-                            <QuestionForm initial={{ question_text: q.question_text, type: q.type, points: q.points, is_scored: q.is_scored !== false, is_required: q.is_required, section_id: q.section_id || null, password_keyword: q.password_keyword || '', answer_key: q.answer_key || '', allow_other: !!q.allow_other, image: q.image, options: q.options?.length ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct, image: o.image })) : [{ option_text: '', is_correct: false }] }} onSave={onSave} onCancel={onCancel} loading={saveLoading} isQuiz={isQuiz} errors={errors} questionId={q.id} sections={sections} sectionsAllowed={sectionsAllowed} scoringMode={scoringMode} />
+                            <QuestionForm initial={{ question_text: q.question_text, type: q.type, points: q.points, is_scored: q.is_scored !== false, is_required: q.is_required, section_id: q.section_id || null, password_keyword: q.password_keyword || '', answer_key: q.answer_key || '', allow_other: !!q.allow_other, image: q.image, audio: q.audio, options: q.options?.length ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct, image: o.image })) : [{ option_text: '', is_correct: false }] }} onSave={onSave} onCancel={onCancel} loading={saveLoading} isQuiz={isQuiz} errors={errors} questionId={q.id} sections={sections} sectionsAllowed={sectionsAllowed} scoringMode={scoringMode} />
                           </Card>
                         </motion.div>
                       )
@@ -1094,6 +1143,7 @@ function QuestionItem({ q, index, onEdit, onDelete, onDuplicate, duplicating, is
               answer_key: q.answer_key || '',
               allow_other: !!q.allow_other,
               image: q.image,
+              audio: q.audio,
               options: q.options?.length
                 ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct, image: o.image }))
                 : [{ option_text: '', is_correct: false }],
@@ -1417,11 +1467,16 @@ export default function QuestionBuilder() {
         const res = await api.post(`/forms/${formId}/questions`, payload)
         // ponytail: upload pending media queued before save (no ID at that time)
         const newQ = res.data
-        if (data._pendingFile) {
+        const pendingSlots = [
+          [data._pendingImage || data._pendingFile, 'image'],
+          [data._pendingAudio, 'audio'],
+        ]
+        for (const [pendingFile, slot] of pendingSlots) {
+          if (!pendingFile) continue
           try {
             const fd = new FormData()
-            fd.append('file', data._pendingFile)
-            await api.post(`/questions/${newQ.id}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+            fd.append('file', pendingFile)
+            await api.post(`/questions/${newQ.id}/${slot}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
           } catch (e) { toast.error(e.response?.data?.message || e.response?.data?.detail || 'Gagal upload media pertanyaan') }
         }
         await uploadPendingOptionImages(newQ)

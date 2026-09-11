@@ -355,10 +355,27 @@ Auth: Bearer Token (pemilik)
         { "id": 1, "option_text": "80", "is_correct": false, "order_index": 0, "image": null },
         { "id": 2, "option_text": "96", "is_correct": true, "order_index": 1, "image": null }
       ],
-      "image": { "id": 1, "path": "http://localhost:8000/uploads/question-images/q1.png" }
+      "image": { "id": 1, "path": "http://localhost:8000/uploads/question-images/q1.png" },
+      "audio": { "id": 2, "path": "http://localhost:8000/uploads/questions/q1.mp3" }
     }
   ]
 }
+```
+
+> Media soal pisah per-slot: `image` (gambar) + `audio` (opsional). Keduanya
+> bisa ada bersamaan. Data lama (audio tersimpan di slot `image`) tetap
+> tampil: `image` fallback ke baris pertama bila tak ada gambar, klien lama
+> (Android) mengabaikan field `audio` baru.
+>
+> | Method | Path | Body | Response | Keterangan |
+> |--------|------|------|----------|------------|
+> | POST | `/api/questions/{id}/image` | form `file` (JPG/PNG/GIF/WEBP) | 201 `{image:{path}}` | Ganti gambar, slot audio utuh |
+> | POST | `/api/questions/{id}/audio` | form `file` (MP3/WAV/M4A/OGG/AAC/WEBM) | 201 `{audio:{path}}` | Ganti audio, slot gambar utuh |
+> | DELETE | `/api/questions/{id}/image` | — | 200 | Hapus gambar saja |
+> | DELETE | `/api/questions/{id}/audio` | — | 200 | Hapus audio saja |
+>
+> Payload responden ikut: `questions[].audio` di `POST /submissions` /
+> `GET /submissions/{id}`, `question_audio` di tiap `answers[]`.
 ```
 
 ### `POST /forms/{id}/questions`

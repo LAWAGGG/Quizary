@@ -8,7 +8,7 @@ import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll'
 import { stripTags } from '../../lib/sanitize'
 import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichText, ConfirmModal, sanitizeHtml } from '../../components/ui'
-import { isAudioUrl, resolveMediaUrl } from '../../lib/media'
+import { resolveMediaUrl, questionImageUrl, questionAudioUrl } from '../../lib/media'
 import { formatCheatReason } from '../../lib/cheatReason'
 import { useTranslation } from 'react-i18next'
 
@@ -614,11 +614,12 @@ export default function Results() {
                                     <div className="text-sm text-ink dark:text-gray-100 leading-snug">
                                       <RichText html={q.question_text} className="rich-text" />
                                     </div>
-                                    {q.image && (isAudioUrl(q.image.path) ? (
-                                      <audio controls src={resolveMediaUrl(q.image.path)} preload="none" className="w-full max-w-sm mt-3" />
-                                    ) : (
-                                      <img src={resolveMediaUrl(q.image.path)} alt="" loading="lazy" decoding="async" className="max-h-32 w-auto rounded-lg object-cover mt-3" />
-                                    ))}
+                                    {questionImageUrl(q) && (
+                                      <img src={resolveMediaUrl(questionImageUrl(q))} alt="" loading="lazy" decoding="async" className="max-h-32 w-auto rounded-lg object-cover mt-3" />
+                                    )}
+                                    {questionAudioUrl(q) && (
+                                      <audio controls src={resolveMediaUrl(questionAudioUrl(q))} preload="none" className="w-full max-w-sm mt-3" />
+                                    )}
                                     <div className="mt-3">
                                       <div className="flex items-center gap-2 mb-1.5">
                                         <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{t('results.answersLabel')}</span>

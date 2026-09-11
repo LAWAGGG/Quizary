@@ -1,11 +1,38 @@
 /**
  * Deteksi media audio vs gambar dari URL upload soal.
- * Upload soal menerima image ATAU audio — preview menyesuaikan dari ekstensi file.
+ * Media soal pisah per-slot: `image` (gambar) + `audio` (opsional).
+ * Helper *-fallback menjaga data lama (audio tersimpan di slot image).
  */
 const AUDIO_EXT = /\.(mp3|wav|m4a|ogg|aac|webm)(\?.*)?$/i
 
 export function isAudioUrl(url) {
   return !!url && AUDIO_EXT.test(url)
+}
+
+export function questionImageUrl(q) {
+  const p = q?.image?.path
+  if (!p || isAudioUrl(p)) return null
+  return p
+}
+
+export function questionAudioUrl(q) {
+  if (q?.audio?.path) return q.audio.path
+  const p = q?.image?.path
+  if (p && isAudioUrl(p)) return p
+  return null
+}
+
+export function answerImageUrl(a) {
+  const u = a?.question_image
+  if (!u || isAudioUrl(u)) return null
+  return u
+}
+
+export function answerAudioUrl(a) {
+  if (a?.question_audio) return a.question_audio
+  const u = a?.question_image
+  if (u && isAudioUrl(u)) return u
+  return null
 }
 
 const API_ROOT = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '')

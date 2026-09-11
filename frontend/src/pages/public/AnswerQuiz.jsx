@@ -6,7 +6,7 @@ import { Button, Input, Textarea, Card, Select, FallbackPage, QuestionMap, Confi
 import { useAutosave, loadDraft, clearDraft } from '../../hooks/useAutosave'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
-import { isAudioUrl, resolveMediaUrl } from '../../lib/media'
+import { isAudioUrl, resolveMediaUrl, questionImageUrl, questionAudioUrl } from '../../lib/media'
 import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { sessionTokenHeaders } from '../../lib/sessionToken'
@@ -1473,16 +1473,17 @@ export default function AnswerQuiz() {
                     {sectionsById[current.section_id]}
                   </p>
                 )} */}
-                {current.image && (isAudioUrl(current.image.path) ? (
-                  <audio controls src={resolveMediaUrl(current.image.path)} preload="none" className="w-full max-w-sm mx-auto mb-4" />
-                ) : (
+                {questionImageUrl(current) && (
                   <img loading="lazy" decoding="async"
-                    src={resolveMediaUrl(current.image.path)}
+                    src={resolveMediaUrl(questionImageUrl(current))}
                     alt=""
                     onClick={() => { setZoomTarget(current); setZoomScale(1) }}
                     className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card cursor-zoom-in"
                   />
-                ))}
+                )}
+                {questionAudioUrl(current) && (
+                  <audio controls src={resolveMediaUrl(questionAudioUrl(current))} preload="none" className="w-full max-w-sm mx-auto mb-4" />
+                )}
                 {/* Perbesar soal tersedia untuk semua tipe soal, dengan/tanpa media */}
                 <div className="flex items-center justify-center">
                   <button
@@ -1847,16 +1848,17 @@ export default function AnswerQuiz() {
                       {q.type === 'password' && pwWrong[q.id] ? t('answerQuiz.wrongPassword') : t('answerQuiz.required')}
                     </p>
                   )}
-                  {q.image && (isAudioUrl(q.image.path) ? (
-                    <audio controls src={resolveMediaUrl(q.image.path)} preload="none" className="w-full max-w-sm mx-auto mb-4" />
-                  ) : (
+                  {questionImageUrl(q) && (
                     <img loading="lazy" decoding="async"
-                      src={resolveMediaUrl(q.image.path)}
+                      src={resolveMediaUrl(questionImageUrl(q))}
                       alt=""
                       onClick={() => { setZoomTarget(q); setZoomScale(1) }}
                       className="max-h-52 w-auto mx-auto rounded-2xl object-cover mb-4 shadow-card cursor-zoom-in"
                     />
-                  ))}
+                  )}
+                  {questionAudioUrl(q) && (
+                    <audio controls src={resolveMediaUrl(questionAudioUrl(q))} preload="none" className="w-full max-w-sm mx-auto mb-4" />
+                  )}
 
                   {q.type === 'multiple_choice' && (
                     <div className="space-y-2">
@@ -2571,12 +2573,15 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                       <h3 className="font-display text-xl sm:text-2xl font-medium text-ink dark:text-gray-100 text-center leading-snug">
                       <RichText html={target.question_text} className="rich-text" />
                     </h3>
-                    {target.image && (
+                    {questionImageUrl(target) && (
                       <img loading="lazy" decoding="async"
-                        src={resolveMediaUrl(target.image.path)}
+                        src={resolveMediaUrl(questionImageUrl(target))}
                         alt=""
                         className="w-full max-h-[40dvh] object-contain rounded-2xl shadow-card"
                       />
+                    )}
+                    {questionAudioUrl(target) && (
+                      <audio controls src={resolveMediaUrl(questionAudioUrl(target))} preload="none" className="w-full max-w-sm" />
                     )}
 
                     {target.options?.length > 0 && (variant === 'card' ? (

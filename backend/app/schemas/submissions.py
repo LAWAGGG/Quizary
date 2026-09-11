@@ -25,6 +25,7 @@ class QuestionWithOptions(BaseModel):
     section_id: Optional[int] = None
     group_id: Optional[str] = None
     image: Optional[dict] = None
+    audio: Optional[dict] = None
     options: list[OptionPublic]
     allow_other: bool = False
 
@@ -83,6 +84,7 @@ class SavedAnswer(BaseModel):
     question_text: str
     question_type: str
     question_image: Optional[str] = None  # full URL to question image, if any
+    question_audio: Optional[str] = None  # full URL to question audio, if any
     # What the respondent saved so far (populated regardless of submission status)
     selected_option_ids: list[int] = []
     answer_text: Optional[str] = None
