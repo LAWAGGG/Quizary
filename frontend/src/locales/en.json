@@ -376,7 +376,7 @@
     "showFinalScore": "Show final score",
     "showAnswerReview": "Show answer review",
     "restrictMode": "Restricted mode",
-    "restrictModeDesc": "Respondents must stay in fullscreen; 3 exits marked as cheating.",
+    "restrictModeDesc": "Respondents must stay in fullscreen",
     "timeLimit": "Time limit (minutes)",
     "timeLimitHintQuiz": "Required for quiz.",
     "timeLimitHintForm": "Leave empty for no limit.",

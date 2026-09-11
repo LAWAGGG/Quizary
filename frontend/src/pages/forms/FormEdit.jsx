@@ -612,7 +612,6 @@ export default function FormEdit() {
                 <>
                   <div className="py-3">
                     <p className="text-sm font-medium text-ink dark:text-gray-100">{t('formEdit.scoringMode')}</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{t('formEdit.scoringAutoDesc')}</p>
                     <div className="mt-3">
                       <ScoringSettings
                         mode={scoringMode}

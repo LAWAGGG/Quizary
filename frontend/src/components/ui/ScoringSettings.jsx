@@ -1,12 +1,19 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Loader2, Check } from 'lucide-react'
 import { Select } from './Select'
 
 export function ScoringSettings({ mode = 'auto', onModeChange, questions = [], saving = false, onBatchUpdate }) {
-  const NO_GRADE = ['essay', 'date', 'time', 'file_upload']
-  const scored = questions.filter((q) => q.is_scored !== false && !NO_GRADE.includes(q.type))
+  // Mirror filter backend batch_update_points (forms.py): tipe ini tak ikut
+  // batch, essay hanya ikut bila punya answer_key.
+  const NO_GRADE = ['date', 'time', 'datetime', 'file_upload', 'dropdown']
+  const scored = questions.filter(
+    (q) => q.is_scored !== false && !NO_GRADE.includes(q.type) && (q.type !== 'essay' || (q.answer_key || '').trim()),
+  )
   const count = scored.length || 1
   const autoPoints = Math.round((100 / count) * 10) / 10
+
+  // Nilai terakhir dari server: modus poin soal dinilai (seragam = nilai itu).
+  const scoredKey = scored.map((q) => q.points ?? 0).join(',')
 
   const [points, setPoints] = useState(5)
   const [applying, setApplying] = useState(false)
@@ -25,29 +32,29 @@ export function ScoringSettings({ mode = 'auto', onModeChange, questions = [], s
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Select
         value={mode}
         onChange={(e) => onModeChange?.(e.target.value)}
         disabled={saving || applying}
-        className="w-[140px]"
+        className="w-full sm:w-[140px]"
       >
         <option value="auto">Auto grade</option>
         <option value="manual">Manual</option>
       </Select>
 
       {mode === 'auto' ? (
-        <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+        <span className="text-xs text-gray-500 dark:text-gray-400">
           100 ÷ {count} = {autoPoints} pts each
         </span>
       ) : (
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           <span className="text-xs text-gray-500 dark:text-gray-400">Weight:</span>
           <input
             type="number"
             value={points}
             onChange={(e) => setPoints(Number(e.target.value))}
-            className="h-8 w-16 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 px-2 text-center text-sm tabular-nums focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
+            className="h-8 w-16 shrink-0 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 px-2 text-center text-sm tabular-nums focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/20"
             min={1}
             max={100}
             disabled={applying}
@@ -56,7 +63,7 @@ export function ScoringSettings({ mode = 'auto', onModeChange, questions = [], s
             type="button"
             onClick={handleApply}
             disabled={applying || applied}
-            className="h-8 rounded-lg bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
+            className="h-8 shrink-0 rounded-lg bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
           >
             {applying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : applied ? <Check className="h-3.5 w-3.5" /> : 'Apply'}
           </button>
