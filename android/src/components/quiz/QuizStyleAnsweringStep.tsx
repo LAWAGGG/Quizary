@@ -19,14 +19,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAppAlert } from '../../context/AlertContext';
 import { RichTextRenderer, stripHtmlTags } from '../RichTextRenderer';
-import { getThemeGradientColors } from './QuizBackground';
 import { extractImgUrl } from './QuizQuestionCard';
 import { AudioPlayer } from '../AudioPlayer';
-import { isAudioUrl } from '../../utils/media';
+import { isAudioUrl, getQuestionImageUrl, getQuestionAudioUrl } from '../../utils/media';
 import { CustomDateTimePickerModal } from './CustomDateTimePickerModal';
 import { checkPassword } from '../../services/api_service';
 import { useKeyboardHeight } from '../../hooks/useKeyboardHeight';
@@ -172,8 +170,6 @@ export function QuizStyleAnsweringStep({
     publicForm?.themeColor ||
     publicForm?.settings?.theme_color ||
     colors.primary;
-
-  const gradientColors = getThemeGradientColors(themeColor);
 
   // Animation values for 1-by-1 question sliding
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -431,8 +427,8 @@ export function QuizStyleAnsweringStep({
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style="light" />
 
-      {/* TOP HEADER BAR (Linear Gradient Theme Bar matching Web Screenshot 1) */}
-      <LinearGradient colors={gradientColors} style={styles.headerBar}>
+      {/* TOP HEADER BAR — editorial solid, bukan gradient mengkilap AI */}
+      <View style={[styles.headerBar, { backgroundColor: themeColor, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.14)' }]}>
         {/* Row 1: Info (i), Quiz Title, and Timer Pill */}
         <View style={styles.headerRowTop}>
           <View style={styles.headerLeftGroup}>
@@ -471,17 +467,17 @@ export function QuizStyleAnsweringStep({
           </View>
 
           <TouchableOpacity
-            style={styles.mapSelectorBtn}
+            style={[styles.mapSelectorBtn, { backgroundColor: 'rgba(0,0,0,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' }]}
             onPress={() => setShowMapModal(true)}
             activeOpacity={0.8}
           >
-            <Ionicons name="grid-outline" size={14} color="#FFF" />
+            <Ionicons name="grid-outline" size={13} color="#FFF" />
             <Text style={styles.mapSelectorText}>
               {currentIdx + 1}/{totalQ}
             </Text>
           </TouchableOpacity>
         </View>
-      </LinearGradient>
+      </View>
 
       {/* MAIN QUESTION CONTAINER — keyboard aware: behavior height on Android + dynamic padding */}
       <KeyboardAvoidingView
@@ -560,29 +556,36 @@ export function QuizStyleAnsweringStep({
                     ) : null}
                   </View>
 
-                  {/* Question Media: image OR audio (listening) */}
+                  {/* Question Media: image + audio — tampil keduanya jika ada (web parity) */}
                   {(() => {
-                    const qImgUrl = extractImgUrl(currentQ, currentQ?.question_text);
-                    if (!qImgUrl) return null;
-                    if (isAudioUrl(qImgUrl)) {
-                      return <AudioPlayer uri={qImgUrl} themeColor={themeColor} />;
-                    }
+                    const imageUrl = getQuestionImageUrl(currentQ) || (() => { const u = extractImgUrl(currentQ, currentQ?.question_text); return u && !isAudioUrl(u) ? u : null; })();
+                    const audioUrl = getQuestionAudioUrl(currentQ) || (() => { const u = extractImgUrl(currentQ, currentQ?.question_text); return u && isAudioUrl(u) ? u : null; })();
+                    if (!imageUrl && !audioUrl) return null;
                     return (
-                      <TouchableOpacity
-                        style={styles.qImageContainer}
-                        onPress={() => onOpenZoom(currentQ)}
-                        activeOpacity={0.85}
-                      >
-                        <Image
-                          source={{ uri: qImgUrl }}
-                          style={styles.qImageStyle}
-                          resizeMode="contain"
-                        />
-                        <View style={styles.zoomBadgeOverlay}>
-                          <Ionicons name="expand-outline" size={12} color="#FFF" />
-                          <Text style={styles.zoomBadgeText}>Ketuk untuk Zoom</Text>
-                        </View>
-                      </TouchableOpacity>
+                      <>
+                        {imageUrl && (
+                          <TouchableOpacity
+                            style={styles.qImageContainer}
+                            onPress={() => onOpenZoom(currentQ)}
+                            activeOpacity={0.85}
+                          >
+                            <Image
+                              source={{ uri: imageUrl }}
+                              style={styles.qImageStyle}
+                              resizeMode="contain"
+                            />
+                            <View style={styles.zoomBadgeOverlay}>
+                              <Ionicons name="expand-outline" size={12} color="#FFF" />
+                              <Text style={styles.zoomBadgeText}>Ketuk untuk Zoom</Text>
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                        {audioUrl && (
+                          <View style={{ marginTop: imageUrl ? 12 : 0, width: '100%' }}>
+                            <AudioPlayer uri={audioUrl} themeColor={themeColor} />
+                          </View>
+                        )}
+                      </>
                     );
                   })()}
 
@@ -802,7 +805,7 @@ export function QuizStyleAnsweringStep({
                           onChangeText={(text) => onTextChange(currentQ.id, text)}
                         />
                         <TouchableOpacity
-                          style={styles.pickerTriggerBtnStyle}
+                          style={[styles.pickerTriggerBtnStyle, { backgroundColor: themeColor }]}
                           onPress={() => openPicker(currentQ.id, 'date')}
                           activeOpacity={0.8}
                         >
@@ -825,7 +828,7 @@ export function QuizStyleAnsweringStep({
                           onChangeText={(text) => onTextChange(currentQ.id, text)}
                         />
                         <TouchableOpacity
-                          style={styles.pickerTriggerBtnStyle}
+                          style={[styles.pickerTriggerBtnStyle, { backgroundColor: themeColor }]}
                           onPress={() => openPicker(currentQ.id, 'time')}
                           activeOpacity={0.8}
                         >
@@ -835,10 +838,33 @@ export function QuizStyleAnsweringStep({
                     </View>
                   )}
 
-                  {showPicker && (
+                  {/* Datetime Input — tgl dan waktu */}
+                  {isDatetimeType && (
+                    <View style={styles.textInputBox}>
+                      <Text style={styles.inputHelperLabel}>Format: YYYY-MM-DDTHH:MM (contoh: 2026-08-25T14:30)</Text>
+                      <View style={styles.pickerFieldRow}>
+                        <TextInput
+                          style={[styles.shortAnswerInput, { flex: 1, color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                          placeholder="YYYY-MM-DDTHH:MM"
+                          placeholderTextColor="#64748B"
+                          value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
+                          onChangeText={(text) => onTextChange(currentQ.id, text)}
+                        />
+                        <TouchableOpacity
+                          style={[styles.pickerTriggerBtnStyle, { backgroundColor: themeColor }]}
+                          onPress={() => setShowPicker({ qId: currentQ.id, mode: 'datetime' })}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="calendar-outline" size={22} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+
+                  {showPicker && showPicker.mode !== 'datetime' && (
                     <DateTimePicker
                       value={pickerDate}
-                      mode={showPicker.mode}
+                      mode={showPicker.mode as any}
                       display="spinner"
                       is24Hour={true}
                       onChange={handlePickerChange}
@@ -1181,7 +1207,6 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 16,
-    backgroundColor: 'rgba(59, 130, 246, 0.8)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,

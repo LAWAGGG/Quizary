@@ -121,6 +121,10 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
     }
     return response.json();
   } catch (err: any) {
+    const msg = String(err?.message || err || '');
+    if (msg.includes('CLEARTEXT') || msg.includes('10.0.2.2')) {
+      throw new Error('Koneksi HTTP 10.0.2.2 diblokir (CLEARTEXT). Build APK pakai EXPO_PUBLIC_API_URL=https://<tunnel>.trycloudflare.com/api lalu rebuild --clear-cache.');
+    }
     if (
       err.message === 'Network request failed' ||
       err.name === 'TypeError' ||
@@ -148,6 +152,10 @@ async function fetchMultipart(endpoint: string, method: string, formData: FormDa
     }
     return response.json();
   } catch (err: any) {
+    const msg = String(err?.message || err || '');
+    if (msg.includes('CLEARTEXT') || msg.includes('10.0.2.2')) {
+      throw new Error('Koneksi HTTP diblokir (CLEARTEXT). Pakai https tunnel untuk APK.');
+    }
     if (
       err.message === 'Network request failed' ||
       err.name === 'TypeError' ||
@@ -212,6 +220,10 @@ export async function apiRegister(body: {
     if (data.user) await saveUser(data.user);
     return data;
   } catch (err: any) {
+    const msg = String(err?.message || err || '');
+    if (msg.includes('CLEARTEXT') || msg.includes('10.0.2.2')) {
+      throw new Error('Koneksi HTTP diblokir (CLEARTEXT). Build ulang APK dengan EXPO_PUBLIC_API_URL=https://<tunnel>/api');
+    }
     if (
       err.message === 'Network request failed' ||
       err.name === 'TypeError' ||
@@ -242,6 +254,10 @@ export async function verifyOtpApi(body: { email: string; code: string }) {
     if (data.user) await saveUser(data.user);
     return data;
   } catch (err: any) {
+    const msg = String(err?.message || err || '');
+    if (msg.includes('CLEARTEXT') || msg.includes('10.0.2.2')) {
+      throw new Error('Koneksi HTTP diblokir (CLEARTEXT). Build ulang APK dengan EXPO_PUBLIC_API_URL=https://<tunnel>/api');
+    }
     if (
       err.message === 'Network request failed' ||
       err.name === 'TypeError' ||
@@ -273,6 +289,10 @@ export async function resendOtpApi(body: { email: string }) {
     console.log('[DEBUG AUTH] POST /auth/resend-otp response data:', JSON.stringify(data));
     return data;
   } catch (err: any) {
+    const msg = String(err?.message || err || '');
+    if (msg.includes('CLEARTEXT') || msg.includes('10.0.2.2')) {
+      throw new Error('Koneksi HTTP diblokir (CLEARTEXT). Build ulang APK dengan EXPO_PUBLIC_API_URL=https://<tunnel>/api');
+    }
     if (
       err.message === 'Network request failed' ||
       err.name === 'TypeError' ||
@@ -580,8 +600,12 @@ export async function getSubmissionDetail(submissionId: string | number) {
   return fetchWithAuth(`/submissions/${submissionId}`);
 }
 
-export async function getMySubmissions() {
-  return fetchWithAuth('/me/submissions');
+export async function getMySubmissions(params?: { page?: number; per_page?: number }) {
+  const qp = new URLSearchParams();
+  if (params?.page) qp.append('page', String(params.page));
+  if (params?.per_page) qp.append('per_page', String(params.per_page));
+  const qs = qp.toString() ? `?${qp.toString()}` : '';
+  return fetchWithAuth(`/me/submissions${qs}`);
 }
 
 export async function getLeaderboard(formCode: string, submissionId?: string | number) {

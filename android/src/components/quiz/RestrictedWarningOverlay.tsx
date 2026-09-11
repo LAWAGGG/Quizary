@@ -1,8 +1,6 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { getThemeGradientColors } from './QuizBackground';
 
 interface Props {
   visible: boolean;
@@ -15,11 +13,11 @@ interface Props {
 
 export function RestrictedWarningOverlay({ visible, countdown, themeColor, onReenter, isPinned, isExpoGo }: Props) {
   if (!visible) return null;
-  const gradient = getThemeGradientColors(themeColor || '#6C5CE7');
+  const base = themeColor || '#6C5CE7';
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <LinearGradient colors={gradient} style={StyleSheet.absoluteFill} />
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0B0F19' }]} pointerEvents="box-none">
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: base, opacity: 0.14 }]} />
       <View style={styles.center}>
         {/* Locked icon badge */}
         <View style={styles.iconCircle}>
@@ -64,25 +62,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
   },
   iconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  title: { color: '#FFF', fontSize: 22, fontWeight: '800', marginBottom: 16 },
+  title: { color: '#F8FAFC', fontSize: 18, fontWeight: '700', letterSpacing: -0.3, marginBottom: 14 },
   countdownCard: {
     width: '100%',
-    maxWidth: 320,
-    borderRadius: 20,
+    maxWidth: 312,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    paddingVertical: 18,
+    borderColor: '#1E293B',
+    backgroundColor: '#151A2A',
+    paddingVertical: 16,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   countdownLabel: {
     color: 'rgba(255,255,255,0.85)',

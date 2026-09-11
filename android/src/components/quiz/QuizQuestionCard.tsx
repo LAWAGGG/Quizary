@@ -5,7 +5,7 @@ import { useAppTheme } from '../../context/ThemeContext';
 import { RichTextRenderer, stripHtmlTags } from '../RichTextRenderer';
 import { ImageZoomModal } from '../ImageZoomModal';
 import { AudioPlayer } from '../AudioPlayer';
-import { isAudioUrl } from '../../utils/media';
+import { isAudioUrl, getQuestionImageUrl, getQuestionAudioUrl } from '../../utils/media';
 import { BASE_URL } from '../../services/api_service';
 import { CustomDateTimePickerModal } from './CustomDateTimePickerModal';
 
@@ -87,7 +87,8 @@ function QuizQuestionCardComponent({
 
 
 
-  const imgUri = extractImgUrl(q, q.question_text);
+  const imageUrl = getQuestionImageUrl(q) || (() => { const u = extractImgUrl(q, q.question_text); return u && !isAudioUrl(u) ? u : null; })();
+  const audioUrl = getQuestionAudioUrl(q) || (() => { const u = extractImgUrl(q, q.question_text); return u && isAudioUrl(u) ? u : null; })();
 
   return (
     <View style={[
@@ -131,19 +132,21 @@ function QuizQuestionCardComponent({
         </TouchableOpacity>
       )}
 
-      {/* Media: image with zoom OR audio player for listening */}
-      {imgUri &&
-        (isAudioUrl(imgUri) ? (
-          <AudioPlayer uri={imgUri} themeColor={activeColor} />
-        ) : (
-          <TouchableOpacity activeOpacity={0.85} onPress={() => setZoomUri(imgUri)} style={styles.imageContainer}>
-            <Image source={{ uri: imgUri }} style={styles.qImage} resizeMode="contain" />
-            <View style={styles.zoomBadge}>
-              <Ionicons name="expand-outline" size={14} color="#FFF" />
-              <Text style={styles.zoomBadgeText}>Ketuk untuk Zoom</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
+      {/* Media: image + audio — tampil keduanya jika ada (web parity) */}
+      {imageUrl && (
+        <TouchableOpacity activeOpacity={0.85} onPress={() => setZoomUri(imageUrl)} style={styles.imageContainer}>
+          <Image source={{ uri: imageUrl }} style={styles.qImage} resizeMode="contain" />
+          <View style={styles.zoomBadge}>
+            <Ionicons name="expand-outline" size={14} color="#FFF" />
+            <Text style={styles.zoomBadgeText}>Ketuk untuk Zoom</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+      {audioUrl && (
+        <View style={{ marginTop: imageUrl ? 12 : 0 }}>
+          <AudioPlayer uri={audioUrl} themeColor={activeColor} />
+        </View>
+      )}
 
       {/* Multiple Choice / Checkbox Options — support audio per option */}
       {(q.type === 'multiple_choice' || q.type === 'checkbox') && (

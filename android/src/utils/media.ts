@@ -37,3 +37,45 @@ export function extractMediaUrl(item: any, htmlText?: string): string | null {
   const cleanPath = urlStr.startsWith('/') ? urlStr : `/${urlStr}`;
   return `${rootHost}${cleanPath}`;
 }
+
+function resolveUrl(urlStr: string | null): string | null {
+  if (!urlStr) return null;
+  if (urlStr.startsWith('http://') || urlStr.startsWith('https://') || urlStr.startsWith('data:')) return urlStr;
+  const { BASE_URL } = require('../services/api_service');
+  const rootHost = (BASE_URL as string).replace(/\/api\/?$/, '');
+  const cleanPath = urlStr.startsWith('/') ? urlStr : `/${urlStr}`;
+  return `${rootHost}${cleanPath}`;
+}
+
+export function getQuestionImageUrl(q: any): string | null {
+  // prioritas: q.image (jika bukan audio) -> html <img>
+  const p = q?.image?.path || (typeof q?.image === 'string' ? q.image : null);
+  if (p && !isAudioUrl(p)) return resolveUrl(p);
+  if (q?.question_text) {
+    const m = String(q.question_text).match(/<img[^>]+src=["']([^"']+)["']/i);
+    if (m && m[1] && !isAudioUrl(m[1])) return resolveUrl(m[1]);
+  }
+  // fallback: cari di q.images array
+  if (Array.isArray(q?.images)) {
+    const img = q.images.find((im: any) => !isAudioUrl(im.path));
+    if (img?.path) return resolveUrl(img.path);
+  }
+  return null;
+}
+
+export function getQuestionAudioUrl(q: any): string | null {
+  // prioritas: q.audio -> q.image jika audio -> html <audio>/<source>
+  const a = q?.audio?.path || (typeof q?.audio === 'string' ? q.audio : null);
+  if (a) return resolveUrl(a);
+  const p = q?.image?.path || (typeof q?.image === 'string' ? q.image : null);
+  if (p && isAudioUrl(p)) return resolveUrl(p);
+  if (q?.question_text) {
+    const m = String(q.question_text).match(/<(audio|source)[^>]+src=["']([^"']+)["']/i);
+    if (m && m[2]) return resolveUrl(m[2]);
+  }
+  if (Array.isArray(q?.images)) {
+    const aud = q.images.find((im: any) => isAudioUrl(im.path));
+    if (aud?.path) return resolveUrl(aud.path);
+  }
+  return null;
+}
