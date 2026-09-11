@@ -75,12 +75,14 @@ export default function JoinScreen() {
       setLinkOrCode('');
       router.push({ pathname: '/quiz', params: { shortCode: token, formId: String(quiz.id) } });
     } catch (e: any) {
+      setIsScanning(false);
       showAlert({
         type: 'error',
         title: language === 'ID' ? 'Gagal Gabung' : 'Failed to Join',
         message: e.message || (language === 'ID' ? 'Link atau kode kuis tidak valid atau kuis belum dipublikasikan.' : 'Invalid quiz link/code or the quiz has not been published.'),
+        onConfirm: () => setIsScanning(true),
+        onCancel: () => setIsScanning(true),
       });
-      setIsScanning(true);
     } finally {
       setLoading(false);
     }
@@ -126,12 +128,29 @@ export default function JoinScreen() {
                 barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
                 onBarcodeScanned={({ data }) => onBarCodeScanned(data)}
               />
-            ) : (
+            ) : loading ? (
               <View style={[styles.cameraPlaceholder, { backgroundColor: colors.cardBg }]}>
                 <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={{ color: colors.textSub, marginTop: 10, fontSize: 13 * fontSizeScale }}>
                   {language === 'ID' ? 'Memproses Link Kuis...' : 'Processing Quiz Link...'}
                 </Text>
+              </View>
+            ) : (
+              <View style={[styles.cameraPlaceholder, { backgroundColor: colors.cardBg }]}>
+                <Ionicons name="scan-circle-outline" size={44} color={colors.primary} />
+                <Text style={{ color: colors.text, fontWeight: 'bold', marginTop: 6, fontSize: 14 * fontSizeScale }}>
+                  {language === 'ID' ? 'Kamera Dijeda' : 'Camera Paused'}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.rescanBtn, { backgroundColor: colors.primary }]}
+                  onPress={() => setIsScanning(true)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="refresh" size={15} color="#FFF" />
+                  <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 13 * fontSizeScale }}>
+                    {language === 'ID' ? 'Pindai Ulang QR' : 'Scan QR Again'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -218,7 +237,8 @@ const styles = StyleSheet.create({
   content: { flex: 1, padding: 20, justifyContent: 'center' },
 
   cameraContainer: { height: 260, borderRadius: 20, overflow: 'hidden', borderWidth: 2, marginBottom: 20 },
-  cameraPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  cameraPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
+  rescanBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 12, marginTop: 12 },
   scannerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
   scanTargetBox: { width: 180, height: 180, borderRadius: 16, borderWidth: 2, borderColor: '#10B981', backgroundColor: 'transparent' },
   scannerHintText: { color: '#FFF', fontWeight: 'bold', marginTop: 14, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
