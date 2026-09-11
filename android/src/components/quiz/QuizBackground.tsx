@@ -34,12 +34,11 @@ function mixHex(a: string, b: string, t: number) {
   });
 }
 
-export function getThemeGradientColors(hex?: string): [string, string, string] {
+export function getThemeGradientColors(hex?: string): [string, string] {
   const base = hex || '#6C5CE7';
-  const c1 = mixHex(base, '#FFFFFF', 0.12);
-  const c2 = base;
-  const c3 = mixHex(base, '#000000', 0.32);
-  return [c1, c2, c3];
+  // Editorial: hanya 2 stop, tanpa putih mengkilap — lebih kalem, tidak AI gradient
+  const c2 = mixHex(base, '#0B0F19', 0.22);
+  return [base, c2];
 }
 
 export function QuizBackground({ children, themeColor, isQuizDesign }: QuizBackgroundProps) {

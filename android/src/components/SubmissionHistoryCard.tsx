@@ -34,19 +34,24 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
 
   const statusLabel = getStatusLabel();
 
-  // Status Badge Colors (Exact match with web screenshot)
   let statusBg = isDark ? '#1E293B' : '#F1F5F9';
   let statusColor = colors.textMuted;
+  let accent = colors.cardBorder;
 
   if (isCheating || isLocked) {
-    statusBg = isDark ? 'rgba(220, 38, 38, 0.2)' : '#FEE2E2';
+    statusBg = isDark ? 'rgba(220, 38, 38, 0.14)' : '#FEF2F2';
     statusColor = isDark ? '#FCA5A5' : '#DC2626';
+    accent = '#EF4444';
   } else if (isSubmitted) {
-    statusBg = isDark ? '#064E3B' : '#DCFCE7';
-    statusColor = isDark ? '#34D399' : '#059669';
+    statusBg = isDark ? 'rgba(16,185,129,0.12)' : '#ECFDF5';
+    statusColor = isDark ? '#6EE7B7' : '#059669';
+    accent = '#10B981';
   } else if (isAutoSubmitted) {
-    statusBg = isDark ? '#3D2B00' : '#FEF3C7';
-    statusColor = isDark ? '#FBBF24' : '#D97706';
+    statusBg = isDark ? 'rgba(245,158,11,0.12)' : '#FFFBEB';
+    statusColor = isDark ? '#FCD34D' : '#D97706';
+    accent = '#F59E0B';
+  } else {
+    accent = colors.primary;
   }
 
   // Format date string
@@ -59,22 +64,22 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
         { backgroundColor: colors.cardBg, borderColor: colors.cardBorder },
       ]}
       onPress={onPress}
-      activeOpacity={0.75}
+      activeOpacity={0.78}
     >
-      {/* Top Row: Title + Link Icon and Status Badge Pill */}
+      <View style={[styles.accentBar, { backgroundColor: accent }]} />
       <View style={styles.topRow}>
         <View style={styles.titleContainer}>
           <Text
-            style={[styles.title, { color: colors.text, fontSize: 16 * fontSizeScale }]}
+            style={[styles.title, { color: colors.text, fontSize: 14.5 * fontSizeScale }]}
             numberOfLines={1}
           >
             {item.form_title || (language === 'ID' ? 'Form Tanpa Judul' : 'Untitled Form')}
           </Text>
-          <Ionicons name="open-outline" size={14 * fontSizeScale} color={colors.textMuted} style={styles.linkIcon} />
+          <Ionicons name="open-outline" size={12 * fontSizeScale} color={colors.textMuted} style={styles.linkIcon} />
         </View>
 
-        <View style={[styles.badgePill, { backgroundColor: statusBg }]}>
-          <Text style={[styles.badgeText, { color: statusColor, fontSize: 11 * fontSizeScale }]}>
+        <View style={[styles.badgePill, { backgroundColor: statusBg, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
+          <Text style={[styles.badgeText, { color: statusColor, fontSize: 10 * fontSizeScale }]}>
             {statusLabel}
           </Text>
         </View>
@@ -103,10 +108,19 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 12,
+    padding: 14,
     borderWidth: 1,
-    marginBottom: 12,
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  accentBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    opacity: 0.95,
   },
   topRow: {
     flexDirection: 'row',

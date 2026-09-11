@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 interface LockOverlayProps {
   onRefresh: () => void;
@@ -11,8 +12,10 @@ export default function LockOverlay({ onRefresh, isChecking }: LockOverlayProps)
   return (
     <View style={styles.overlay}>
       <View style={styles.card}>
-        <Text style={styles.icon}>🔒</Text>
-        <Text style={styles.title}>Akses Terkunci!</Text>
+        <View style={styles.iconBox}>
+          <Ionicons name="lock-closed" size={22} color="#94A3B8" />
+        </View>
+        <Text style={styles.title}>Akses terkunci</Text>
         <Text style={styles.subtitle}>
           Kamu terdeteksi meninggalkan aplikasi atau membuka bar notifikasi. Silakan minta creator/pengawas untuk membuka kembali akses ujianmu.
         </Text>
@@ -47,18 +50,27 @@ const styles = StyleSheet.create({
     zIndex: 9999,
   },
   card: {
-    backgroundColor: '#1e293b',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
+    backgroundColor: '#0F172A',
+    borderRadius: 14,
+    padding: 20,
     width: '100%',
     maxWidth: 360,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#1E293B',
   },
-  icon: { fontSize: 48, marginBottom: 12 },
-  title: { fontSize: 20, fontWeight: 'bold', color: '#ef4444', marginBottom: 8 },
-  subtitle: { fontSize: 14, color: '#94a3b8', textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  iconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  title: { fontSize: 15, fontWeight: '700', color: '#F1F5F9', letterSpacing: -0.2, marginBottom: 8 },
+  subtitle: { fontSize: 13, color: '#64748B', marginBottom: 20, lineHeight: 19 },
   button: {
     backgroundColor: '#6366f1',
     paddingVertical: 12,

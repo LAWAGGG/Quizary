@@ -134,7 +134,7 @@ export default function ProfileScreen() {
       setPendingAvatarUri(null);
       showAlert({
         type: 'success',
-        title: language === 'ID' ? 'Sukses 🎉' : 'Success 🎉',
+        title: language === 'ID' ? 'Sukses' : 'Success',
         message: language === 'ID' ? 'Avatar berhasil diperbarui' : 'Avatar updated successfully',
       });
     } catch (e: any) {
@@ -179,7 +179,7 @@ export default function ProfileScreen() {
 
       showAlert({
         type: 'success',
-        title: language === 'ID' ? 'Profil Diperbarui 🎉' : 'Profile Updated 🎉',
+        title: language === 'ID' ? 'Profil Diperbarui' : 'Profile Updated',
         message: language === 'ID' ? 'Profil berhasil disimpan' : 'Profile saved successfully',
       });
     } catch (err: any) {
@@ -257,7 +257,7 @@ export default function ProfileScreen() {
 
       showAlert({
         type: 'success',
-        title: language === 'ID' ? 'Sukses ✔️' : 'Success ✔️',
+        title: language === 'ID' ? 'Sukses' : 'Success',
         message: language === 'ID' ? 'Kata sandi berhasil diperbarui.' : 'Password updated successfully.',
       });
     } catch (err: any) {

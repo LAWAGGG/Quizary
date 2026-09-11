@@ -185,14 +185,19 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
           .rich-text h1, .rich-text h2, .rich-text h3 { font-weight: 600; line-height: 1.3; margin: 0.6em 0 0.3em; }
           .rich-text h1 { font-size: 2em; } .rich-text h2 { font-size: 1.5em; } .rich-text h3 { font-size: 1.17em; }
           .rich-text blockquote { border-left: 4px solid rgba(108,92,231,0.4); padding-left: 16px; margin: 0.5em 0; }
-          /* Code block — match frontend index.css dark #0f0f0f */
-          .rich-text .ql-code-block-container, .rich-text pre.ql-syntax, .rich-text pre.ql-code-block, .rich-text div.ql-code-block {
+          /* Code block — match frontend index.css dark #0f0f0f — HANYA container yang punya bg/border */
+          .rich-text .ql-code-block-container, .rich-text pre.ql-syntax, .rich-text pre.ql-code-block {
             background: #0f0f0f !important; color: #f5f5f5 !important; border: 1px solid #27272a !important;
             border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             font-size: 0.8125rem; line-height: 1.6; padding: 0.75rem 1rem; margin: 0.6em 0;
             white-space: pre-wrap; word-break: break-word; overflow-x: auto; tab-size: 4; display: block; text-align: left !important; width: 100%; box-sizing: border-box;
           }
-          .rich-text .ql-code-block { background: transparent; border: none; padding: 0; margin: 0; border-radius: 0; white-space: pre-wrap; }
+          /* Inner lines — transparan, tanpa border, biar tidak jadi kotak-kotak terpisah seperti di screenshot */
+          .rich-text .ql-code-block-container .ql-code-block, .rich-text div.ql-code-block {
+            background: transparent !important; border: none !important; padding: 0 !important; margin: 0 !important; border-radius: 0 !important; white-space: pre-wrap; display: block;
+          }
+          .rich-text .ql-code-block-container .ql-code-block + .ql-code-block { margin-top: 0; }
+          .rich-text .ql-code-block .ql-ui { display: none !important; }
           .rich-text code { background: #0f0f0f !important; border: 1px solid #27272a !important; border-radius: 0.375rem;
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85em; padding: 0.15em 0.4em; color: #f5f5f5 !important; word-break: break-word; }
           .rich-text pre code, .rich-text .ql-code-block code, .rich-text .ql-code-block-container code { background: transparent !important; border: none !important; padding: 0 !important; color: inherit !important; }
@@ -235,6 +240,7 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
                   {left: '$', right: '$', display: false}
                 ],
                 ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+                ignoredClasses: ['ql-code-block', 'ql-code-block-container', 'ql-syntax'],
                 throwOnError: false, strict: false
               });
             }

@@ -17,7 +17,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useKeyboardHeight } from '../hooks/useKeyboardHeight';
 import { StatusBar } from 'expo-status-bar';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
@@ -48,7 +47,6 @@ import { QuestionZoomModal } from '../components/quiz/QuestionZoomModal';
 import { QuizSubmittedStep } from '../components/quiz/QuizSubmittedStep';
 import { RestrictedWarningOverlay } from '../components/quiz/RestrictedWarningOverlay';
 import { ViolatingLockOverlay } from '../components/quiz/ViolatingLockOverlay';
-import { getThemeGradientColors } from '../components/quiz/QuizBackground';
 import { useAppPinning } from '../hooks/useAppPinning';
 import { useCheatSound } from '../hooks/useCheatSound';
 import { useLockedVolume } from '../hooks/useLockedVolume';
@@ -1080,10 +1078,9 @@ export default function QuizScreen() {
     const reason = canStartInfo?.reason;
     // already_submitted gets special themed screen matching web Image 1
     if (alreadySubmitted || reason === 'already_submitted') {
-      const gradient = getThemeGradientColors(themeColor);
       return (
-        <View style={{ flex: 1 }}>
-          <LinearGradient colors={gradient} style={StyleSheet.absoluteFill} />
+        <View style={{ flex: 1, backgroundColor: themeColor }}>
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(11,15,25,0.06)' }]} />
           <SafeAreaView style={styles.alreadyContainer}>
             <StatusBar style="light" />
             <View style={styles.alreadyIconCircle}>
@@ -1107,7 +1104,6 @@ export default function QuizScreen() {
       );
     }
     const isNotStarted = reason === 'not_started';
-    const blockedGradient = getThemeGradientColors(themeColor);
     const iconName = isNotStarted ? 'time-outline' as const : 'lock-closed-outline' as const;
     // Web pakai t('landing.notStarted') = "Not yet opened" untuk title & desc not_started
     const blockedTitleMap: any = {
@@ -1123,10 +1119,10 @@ export default function QuizScreen() {
     // Web: Not yet opened pakai "Not yet opened" untuk title & desc sama (Image 1 blue solid)
     const title = blockedTitleMap[reason] || (language === 'ID' ? 'Tidak dapat memulai' : 'Cannot start');
     const desc = blockedDescMap[reason] || title;
-    // QR scan flow: landing tetap Start, blocked hanya setelah Start ditekan — jadi di sini kita tampilkan themed blocked
+    // QR scan flow: landing tetap Start, blocked hanya setelah Start ditekan — solid editorial, bukan gradient mengkilap
     return (
-      <View style={{ flex: 1 }}>
-        <LinearGradient colors={blockedGradient} style={StyleSheet.absoluteFill} />
+      <View style={{ flex: 1, backgroundColor: themeColor }}>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(11,15,25,0.06)' }]} />
         <SafeAreaView style={styles.blockedContainer}>
           <View style={styles.blockedIconCircle}>
             <Ionicons name={iconName} size={32} color="#FFF" />
@@ -1275,7 +1271,7 @@ export default function QuizScreen() {
 
           <ScrollView
             ref={cardScrollRef}
-            contentContainerStyle={[styles.formScroll, { paddingBottom: isKeyboardOpen ? Math.max(keyboardHeight, 280) : 24 }]}
+            contentContainerStyle={[styles.formScroll, { paddingBottom: isKeyboardOpen ? 60 : 24 }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             automaticallyAdjustKeyboardInsets
