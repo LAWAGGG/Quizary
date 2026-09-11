@@ -75,15 +75,6 @@ export function QuizStyleAnsweringStep({
   const [currentIdx, setCurrentIdx] = useState(0);
   const { keyboardHeight, isVisible: isKeyboardOpen } = useKeyboardHeight();
 
-  // Auto scroll to end when keyboard opens so bottom inputs (short_answer/essay) stay visible
-  useEffect(() => {
-    if (isKeyboardOpen) {
-      setTimeout(() => {
-        mainScrollRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [isKeyboardOpen]);
-
   // Reset scroll to top on question change
   useEffect(() => {
     mainScrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -491,7 +482,7 @@ export function QuizStyleAnsweringStep({
           contentContainerStyle={[
             styles.scrollContent,
             isKeyboardOpen
-              ? { justifyContent: 'flex-start', paddingBottom: Math.max(keyboardHeight, 280) }
+              ? { justifyContent: 'flex-start', paddingBottom: 60 }
               : null,
           ]}
           showsVerticalScrollIndicator={false}

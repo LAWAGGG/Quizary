@@ -1271,7 +1271,7 @@ export default function QuizScreen() {
 
           <ScrollView
             ref={cardScrollRef}
-            contentContainerStyle={[styles.formScroll, { paddingBottom: isKeyboardOpen ? Math.max(keyboardHeight, 280) : 24 }]}
+            contentContainerStyle={[styles.formScroll, { paddingBottom: isKeyboardOpen ? 60 : 24 }]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             automaticallyAdjustKeyboardInsets
