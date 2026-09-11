@@ -343,7 +343,6 @@
     "makeQuiz": "Make this a quiz",
     "makeQuizDesc": "Assign point values, set answers and automatically provide feedback",
     "limitOneResponse": "Limit to 1 response",
-    "limitOneResponseDesc": "On = once; off = unlimited",
     "publicStatus": "Public status",
     "statusPublic": "Public",
     "statusDraft": "Draft",

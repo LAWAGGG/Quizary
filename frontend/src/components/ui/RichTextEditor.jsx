@@ -358,9 +358,10 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       )}
       {formula && (
         <>
-          <div className="fixed inset-0 z-40 bg-ink/30 backdrop-blur-sm sm:hidden" onClick={() => setFormula(null)} aria-hidden="true" />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:contents" role="presentation">
+          <div className="fixed inset-0 bg-ink/30 backdrop-blur-sm sm:hidden" onClick={() => setFormula(null)} aria-hidden="true" />
           <div
-            className={`fixed inset-x-0 bottom-0 z-50 sm:absolute sm:inset-x-auto sm:bottom-auto bg-white dark:bg-ink-800 border-t sm:border border-gray-200 dark:border-gray-700 rounded-t-2xl sm:rounded-xl shadow-xl p-3 w-full sm:w-[360px] max-w-none sm:max-w-[calc(100vw-2rem)] max-h-[90dvh] overflow-y-auto sm:max-h-none sm:overflow-visible ${compact ? 'sm:top-[38px]' : 'sm:top-[52px]'} sm:left-2`}
+            className={`relative z-10 bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 rounded-2xl sm:rounded-xl shadow-xl p-3 w-[calc(100vw-2rem)] max-w-[360px] max-h-[80dvh] overflow-y-auto sm:w-[360px] sm:max-w-[calc(100vw-2rem)] sm:max-h-none sm:overflow-visible sm:absolute ${compact ? 'sm:top-[38px]' : 'sm:top-[52px]'} sm:left-2`}
             role="dialog"
             aria-label="Insert LaTeX formula"
           >
@@ -430,6 +431,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
               <Button size="sm" variant="ghost" onClick={() => setFormula(null)}>Cancel</Button>
               <Button size="sm" onClick={saveFormula} disabled={!formula.tex.trim()}>Insert</Button>
             </div>
+          </div>
           </div>
         </div>
         </>
