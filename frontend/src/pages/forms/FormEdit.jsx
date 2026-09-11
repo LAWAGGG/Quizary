@@ -436,26 +436,6 @@ export default function FormEdit() {
                 {errors.description && <p className="field-error">{errors.description}</p>}
               </div>
 
-              <div className="divide-y divide-gray-100 dark:divide-gray-800 border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden">
-                <SettingRow
-                  title={t('formEdit.makeQuiz')}
-                  desc={t('formEdit.makeQuizDesc')}
-                  control={
-                    <Toggle
-                      label={t('formEdit.makeQuiz')}
-                      checked={isQuiz}
-                      onChange={(v) => {
-                        const nt = v ? 'quiz' : 'form'
-                        if (nt === 'form') setForm((prev) => ({ ...prev, type: nt, show_leaderboard: false, is_restricted: false }))
-                        else setForm((prev) => ({ ...prev, type: nt }))
-                        setErrors((prev) => ({ ...prev, type: undefined }))
-                      }}
-                    />
-                  }
-                />
-                {errors.type && <p className="field-error px-4 pb-2 -mt-1">{errors.type}</p>}
-              </div>
-
               <div>
                 <label className="field-label !mb-1.5">{t('formEdit.publicStatus')}</label>
                 <div className="flex h-11 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
@@ -488,6 +468,26 @@ export default function FormEdit() {
                   <p className="field-error">{errors.status}</p>
                 )}
               </div>
+
+              <div className="divide-y divide-gray-100 dark:divide-gray-800 rounded-xl overflow-hidden">
+                <SettingRow
+                  title={t('formEdit.makeQuiz')}
+                  control={
+                    <Toggle
+                      label={t('formEdit.makeQuiz')}
+                      checked={isQuiz}
+                      onChange={(v) => {
+                        const nt = v ? 'quiz' : 'form'
+                        if (nt === 'form') setForm((prev) => ({ ...prev, type: nt, show_leaderboard: false, is_restricted: false }))
+                        else setForm((prev) => ({ ...prev, type: nt }))
+                        setErrors((prev) => ({ ...prev, type: undefined }))
+                      }}
+                    />
+                  }
+                />
+                {errors.type && <p className="field-error px-4 pb-2 -mt-1">{errors.type}</p>}
+              </div>
+
             </div>
           </CollapsibleCard>
 

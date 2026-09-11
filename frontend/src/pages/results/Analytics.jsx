@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { Users, Trophy, TrendingUp, TrendingDown, ArrowLeft, BarChart3, ClipboardList, ChevronDown, CheckCircle2, AlertCircle } from 'lucide-react'
 import api from '../../api/client'
 import { Card, Button, PageHeader, FormSubNav, CardSkeleton, RichText } from '../../components/ui'
+import { stripTags, resolveRichHtml } from '../../lib/sanitize'
 import { useTranslation } from 'react-i18next'
 
 function StatCard({ label, value, icon: Icon, tint, delay }) {
@@ -52,14 +53,10 @@ function Donut({ pct, label, size = 176, inset = 16 }) {
   )
 }
 
-function stripHtml(str) {
-  return (str || '').replace(/<[^>]*>/g, '').trim()
-}
-
 const QuestionRow = memo(function QuestionRow({ q, i, total, open, onToggle }) {
   const { t } = useTranslation()
   const answeredPct = total ? Math.round((q.answered / total) * 100) : 0
-  const text = stripHtml(q.question_text) || `Question ${i + 1}`
+  const text = resolveRichHtml(q.question_text) || `Question ${i + 1}`
   const isChoice = (q.option_breakdown || []).length > 0
 
   return (
@@ -92,7 +89,7 @@ const QuestionRow = memo(function QuestionRow({ q, i, total, open, onToggle }) {
         {q.most_selected ? (
           <span className="hidden md:inline-flex items-center gap-1 text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-ink-800 px-2.5 py-1 rounded-full truncate max-w-[220px] shrink-0">
             <CheckCircle2 className="w-3.5 h-3.5 text-correct shrink-0" />
-            <span className="truncate"><RichText html={stripHtml(q.most_selected)} className="rich-text block truncate" /></span>
+            <span className="truncate"><RichText html={resolveRichHtml(q.most_selected)} className="rich-text block truncate" /></span>
           </span>
         ) : null}
         <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
@@ -104,7 +101,7 @@ const QuestionRow = memo(function QuestionRow({ q, i, total, open, onToggle }) {
             <div className="space-y-2.5">
               {q.option_breakdown.map((o) => (
                 <div key={o.option_id} className="flex items-center gap-3">
-                  <span className="text-sm text-gray-600 dark:text-gray-300 flex-1 min-w-0 truncate"><RichText html={stripHtml(o.option_text)} className="rich-text block truncate" /></span>
+                  <span className="text-sm text-gray-600 dark:text-gray-300 flex-1 min-w-0 truncate"><RichText html={resolveRichHtml(o.option_text)} className="rich-text block truncate" /></span>
                   <div className="flex-1 h-2.5 bg-gray-100 dark:bg-ink-800 rounded-full overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
@@ -225,14 +222,14 @@ function QuizAnalytics({ data }) {
               <RateRow
                 label={t('analytics.correctRate')}
                 pct={Math.round(data.correct_rate * 100)}
-                count={data.per_question_stats.reduce((s, q) => s + q.correct_count, 0)}
+                count={data.per_question_stats.filter((q) => q.is_scored !== false).reduce((s, q) => s + q.correct_count, 0)}
                 barClass="bg-correct"
                 textClass="text-correct"
               />
               <RateRow
                 label={t('analytics.wrongRate')}
                 pct={Math.round(data.wrong_rate * 100)}
-                count={data.per_question_stats.reduce((s, q) => s + q.wrong_count, 0)}
+                count={data.per_question_stats.filter((q) => q.is_scored !== false).reduce((s, q) => s + q.wrong_count, 0)}
                 barClass="bg-incorrect"
                 textClass="text-incorrect"
               />
@@ -241,7 +238,7 @@ function QuizAnalytics({ data }) {
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-          <Card className="h-full">
+          <Card className="h-full flex items-center justify-center">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="rounded-xl bg-correct-soft border border-correct/20 p-4 flex flex-col justify-between">
                 <div>
@@ -260,8 +257,8 @@ function QuizAnalytics({ data }) {
                     {data.easiest_question ? `Question #${data.easiest_question.order_index}` : '-'}
                   </p>
                 </div>
-                <p className="text-[11px] text-correct/80 mt-1 truncate" title={stripHtml(data.easiest_question?.question_text)}>
-                  {data.easiest_question ? stripHtml(data.easiest_question.question_text) : t('analytics.noQuestionData')}
+                <p className="text-[11px] text-correct/80 mt-1 truncate" title={stripTags(data.easiest_question?.question_text)}>
+                  {data.easiest_question ? stripTags(data.easiest_question.question_text) : t('analytics.noQuestionData')}
                 </p>
               </div>
 
@@ -282,8 +279,8 @@ function QuizAnalytics({ data }) {
                     {data.hardest_question ? `Question #${data.hardest_question.order_index}` : '-'}
                   </p>
                 </div>
-                <p className="text-[11px] text-warn/80 mt-1 truncate" title={stripHtml(data.hardest_question?.question_text)}>
-                  {data.hardest_question ? stripHtml(data.hardest_question.question_text) : t('analytics.noQuestionData')}
+                <p className="text-[11px] text-warn/80 mt-1 truncate" title={stripTags(data.hardest_question?.question_text)}>
+                  {data.hardest_question ? stripTags(data.hardest_question.question_text) : t('analytics.noQuestionData')}
                 </p>
               </div>
             </div>
@@ -313,20 +310,25 @@ function QuizAnalytics({ data }) {
                 </thead>
                 <tbody>
                   {data.per_question_stats.map((q, i) => {
+                    const scored = q.is_scored !== false
                     const total = q.correct_count + q.wrong_count
                     const accuracy = total ? Math.round((q.correct_count / total) * 100) : 0
                     return (
                       <tr key={q.question_id} className="border-t border-gray-50 hover:bg-gray-50/70 dark:hover:bg-ink-800/50 transition-colors">
                         <td className="px-6 py-3.5 text-sm text-ink dark:text-gray-100 font-medium">
-                          <RichText html={q.question_text || `Question ${i + 1}`} className="rich-text block max-w-[280px] truncate" />
+                          <RichText html={resolveRichHtml(q.question_text) || `Question ${i + 1}`} className="rich-text block max-w-[280px] truncate" />
                         </td>
-                        <td className="text-center px-4 py-3.5 text-sm text-correct font-semibold tabular-nums">{q.correct_count}</td>
-                        <td className="text-center px-4 py-3.5 text-sm text-incorrect font-semibold tabular-nums">{q.wrong_count}</td>
+                        <td className="text-center px-4 py-3.5 text-sm text-correct font-semibold tabular-nums">{scored ? q.correct_count : '-'}</td>
+                        <td className="text-center px-4 py-3.5 text-sm text-incorrect font-semibold tabular-nums">{scored ? q.wrong_count : '-'}</td>
                         <td className="text-center px-4 py-3.5">
+                          {scored ? (
                           <span className={`inline-flex items-center gap-1.5 text-sm font-semibold ${accuracy >= 70 ? 'text-correct' : accuracy >= 40 ? 'text-warn' : 'text-incorrect'}`}>
                             <span className="w-1.5 h-1.5 rounded-full bg-current" />
                             {accuracy}%
                           </span>
+                          ) : (
+                            <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
+                          )}
                         </td>
                       </tr>
                     )
