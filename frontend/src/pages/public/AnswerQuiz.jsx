@@ -215,6 +215,24 @@ export default function AnswerQuiz() {
 
   const timerRef = useRef(null)
   const questionRefs = useRef({})   // { [qId]: HTMLElement } untuk scroll ke soal bermasalah
+  const pageScrollRef = useRef(null)   // container scroll layout quiz (layout form pakai window scroll)
+  // Tiap ganti halaman/section/mulai: selalu dari soal pertama (top).
+  // Tanpa ini posisi scroll bawah terbawa ke section baru.
+  const scrollPageToTop = () => {
+    pageScrollRef.current?.scrollTo?.(0, 0)
+    window.scrollTo(0, 0)
+  }
+  // Reset tiap ganti halaman/section: next, prev, map-jump, submit-jump,
+  // maupun mount awal. Aman dari scroll validasi (tak ubah currentIdx).
+  // Dua kali: langsung + setelah animasi exit AnimatePresence (0.2s) selesai,
+  // karena reset pertama jalan saat konten lama masih tampil lalu layout
+  // bergeser saat konten baru masuk (terutama konten bergambar/lazy).
+  useEffect(() => {
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+    scrollPageToTop()
+    const id = setTimeout(scrollPageToTop, 260)
+    return () => clearTimeout(id)
+  }, [currentIdx])
   // ponytail: cheat alert — loop infinite selama grace 5s, lazy hanya untuk quiz restricted
   const alertAudioRef = useRef(null)
   useEffect(() => {
@@ -1435,7 +1453,7 @@ export default function AnswerQuiz() {
           onSelect={(idx) => { setShowMap(false); goToQuestion(idx) }}
         />
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6">
+        <div ref={pageScrollRef} className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6">
           <AnimatePresence mode="wait" custom={direction}>            <motion.div
             key={current?.id}
             custom={direction}

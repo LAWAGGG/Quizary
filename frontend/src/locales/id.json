@@ -313,7 +313,12 @@
     "overlayWait": "Jangan tutup atau pindah halaman.",
     "overlayStep1": "Membaca prompt...",
     "overlayStep2": "Menyusun soal...",
-    "overlayStep3": "Merapikan draf..."
+    "overlayStep3": "Merapikan draf...",
+    "overlayReading": "Membaca prompt...",
+    "overlayGenerating": "Menyusun soal...",
+    "overlaySanitizing": "Merapikan draf...",
+    "cancelGenerate": "Batalkan",
+    "generateCancelled": "Generate dibatalkan. Jatah tidak berkurang."
   },
   "formEdit": {
     "backToForms": "Kembali ke formulir",

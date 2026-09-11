@@ -2,23 +2,25 @@ import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 
-// Overlay loading non-dismissable untuk generate/accept AI.
-// Logo putih berputar ease-in-out + teks tahap bergilir (persepsi progres,
-// backend tidak streaming). Backdrop menahan semua klik halaman.
-export function AiLoadingOverlay({ open, mode = 'generate' }) {
+// Overlay loading untuk generate/accept AI.
+// Generate: progres nyata dari SSE (satu baris tahap + bar tipis + persen +
+// tombol Batal). Accept: tetap teks bergilir tanpa bar (proses singkat).
+// Backdrop menahan semua klik halaman.
+export function AiLoadingOverlay({ open, mode = 'generate', percent = 0, stage = '', onCancel }) {
   const { t } = useTranslation()
-  const [stage, setStage] = useState(0)
+  const [fake, setFake] = useState(0)
 
   useEffect(() => {
-    if (!open) return
-    setStage(0)
-    const id = setInterval(() => setStage((s) => (s + 1) % 3), 4000)
+    if (!open || mode !== 'accept') return
+    setFake(0)
+    const id = setInterval(() => setFake((s) => (s + 1) % 3), 4000)
     return () => clearInterval(id)
   }, [open, mode])
 
   const steps = [t('aiGenerate.overlayStep1'), t('aiGenerate.overlayStep2'), t('aiGenerate.overlayStep3')]
   const title = mode === 'accept' ? t('aiGenerate.overlayAcceptTitle') : t('aiGenerate.overlayGenTitle')
   const desc = mode === 'accept' ? t('aiGenerate.overlayAcceptDesc') : t('aiGenerate.overlayGenDesc')
+  const pct = Math.max(0, Math.min(100, Math.round(percent || 0)))
 
   return (
     <AnimatePresence>
@@ -56,7 +58,7 @@ export function AiLoadingOverlay({ open, mode = 'generate' }) {
               <h3 className="mt-4 font-display text-lg font-bold text-ink dark:text-gray-100">{title}</h3>
               <AnimatePresence mode="wait">
                 <motion.p
-                  key={stage}
+                  key={mode === 'generate' ? stage : fake}
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
@@ -64,9 +66,26 @@ export function AiLoadingOverlay({ open, mode = 'generate' }) {
                   className="mt-3 text-sm font-semibold text-primary-600 dark:text-primary-300"
                   aria-live="polite"
                 >
-                  {steps[stage]}
+                  {mode === 'generate' ? (stage || desc) : steps[fake]}
                 </motion.p>
               </AnimatePresence>
+              {mode === 'generate' && (
+                <div className="mt-4">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-ink-800" role="progressbar" aria-valuenow={pct} aria-valuemin="0" aria-valuemax="100">
+                    <div className="h-full rounded-full bg-gradient-to-r from-primary-500 to-primary-700 transition-[width] duration-500" style={{ width: `${pct}%` }} />
+                  </div>
+                  <p className="mt-2 text-xs font-mono font-bold text-gray-400 tabular-nums">{pct}%</p>
+                </div>
+              )}
+              {mode === 'generate' && onCancel && (
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="mt-4 inline-flex h-10 items-center justify-center rounded-xl px-5 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-gray-100 transition-colors"
+                >
+                  {t('aiGenerate.cancelGenerate')}
+                </button>
+              )}
             </div>
           </motion.div>
         </motion.div>

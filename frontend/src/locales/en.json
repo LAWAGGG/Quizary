@@ -313,7 +313,12 @@
     "overlayWait": "Do not close or leave this page.",
     "overlayStep1": "Reading prompt...",
     "overlayStep2": "Composing questions...",
-    "overlayStep3": "Polishing draft..."
+    "overlayStep3": "Polishing draft...",
+    "overlayReading": "Reading prompt...",
+    "overlayGenerating": "Composing questions...",
+    "overlaySanitizing": "Polishing draft...",
+    "cancelGenerate": "Cancel",
+    "generateCancelled": "Generation cancelled. Quota untouched."
   },
   "formEdit": {
     "backToForms": "Back to forms",

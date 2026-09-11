@@ -101,6 +101,10 @@ export default function AIGenerate() {
   const [generating, setGenerating] = useState(false)
   const [accepting, setAccepting] = useState(false)
   const [error, setError] = useState('')
+  const [genProgress, setGenProgress] = useState({ percent: 0, key: '', done: 0, total: 0 })
+  const abortRef = useRef(null)
+  const tickRef = useRef(null)
+  const cancelledRef = useRef(false)
 
   useEffect(() => {
     api.get('/ai/quota').then((r) => setQuota(r.data)).catch(() => {})
@@ -235,12 +239,122 @@ export default function AIGenerate() {
     addFiles(e.dataTransfer?.files)
   }
 
+  const stopTick = () => { clearInterval(tickRef.current); tickRef.current = null }
+  const startTick = () => {
+    stopTick()
+    tickRef.current = setInterval(() => {
+      setGenProgress((p) => (p.key === 'generating' && p.percent < 90 ? { ...p, percent: p.percent + 1 } : p))
+    }, 2000)
+  }
+
+  // Batalkan generate: putus stream, backend deteksi disconnect dan
+  // tidak mencatat kuota. Tanpa error merah — cukup toast info.
+  const cancelGenerate = () => {
+    cancelledRef.current = true
+    abortRef.current?.abort()
+  }
+
+  const applyDone = (data) => {
+    setDraft(data.draft)
+    setIgnored(data.ignored || [])
+    setModelUsed(data.model || '')
+    setQuota((q) => (q ? { ...q, remaining: data.remaining, used: q.limit - data.remaining } : q))
+    setGenProgress({ percent: 100, key: '', done: 0, total: 0 })
+    setStep(3)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const failGenerate = (status, serverMsg, fallbackCode) => {
+    let msg
+    if (status === 429) msg = serverMsg || t('aiGenerate.quotaEmpty')
+    else if (status === 502 && serverMsg?.toLowerCase().includes('terpotong')) msg = serverMsg
+    else if (fallbackCode === 'ECONNABORTED') msg = t('aiGenerate.timeout')
+    else msg = serverMsg || t('aiGenerate.generateFailed')
+    setError(typeof msg === 'string' ? msg : t('aiGenerate.generateFailed'))
+    toast.error(serverMsg || msg)
+  }
+
+  // Generate via SSE stream (fetch + getReader; axios tak bisa stream).
+  // Fallback ke endpoint non-stream bila respons bukan event-stream.
+  const streamGenerate = async (fd, signal) => {
+    const token = localStorage.getItem('token')
+    const res = await fetch(`${api.defaults.baseURL}/ai/generate/stream`, {
+      method: 'POST',
+      body: fd,
+      signal,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        'ngrok-skip-browser-warning': 'true',
+      },
+    })
+    const ctype = res.headers.get('content-type') || ''
+    if (!ctype.includes('text/event-stream')) {
+      const res2 = await api.post('/ai/generate', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 180000 })
+      applyDone(res2.data)
+      return
+    }
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    const onEvent = (event, data) => {
+      if (event === 'progress') {
+        if (data.stage === 'reading') {
+          const total = data.total || 0
+          const done = data.done || 0
+          setGenProgress({ percent: total ? 10 + Math.round((30 * done) / total) : 10, key: 'reading', done, total })
+        } else if (data.stage === 'generating') {
+          setGenProgress({ percent: 50, key: 'generating', done: 0, total: 0 })
+          startTick()
+        } else if (data.stage === 'sanitizing') {
+          stopTick()
+          setGenProgress({ percent: 92, key: 'sanitizing', done: 0, total: 0 })
+        }
+      } else if (event === 'done') {
+        stopTick()
+        applyDone(data)
+        return true
+      } else if (event === 'error') {
+        stopTick()
+        failGenerate(data.status, data.message)
+        return true
+      }
+      return false
+    }
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      let idx
+      let finished = false
+      while ((idx = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, idx)
+        buf = buf.slice(idx + 2)
+        let event = null
+        const dataLines = []
+        for (const line of block.split('\n')) {
+          if (line.startsWith(':')) continue
+          if (line.startsWith('event:')) event = line.slice(6).trim()
+          else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
+        }
+        if (!event || !dataLines.length) continue
+        let data = null
+        try { data = JSON.parse(dataLines.join('\n')) } catch { continue }
+        if (onEvent(event, data)) { finished = true; break }
+      }
+      if (finished) { reader.cancel().catch(() => {}); break }
+    }
+  }
+
   const handleGenerate = async (e) => {
     e?.preventDefault()
     if (!stripTags(title)) { setError(t('aiGenerate.titleRequired')); return }
     if (prompt.trim().length < 10) { setError(t('aiGenerate.promptMin')); return }
+    abortRef.current?.abort()
+    abortRef.current = new AbortController()
+    cancelledRef.current = false
     setGenerating(true)
     setError('')
+    setGenProgress({ percent: 5, key: 'reading', done: 0, total: 0 })
     try {
       const fd = new FormData()
       fd.append('title', title)
@@ -248,30 +362,29 @@ export default function AIGenerate() {
       fd.append('type', formType)
       fd.append('prompt', prompt)
       files.forEach((f) => fd.append('files', f))
-      const res = await api.post('/ai/generate', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 180000,
-      })
-      setDraft(res.data.draft)
-      setIgnored(res.data.ignored || [])
-      setModelUsed(res.data.model || '')
-      setQuota((q) => (q ? { ...q, remaining: res.data.remaining, used: q.limit - res.data.remaining } : q))
-      setStep(3)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      await streamGenerate(fd, abortRef.current.signal)
     } catch (err) {
-      const status = err.response?.status
-      const serverMsg = err.response?.data?.message || err.response?.data?.detail
-      let msg
-      if (status === 429) msg = serverMsg || t('aiGenerate.quotaEmpty')
-      else if (status === 502 && serverMsg?.toLowerCase().includes('terpotong')) msg = serverMsg
-      else if (err.code === 'ECONNABORTED') msg = t('aiGenerate.timeout')
-      else msg = serverMsg || t('aiGenerate.generateFailed')
-      setError(typeof msg === 'string' ? msg : t('aiGenerate.generateFailed'))
-      toast.error(serverMsg || msg)
+      if (cancelledRef.current || err?.name === 'AbortError' || err?.name === 'CanceledError') {
+        toast.info(t('aiGenerate.generateCancelled'))
+      } else {
+        const status = err.response?.status
+        const serverMsg = err.response?.data?.message || err.response?.data?.detail
+        failGenerate(status, serverMsg, err.code)
+      }
     } finally {
+      stopTick()
       setGenerating(false)
     }
   }
+
+  // Bersihkan interval + stream bila user pindah halaman saat generate.
+  useEffect(() => () => { stopTick(); abortRef.current?.abort() }, [])
+
+  const genStageText =
+    genProgress.key === 'reading' ? t('aiGenerate.overlayReading')
+    : genProgress.key === 'generating' ? t('aiGenerate.overlayGenerating')
+    : genProgress.key === 'sanitizing' ? t('aiGenerate.overlaySanitizing')
+    : ''
 
   const handleAccept = async () => {
     if (!stripTags(title)) { setError(t('aiGenerate.titleRequired')); window.scrollTo({ top: 0, behavior: 'smooth' }); return }
@@ -640,7 +753,13 @@ export default function AIGenerate() {
           </div>
         )}
       </motion.div>
-      <AiLoadingOverlay open={generating || accepting} mode={generating ? 'generate' : 'accept'} />
+      <AiLoadingOverlay
+        open={generating || accepting}
+        mode={generating ? 'generate' : 'accept'}
+        percent={genProgress.percent}
+        stage={genStageText}
+        onCancel={generating ? cancelGenerate : undefined}
+      />
     </div>
   )
 }

@@ -1,8 +1,11 @@
+import asyncio
+import json
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
 from fastapi import Form as ApiForm
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -58,6 +61,129 @@ def _quota_or_429(db: Session, user_id: int) -> int:
 def ai_quota(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     used = _used_today(db, user.id)
     return {"limit": AI_DAILY_LIMIT, "used": used, "remaining": max(0, AI_DAILY_LIMIT - used)}
+
+
+def _sse(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+@router.post("/ai/generate/stream")
+async def ai_generate_stream(
+    request: Request,
+    title: str = ApiForm(...),
+    description: str | None = ApiForm(None),
+    type: str = ApiForm("form"),
+    prompt: str = ApiForm(...),
+    files: list[UploadFile] = File([]),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """SSE progress untuk generate AI. Event: progress -> done | error.
+
+    Kuota harian dicatat hanya saat done; client batal (disconnect) =
+    tanpa kuota terpakai dan tanpa draft.
+    """
+
+    async def events():
+        def err(msg: str, code: int = 502) -> str:
+            return _sse("error", {"message": msg, "status": code})
+        if type not in ("form", "quiz"):
+            yield err("type harus 'form' atau 'quiz'", 422)
+            return
+        if not re.sub(r"<[^>]*>", "", title or "").strip():
+            yield err("Title tidak boleh kosong", 422)
+            return
+        if len(title) > 1000:
+            yield err("Title maksimal 1000 karakter", 422)
+            return
+        if description and len(description) > 5000:
+            yield err("Description maksimal 5000 karakter", 422)
+            return
+        clean_prompt = (prompt or "").strip()
+        if len(clean_prompt) < 10:
+            yield err("Prompt minimal 10 karakter agar AI paham maumu", 422)
+            return
+        if len(clean_prompt) > 5000:
+            yield err("Prompt maksimal 5000 karakter", 422)
+            return
+        if len(files) > MAX_REF_FILES:
+            yield err(f"Maksimal {MAX_REF_FILES} file referensi", 422)
+            return
+        used = _used_today(db, user.id)
+        if used >= AI_DAILY_LIMIT:
+            yield err(f"Batas generate AI hari ini habis ({AI_DAILY_LIMIT}/hari). Coba lagi besok.", 429)
+            return
+
+        yield _sse("progress", {"stage": "reading", "done": 0, "total": len(files)})
+        refs: list[tuple[str, str]] = []
+        for i, f in enumerate(files):
+            if await request.is_disconnected():
+                return
+            ext = Path(f.filename or "").suffix.lower()
+            if ext not in ALLOWED_REF_EXT:
+                yield err(f"Tipe file tidak didukung ({f.filename or 'tanpa nama'}). Pakai docx, pdf, atau pptx.", 422)
+                return
+            try:
+                blob = await asyncio.to_thread(read_limited, f.file, MAX_REF_FILE_BYTES)
+                text = await asyncio.to_thread(extract_ref_text, f.filename or "referensi", blob)
+            except HTTPException:
+                yield err(f"File {f.filename or ''} terlalu besar. Maksimal 5MB per file.", 413)
+                return
+            except Exception:
+                yield err(f"File {f.filename or ''} tidak bisa dibaca.", 422)
+                return
+            text = (text or "").strip()
+            if not text:
+                yield err(f"File {f.filename or ''} kosong atau tidak ada teksnya.", 422)
+                return
+            refs.append((f.filename or "referensi", text))
+            yield _sse("progress", {"stage": "reading", "done": i + 1, "total": len(files)})
+        refs = truncate_refs(refs)
+
+        yield _sse("progress", {"stage": "generating"})
+        task = asyncio.create_task(
+            asyncio.to_thread(call_gemini, build_user_text(title, description, type, clean_prompt, refs), user.id)
+        )
+        while not task.done():
+            await asyncio.sleep(15)
+            if await request.is_disconnected():
+                task.cancel()
+                return
+            yield ": ping\n\n"
+        try:
+            raw, model_used = task.result()
+        except AiNotConfigured:
+            yield err("Fitur AI belum dikonfigurasi server. Hubungi admin.", 503)
+            return
+        except AiFailed as e:
+            yield err(str(e), 502)
+            return
+        except Exception:
+            yield err("AI tidak merespons. Periksa koneksi lalu coba lagi.", 502)
+            return
+
+        yield _sse("progress", {"stage": "sanitizing"})
+        try:
+            draft = await asyncio.to_thread(sanitize_draft, raw, type, clean_prompt)
+        except AiFailed as e:
+            yield err(str(e), 502)
+            return
+        if await request.is_disconnected():
+            return
+        db.add(AiGeneration(user_id=user.id, created_at=now_wib()))
+        db.commit()
+        left = AI_DAILY_LIMIT - (used + 1)
+        ignored = draft.pop("ignored", []) if isinstance(draft, dict) else []
+        yield _sse(
+            "done",
+            {"draft": draft, "model": model_used, "remaining": max(0, left), "limit": AI_DAILY_LIMIT, "ignored": ignored},
+        )
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/ai/generate", response_model=AiGenerateResponse)
