@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, memo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, GripVertical, Upload, ArrowLeft, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, TextQuote, Unlink, ChevronDown, ChevronUp, Pencil, Copy } from 'lucide-react'
+import { Plus, GripVertical, Upload, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, TextQuote, Unlink, ChevronDown, ChevronUp, Pencil, Copy } from 'lucide-react'
 import {
   DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
   useSensor, useSensors, closestCenter, useDroppable,
@@ -16,7 +16,7 @@ import { useToast } from '../../hooks/useToast'
 import { useTranslation } from 'react-i18next'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { isAudioUrl, resolveMediaUrl } from '../../lib/media'
-import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichTextEditor, RichText, AnswerKeyEditor } from '../../components/ui'
+import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, FormBackButton, EmptyState, CardSkeleton, RichTextEditor, RichText, AnswerKeyEditor } from '../../components/ui'
 import SectionManager from '../../components/ui/SectionManager'
 
 const TYPE_LABELS = {
@@ -1251,7 +1251,6 @@ function SectionDropZone({ _sectionId, children }) {
 
 export default function QuestionBuilder() {
   const { formId } = useParams()
-  const navigate = useNavigate()
   const toast = useToast()
   const { t } = useTranslation()
   const typeLabels = {
@@ -1952,12 +1951,7 @@ export default function QuestionBuilder() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate(`/forms/${formId}`)}
-        className="inline-flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 transition-colors mb-4"
-      >
-        <ArrowLeft className="w-4 h-4" /> {t('questionBuilder.backToSettings')}
-      </button>
+      <FormBackButton />
 
       <PageHeader
         eyebrow={form.type === 'quiz' ? t('questionBuilder.quizBuilder') : t('questionBuilder.formBuilder')}

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Check, X, Minus, Eye, EyeOff, ArrowRight, ClipboardList, Trophy, AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button, Card, Badge, FallbackPage, DotCorner, AuroraBg, RichText } from '../../components/ui'
-import { sanitizeHtml, stripTags } from '../../lib/sanitize'
+import { stripTags, resolveRichHtml } from '../../lib/sanitize'
 import { resolveMediaUrl, answerImageUrl, answerAudioUrl } from '../../lib/media'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
@@ -109,7 +109,7 @@ export default function QuizResult() {
 
   // Pesan terima kasih (atau fallback nama form) — dipakai untuk form & quiz.
   const rawThanks = publicForm?.thank_you_message || ''
-  const hasThanks = rawThanks.replace(/<[^>]*>/g, '').trim().length > 0
+  const hasThanks = stripTags(rawThanks).length > 0
   const plainFormTitle = stripTags(publicForm?.title || formTitle)
   const thankYou = hasThanks ? rawThanks : t('quizResult.submittedFallback', { title: plainFormTitle })
 
@@ -161,7 +161,7 @@ export default function QuizResult() {
             <div className="text-center">
               <p className="eyebrow justify-center" style={{ color: palette.base }}>{t('quizResult.submitted')}</p>
               <h1 className="font-display text-2xl md:text-[26px] font-bold text-ink dark:text-gray-100 mt-3 leading-snug">
-                <RichText html={thankYou} className="rich-text" />
+                <RichText html={resolveRichHtml(thankYou)} className="rich-text" />
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
                 {plainFormTitle ? (
@@ -245,11 +245,11 @@ export default function QuizResult() {
           className="text-center mb-8"
         >
           {(publicForm?.title || formTitle) && (
-            <p className="eyebrow justify-center" style={{ color: palette.base }}><RichText html={publicForm?.title || formTitle} className="rich-text" /></p>
+            <p className="eyebrow justify-center" style={{ color: palette.base }}><RichText html={resolveRichHtml(publicForm?.title || formTitle)} className="rich-text" /></p>
           )}
 
           <h1 className="font-display text-2xl md:text-[26px] font-bold text-ink dark:text-gray-100 mt-3 leading-snug">
-            <RichText html={thankYou} className="rich-text" />
+            <RichText html={resolveRichHtml(thankYou)} className="rich-text" />
           </h1>
 
           {data.status === 'cheating' && (
@@ -341,7 +341,7 @@ export default function QuizResult() {
                           {statusIcon(answer.is_correct)}
                           <div className="flex-1 min-w-0">
                             <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">{t('quizResult.questionLabel', { n: i + 1 })}</p>
-                            <p className="font-medium text-ink dark:text-gray-100 mb-2 leading-snug"><RichText html={answer.question_text} className="rich-text" /></p>
+                            <p className="font-medium text-ink dark:text-gray-100 mb-2 leading-snug"><RichText html={resolveRichHtml(answer.question_text)} className="rich-text" /></p>
 
                             {/* Media soal — gambar dan/atau audio */}
                             {answerImageUrl(answer) && (
@@ -362,7 +362,7 @@ export default function QuizResult() {
                               {(answer.question_type === 'multiple_choice' || answer.question_type === 'checkbox' || answer.question_type === 'dropdown')
                                 ? (<>
                                   {answer.selected_options?.length > 0
-                                    ? answer.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(', ')
+                                    ? answer.selected_options.map((s) => stripTags(s) || s).join(', ')
                                     : (!answer.answer_text && <span className="text-gray-400 italic">{t('quizResult.notAnswered')}</span>)}
                                   {answer.answer_text && (
                                     <span className="block mt-1 text-gray-500 dark:text-gray-400">{t('quizResult.otherAnswer', { text: answer.answer_text })}</span>

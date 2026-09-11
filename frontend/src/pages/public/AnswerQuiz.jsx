@@ -7,6 +7,7 @@ import { useAutosave, loadDraft, clearDraft } from '../../hooks/useAutosave'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import { isAudioUrl, resolveMediaUrl, questionImageUrl, questionAudioUrl } from '../../lib/media'
+import { stripTags, resolveRichHtml } from '../../lib/sanitize'
 import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { sessionTokenHeaders } from '../../lib/sessionToken'
@@ -1368,7 +1369,7 @@ export default function AnswerQuiz() {
     const reviewedCount = Object.values(reviewed).filter(Boolean).length
     const missingRequired = questions
       .filter((q) => q.is_required !== false && !isAnswered(q, answers[q.id]))
-      .map((q) => (q.question_text || '').replace(/<[^>]*>/g, '').trim())
+      .map((q) => stripTags(q.question_text))
     const answeredCount = questions.filter((q) => isAnswered(q, answers[q.id])).length
 
     return (
@@ -1402,7 +1403,7 @@ export default function AnswerQuiz() {
               >
                 <Info className="w-4 h-4" />
               </button>
-              <span className="text-sm font-semibold text-white truncate"><RichText html={effectiveTitle} className="rich-text" /></span>
+              <span className="text-sm font-semibold text-white truncate"><RichText html={resolveRichHtml(effectiveTitle)} className="rich-text" /></span>
             </div>
             <div className="flex items-center gap-2">
               {current && (
@@ -1480,10 +1481,10 @@ export default function AnswerQuiz() {
                     {reviewed[current.id] ? t('answerQuiz.marked') : t('answerQuiz.markReview')}
                   </button>
                 </div>
-                <h2 className="font-display text-xl font-medium text-ink dark:text-gray-100 text-center mb-3 flex items-start justify-center gap-0.5">
-                  <span className="[&>p]:mb-0"><RichText html={current.question_text} className="rich-text" /></span>
+                <h2 className="font-display text-xl font-medium text-ink dark:text-gray-100 text-center mb-3 relative">
+                  <RichText html={resolveRichHtml(current.question_text)} className="rich-text quiz-question-text block w-full" />
                   {current.is_required !== false && (
-                    <span className="text-incorrect font-bold shrink-0" title="Required">*</span>
+                    <span className="text-incorrect font-bold absolute top-0 right-0" title="Required">*</span>
                   )}
                 </h2>
                 {/* {current.section_id && sectionsById[current.section_id] && (
@@ -1528,7 +1529,7 @@ export default function AnswerQuiz() {
                             onClick={() => handleSelect(current.id, opt.id)}
                             image={opt.image}
                           >
-                            <RichText html={opt.option_text} className="rich-text" />
+                            <RichText html={resolveRichHtml(opt.option_text)} className="rich-text" />
                           </OptionTile>
                         )
                       })}
@@ -1565,7 +1566,7 @@ export default function AnswerQuiz() {
                             onClick={() => handleSelect(current.id, opt.id)}
                             image={opt.image}
                           >
-                            <RichText html={opt.option_text} className="rich-text" />
+                            <RichText html={resolveRichHtml(opt.option_text)} className="rich-text" />
                           </OptionTile>
                         )
                       })}
@@ -1643,7 +1644,7 @@ export default function AnswerQuiz() {
                     >
                       <option value="">{t('answerQuiz.selectAnswer')}</option>
                       {current.options.map((opt) => (
-                        <option key={opt.id} value={opt.id}><RichText html={opt.option_text} className="rich-text" /></option>
+                        <option key={opt.id} value={opt.id}><RichText html={resolveRichHtml(opt.option_text)} className="rich-text" /></option>
                       ))}
                     </Select>
                   </div>
@@ -1797,7 +1798,7 @@ export default function AnswerQuiz() {
           <img loading="lazy" decoding="async" src={resolveMediaUrl(bannerPath)} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
         <div className="flex items-center justify-between gap-3 mb-6">
-          <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={effectiveTitle} className="rich-text" /></h1>
+          <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={resolveRichHtml(effectiveTitle)} className="rich-text" /></h1>
           <div className="flex items-center gap-2 shrink-0">
             {timeLeft !== null && (
               <span className={`inline-flex items-center gap-1.5 font-mono text-sm font-bold tabular-nums px-2.5 h-8 rounded-lg transition-colors ${timeLeft < 30000
@@ -1827,7 +1828,7 @@ export default function AnswerQuiz() {
               {formPage.title && (
                 <div className="flex items-center gap-3">
                   <span className="w-1.5 h-6 rounded-full bg-[var(--t)] shrink-0" />
-                  <h2 className="font-display text-lg font-bold text-ink dark:text-gray-100"><RichText html={formPage.title} className="rich-text" /></h2>
+                  <h2 className="font-display text-lg font-bold text-ink dark:text-gray-100"><RichText html={resolveRichHtml(formPage.title)} className="rich-text" /></h2>
                   <span className="ml-auto text-xs font-semibold text-gray-400">{currentIdx + 1}/{formPages.length}</span>
                 </div>
               )}
@@ -1845,7 +1846,7 @@ export default function AnswerQuiz() {
                   <div className="mb-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-0.5 flex-1 min-w-0">
-                        <p className="font-medium text-ink dark:text-gray-100 leading-snug flex-1 [&>p]:mb-0"><RichText html={q.question_text} className="rich-text" /></p>
+                        <p className="font-medium text-ink dark:text-gray-100 leading-snug flex-1 [&>p]:mb-0"><RichText html={resolveRichHtml(q.question_text)} className="rich-text" /></p>
                         {q.is_required !== false && (
                           <span className="text-incorrect font-bold leading-snug shrink-0" title="Required">*</span>
                         )}
@@ -1903,7 +1904,7 @@ export default function AnswerQuiz() {
                                 onChange={() => handleSelect(q.id, opt.id)}
                                 className="sr-only"
                               />
-                              <span className="text-sm text-ink dark:text-gray-200 flex-1 leading-snug"><RichText html={opt.option_text} className="rich-text" /></span>
+                              <span className="text-sm text-ink dark:text-gray-200 flex-1 leading-snug"><RichText html={resolveRichHtml(opt.option_text)} className="rich-text" /></span>
                             </div>
                             {opt.image && (
                               isAudioUrl(opt.image.path) ? (
@@ -1956,7 +1957,7 @@ export default function AnswerQuiz() {
                                 onChange={() => handleSelect(q.id, opt.id)}
                                 className="sr-only"
                               />
-                              <span className="text-sm text-ink dark:text-gray-200 flex-1 leading-snug"><RichText html={opt.option_text} className="rich-text" /></span>
+                              <span className="text-sm text-ink dark:text-gray-200 flex-1 leading-snug"><RichText html={resolveRichHtml(opt.option_text)} className="rich-text" /></span>
                             </div>
                             {opt.image && (
                               isAudioUrl(opt.image.path) ? (
@@ -2029,7 +2030,7 @@ export default function AnswerQuiz() {
                     >
                       <option value="">{t('answerQuiz.selectAnswer')}</option>
                       {q.options.map((opt) => (
-                        <option key={opt.id} value={opt.id}><RichText html={opt.option_text} className="rich-text" /></option>
+                        <option key={opt.id} value={opt.id}><RichText html={resolveRichHtml(opt.option_text)} className="rich-text" /></option>
                       ))}
                     </Select>
                   )}
@@ -2459,9 +2460,9 @@ function ExamInfoDrawer({ show, onClose, form, data }) {
                 <img loading="lazy" decoding="async" src={resolveMediaUrl(banner)} alt="" className="w-full h-28 object-cover rounded-2xl mb-5 shadow-card" />
               )}
               <h4 className="font-display font-semibold text-ink dark:text-gray-100 text-lg leading-snug">
-                <RichText html={form?.title} />
+                <RichText html={resolveRichHtml(form?.title)} />
               </h4>
-              {form?.description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 mb-4"><RichText html={form.description} className="rich-text" /></p>}
+              {form?.description && <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 mb-4"><RichText html={resolveRichHtml(form.description)} className="rich-text" /></p>}
 
               <div className="mt-4">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">{t('answerQuiz.respondentInfo')}</p>
@@ -2628,8 +2629,8 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                   }}
                 >
                   <div className="flex flex-col items-center gap-5">
-                      <h3 className="font-display text-xl sm:text-2xl font-medium text-ink dark:text-gray-100 text-center leading-snug">
-                      <RichText html={target.question_text} className="rich-text" />
+                      <h3 className="font-display text-xl sm:text-2xl font-medium text-ink dark:text-gray-100 text-center leading-snug w-full">
+                      <RichText html={resolveRichHtml(target.question_text)} className="rich-text quiz-question-text block w-full" />
                     </h3>
                     {questionImageUrl(target) && (
                       <img loading="lazy" decoding="async"
@@ -2654,7 +2655,7 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                               {LETTERS[i % LETTERS.length]}
                             </span>
                             <span className="flex-1 text-sm text-left leading-snug text-ink dark:text-gray-200">
-                              <RichText html={opt.option_text} className="rich-text" />
+                              <RichText html={resolveRichHtml(opt.option_text)} className="rich-text" />
                             </span>
                             {opt.image && (
                               isAudioUrl(opt.image.path) ? (
@@ -2677,7 +2678,7 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
                             <span className="flex items-center justify-center w-8 h-8 rounded-full bg-white/25 font-mono text-sm font-bold shrink-0">
                               {LETTERS[i % LETTERS.length]}
                             </span>
-                            <span className="flex-1 leading-snug text-left"><RichText html={opt.option_text} className="rich-text" /></span>
+                            <span className="flex-1 leading-snug text-left"><RichText html={resolveRichHtml(opt.option_text)} className="rich-text" /></span>
                             {opt.image && (
                               isAudioUrl(opt.image.path) ? (
                                 <audio controls src={resolveMediaUrl(opt.image.path)} preload="none" className="max-h-20 w-32 rounded-lg shrink-0" onClick={(e) => e.stopPropagation()} />

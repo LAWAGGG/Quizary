@@ -529,18 +529,35 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   border-bottom-right-radius: 0.5rem;
 }
 
-/* Quiz: block code jangan di-center — tab jadi berantakan kalau center */
-.rich-text .ql-code-block-container,
-.rich-text pre.ql-syntax,
-.rich-text pre.ql-code-block,
-.rich-text div.ql-code-block {
-  text-align: left !important;
+/* Quiz respondent: teks soal tetap center, hanya code-block yang kiri + full width */
+.quiz-question-text {
+  display: block;
+  width: 100%;
 }
-h2:has(.ql-code-block-container),
-h2:has(pre.ql-syntax),
-h2:has(pre.ql-code-block) {
-  justify-content: flex-start !important;
+.quiz-question-text > p,
+.quiz-question-text > h1,
+.quiz-question-text > h2,
+.quiz-question-text > h3,
+.quiz-question-text > ul,
+.quiz-question-text > ol,
+.quiz-question-text > blockquote {
+  text-align: center;
+}
+.quiz-question-text .ql-code-block-container,
+.quiz-question-text pre.ql-syntax,
+.quiz-question-text pre.ql-code-block,
+.quiz-question-text div.ql-code-block {
   text-align: left !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  box-sizing: border-box !important;
+}
+.quiz-question-text:has(.ql-code-block-container),
+.quiz-question-text:has(pre.ql-syntax),
+.quiz-question-text:has(pre.ql-code-block) {
+  text-align: center;
 }
 
 /* Inline code — seleksi parsial, hitam teks putih seperti block (tidak bikin block baru saat enter) */

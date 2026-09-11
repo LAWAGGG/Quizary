@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Copy, Check, ArrowLeft, Save, Trash2, ImageUp, Link2, ChevronDown, Info, Lock, Settings2, Download, QrCode, X, Palette } from 'lucide-react'
+import { Copy, Check, Save, Trash2, ImageUp, Link2, ChevronDown, Info, Lock, Settings2, Download, QrCode, X, Palette } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
-import { Button, Input, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, PageSkeleton, RichTextEditor, RichText, ScoringSettings } from '../../components/ui'
+import { Button, Input, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, FormBackButton, PageSkeleton, RichTextEditor, RichText, ScoringSettings } from '../../components/ui'
 import { stripTags } from '../../lib/sanitize'
 import { resolveMediaUrl } from '../../lib/media'
 import { useTranslation } from 'react-i18next'
@@ -391,12 +391,7 @@ export default function FormEdit() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate('/forms')}
-        className="inline-flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 transition-colors mb-4"
-      >
-        <ArrowLeft className="w-4 h-4" /> {t('formEdit.backToForms')}
-      </button>
+      <FormBackButton />
 
       <PageHeader
         eyebrow={t('formEdit.workspace')}

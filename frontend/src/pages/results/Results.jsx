@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { BarChart3, Download, ClipboardList, X, Check, AlertTriangle, Trash2 } from 'lucide-react'
+import { Download, ClipboardList, X, Check, AlertTriangle, Trash2 } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll'
 import { stripTags } from '../../lib/sanitize'
-import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, EmptyState, CardSkeleton, RichText, ConfirmModal, sanitizeHtml } from '../../components/ui'
+import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, FormBackButton, EmptyState, CardSkeleton, RichText, ConfirmModal, sanitizeHtml } from '../../components/ui'
 import { resolveMediaUrl, questionImageUrl, questionAudioUrl } from '../../lib/media'
 import { formatCheatReason } from '../../lib/cheatReason'
 import { useTranslation } from 'react-i18next'
@@ -314,6 +314,7 @@ export default function Results() {
 
   return (
     <div>
+      <FormBackButton />
       <PageHeader
         eyebrow={t('results.eyebrow')}
         title={formTitle ? <RichText html={formTitle} /> : t('results.eyebrow')}

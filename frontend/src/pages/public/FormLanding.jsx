@@ -8,7 +8,7 @@ import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import api from '../../api/client'
 import { saveSessionToken } from '../../lib/sessionToken'
-import { stripTags } from '../../lib/sanitize'
+import { stripTags, resolveRichHtml } from '../../lib/sanitize'
 import { resolveMediaUrl } from '../../lib/media'
 
 const BUBBLES = Array.from({ length: 12 }, (_, i) => i)
@@ -232,7 +232,7 @@ export default function FormLanding() {
             <span className="font-display font-bold text-ink dark:text-gray-100">Quizary</span>
           </div>
           <Card className="p-6 md:p-7" style={{ borderColor: palette.border }}>
-            <h2 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={form.title} /></h2>
+            <h2 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={resolveRichHtml(form.title)} /></h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-6">{t('landing.enterDetails')}</p>
             <form onSubmit={handleSubmitIdentity} className="space-y-4">
               <Input
@@ -288,7 +288,7 @@ export default function FormLanding() {
             transition={{ delay: 0.1 }}
             className="font-display text-4xl md:text-5xl font-bold leading-tight text-white max-w-4xl"
           >
-            <RichText html={form.title} />
+            <RichText html={resolveRichHtml(form.title)} />
           </motion.h1>
           {form.description && (
           <motion.p
@@ -297,7 +297,7 @@ export default function FormLanding() {
             transition={{ delay: 0.2 }}
             className="text-base md:text-lg opacity-80 max-w-2xl text-white mt-4"
           >
-            <RichText html={form.description} className="rich-text" />
+            <RichText html={resolveRichHtml(form.description)} className="rich-text" />
           </motion.p>
           )}
 
@@ -356,8 +356,8 @@ export default function FormLanding() {
         )}
         <SpotlightCard>
           <Card className="p-6 md:p-7 h-full" style={{ borderColor: palette.border }}>
-            <h1 className="font-display text-2xl font-bold text-ink dark:text-gray-100 mb-2"><RichText html={form.title} /></h1>
-            {form.description && <p className="text-gray-600 dark:text-gray-400 mb-6"><RichText html={form.description} className="rich-text" /></p>}
+            <h1 className="font-display text-2xl font-bold text-ink dark:text-gray-100 mb-2"><RichText html={resolveRichHtml(form.title)} /></h1>
+            {form.description && <p className="text-gray-600 dark:text-gray-400 mb-6"><RichText html={resolveRichHtml(form.description)} className="rich-text" /></p>}
             <Button onClick={handleStart} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }} icon={<ArrowRight className="w-4 h-4" />}>
               {t('landing.start')}
             </Button>

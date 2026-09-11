@@ -1,9 +1,9 @@
 import { useState, useEffect, memo } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Users, Trophy, TrendingUp, TrendingDown, ArrowLeft, BarChart3, ClipboardList, ChevronDown, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Users, Trophy, TrendingUp, TrendingDown, ClipboardList, ChevronDown, CheckCircle2, AlertCircle } from 'lucide-react'
 import api from '../../api/client'
-import { Card, Button, PageHeader, FormSubNav, CardSkeleton, RichText } from '../../components/ui'
+import { Card, PageHeader, FormSubNav, FormBackButton, CardSkeleton, RichText } from '../../components/ui'
 import { stripTags, resolveRichHtml } from '../../lib/sanitize'
 import { useTranslation } from 'react-i18next'
 
@@ -388,6 +388,7 @@ export default function Analytics() {
 
   return (
     <div>
+      <FormBackButton />
       <PageHeader
         eyebrow={t('analytics.insights')}
         title={t('analytics.title')}
