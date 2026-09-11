@@ -9,6 +9,7 @@ import io
 import json
 import logging
 import re
+import time
 
 import httpx
 
@@ -28,7 +29,25 @@ MAX_SECTIONS = 10
 MAX_QUESTIONS = 50
 MAX_OPTIONS = 10
 
-GEMINI_TIMEOUT = 120.0
+
+def truncate_refs(refs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Potong proporsional per file bila total melebihi MAX_REF_TOTAL_CHARS.
+
+    Murni fungsi data (tanpa HTTP) supaya service mandiri dan mudah diuji;
+    router tinggal panggil setelah teks referensi terkumpul.
+    """
+    if not refs:
+        return refs
+    total = sum(len(t) for _, t in refs)
+    if total <= MAX_REF_TOTAL_CHARS:
+        return refs
+    budget = MAX_REF_TOTAL_CHARS // len(refs)
+    return [(n, t[:budget]) for n, t in refs]
+
+# Timeout per percobaan Gemini. Worst-case dijaga ~2 mnt (2 model x 1 coba x
+# 60 dtk) agar muat di proxy_read_timeout nginx (300 dtk) dan timeout
+# frontend 180 dtk.
+GEMINI_TIMEOUT = 60.0
 
 QUESTION_TYPES = (
     "multiple_choice", "checkbox", "dropdown", "short_answer", "essay",
@@ -81,16 +100,49 @@ def extract_ref_text(filename: str, raw: bytes) -> str:
         return "\n".join(parts)
     raise AiFailed(f"Tipe file tidak didukung ({filename}). Pakai docx, pdf, atau pptx.")
 
+_EXAMPLE_DRAFT = {
+    "sections": [
+        {
+            "title": "nama section",
+            "questions": [
+                {
+                    "type": "__QUESTION_TYPES__",
+                    "question_text": "teks soal",
+                    "is_required": True,
+                    "points": 1,
+                    "group_id": None,
+                    "options": [{"option_text": "teks opsi", "is_correct": True}],
+                    "password_keyword": None,
+                    "answer_key": None,
+                    "allow_other": False,
+                }
+            ],
+        }
+    ],
+    "settings": {
+        "shuffle_questions": False,
+        "shuffle_options": False,
+        "timer_minutes": None,
+        "require_login": False,
+        "submission_limit": "unlimited",
+        "show_leaderboard": False,
+        "is_restricted": False,
+        "show_in_history": True,
+        "reveal_score": True,
+        "reveal_answers": True,
+        "starts_at": None,
+        "ends_at": None,
+    },
+}
+
+_EXAMPLE_JSON = json.dumps(_EXAMPLE_DRAFT).replace(
+    '"__QUESTION_TYPES__"', '"salah satu: %s"' % (", ".join(QUESTION_TYPES))
+)
 
 SYSTEM_INSTRUCTION = """Kamu penyusun form/kuis untuk berbagai bahasa. Jawab HANYA dengan SATU objek JSON valid, tanpa markdown, tanpa penjelasan.
 
 Bentuk:
-{"sections": [{"title": "nama section", "questions": [
-  {"type": "salah satu: %s", "question_text": "teks soal",
-   "is_required": true, "points": 1, "group_id": null,
-   "options": [{"option_text": "teks opsi", "is_correct": true}],
-   "password_keyword": null, "answer_key": null, "allow_other": false}
-]}]}], "settings": {"shuffle_questions": false, "shuffle_options": false, "timer_minutes": null, "require_login": false, "submission_limit": "unlimited", "show_leaderboard": false, "is_restricted": false, "show_in_history": true, "reveal_score": true, "reveal_answers": true, "starts_at": null, "ends_at": null}}
+%s
 
 Aturan WAJIB (B-light: tanpa group/wacana):
 - SETIAP soal WAJIB standalone & mandiri — tidak bergantung soal lain. DILARANG pakai group_id (selalu null), DILARANG pakai delimiter "---" atau "--", DILARANG buat wacana/passage bersama untuk banyak soal. Jika prompt minta cerita, buat tiap soal lengkap sendiri tanpa mengulang cerita yang sama di soal lain.
@@ -108,12 +160,10 @@ Aturan WAJIB (B-light: tanpa group/wacana):
 - Rumus/simbol: tulis LaTeX dengan delimiter \\(...\\) inline atau \\[...\\] display. JANGAN art Unicode (√½) dan JANGAN ejaan kata ("akar kuadrat dari").
 - Kode: fence ```bahasa ... ``` (satu blok per snippet, bahasa opsional: python, javascript, java, sql, cpp, html). Kode inline: `satu backtick`.
 - Link: [teks](https://...) — hanya http(s); jangan link lain.
-- Maksimal 10 sections, total maksimal 30 soal. Hemat token: jangan ulang teks yang sama di banyak soal, tiap soal beda.
-""" % (", ".join(QUESTION_TYPES))
+- Maksimal 10 sections, total maksimal 40 soal. Hemat token: jangan ulang teks yang sama di banyak soal, tiap soal beda.
+""" % _EXAMPLE_JSON
 
 
-# prompt -> label Indonesia untuk fitur yang TIDAK didukung AI
-# (banner & kategori tak pernah bisa; sisanya "diabaikan" bila AI tak menyetelnya).
 IGNORED_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("banner", ("banner", "cover", "gambar header", "header image")),
     ("kategori", ("kategori", "category", "kelompok form")),
@@ -139,27 +189,73 @@ def _gemini_models() -> list[str]:
     return list(dict.fromkeys(models)) or ["gemini-3.6-flash"]
 
 
+def _scan_json_structure(text: str) -> tuple[bool, list[str], int]:
+    """Scan struktur JSON sekali, sadar-string.
+
+    Return (in_string, stack_tutup_terbuka, cut_pos):
+    - in_string: True bila teks berakhir di dalam string JSON (quote tak tutup).
+    - stack: urutan tutup yang masih terbuka ("}" / "]", paling dalam dulu).
+    - cut_pos: indeks eksklusif batas objek/array lengkap terakhir di LUAR
+      string (-1 bila tak ada). Kurung LaTeX (\\frac{a}{b}) di dalam string
+      TIDAK dihitung karena pemindai tahu posisi di dalam string vs di luar.
+    Escape ditangani: \\ membuat char berikut literal, \" bukan penutup string.
+    """
+    stack: list[str] = []
+    in_string = False
+    escaped = False
+    cut_pos = -1
+    for i, ch in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            stack.append("}")
+        elif ch == "[":
+            stack.append("]")
+        elif ch == "}" or ch == "]":
+            if stack and stack[-1] == ch:
+                stack.pop()
+                cut_pos = i + 1
+            # tutup liar tanpa pasangan: abaikan (biar json.loads yang menilai)
+    return in_string, stack, cut_pos
+
+
 def _repair_truncated_json(text: str) -> str:
-    """Tutup JSON terpotong karena maxOutputTokens (mis. 20 soal passage)."""
+    """Tutup JSON terpotong karena maxOutputTokens (mis. 20 soal passage).
+
+    State-aware: kurung kurawal literal di dalam string JSON (mis. LaTeX
+    \\frac{a}{b}) tidak dihitung sebagai struktur. Urutan tutup mengikuti
+    stack (terdalam dulu), bukan tebakan tetap.
+    """
     t = text.strip()
-    # hitung buka vs tutup, tutup yang kurang
-    # ponytail: cukup tutup } ] } } untuk kasus sections->questions terpotong
-    open_braces = t.count("{") - t.count("}")
-    open_brackets = t.count("[") - t.count("]")
-    # jika dalam string (quote belum tutup), tutup dulu
-    # sederhana: potong di last complete object boundary
-    if t.endswith(",") or t.endswith(":") or t.endswith('"'):
-        # potong trailing comma/colon yang bikin invalid
-        t = t.rstrip(", :\"")
-        # cari last } atau ] yang valid
-        last_brace = t.rfind("}")
-        last_bracket = t.rfind("]")
-        cut = max(last_brace, last_bracket)
-        if cut > 0:
-            t = t[:cut+1]
-            open_braces = t.count("{") - t.count("}")
-            open_brackets = t.count("[") - t.count("]")
-    t += "]" * open_brackets + "}" * open_braces
+    in_string, stack, cut_pos = _scan_json_structure(t)
+    if in_string:
+        # Ekor dalam string tapi sudah ada pembuka struktur baru setelah batas
+        # lengkap terakhir (mis. `...[]}, {"type": "essa`) → objek ekor tak
+        # lengkap; buang ekor, pertahankan objek lengkap saja.
+        tail = t[cut_pos:] if cut_pos > 0 else ""
+        if cut_pos > 0 and ("{" in tail or "[" in tail):
+            t = t[:cut_pos]
+            in_string, stack, cut_pos = _scan_json_structure(t)
+        else:
+            # String kepotong: buang backslash ekor (escape yatim), tutup quote.
+            t = t.rstrip("\\") + '"'
+            in_string, stack, cut_pos = _scan_json_structure(t)
+    if t.endswith(",") or t.endswith(":"):
+        # Koma/kolon ekor: mundur ke batas objek/array lengkap terakhir
+        # (di luar string) agar tak motong di dalam string LaTeX.
+        _, _, cut_pos = _scan_json_structure(t)
+        if cut_pos > 0:
+            t = t[:cut_pos]
+            _, stack, _ = _scan_json_structure(t)
+    t += "".join(reversed(stack))
     # pastikan punya settings jika hilang
     if '"settings"' not in t:
         t = t.rstrip("}") + ', "settings": {"timer_minutes": 30}}'
@@ -243,13 +339,14 @@ def _parse_gemini_text(data: dict) -> dict:
     return parsed
 
 
-def call_gemini(user_text: str) -> tuple[dict, str]:
+def call_gemini(user_text: str, user_id: int | None = None) -> tuple[dict, str]:
     """Panggil Gemini JSON mode. Balik (draf, model_terpakai).
 
-    Key dikirim via header (tak muncul di URL/log). Tiap model dicoba 2x
-    untuk error transient (429/5xx/network/JSON rusak); gagal semua di model
-    utama -> lanjut ke fallback. 401/403 (key salah) dan 400 langsung gagal
-    tanpa buang kuota coba — fallback pakai key yang sama.
+    Key dikirim via header (tak muncul di URL/log). Tiap model dicoba 1x;
+    gagal transient (429/5xx/network/JSON rusak) di model utama langsung
+    lanjut ke fallback — worst-case ~2 mnt (2 model x 1 coba x 60 dtk) agar
+    muat di timeout proxy/frontend. 401/403 (key salah) dan 400 langsung
+    gagal tanpa buang kuota coba — fallback pakai key yang sama.
     """
     if not GEMINI_API_KEY:
         raise AiNotConfigured("Fitur AI belum dikonfigurasi server.")
@@ -264,41 +361,68 @@ def call_gemini(user_text: str) -> tuple[dict, str]:
     }
     headers = {"x-goog-api-key": GEMINI_API_KEY}
     last_err: Exception | None = None
-    for model in _gemini_models():
+    for attempt, model in enumerate(_gemini_models(), start=1):
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-        for _ in range(2):
+        t0 = time.monotonic()
+        try:
+            with httpx.Client(timeout=GEMINI_TIMEOUT) as client:
+                resp = client.post(url, headers=headers, json=payload)
+        except httpx.HTTPError as e:
+            logger.warning(
+                "gemini attempt=%d model=%s user_id=%s: network error %s (%.0fms)",
+                attempt, model, user_id, type(e).__name__, (time.monotonic() - t0) * 1000,
+            )
+            last_err = e
+            continue
+        elapsed_ms = (time.monotonic() - t0) * 1000
+        if resp.status_code == 200:
             try:
-                with httpx.Client(timeout=GEMINI_TIMEOUT) as client:
-                    resp = client.post(url, headers=headers, json=payload)
-            except httpx.HTTPError as e:
-                logger.warning("gemini %s: network error %s", model, type(e).__name__)
+                draft = _parse_gemini_text(resp.json())
+                logger.info(
+                    "gemini attempt=%d model=%s user_id=%s: ok (%.0fms)",
+                    attempt, model, user_id, elapsed_ms,
+                )
+                return draft, model
+            except AiFailed as e:
+                logger.warning(
+                    "gemini attempt=%d model=%s user_id=%s: draf tak valid (%s, %.0fms)",
+                    attempt, model, user_id, e, elapsed_ms,
+                )
                 last_err = e
                 continue
-            if resp.status_code == 200:
-                try:
-                    return _parse_gemini_text(resp.json()), model
-                except AiFailed as e:
-                    logger.warning("gemini %s: draf tak valid (%s)", model, e)
-                    last_err = e
-                    continue
-                except ValueError as e:
-                    logger.warning("gemini %s: respons bukan JSON", model)
-                    last_err = e
-                    continue
-            if resp.status_code in (401, 403):
-                logger.error("gemini %s: key ditolak (%s)", model, resp.status_code)
-                raise AiFailed("API key AI ditolak. Hubungi admin.")
-            if resp.status_code == 400:
-                logger.warning("gemini %s: 400 %.120s", model, resp.text)
-                raise AiFailed("AI menolak permintaan. Coba ubah prompt lalu generate ulang.")
-            if resp.status_code == 404:
-                # ID model pensiun/diganti Google (kasus 2.x) — bukan "sibuk".
-                logger.error("gemini %s: 404 model tak tersedia", model)
-                last_err = AiFailed(f"Model AI {model} tidak tersedia. Hubungi admin.")
-                break
-            # 429 / 5xx -> coba lagi / fallback.
-            logger.warning("gemini %s: sibuk (%s)", model, resp.status_code)
-            last_err = AiFailed(f"AI sibuk ({resp.status_code}). Coba lagi sebentar lagi.")
+            except ValueError as e:
+                logger.warning(
+                    "gemini attempt=%d model=%s user_id=%s: respons bukan JSON (%.0fms)",
+                    attempt, model, user_id, elapsed_ms,
+                )
+                last_err = e
+                continue
+        if resp.status_code in (401, 403):
+            logger.error(
+                "gemini attempt=%d model=%s user_id=%s: key ditolak (%s, %.0fms)",
+                attempt, model, user_id, resp.status_code, elapsed_ms,
+            )
+            raise AiFailed("API key AI ditolak. Hubungi admin.")
+        if resp.status_code == 400:
+            logger.warning(
+                "gemini attempt=%d model=%s user_id=%s: 400 %.120s (%.0fms)",
+                attempt, model, user_id, resp.text, elapsed_ms,
+            )
+            raise AiFailed("AI menolak permintaan. Coba ubah prompt lalu generate ulang.")
+        if resp.status_code == 404:
+            # ID model pensiun/diganti Google (kasus 2.x) — bukan "sibuk".
+            logger.error(
+                "gemini attempt=%d model=%s user_id=%s: 404 model tak tersedia (%.0fms)",
+                attempt, model, user_id, elapsed_ms,
+            )
+            last_err = AiFailed(f"Model AI {model} tidak tersedia. Hubungi admin.")
+            continue
+        # 429 / 5xx -> langsung model berikut (tanpa retry) agar worst-case ~2 mnt.
+        logger.warning(
+            "gemini attempt=%d model=%s user_id=%s: sibuk (%s, %.0fms)",
+            attempt, model, user_id, resp.status_code, elapsed_ms,
+        )
+        last_err = AiFailed(f"AI sibuk ({resp.status_code}). Coba lagi sebentar lagi.")
     if isinstance(last_err, AiFailed):
         raise last_err
     raise AiFailed("AI tidak merespons. Periksa koneksi lalu coba lagi.")

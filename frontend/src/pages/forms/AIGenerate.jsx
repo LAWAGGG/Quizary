@@ -128,6 +128,20 @@ export default function AIGenerate() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const canGoTo = (id) => {
+    if (id === step) return false
+    if (id === 1 || id === 2) return true
+    return !!draft
+  }
+
+  const goToStep = (id) => {
+    if (!canGoTo(id)) return
+    if (step === 1 && id === 2) { goToPrompt(); return }
+    setError('')
+    setStep(id)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const patchSettings = (patch) => setDraft((d) => (d ? { ...d, settings: { ...d.settings, ...patch } } : d))
 
   // Ubah 1 soal dalam draf (si/qi = indeks section/question).
@@ -338,13 +352,13 @@ export default function AIGenerate() {
               <button
                 key={item.id}
                 type="button"
-                disabled={item.id >= step || (item.id === 3 && !draft)}
-                onClick={() => item.id < step && setStep(item.id)}
+                disabled={!canGoTo(item.id)}
+                onClick={() => goToStep(item.id)}
                 className={`rounded-2xl border p-3 text-left transition-colors ${
                   step === item.id
                     ? 'border-primary bg-primary-50/60 dark:bg-primary-900/20'
                     : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-ink-900 opacity-70'
-                } ${item.id < step ? 'cursor-pointer hover:border-primary/50' : 'cursor-default'}`}
+                } ${canGoTo(item.id) ? 'cursor-pointer hover:border-primary/50' : 'cursor-default'}`}
               >
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">Step {item.id}</p>
                 <p className="mt-1 text-sm font-semibold text-ink dark:text-gray-100">{item.label}</p>
@@ -616,7 +630,7 @@ export default function AIGenerate() {
               <Button
                 variant="secondary"
                 size="lg"
-                onClick={() => { setStep(1); setIgnored([]); setError(''); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                onClick={() => goToStep(2)}
                 icon={<RefreshCw className="w-4 h-4" />}
                 title={t('aiGenerate.regenerateHint')}
               >

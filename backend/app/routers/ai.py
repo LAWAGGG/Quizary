@@ -21,13 +21,13 @@ from app.services.ai_generate import (
     ALLOWED_REF_EXT,
     MAX_REF_FILES,
     MAX_REF_FILE_BYTES,
-    MAX_REF_TOTAL_CHARS,
     AiFailed,
     AiNotConfigured,
     build_user_text,
     call_gemini,
     extract_ref_text,
     sanitize_draft,
+    truncate_refs,
 )
 from app.services.points import distribute_quiz_points
 from app.utils import now_wib, read_limited
@@ -103,14 +103,13 @@ def ai_generate(
         if not text:
             raise HTTPException(status_code=422, detail=f"File {f.filename or ''} kosong atau tidak ada teksnya.")
         refs.append((f.filename or "referensi", text))
-    total = sum(len(t) for _, t in refs)
-    if total > MAX_REF_TOTAL_CHARS:
-        # Potong proporsional per file supaya konteks muat di limit gratis.
-        budget = MAX_REF_TOTAL_CHARS // len(refs)
-        refs = [(n, t[:budget]) for n, t in refs]
+    refs = truncate_refs(refs)
 
     try:
-        raw, model_used = call_gemini(build_user_text(title, description, type, prompt, refs))
+        raw, model_used = call_gemini(
+            build_user_text(title, description, type, prompt, refs),
+            user_id=user.id,
+        )
         draft = sanitize_draft(raw, type, prompt)
     except AiNotConfigured:
         raise HTTPException(status_code=503, detail="Fitur AI belum dikonfigurasi server. Hubungi admin.")

@@ -1,6 +1,8 @@
+import contextvars
 import logging
 import os
 import re
+import uuid
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -13,6 +15,26 @@ from app.routers import auth, categories, forms, questions, profile, public_acce
 from app.utils import UPLOAD_DIR
 
 app = FastAPI(title="Quizary API")
+
+# Request-ID terstruktur (stdlib saja): middleware terima/buat X-Request-ID,
+# simpan di contextvars agar terbawa ke threadpool endpoint sync (def) dan
+# muncul di semua log quizary tanpa mengubah tiap logger call-site.
+request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
+
+
+class _RequestIdFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = request_id_var.get()
+        return True
+
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(logging.Formatter("%(asctime)s [%(request_id)s] %(name)s %(levelname)s: %(message)s"))
+_handler.addFilter(_RequestIdFilter())
+_quizary_logger = logging.getLogger("quizary")
+if not _quizary_logger.handlers:
+    _quizary_logger.addHandler(_handler)
+_quizary_logger.setLevel(logging.INFO)
 
 # Hormati X-Forwarded-Proto/Host dari ngrok/nginx supaya request.base_url
 # (dipakai file_url) berskema https — tanpa ini URL file jadi http dan
@@ -83,6 +105,18 @@ os.makedirs(os.path.join(UPLOAD_DIR, "banners"), exist_ok=True)
 os.makedirs(os.path.join(UPLOAD_DIR, "question-images"), exist_ok=True)
 os.makedirs(os.path.join(UPLOAD_DIR, "avatars"), exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    rid = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
+    token = request_id_var.set(rid)
+    try:
+        response = await call_next(request)
+    finally:
+        request_id_var.reset(token)
+    response.headers["X-Request-ID"] = rid
+    return response
 
 
 @app.middleware("http")

@@ -2522,6 +2522,41 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
       window.removeEventListener('wheel', onWheel)
     }
   }, [target, onClose, onZoom, STEP])
+  // Drag-to-pan saat zoom: tahan mouse di area konten lalu geser.
+  // Berlaku semua variant (card/quiz) karena satu komponen modal.
+  const dragRef = useRef({ active: false, sx: 0, sy: 0, sl: 0, st: 0 })
+  const [dragging, setDragging] = useState(false)
+  const canDrag = scale > 1
+  useEffect(() => {
+    dragRef.current.active = false; setDragging(false)
+    scrollRef.current?.scrollTo?.({ left: 0, top: 0 })
+  }, [target])
+  useEffect(() => {
+    if (!dragging) return
+    const move = (e) => {
+      const d = dragRef.current
+      const scroll = scrollRef.current
+      if (!d.active || !scroll) return
+      scroll.scrollLeft = d.sl - (e.clientX - d.sx)
+      scroll.scrollTop = d.st - (e.clientY - d.sy)
+    }
+    const up = () => { dragRef.current.active = false; setDragging(false) }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+    return () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+    }
+  }, [dragging])
+  const onDragStart = (e) => {
+    if (!canDrag || e.button !== 0) return
+    if (e.target.closest?.('audio,button,a,input,textarea,select,video')) return
+    const scroll = scrollRef.current
+    if (!scroll) return
+    dragRef.current = { active: true, sx: e.clientX, sy: e.clientY, sl: scroll.scrollLeft, st: scroll.scrollTop }
+    setDragging(true)
+    e.preventDefault()
+  }
   return (
     <AnimatePresence>
       {target && (
@@ -2559,7 +2594,12 @@ function ZoomModal({ target, scale, onClose, onZoom, variant = 'quiz' }) {
               </div>
             </div>
 
-            <div ref={scrollRef} className="flex-1 overflow-auto px-5 sm:px-7 py-5">
+            <div
+              ref={scrollRef}
+              onMouseDown={onDragStart}
+              onDragStartCapture={(e) => { if (canDrag) e.preventDefault() }}
+              className={`flex-1 overflow-auto px-5 sm:px-7 py-5 ${canDrag ? (dragging ? 'cursor-grabbing select-none' : 'cursor-grab select-none') : ''}`}
+            >
               <div style={{ width: natural.w * scale, height: natural.h * scale }}>
                 <div
                   ref={contentRef}
