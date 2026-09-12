@@ -653,6 +653,7 @@
     "passwordPlaceholder": "Masukkan kata sandi",
     "selectAnswer": "— Pilih jawaban —",
     "required": "Pertanyaan ini wajib diisi",
+    "otherRequired": "Kamu memilih Lainnya — silakan ketik jawabanmu",
     "wrongPassword": "Kata sandi salah, coba lagi",
     "charLimit": "Melebihi batas {{limit}} karakter ({{current}}/{{limit}})",
     "fileRequired": "Pertanyaan wajib — unggah berkas terlebih dahulu",

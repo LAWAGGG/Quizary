@@ -30,6 +30,12 @@ const hasValue = (v) => Array.isArray(v)
 const splitChoice = (v) => Array.isArray(v)
   ? { ids: v, text: null }
   : { ids: (v && v.ids) || [], text: (v && v.text) ?? null }
+// Other aktif tapi teks kosong = belum lengkap, walau opsi lain tercheck.
+const otherTextMissing = (q, v) => {
+  if (!q || (q.type !== 'multiple_choice' && q.type !== 'checkbox') || !q.allow_other) return false
+  const { text } = splitChoice(v)
+  return text != null && !String(text).trim()
+}
 
 function parseDate(str) {
   if (!str) return null
@@ -853,29 +859,32 @@ export default function AnswerQuiz() {
     if (!question) return
 
     if (question.type === 'multiple_choice' || question.type === 'dropdown') {
+      const { ids, text } = splitChoice(answers[qId])
+      const toggledOff = optId == null || ids[0] === optId
+      const nextIds = toggledOff ? [] : [optId]
+      // MC single-answer: pilih opsi baru membuang teks Lainnya;
+      // batal-pilih mempertahankannya (tetap terjawab bila teks ada).
+      const keepText = text && toggledOff ? text : null
+      const next = keepText ? { ids: nextIds, text: keepText } : nextIds
       setAnswers((a) => {
-        const { ids, text } = splitChoice(a[qId])
-        const toggledOff = optId == null || ids[0] === optId
-        const nextIds = toggledOff ? [] : [optId]
-        // MC single-answer: pilih opsi baru membuang teks Lainnya;
-        // batal-pilih mempertahankannya (tetap terjawab bila teks ada).
-        const keepText = text && toggledOff ? text : null
-        const next = keepText ? { ids: nextIds, text: keepText } : nextIds
         save(qId, next)
         return { ...a, [qId]: next }
       })
+      // Clear error hanya bila hasil akhirnya valid — Other kosong tetap invalid.
+      if (validationErrors[qId] && isAnswered(question, next)) {
+        setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
+      }
     } else if (question.type === 'checkbox') {
+      const { ids, text } = splitChoice(answers[qId])
+      const nextIds = ids.includes(optId) ? ids.filter((id) => id !== optId) : [...ids, optId]
+      const next = text ? { ids: nextIds, text } : nextIds
       setAnswers((a) => {
-        const { ids, text } = splitChoice(a[qId])
-        const nextIds = ids.includes(optId) ? ids.filter((id) => id !== optId) : [...ids, optId]
-        const next = text ? { ids: nextIds, text } : nextIds
         save(qId, next)
         return { ...a, [qId]: next }
       })
-    }
-    // Clear validation error for this question once user picks an answer
-    if (validationErrors[qId]) {
-      setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
+      if (validationErrors[qId] && isAnswered(question, next)) {
+        setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
+      }
     }
   }
 
@@ -887,20 +896,20 @@ export default function AnswerQuiz() {
     const question = data?.questions?.find((x) => x.id === qId)
     const v = answers[qId]
     if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const next = splitChoice(v).ids
       setAnswers((a) => {
-        const next = splitChoice(a[qId]).ids
         save(qId, next)
         return { ...a, [qId]: next }
       })
+      if (validationErrors[qId] && isAnswered(question, next)) {
+        setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
+      }
     } else {
       const ids = Array.isArray(v) ? v : []
       // MC satu jawaban: nyalakan Lainnya = lepas semua opsi biasa
       const nextIds = question?.type === 'multiple_choice' ? [] : ids
       setAnswers((a) => ({ ...a, [qId]: { ids: nextIds, text: '' } }))
       setTimeout(() => document.getElementById(`other-input-${qId}`)?.focus(), 60)
-    }
-    if (validationErrors[qId]) {
-      setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
     }
   }
 
@@ -1026,11 +1035,7 @@ export default function AnswerQuiz() {
     // Quiz (isOneByOne) memang tidak blok Next Question untuk required, hanya password.
     if (!isOneByOne) {
       const pageQs = formPages[currentIdx]?.questions || []
-      const isAns = (q) => {
-        if (q.type === 'file_upload') return !!fileAnswers[q.id]?.url
-        return hasValue(answers[q.id])
-      }
-      const missing = pageQs.filter((q) => q.is_required !== false && !isAns(q))
+      const missing = pageQs.filter((q) => q.is_required !== false && !isAnswered(q, answers[q.id]))
       if (missing.length) {
         const errs = Object.fromEntries(missing.map((q) => [q.id, true]))
         setValidationErrors((e) => ({ ...e, ...errs }))
@@ -1101,11 +1106,7 @@ export default function AnswerQuiz() {
       // CARD: required blok forward jump (section) — mirip Next
       if (!isOneByOne) {
         const pageQs = formPages[currentIdx]?.questions || []
-        const isAns = (q) => {
-          if (q.type === 'file_upload') return !!fileAnswers[q.id]?.url
-          return hasValue(answers[q.id])
-        }
-        const missing = pageQs.filter((q) => q.is_required !== false && !isAns(q))
+        const missing = pageQs.filter((q) => q.is_required !== false && !isAnswered(q, answers[q.id]))
         if (missing.length) {
           const errs = Object.fromEntries(missing.map((q) => [q.id, true]))
           setValidationErrors((e) => ({ ...e, ...errs }))
@@ -1154,15 +1155,11 @@ export default function AnswerQuiz() {
     }
 
     // Frontend validation — cek semua soal required sebelum kirim ke backend
-    const isAnsweredCheck = (q, val) => {
-      if (q?.type === 'file_upload') return !!fileAnswers[q.id]?.url
-      return Array.isArray(val) ? val.length > 0 : !!val && String(val).trim().length > 0
-    }
     const errors = {}
     let firstErrorIdx = -1
     const qs = data?.questions || []
     qs.forEach((q, idx) => {
-      if (q.is_required !== false && !isAnsweredCheck(q, answers[q.id])) {
+      if (q.is_required !== false && !isAnswered(q, answers[q.id])) {
         errors[q.id] = true
         if (firstErrorIdx === -1) firstErrorIdx = idx
       }
@@ -1332,6 +1329,7 @@ export default function AnswerQuiz() {
   // Helper shared by both quiz and form modes
   const isAnswered = (q, val) => {
     if (q?.type === 'file_upload') return !!fileAnswers[q.id]?.url
+    if (otherTextMissing(q, val)) return false
     return hasValue(val)
   }
 
@@ -1547,6 +1545,9 @@ export default function AnswerQuiz() {
                         />
                       )}
                     </div>
+                    {validationErrors[current.id] && otherTextMissing(current, answers[current.id]) && (
+                      <p className="text-xs font-medium text-incorrect mt-2 text-center">{t('answerQuiz.otherRequired')}</p>
+                    )}
                   </div>
                 )}
 
@@ -1585,6 +1586,9 @@ export default function AnswerQuiz() {
                         />
                       )}
                     </div>
+                    {validationErrors[current.id] && otherTextMissing(current, answers[current.id]) && (
+                      <p className="text-xs font-medium text-incorrect mt-2 text-center">{t('answerQuiz.otherRequired')}</p>
+                    )}
                   </div>
                 )}
 
@@ -1864,7 +1868,7 @@ export default function AnswerQuiz() {
                   {(validationErrors[q.id] && !textLimitErrors[q.id]) && (
                     <p className="text-xs font-semibold text-red-500 flex items-center gap-1 mb-3">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      {q.type === 'password' && pwWrong[q.id] ? t('answerQuiz.wrongPassword') : t('answerQuiz.required')}
+                      {q.type === 'password' && pwWrong[q.id] ? t('answerQuiz.wrongPassword') : otherTextMissing(q, answers[q.id]) ? t('answerQuiz.otherRequired') : t('answerQuiz.required')}
                     </p>
                   )}
                   {questionImageUrl(q) && (

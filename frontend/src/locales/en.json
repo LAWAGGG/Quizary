@@ -658,6 +658,7 @@
     "passwordPlaceholder": "Enter password",
     "selectAnswer": "— Select an answer —",
     "required": "This question is required",
+    "otherRequired": "You selected Other — please type your answer",
     "wrongPassword": "Wrong password, please try again",
     "charLimit": "Exceeds {{limit}} characters ({{current}}/{{limit}})",
     "fileRequired": "Required question — upload a file first",

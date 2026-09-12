@@ -376,7 +376,7 @@ export default function FormEdit() {
   const isQuiz = form.type === 'quiz'
 
   return (
-    <div className="settings-blueprint" style={{ '--t': form.theme_color || '#6C5CE7' }}>
+    <div>
       <FormBackButton />
 
       <PageHeader
