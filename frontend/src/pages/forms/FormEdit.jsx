@@ -451,25 +451,6 @@ export default function FormEdit() {
                 )}
               </div>
 
-              <div className="divide-y divide-gray-100 dark:divide-gray-800 rounded-xl overflow-hidden">
-                <SettingRow
-                  title={t('formEdit.makeQuiz')}
-                  control={
-                    <Toggle
-                      label={t('formEdit.makeQuiz')}
-                      checked={isQuiz}
-                      onChange={(v) => {
-                        const nt = v ? 'quiz' : 'form'
-                        if (nt === 'form') setForm((prev) => ({ ...prev, type: nt, show_leaderboard: false, is_restricted: false }))
-                        else setForm((prev) => ({ ...prev, type: nt }))
-                        setErrors((prev) => ({ ...prev, type: undefined }))
-                      }}
-                    />
-                  }
-                />
-                {errors.type && <p className="field-error px-4 pb-2 -mt-1">{errors.type}</p>}
-              </div>
-
             </div>
           </SectionCard>
 
@@ -579,19 +560,25 @@ export default function FormEdit() {
           </SectionCard>
 
           <SectionCard title={t('formEdit.behavior')} icon={<Settings2 className="w-4 h-4" />}>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            <div className="divide-y divide-gray-100 dark:divide-gray-800 rounded-xl overflow-hidden">
               <SettingRow
-                title={t('formEdit.shuffleQuestions')}
-                desc={t('formEdit.shuffleQuestionsDesc')}
-                control={<Toggle label="Shuffle questions" checked={form.shuffle_questions} onChange={(v) => setForm((prev) => ({ ...prev, shuffle_questions: v }))} />}
+                title={t('formEdit.makeQuiz')}
+                control={
+                  <Toggle
+                    label={t('formEdit.makeQuiz')}
+                    checked={isQuiz}
+                    onChange={(v) => {
+                      const nt = v ? 'quiz' : 'form'
+                      if (nt === 'form') setForm((prev) => ({ ...prev, type: nt, show_leaderboard: false, is_restricted: false }))
+                      else setForm((prev) => ({ ...prev, type: nt }))
+                      setErrors((prev) => ({ ...prev, type: undefined }))
+                    }}
+                  />
+                }
               />
-              <SettingRow
-                title={t('formEdit.shuffleOptions')}
-                desc={t('formEdit.shuffleOptionsDesc')}
-                control={<Toggle label="Shuffle options" checked={form.shuffle_options} onChange={(v) => setForm((prev) => ({ ...prev, shuffle_options: v }))} />}
-              />
+              {errors.type && <p className="field-error px-4 pb-2 -mt-1">{errors.type}</p>}
               {isQuiz && (
-                <>
+                <div className="ml-4 pl-4 border-l-2 border-primary/25 dark:border-primary/30 divide-y divide-gray-100 dark:divide-gray-800">
                   <div className="py-3">
                     <p className="text-sm font-medium text-ink dark:text-gray-100">{t('formEdit.scoringMode')}</p>
                     <div className="mt-3">
@@ -624,8 +611,20 @@ export default function FormEdit() {
                     desc={t('formEdit.restrictModeDesc')}
                     control={<Toggle label="Restrict mode" checked={isRestricted} onChange={(v) => toggleSetting('is_restricted', v)} />}
                   />
-                </>
+                </div>
               )}
+            </div>
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              <SettingRow
+                title={t('formEdit.shuffleQuestions')}
+                desc={t('formEdit.shuffleQuestionsDesc')}
+                control={<Toggle label="Shuffle questions" checked={form.shuffle_questions} onChange={(v) => setForm((prev) => ({ ...prev, shuffle_questions: v }))} />}
+              />
+              <SettingRow
+                title={t('formEdit.shuffleOptions')}
+                desc={t('formEdit.shuffleOptionsDesc')}
+                control={<Toggle label="Shuffle options" checked={form.shuffle_options} onChange={(v) => setForm((prev) => ({ ...prev, shuffle_options: v }))} />}
+              />
               <div className="py-4">
                 <Input
                   label={t('formEdit.timeLimit') + (isQuiz ? ' *' : '')}
