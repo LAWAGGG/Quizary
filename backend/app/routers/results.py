@@ -18,7 +18,7 @@ from app.models.answer_option import AnswerOption
 from app.models.question import Question, QuestionType
 from app.models.question_option import QuestionOption
 from app.models.user import User
-from app.services.grading import grade_answer
+from app.services.grading import grade_answer, GRADABLE_TYPES, has_answer_key
 from app.services.session_expiry import auto_submit_expired_for_form
 from app.utils import to_naive_utc, fmt_dt, now_wib, _delete_file
 from app.services.grading import grade_submission
@@ -385,14 +385,17 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
                 correct += 1
             elif verdict is False:
                 wrong += 1
+        scored = bool(q.is_scored) and (q.type in GRADABLE_TYPES or has_answer_key(q))
         per_q.append(PerQuestionStat(
             question_id=q.id,
             question_text=q.question_text,
             correct_count=correct,
             wrong_count=wrong,
+            is_scored=scored,
         ))
-        total_correct += correct
-        total_answers += correct + wrong
+        if scored:
+            total_correct += correct
+            total_answers += correct + wrong
 
     rate = total_correct / total_answers if total_answers else 0
 
@@ -429,6 +432,8 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
     # ── Item Difficulty Diagnostics (Easiest & Hardest) ───────────────────────
     evaluated_questions = []
     for idx, q_stat in enumerate(per_q):
+        if not q_stat.is_scored:
+            continue
         attempt_total = q_stat.correct_count + q_stat.wrong_count
         if attempt_total > 0:
             acc = q_stat.correct_count / attempt_total
@@ -474,10 +479,14 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
 
 def _strip_html(text) -> str:
     """Buang tag HTML dari teks rich (question/option) untuk export yang bersih."""
+    import html
     import re
-    text = str(text or "")
-    text = re.sub(r"<[^>]*>", "", text)
-    return text.strip()
+    raw = str(text or "")
+    had_tags = bool(re.search(r"<[a-zA-Z][^>]*>", raw))
+    cleaned = html.unescape(re.sub(r"<[^>]*>", "", raw))
+    if not had_tags and re.search(r"<[a-zA-Z][^>]*>", cleaned):
+        cleaned = html.unescape(re.sub(r"<[^>]*>", "", cleaned))
+    return html.unescape(cleaned).strip()
 
 
 # Karakter pembuka yang membuat Excel menafsirkan sel sebagai formula.

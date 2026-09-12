@@ -975,8 +975,11 @@ Response bergantung pada tipe form (`type` field).
     { "range": "2-3", "count": 22 }
   ],
   "per_question_stats": [
-    { "question_id": 1, "correct_count": 20, "wrong_count": 5 }
+    { "question_id": 1, "question_text": "...", "correct_count": 20, "wrong_count": 5, "is_scored": true },
+    { "question_id": 2, "question_text": "...", "correct_count": 0, "wrong_count": 0, "is_scored": false }
   ],
+  // is_scored=false → soal tak dinilai (date/time/file_upload/dropdown/essay
+  // tanpa kunci): frontend tampil "-" untuk correct/wrong/accuracy.
   "total_answers": 0,
   "completion_rate": 0,
   "avg_answers": 0,

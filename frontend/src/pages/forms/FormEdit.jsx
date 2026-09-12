@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Copy, Check, Save, Trash2, ImageUp, Link2, ChevronDown, Info, Lock, Settings2, Download, QrCode, X, Palette } from 'lucide-react'
+import { Copy, Check, Save, Trash2, ImageUp, Link2, Info, Lock, Settings2, Download, QrCode, X, Palette } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
@@ -43,23 +43,14 @@ function ShareLink({ value }) {
   )
 }
 
-function CollapsibleCard({ title, icon, defaultOpen = false, open, onToggle, children }) {
-  const [internal, setInternal] = useState(defaultOpen)
-  const isOpen = open !== undefined ? open : internal
-  const toggle = () => (onToggle ? onToggle(!isOpen) : setInternal(!isOpen))
+function SectionCard({ title, icon, children }) {
   return (
     <Card padding={false}>
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={isOpen}
-        className="w-full flex items-center gap-2.5 px-5 py-4 text-left hover:bg-gray-50/70 dark:hover:bg-ink-800/40 transition-colors"
-      >
+      <div className="flex items-center gap-2.5 px-5 pt-4 pb-3">
         <span className="text-primary shrink-0">{icon}</span>
         <h2 className="font-display font-semibold text-ink dark:text-gray-100">{title}</h2>
-        <ChevronDown className={`w-4 h-4 text-gray-400 dark:text-gray-500 ml-auto shrink-0 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-      {isOpen && <div className="px-5 pb-5">{children}</div>}
+      </div>
+      <div className="px-5 pb-5">{children}</div>
     </Card>
   )
 }
@@ -99,13 +90,9 @@ export default function FormEdit() {
   const titleRef = useRef(null)
   const timerRef = useRef(null)
   const designRef = useRef(null)
-  const [basicOpen, setBasicOpen] = useState(true)
-  const [behaviorOpen, setBehaviorOpen] = useState(false)
-  const [designOpen, setDesignOpen] = useState(false)
 
-  // Buka card + scroll ke input yang error supaya user langsung lihat apa yang kurang.
-  const revealError = (setOpen, ref) => {
-    setOpen(true)
+  // Scroll ke input yang error supaya user langsung lihat apa yang kurang.
+  const revealError = (ref) => {
     setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
   }
 
@@ -248,9 +235,9 @@ export default function FormEdit() {
         Object.entries(entry).forEach(([k, v]) => { mapped[k] = v })
       })
       setErrors(mapped)
-      if (mapped.title) revealError(setBasicOpen, titleRef)
-      if (mapped.timer_seconds) revealError(setBehaviorOpen, timerRef)
-      if (mapped.display_style || mapped.theme_color) revealError(setDesignOpen, designRef)
+      if (mapped.title) revealError(titleRef)
+      if (mapped.timer_seconds) revealError(timerRef)
+      if (mapped.display_style || mapped.theme_color) revealError(designRef)
       const unresolved = data.errors.filter((entry) => Object.keys(entry)[0] === '_schema')
       if (unresolved.length || data.message) {
         toast.error(data.message || t('formEdit.invalidFields'))
@@ -263,13 +250,13 @@ export default function FormEdit() {
   const handleSave = async () => {
     if (!stripTags(form.title)) {
       setErrors({ title: t('formEdit.titleRequired') })
-      revealError(setBasicOpen, titleRef)
+      revealError(titleRef)
       return
     }
     // Quiz wajib punya timer (per menit) — dicek juga di backend saat publish.
     if (isQuiz && !timerMinutes) {
       setErrors({ timer_seconds: t('formEdit.timerRequired') })
-      revealError(setBehaviorOpen, timerRef)
+      revealError(timerRef)
       return
     }
     setSaving(true)
@@ -408,7 +395,7 @@ export default function FormEdit() {
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-6 order-2 lg:order-1">
-          <CollapsibleCard title={t('formEdit.basicInfo')} icon={<Info className="w-4 h-4" />} open={basicOpen} onToggle={setBasicOpen}>
+          <SectionCard title={t('formEdit.basicInfo')} icon={<Info className="w-4 h-4" />}>
             <div className="space-y-5">
               <div ref={titleRef}>
                 <span className="field-label">{t('formEdit.titleLabel')}</span>
@@ -484,9 +471,9 @@ export default function FormEdit() {
               </div>
 
             </div>
-          </CollapsibleCard>
+          </SectionCard>
 
-          <CollapsibleCard title={t('formEdit.access')} icon={<Lock className="w-4 h-4" />}>
+          <SectionCard title={t('formEdit.access')} icon={<Lock className="w-4 h-4" />}>
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               <SettingRow
                 title={t('formEdit.limitOneResponse')}
@@ -524,9 +511,9 @@ export default function FormEdit() {
                 }
               />
             </div>
-          </CollapsibleCard>
+          </SectionCard>
 
-          <CollapsibleCard title={t('formEdit.design')} icon={<Palette className="w-4 h-4" />} open={designOpen} onToggle={setDesignOpen}>
+          <SectionCard title={t('formEdit.design')} icon={<Palette className="w-4 h-4" />}>
             <div ref={designRef} className="space-y-5">
               <div>
                 <label className="field-label">{t('formEdit.designType')}</label>
@@ -589,9 +576,9 @@ export default function FormEdit() {
                 {errors.theme_color && <p className="field-error">{errors.theme_color}</p>}
               </div>
             </div>
-          </CollapsibleCard>
+          </SectionCard>
 
-          <CollapsibleCard title={t('formEdit.behavior')} icon={<Settings2 className="w-4 h-4" />} open={behaviorOpen} onToggle={setBehaviorOpen}>
+          <SectionCard title={t('formEdit.behavior')} icon={<Settings2 className="w-4 h-4" />}>
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               <SettingRow
                 title={t('formEdit.shuffleQuestions')}
@@ -697,11 +684,11 @@ export default function FormEdit() {
                 </Button>
               </div>
             </div>
-          </CollapsibleCard>
+          </SectionCard>
         </div>
 
         <div className="space-y-6 lg:sticky lg:top-6 self-start order-1 lg:order-2">
-          <CollapsibleCard title={t('formEdit.share')} icon={<Link2 className="w-4 h-4" />} defaultOpen>
+          <SectionCard title={t('formEdit.share')} icon={<Link2 className="w-4 h-4" />}>
             <ShareLink value={`${window.location.origin}/q/${form.short_code}`} />
             <div className="mt-4">
               <Button
@@ -713,8 +700,8 @@ export default function FormEdit() {
                 {t('formEdit.showQr')}
               </Button>
             </div>
-          </CollapsibleCard>
-          <CollapsibleCard title={t('formEdit.banner')} icon={<ImageUp className="w-4 h-4" />} defaultOpen>
+          </SectionCard>
+          <SectionCard title={t('formEdit.banner')} icon={<ImageUp className="w-4 h-4" />}>
             {form.banner_path ? (
               <img src={resolveMediaUrl(form.banner_path)} alt="Banner" className="w-full h-36 object-cover rounded-xl mb-4" />
             ) : (
@@ -738,7 +725,7 @@ export default function FormEdit() {
                 </Button>
               </div>
             )}
-          </CollapsibleCard>
+          </SectionCard>
         </div>
       </div>
 

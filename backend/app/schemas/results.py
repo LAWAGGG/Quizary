@@ -41,6 +41,7 @@ class PerQuestionStat(BaseModel):
     question_text: str = ""
     correct_count: int
     wrong_count: int
+    is_scored: bool = True
 
 
 class ScoreDistribution(BaseModel):
