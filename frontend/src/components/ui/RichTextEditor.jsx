@@ -30,7 +30,7 @@ const FORMULA_TEMPLATES = [
   { label: 'lim', tex: '\\lim_{x \\to \\infty} f(x)' },
 ]
 
-export function RichTextEditor({ value = '', onChange, placeholder = '', compact = false, minHeight = 140, showPreview = true }) {
+export function RichTextEditor({ value = '', onChange, placeholder = '', compact = false, minHeight = 140, showPreview = true, headline = false }) {
   const containerRef = useRef(null)
   const wrapperRef = useRef(null)
   const quillRef = useRef(null)
@@ -316,7 +316,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
 
   return (
     <>
-    <div ref={wrapperRef} className={`rich-editor relative ${compact ? 'rich-editor-compact' : ''} ${active ? 'rich-editor-active' : ''}`}>
+    <div ref={wrapperRef} className={`rich-editor relative ${compact ? 'rich-editor-compact' : ''} ${headline ? 'rich-editor-headline' : ''} ${active ? 'rich-editor-active' : ''}`}>
       <div
         ref={containerRef}
         style={{ minHeight }}

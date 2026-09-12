@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Copy, Check, Save, Trash2, ImageUp, Link2, Info, Lock, Settings2, Download, QrCode, X, Palette } from 'lucide-react'
+import { Copy, Check, Save, Trash2, ImageUp, Link2, Info, Lock, Settings2, Download, QrCode, X, Palette, ExternalLink } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
@@ -18,18 +18,13 @@ function ShareLink({ value }) {
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
-  // Compact: link bisa diklik (buka halaman publik) + tombol copy dalam satu baris.
+  // Link hanya untuk copy — preview lewat tombol terpisah agar tidak
+  // membingungkan user baru (dulu teks link bisa diklik buka halaman publik).
   return (
     <div className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-ink-800/50 px-3.5 h-11">
-      <a
-        href={value}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={t('formEdit.openPublic')}
-        className="flex-1 min-w-0 font-mono text-sm text-gray-600 dark:text-gray-300 truncate hover:text-primary dark:hover:text-primary-300 transition-colors"
-      >
+      <span className="flex-1 min-w-0 font-mono text-sm text-gray-600 dark:text-gray-300 truncate">
         {value}
-      </a>
+      </span>
       <button
         type="button"
         onClick={handleCopy}
@@ -84,9 +79,10 @@ export default function FormEdit() {
   const [showDelete, setShowDelete] = useState(false)
   const [showQr, setShowQr] = useState(false)
   const [errors, setErrors] = useState({})
-  const [scoringMode, setScoringMode] = useState('auto')
-  const [scoringSaving, setScoringSaving] = useState(false)
   const [questions, setQuestions] = useState([])
+  // Bobot manual pending: ikut unsaved changes, dikirim saat Save (tanpa Apply).
+  const [manualPoints, setManualPoints] = useState(5)
+  const [initialManualPoints, setInitialManualPoints] = useState(5)
   const titleRef = useRef(null)
   const timerRef = useRef(null)
   const designRef = useRef(null)
@@ -96,17 +92,24 @@ export default function FormEdit() {
     setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
   }
 
+  // Bobot awal = modus poin soal dinilai (seragam = nilai itu, beda = 5).
+  const syncManualPoints = (list) => {
+    const pts = (list || []).filter((q) => q.is_scored !== false).map((q) => q.points ?? 0)
+    const initial = pts.length && pts.every((p) => p === pts[0]) && pts[0] > 0 ? pts[0] : 5
+    setManualPoints(initial)
+    setInitialManualPoints(initial)
+  }
+
   useEffect(() => {
     api.get(`/forms/${id}`)
       .then((res) => {
         setForm(res.data)
         setBase(res.data)
-        setScoringMode(res.data.scoring_mode || 'auto')
         const minutes = res.data.timer_seconds ? String(Math.round(res.data.timer_seconds / 60)) : ''
         setTimerMinutes(minutes)
         setInitialTimerMinutes(minutes)
         if (res.data.type === 'quiz') {
-          api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => { })
+          api.get(`/forms/${id}/questions`).then((qRes) => { setQuestions(qRes.data.data); syncManualPoints(qRes.data.data) }).catch(() => { })
         }
       })
       .catch(() => navigate('/forms'))
@@ -167,6 +170,7 @@ export default function FormEdit() {
       status: form.status,
       require_login: form.require_login,
       submission_limit: form.submission_limit,
+      scoring_mode: form.scoring_mode || 'auto',
       theme_color: form.theme_color || null,
       thank_you_message: form.thank_you_message || null,
       shuffle_questions: form.shuffle_questions,
@@ -190,6 +194,7 @@ export default function FormEdit() {
       status: base.status,
       require_login: base.require_login,
       submission_limit: base.submission_limit,
+      scoring_mode: base.scoring_mode || 'auto',
       theme_color: base.theme_color || null,
       thank_you_message: base.thank_you_message || null,
       shuffle_questions: base.shuffle_questions,
@@ -219,8 +224,9 @@ export default function FormEdit() {
   const dirty = useMemo(() => {
     if (!form || !base) return false
     const timerChanged = timerMinutes !== initialTimerMinutes
-    return JSON.stringify(normalize()) !== JSON.stringify(baseSnapshot()) || timerChanged
-  }, [form, base, timerMinutes, initialTimerMinutes])
+    const pointsChanged = manualPoints !== initialManualPoints
+    return JSON.stringify(normalize()) !== JSON.stringify(baseSnapshot()) || timerChanged || pointsChanged
+  }, [form, base, timerMinutes, initialTimerMinutes, manualPoints, initialManualPoints])
 
   const buildPayload = () => ({
     ...normalize(),
@@ -267,6 +273,15 @@ export default function FormEdit() {
       const minutes = res.data.timer_seconds ? String(Math.round(res.data.timer_seconds / 60)) : ''
       setTimerMinutes(minutes)
       setInitialTimerMinutes(minutes)
+      // Mode manual: bobot pending dikirim setelah PUT (mode tersimpan dulu
+      // agar backend tidak menolak batch saat masih auto).
+      if (res.data.type === 'quiz' && (res.data.scoring_mode || 'auto') === 'manual' && manualPoints !== initialManualPoints) {
+        await api.patch(`/forms/${id}/questions/points`, { points: manualPoints })
+        setInitialManualPoints(manualPoints)
+      }
+      if (res.data.type === 'quiz') {
+        api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => { })
+      }
       setErrors({})
       toast.success(t('formEdit.saved'))
     } catch (err) {
@@ -281,6 +296,10 @@ export default function FormEdit() {
     const minutes = base.timer_seconds ? String(Math.round(base.timer_seconds / 60)) : ''
     setTimerMinutes(minutes)
     setInitialTimerMinutes(minutes)
+    setManualPoints(initialManualPoints)
+    if (base.type === 'quiz') {
+      api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => { })
+    }
     setErrors({})
   }
 
@@ -334,37 +353,17 @@ export default function FormEdit() {
     }
   }
 
-  const handleBatchUpdatePoints = async (points) => {
-    try {
-      await api.patch(`/forms/${id}/questions/points`, { points })
-      const qRes = await api.get(`/forms/${id}/questions`)
-      setQuestions(qRes.data.data)
-      toast.success(t('formEdit.batchPointsSet', { points }))
-    } catch (err) {
-      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to update points')
-      throw err
+  const handleScoringModeChange = (mode) => {
+    if (!form || mode === (form.scoring_mode || 'auto')) return
+    setForm((prev) => ({ ...prev, scoring_mode: mode }))
+    if (mode === 'auto') {
+      api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => { })
     }
   }
 
-  const handleScoringModeChange = async (mode) => {
-    if (!form || mode === scoringMode || scoringSaving) return
-    const previous = scoringMode
-    setScoringMode(mode)
-    setScoringSaving(true)
-    try {
-      const res = await api.put(`/forms/${id}`, { scoring_mode: mode })
-      setForm((prev) => ({ ...prev, ...res.data }))
-      setBase((prev) => ({ ...prev, ...res.data }))
-      if (mode === 'auto') {
-        api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => { })
-      }
-      toast.success(mode === 'auto' ? t('formEdit.scoringAutoOn') : t('formEdit.scoringManualOn'))
-    } catch (err) {
-      setScoringMode(previous)
-      toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to change scoring method')
-    } finally {
-      setScoringSaving(false)
-    }
+  const handleManualPointsChange = (value) => {
+    if (!Number.isFinite(value)) return
+    setManualPoints(Math.max(0, Math.min(999, Math.round(value))))
   }
 
   if (loading) return <PageSkeleton />
@@ -377,7 +376,7 @@ export default function FormEdit() {
   const isQuiz = form.type === 'quiz'
 
   return (
-    <div>
+    <div className="settings-blueprint" style={{ '--t': form.theme_color || '#6C5CE7' }}>
       <FormBackButton />
 
       <PageHeader
@@ -404,6 +403,7 @@ export default function FormEdit() {
                   onChange={(html) => setForm((prev) => ({ ...prev, title: html }))}
                   placeholder={t('formEdit.titlePlaceholder')}
                   minHeight={60}
+                  headline
                 />
                 {errors.title && <p className="field-error mt-1">{errors.title}</p>}
               </div>
@@ -583,11 +583,11 @@ export default function FormEdit() {
                     <p className="text-sm font-medium text-ink dark:text-gray-100">{t('formEdit.scoringMode')}</p>
                     <div className="mt-3">
                       <ScoringSettings
-                        mode={scoringMode}
+                        mode={form.scoring_mode || 'auto'}
                         onModeChange={handleScoringModeChange}
-                        saving={scoringSaving}
                         questions={questions}
-                        onBatchUpdate={handleBatchUpdatePoints}
+                        manualPoints={manualPoints}
+                        onManualPointsChange={handleManualPointsChange}
                       />
                     </div>
                   </div>
@@ -689,10 +689,18 @@ export default function FormEdit() {
         <div className="space-y-6 lg:sticky lg:top-6 self-start order-1 lg:order-2">
           <SectionCard title={t('formEdit.share')} icon={<Link2 className="w-4 h-4" />}>
             <ShareLink value={`${window.location.origin}/q/${form.short_code}`} />
-            <div className="mt-4">
+            <div className="mt-4 flex gap-2">
+              <Button
+                variant="primary"
+                className="flex-1"
+                icon={<ExternalLink className="w-4 h-4" />}
+                onClick={() => window.open(`${window.location.origin}/q/${form.short_code}`, '_blank', 'noopener,noreferrer')}
+              >
+                {t('formEdit.openPublic')}
+              </Button>
               <Button
                 variant="secondary"
-                className="w-full"
+                className="flex-1"
                 icon={<QrCode className="w-4 h-4" />}
                 onClick={() => setShowQr(true)}
               >

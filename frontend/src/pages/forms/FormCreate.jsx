@@ -87,6 +87,7 @@ export default function FormCreate() {
                   onChange={(html) => { setForm((prev) => ({ ...prev, title: html })); setError('') }}
                   placeholder={t('formCreate.titlePlaceholder')}
                   minHeight={60}
+                  headline
                 />
                 {error && <p className="field-error mt-1">{error}</p>}
               </div>
