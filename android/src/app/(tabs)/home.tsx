@@ -39,11 +39,13 @@ export default function HomeScreen() {
     } catch {}
   }, []);
 
-  const fetchPage = useCallback(async (pageNum: number, isRefresh = false) => {
-    if (isRefresh) {
-      setLoading(true);
-    } else if (pageNum > 1) {
-      setLoadingMore(true);
+  const fetchPage = useCallback(async (pageNum: number, isRefresh = false, silent = false) => {
+    if (!silent) {
+      if (isRefresh) {
+        setLoading(true);
+      } else if (pageNum > 1) {
+        setLoadingMore(true);
+      }
     }
     try {
       const res: any = await getMySubmissions({ page: pageNum, per_page: PER_PAGE }).catch(() => null);
@@ -52,7 +54,30 @@ export default function HomeScreen() {
         const meta = res?.meta;
         const serverTotal = meta?.total;
         if (typeof serverTotal === 'number') setTotal(serverTotal);
-        if (isRefresh || pageNum === 1) {
+        if (silent && (isRefresh || pageNum === 1)) {
+          // silent polling: upsert tanpa reset scroll, biar status langsung update tanpa flicker
+          setSubmissions((prev) => {
+            if (prev.length === 0) return list;
+            const byId = new Map(prev.map((p: any) => [p.id, p]));
+            let changed = false;
+            const merged = [...prev];
+            for (const item of list) {
+              const existingIdx = merged.findIndex((p: any) => p.id === item.id);
+              if (existingIdx !== -1) {
+                if (JSON.stringify(merged[existingIdx]) !== JSON.stringify(item)) {
+                  merged[existingIdx] = item;
+                  changed = true;
+                }
+              } else {
+                merged.unshift(item);
+                changed = true;
+                // keep total length reasonable — trim if exceeds loaded + new
+                if (merged.length > 100) merged.pop();
+              }
+            }
+            return changed ? merged : prev;
+          });
+        } else if (isRefresh || pageNum === 1) {
           setSubmissions(list);
         } else {
           setSubmissions((prev) => [...prev, ...list]);
@@ -73,9 +98,11 @@ export default function HomeScreen() {
     } catch (e) {
       console.log('Error loading submissions page', pageNum, e);
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      setRefreshing(false);
+      if (!silent) {
+        setLoading(false);
+        setLoadingMore(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -86,7 +113,13 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       loadData();
-    }, [loadData])
+      // polling silent tiap 4 detik biar status auto_submitted/cheating/locked langsung kelihatan tanpa refresh manual
+      const id = setInterval(() => {
+        fetchPage(1, true, true);
+        fetchUser().catch(() => {});
+      }, 4000);
+      return () => clearInterval(id);
+    }, [loadData, fetchPage, fetchUser])
   );
 
   const onRefresh = useCallback(() => {

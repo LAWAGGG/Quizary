@@ -99,13 +99,19 @@ export default function Results() {
 
   const handleDeleteSelected = async () => {
     setDeleting(true)
+    const ids = [...selected]
+    const prevData = [...data]
+    // optimistic hapus
+    setData((prev) => prev.filter((r) => !ids.includes(r.submission_id)))
+    setSelected(new Set())
     try {
-      const res = await api.delete(`/forms/${formId}/results`, { data: { submission_ids: [...selected] } })
+      const res = await api.delete(`/forms/${formId}/results`, { data: { submission_ids: ids } })
       toast.success(res.data.message || t('results.deleted', { count: res.data.deleted }))
       setShowDelete(false)
-      setSelected(new Set())
-      fetchResults(1, { reset: true })
+      fetchResults(1, { reset: false })
     } catch (err) {
+      setData(prevData)
+      setSelected(new Set(ids))
       toast.error(err.response?.data?.message || t('results.deleteFailed'))
     } finally {
       setDeleting(false)
@@ -119,13 +125,20 @@ export default function Results() {
 
   const applyStatus = async ({ id, status }) => {
     setStatusSaving(true)
+    // optimistic: langsung ubah UI biar tidak nunggu refresh
+    const prevData = [...data]
+    setData((prev) => prev.map((r) => r.submission_id === id ? { ...r, status } : r))
+    setDetail((prev) => (prev && prev.id === id ? { ...prev, status } : prev))
     try {
       const res = await api.patch(`/forms/${formId}/results/${id}/status`, { status })
       toast.success(res.data.message || t('results.statusUpdated'))
       setStatusTarget(null)
       setDetail((prev) => (prev && prev.id === id ? { ...prev, status: res.data.status, score: res.data.score } : prev))
-      fetchResults(1, { reset: true })
+      // sync ulang biar data server final, tapi tanpa flicker reset
+      fetchResults(1, { reset: false })
     } catch (err) {
+      // rollback kalau gagal
+      setData(prevData)
       toast.error(err.response?.data?.message || err.response?.data?.detail || t('results.deleteFailed'))
     } finally {
       setStatusSaving(false)
@@ -143,16 +156,21 @@ export default function Results() {
 
   const applyBulkStatus = async ({ status }) => {
     setBulkStatusSaving(true)
+    const prevData = [...data]
+    const ids = [...selected]
+    // optimistic bulk
+    setData((prev) => prev.map((r) => ids.includes(r.submission_id) ? { ...r, status } : r))
     try {
       const res = await api.patch(`/forms/${formId}/results/status`, { 
-        submission_ids: [...selected], 
+        submission_ids: ids, 
         status 
       })
       toast.success(res.data.message || t('results.statusUpdated'))
       setBulkStatusTarget(null)
       setSelected(new Set())
-      fetchResults(1, { reset: true })
+      fetchResults(1, { reset: false })
     } catch (err) {
+      setData(prevData)
       toast.error(err.response?.data?.message || err.response?.data?.detail || t('results.deleteFailed'))
     } finally {
       setBulkStatusSaving(false)
@@ -241,6 +259,45 @@ export default function Results() {
     totalRef.current = 0
     fetchResults(1, { reset: true })
   }, [fetchResults])
+
+  // polling silent tiap 4 detik biar status auto (auto_submitted/locked->cheating) langsung update tanpa refresh manual
+  useEffect(() => {
+    const id = setInterval(async () => {
+      if (pendingRef.current) return
+      try {
+        const params = { page: 1, per_page: 20 }
+        if (status) params.status = status
+        if (sort) params.sort = sort
+        const res = await api.get(`/forms/${formId}/results`, { params })
+        const rows = res.data.data || []
+        const m = res.data.meta || {}
+        if (typeof m.total === 'number') {
+          totalRef.current = m.total
+          setMeta((prev) => ({ ...prev, total: m.total, page: 1 }))
+        }
+        setData((prev) => {
+          if (prev.length === 0) return rows.slice(0, 20)
+          let changed = false
+          const merged = [...prev]
+          for (const row of rows) {
+            const idx = merged.findIndex((p) => p.submission_id === row.submission_id)
+            if (idx !== -1) {
+              if (JSON.stringify(merged[idx]) !== JSON.stringify(row)) {
+                merged[idx] = row
+                changed = true
+              }
+            } else {
+              merged.unshift(row)
+              changed = true
+              if (merged.length > 120) merged.pop()
+            }
+          }
+          return changed ? merged : prev
+        })
+      } catch {}
+    }, 4000)
+    return () => clearInterval(id)
+  }, [formId, status, sort])
 
   const handleExport = async () => {
     try {
