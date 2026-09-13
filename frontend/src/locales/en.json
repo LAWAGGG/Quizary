@@ -15,6 +15,12 @@
     "userMenu": "User menu",
     "userFallback": "User"
   },
+  "formTabs": {
+    "settings": "Settings",
+    "questions": "Questions",
+    "results": "Results",
+    "analytics": "Analytics"
+  },
   "auth": {
     "logout": "Logout",
     "welcomeBack": "Welcome back",
@@ -748,7 +754,7 @@
     "insights": "Insights",
     "title": "Analytics",
     "quizDesc": "How respondents performed — scores, pace, and per question.",
-    "formDesc": "What respondents answered — frequency and breakdown.",
+    "formDesc": "Analytics from what respondents answered",
     "noData": "No data yet",
     "completion": "Completion",
     "participants": "Participants",

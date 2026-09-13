@@ -15,6 +15,12 @@
     "userMenu": "Menu pengguna",
     "userFallback": "Pengguna"
   },
+  "formTabs": {
+    "settings": "Pengaturan",
+    "questions": "Soal",
+    "results": "Hasil",
+    "analytics": "Analitik"
+  },
   "auth": {
     "logout": "Keluar",
     "welcomeBack": "Selamat datang kembali",
@@ -344,7 +350,7 @@
     "showQr": "Tampilkan QR",
     "copy": "Salin",
     "copied": "Tersalin!",
-    "openPublic": "Buka halaman publik",
+    "openPublic": "Pratinjau",
     "descLabel": "Deskripsi",
     "descPlaceholder": "Jelaskan formulir ini",
     "typeLabel": "Tipe",
@@ -743,7 +749,7 @@
     "insights": "Wawasan",
     "title": "Analitik",
     "quizDesc": "Bagaimana responden mengerjakan — skor, kecepatan, dan per soal.",
-    "formDesc": "Apa yang responden jawab — frekuensi dan sebaran.",
+    "formDesc": "Analisis dari apa yang responden jawab",
     "noData": "Belum ada data",
     "completion": "Penyelesaian",
     "participants": "Peserta",

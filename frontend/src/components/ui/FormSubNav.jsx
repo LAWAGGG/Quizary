@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Settings, HelpCircle, ClipboardList, BarChart3 } from 'lucide-react'
 import api from '../../api/client'
 
 const items = [
-  { to: (id) => `/forms/${id}`, label: 'Settings', icon: Settings, end: true },
-  { to: (id) => `/forms/${id}/questions`, label: 'Questions', icon: HelpCircle, end: false },
-  { to: (id) => `/forms/${id}/results`, label: 'Results', icon: ClipboardList, end: false, count: true },
-  { to: (id) => `/forms/${id}/analytics`, label: 'Analytics', icon: BarChart3, end: false },
+  { to: (id) => `/forms/${id}`, key: 'settings', icon: Settings, end: true },
+  { to: (id) => `/forms/${id}/questions`, key: 'questions', icon: HelpCircle, end: false },
+  { to: (id) => `/forms/${id}/results`, key: 'results', icon: ClipboardList, end: false, count: true },
+  { to: (id) => `/forms/${id}/analytics`, key: 'analytics', icon: BarChart3, end: false },
 ]
 
 export function FormSubNav({ formId, className = '' }) {
+  const { t } = useTranslation()
   const [total, setTotal] = useState(null)
 
   useEffect(() => {
@@ -29,7 +31,7 @@ export function FormSubNav({ formId, className = '' }) {
     >
       {items.map((item) => (
         <NavLink
-          key={item.label}
+          key={item.key}
           to={item.to(formId)}
           end={item.end}
           className={({ isActive }) =>
@@ -39,7 +41,7 @@ export function FormSubNav({ formId, className = '' }) {
           }
         >
           <item.icon className="w-4 h-4" />
-          {item.label}
+          {t(`formTabs.${item.key}`)}
           {item.count && total !== null && (
             <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-primary text-white text-[11px] font-bold tabular-nums">
               {total}
