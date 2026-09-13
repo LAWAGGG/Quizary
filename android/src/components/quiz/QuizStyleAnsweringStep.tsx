@@ -969,7 +969,7 @@ export function QuizStyleAnsweringStep({
             >
               <Ionicons name="chevron-back" size={18} color="#94A3B8" />
               <Text style={[styles.prevBtnText, { fontSize: 15 * fontSizeScale }]}>
-                {language === 'ID' ? 'Previous' : 'Previous'}
+                {language === 'ID' ? 'Sebelumnya' : 'Previous'}
               </Text>
             </TouchableOpacity>
           )}
@@ -983,7 +983,7 @@ export function QuizStyleAnsweringStep({
             <Text style={[styles.nextBtnText, { fontSize: 16 * fontSizeScale }]}>
               {currentIdx === totalQ - 1
                 ? (language === 'ID' ? 'Kirim Jawaban' : 'Submit')
-                : (language === 'ID' ? 'Next >' : 'Next >')}
+                : (language === 'ID' ? 'Selanjutnya >' : 'Next >')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1349,9 +1349,9 @@ const styles = StyleSheet.create({
   /* BOTTOM ACTION BAR */
   bottomActionBar: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 14, backgroundColor: '#0F172A', borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)' },
   bottomButtonsRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  prevBtnWithText: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', backgroundColor: 'rgba(30, 41, 59, 0.6)' },
+  prevBtnWithText: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 16, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', backgroundColor: 'rgba(30, 41, 59, 0.6)' },
   prevBtnText: { color: '#94A3B8', fontWeight: '700' },
-  nextBtn: { flex: 1, height: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
+  nextBtn: { flex: 1, paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
   nextBtnText: { color: '#FFFFFF', fontWeight: 'bold' },
 
   /* MODALS */

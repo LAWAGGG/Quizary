@@ -498,6 +498,7 @@ export default function ProfileScreen() {
       <Modal
         visible={showPasswordModal}
         transparent
+        statusBarTranslucent
         animationType="fade"
         onRequestClose={() => {
           if (!passwordLoading) {
@@ -506,39 +507,42 @@ export default function ProfileScreen() {
           }
         }}
       >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={0}
-        >
-          <ScrollView
-            contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            automaticallyAdjustKeyboardInsets
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            style={{ width: '100%', flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={0}
           >
-            <TouchableOpacity
-              style={styles.modalOverlay}
-              activeOpacity={1}
-              onPress={() => {
-                if (!passwordLoading) {
-                  setShowPasswordModal(false);
-                  resetPasswordForm();
-                }
-              }}
+            <ScrollView
+              contentContainerStyle={[
+                styles.modalScrollContent,
+                { paddingBottom: insets.bottom > 0 ? insets.bottom + 20 : 20 },
+              ]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              automaticallyAdjustKeyboardInsets
             >
               <TouchableOpacity
+                style={styles.modalBackdropDismiss}
                 activeOpacity={1}
-                style={[
-                  styles.modalCard,
-                  {
-                    backgroundColor: colors.cardBg,
-                    borderColor: colors.cardBorder,
-                    paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 24,
-                  },
-                ]}
-                onPress={(e) => e.stopPropagation()}
+                onPress={() => {
+                  if (!passwordLoading) {
+                    setShowPasswordModal(false);
+                    resetPasswordForm();
+                  }
+                }}
               >
+                <TouchableOpacity
+                  activeOpacity={1}
+                  style={[
+                    styles.modalCard,
+                    {
+                      backgroundColor: colors.cardBg,
+                      borderColor: colors.cardBorder,
+                    },
+                  ]}
+                  onPress={(e) => e.stopPropagation()}
+                >
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <View style={[styles.modalLockIconBox, { backgroundColor: colors.primarySoft }]}>
@@ -711,6 +715,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
+    </View>
   </Modal>
 </ScrollView>
   );
@@ -815,9 +820,18 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.65)',
+  },
+  modalScrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+    width: '100%',
+  },
+  modalBackdropDismiss: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalCard: {
     width: '100%',
