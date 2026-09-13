@@ -16,7 +16,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
@@ -64,6 +64,7 @@ export function QuizStyleAnsweringStep({
   onCloseQuiz,
   submissionId,
 }: QuizStyleAnsweringStepProps) {
+  const insets = useSafeAreaInsets();
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
   const { showAlert } = useAppAlert();
   const [showPassword, setShowPassword] = useState(false);
@@ -415,7 +416,7 @@ export function QuizStyleAnsweringStep({
   const isFileUploadType = rawType === 'file_upload' || rawType === 'file';
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="light" />
 
       {/* TOP HEADER BAR — editorial solid, bukan gradient mengkilap AI */}
@@ -958,7 +959,7 @@ export function QuizStyleAnsweringStep({
       )}
 
       {/* BOTTOM ACTION BAR (Matching Web Screenshot 1 with Previous Text & Bright Green Next Button) */}
-      <View style={styles.bottomActionBar}>
+      <View style={[styles.bottomActionBar, { paddingBottom: insets.bottom > 0 ? insets.bottom + 14 : 14 }]}>
         <View style={styles.bottomButtonsRow}>
           {currentIdx > 0 && (
             <TouchableOpacity
@@ -1346,7 +1347,7 @@ const styles = StyleSheet.create({
   dropdownOptionText: { fontWeight: '600', flex: 1, paddingRight: 10 },
 
   /* BOTTOM ACTION BAR */
-  bottomActionBar: { paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#0F172A', borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)' },
+  bottomActionBar: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 14, backgroundColor: '#0F172A', borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)' },
   bottomButtonsRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   prevBtnWithText: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', backgroundColor: 'rgba(30, 41, 59, 0.6)' },
   prevBtnText: { color: '#94A3B8', fontWeight: '700' },

@@ -3,10 +3,11 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator,
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { apiRegister } from '../services/api_service';
-import { useAppTheme } from '../context/ThemeContext';
+import { palette, useAppTheme } from '../context/ThemeContext';
 import { useAppAlert } from '../context/AlertContext';
 
 export default function RegisterScreen() {
+  const colors = palette.light;
   const { language, fontSizeScale } = useAppTheme();
   const { showAlert } = useAppAlert();
   const [name, setName] = useState('');
@@ -90,12 +91,12 @@ export default function RegisterScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#0F172A' }}
+      style={{ flex: 1, backgroundColor: colors.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={0}
     >
       <ScrollView
-        contentContainerStyle={styles.scrollContainer}
+        contentContainerStyle={[styles.scrollContainer, { backgroundColor: colors.bg }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         automaticallyAdjustKeyboardInsets
@@ -103,48 +104,48 @@ export default function RegisterScreen() {
         <View style={styles.container}>
         <View style={styles.header}>
           <Image
-            source={require('../../assets/images/Quizary_Logo_White.png')}
+            source={require('../../assets/images/Quizary_Logo_Original.png')}
             style={styles.logoImage}
             resizeMode="contain"
           />
-          <Text style={[styles.subtitle, { fontSize: 14 * fontSizeScale }]}>
+          <Text style={[styles.subtitle, { color: colors.textSub, fontSize: 14 * fontSizeScale }]}>
             {language === 'ID' ? 'Formulir dan kuis dengan penilaian otomatis.' : 'Forms and quizzes with automated grading.'}
           </Text>
         </View>
 
         <View style={styles.form}>
-          <Text style={[styles.label, { fontSize: 13 * fontSizeScale }]}>
+          <Text style={[styles.label, { color: colors.text, fontSize: 13 * fontSizeScale }]}>
             {language === 'ID' ? 'Nama Lengkap' : 'Full Name'}
           </Text>
           <TextInput
-            style={[styles.input, { fontSize: 15 * fontSizeScale }]}
+            style={[styles.input, { backgroundColor: colors.cardBg, color: colors.text, borderColor: colors.cardBorder, fontSize: 15 * fontSizeScale }]}
             placeholder={language === 'ID' ? 'Nama Anda' : 'Your Name'}
-            placeholderTextColor="#475569"
+            placeholderTextColor={colors.textMuted}
             value={name}
             onChangeText={setName}
           />
 
-          <Text style={[styles.label, { fontSize: 13 * fontSizeScale }]}>
+          <Text style={[styles.label, { color: colors.text, fontSize: 13 * fontSizeScale }]}>
             {language === 'ID' ? 'Email' : 'Email Address'}
           </Text>
           <TextInput
-            style={[styles.input, { fontSize: 15 * fontSizeScale }]}
+            style={[styles.input, { backgroundColor: colors.cardBg, color: colors.text, borderColor: colors.cardBorder, fontSize: 15 * fontSizeScale }]}
             placeholder="email@contoh.com"
-            placeholderTextColor="#475569"
+            placeholderTextColor={colors.textMuted}
             keyboardType="email-address"
             autoCapitalize="none"
             value={email}
             onChangeText={setEmail}
           />
 
-          <Text style={[styles.label, { fontSize: 13 * fontSizeScale }]}>
+          <Text style={[styles.label, { color: colors.text, fontSize: 13 * fontSizeScale }]}>
             {language === 'ID' ? 'Password' : 'Password'}
           </Text>
-          <View style={styles.passwordContainer}>
+          <View style={[styles.passwordContainer, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
             <TextInput
-              style={[styles.passwordInput, { fontSize: 15 * fontSizeScale }]}
+              style={[styles.passwordInput, { color: colors.text, fontSize: 15 * fontSizeScale }]}
               placeholder="••••••••"
-              placeholderTextColor="#475569"
+              placeholderTextColor={colors.textMuted}
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
@@ -157,19 +158,19 @@ export default function RegisterScreen() {
               <Ionicons
                 name={showPassword ? 'eye-outline' : 'eye-off-outline'}
                 size={20 * fontSizeScale}
-                color="#94A3B8"
+                color={colors.textMuted}
               />
             </TouchableOpacity>
           </View>
 
-          <Text style={[styles.label, { fontSize: 13 * fontSizeScale }]}>
+          <Text style={[styles.label, { color: colors.text, fontSize: 13 * fontSizeScale }]}>
             {language === 'ID' ? 'Konfirmasi Password' : 'Confirm Password'}
           </Text>
-          <View style={styles.passwordContainer}>
+          <View style={[styles.passwordContainer, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
             <TextInput
-              style={[styles.passwordInput, { fontSize: 15 * fontSizeScale }]}
+              style={[styles.passwordInput, { color: colors.text, fontSize: 15 * fontSizeScale }]}
               placeholder="••••••••"
-              placeholderTextColor="#475569"
+              placeholderTextColor={colors.textMuted}
               secureTextEntry={!showPasswordConfirmation}
               value={passwordConfirmation}
               onChangeText={setPasswordConfirmation}
@@ -182,13 +183,13 @@ export default function RegisterScreen() {
               <Ionicons
                 name={showPasswordConfirmation ? 'eye-off-outline' : 'eye-outline'}
                 size={20 * fontSizeScale}
-                color="#94A3B8"
+                color={colors.textMuted}
               />
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity
-            style={[styles.registerBtn, loading && styles.registerBtnDisabled]}
+            style={[styles.registerBtn, { backgroundColor: colors.primary }, loading && styles.registerBtnDisabled]}
             onPress={handleRegister}
             disabled={loading}
             activeOpacity={0.85}
@@ -203,11 +204,11 @@ export default function RegisterScreen() {
           </TouchableOpacity>
 
           <View style={styles.loginContainer}>
-            <Text style={[styles.loginText, { fontSize: 14 * fontSizeScale }]}>
+            <Text style={[styles.loginText, { color: colors.textSub, fontSize: 14 * fontSizeScale }]}>
               {language === 'ID' ? 'Sudah punya akun? ' : 'Already have an account? '}
             </Text>
             <TouchableOpacity onPress={() => router.replace('/')}>
-              <Text style={[styles.loginLink, { fontSize: 14 * fontSizeScale }]}>
+              <Text style={[styles.loginLink, { color: colors.primary, fontSize: 14 * fontSizeScale }]}>
                 {language === 'ID' ? 'Login' : 'Sign In'}
               </Text>
             </TouchableOpacity>
@@ -220,36 +221,36 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  scrollContainer: { flexGrow: 1, backgroundColor: '#0F172A', justifyContent: 'center', paddingBottom: 32 },
+  scrollContainer: { flexGrow: 1, justifyContent: 'center', paddingBottom: 32 },
   container: { padding: 24 },
   header: { alignItems: 'center', marginBottom: 32 },
   logoImage: { width: 220, height: 75, marginBottom: 8 },
-  subtitle: { color: '#94A3B8' },
+  subtitle: { textAlign: 'center' },
   form: { gap: 8 },
-  label: { color: '#CBD5E1', fontWeight: '600', marginTop: 8 },
+  label: { fontWeight: '600', marginTop: 8 },
   input: {
-    backgroundColor: '#1E293B', color: '#FFF', padding: 14,
-    borderRadius: 10, borderWidth: 1, borderColor: '#334155',
+    padding: 14,
+    borderRadius: 10, borderWidth: 1,
   },
   passwordContainer: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#1E293B', borderRadius: 10,
-    borderWidth: 1, borderColor: '#334155',
+    borderRadius: 10,
+    borderWidth: 1,
   },
   passwordInput: {
-    flex: 1, color: '#FFF', padding: 14,
+    flex: 1, padding: 14,
   },
   eyeBtn: {
     paddingHorizontal: 14, paddingVertical: 14,
     justifyContent: 'center', alignItems: 'center',
   },
   registerBtn: {
-    backgroundColor: '#6C5CE7', padding: 16, borderRadius: 12,
+    padding: 16, borderRadius: 12,
     alignItems: 'center', marginTop: 16,
   },
   registerBtnDisabled: { opacity: 0.6 },
   registerBtnText: { color: '#FFF', fontWeight: 'bold' },
   loginContainer: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
-  loginText: { color: '#64748B' },
-  loginLink: { color: '#6C5CE7', fontWeight: 'bold' },
+  loginText: {},
+  loginLink: { fontWeight: 'bold' },
 });

@@ -3,12 +3,12 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator,
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { apiLogin, saveToken, getToken, getStoredUser } from '../services/api_service';
-import { useAppTheme } from '../context/ThemeContext'; 
-import { ThemeToggleBtn } from '../components/ThemeToggleBtn';
+import { palette, useAppTheme } from '../context/ThemeContext'; 
 import { useAppAlert } from '../context/AlertContext';
 
 export default function LoginScreen() {
-  const { colors, isDark } = useAppTheme();
+  const colors = palette.light;
+  const isDark = false;
   const { showAlert } = useAppAlert();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -72,11 +72,7 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.container, { backgroundColor: colors.bg }]}>
-          <View style={styles.topBar}>
-            <ThemeToggleBtn />
-          </View>
-          
+          <View style={[styles.container, { backgroundColor: colors.bg }]}>
           <View style={styles.header}>
             <Image
               source={isDark ? require('../../assets/images/Quizary_Logo_White.png') : require('../../assets/images/Quizary_Logo_Original.png')}
