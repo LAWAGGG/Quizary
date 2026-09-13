@@ -39,8 +39,12 @@ export default function HomeScreen() {
     } catch {}
   }, []);
 
+  const isFetchingRef = useRef(false);
+
   const fetchPage = useCallback(async (pageNum: number, isRefresh = false, silent = false) => {
+    if (!silent && isFetchingRef.current) return;
     if (!silent) {
+      isFetchingRef.current = true;
       if (isRefresh) {
         setLoading(true);
       } else if (pageNum > 1) {
@@ -51,46 +55,60 @@ export default function HomeScreen() {
       const res: any = await getMySubmissions({ page: pageNum, per_page: PER_PAGE }).catch(() => null);
       if (res) {
         const rawList: any[] = Array.isArray(res) ? res : res.data || [];
-        const list: any[] = rawList.filter((it: any) => it && it.id != null);
+        const list: any[] = rawList.filter((it: any) => it && typeof it === 'object' && it.id != null);
         const meta = res?.meta;
         const serverTotal = meta?.total;
         if (typeof serverTotal === 'number') setTotal(serverTotal);
+
         if (silent && (isRefresh || pageNum === 1)) {
           // silent polling: upsert tanpa reset scroll, biar status langsung update tanpa flicker
           setSubmissions((prev) => {
             if (prev.length === 0) return list;
-            const byId = new Map(prev.map((p: any) => [p.id, p]));
-            let changed = false;
             const merged = [...prev];
             for (const item of list) {
               const existingIdx = merged.findIndex((p: any) => p.id === item.id);
               if (existingIdx !== -1) {
                 if (JSON.stringify(merged[existingIdx]) !== JSON.stringify(item)) {
                   merged[existingIdx] = item;
-                  changed = true;
                 }
               } else {
                 merged.unshift(item);
-                changed = true;
-                // keep total length reasonable — trim if exceeds loaded + new
-                if (merged.length > 100) merged.pop();
               }
             }
-            return changed ? merged : prev;
+            return merged;
           });
         } else if (isRefresh || pageNum === 1) {
           setSubmissions(list);
+          if (list.length === 0 || list.length < PER_PAGE) {
+            setHasMore(false);
+          } else if (typeof serverTotal === 'number') {
+            setHasMore(list.length < serverTotal);
+          } else {
+            setHasMore(true);
+          }
+          setPage(1);
         } else {
-          setSubmissions((prev) => [...prev, ...list]);
+          // Pagination: Deduplicate new items to prevent infinite scroll item duplication
+          let addedCount = 0;
+          setSubmissions((prev) => {
+            const existingIds = new Set(prev.map((p: any) => p.id));
+            const uniqueNew = list.filter((p: any) => !existingIds.has(p.id));
+            addedCount = uniqueNew.length;
+            if (uniqueNew.length > 0) {
+              const updated = [...prev, ...uniqueNew];
+              if (typeof serverTotal === 'number') {
+                setHasMore(updated.length < serverTotal);
+              }
+              return updated;
+            }
+            return prev;
+          });
+
+          if (addedCount === 0 || list.length < PER_PAGE) {
+            setHasMore(false);
+          }
+          setPage(pageNum);
         }
-        // determine hasMore from meta or list length
-        if (meta && typeof serverTotal === 'number') {
-          const fetchedCount = pageNum * PER_PAGE;
-          setHasMore(fetchedCount < serverTotal && list.length === PER_PAGE);
-        } else {
-          setHasMore(list.length === PER_PAGE);
-        }
-        setPage(pageNum);
       } else if (isRefresh || pageNum === 1) {
         setSubmissions([]);
         setHasMore(false);
@@ -100,6 +118,7 @@ export default function HomeScreen() {
       console.log('Error loading submissions page', pageNum, e);
     } finally {
       if (!silent) {
+        isFetchingRef.current = false;
         setLoading(false);
         setLoadingMore(false);
         setRefreshing(false);
@@ -130,7 +149,7 @@ export default function HomeScreen() {
   }, [fetchPage]);
 
   const onEndReached = useCallback(() => {
-    if (loading || loadingMore || refreshing || !hasMore) return;
+    if (loading || loadingMore || refreshing || !hasMore || isFetchingRef.current) return;
     fetchPage(page + 1);
   }, [loading, loadingMore, refreshing, hasMore, page, fetchPage]);
 
@@ -309,11 +328,11 @@ export default function HomeScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         onScroll={(e) => {
           const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-          if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 600) {
+          if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 150) {
             onEndReached();
           }
         }}
-        scrollEventThrottle={400}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
       >
         {ListHeader()}
