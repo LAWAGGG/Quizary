@@ -16,12 +16,14 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getMe, updateProfile, changePassword, apiLogout, removeToken, getStoredUser, saveUser, BASE_URL } from '../../services/api_service';
 import { ThemeToggleBtn } from '../../components/ThemeToggleBtn';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAppAlert } from '../../context/AlertContext';
 
 export default function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
   const { showAlert } = useAppAlert();
   const [user, setUser] = useState<any>(null);
@@ -532,6 +534,7 @@ export default function ProfileScreen() {
                   {
                     backgroundColor: colors.cardBg,
                     borderColor: colors.cardBorder,
+                    paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 24,
                   },
                 ]}
                 onPress={(e) => e.stopPropagation()}
