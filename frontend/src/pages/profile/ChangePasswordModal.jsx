@@ -133,7 +133,7 @@ export default function ChangePasswordModal({ show, onClose }) {
             initial={{ scale: 0.96, opacity: 0, y: 8 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.96, opacity: 0, y: 8 }}
-            className="bg-white dark:bg-ink-900 rounded-2xl p-6 w-full max-w-md shadow-lift border border-gray-100 dark:border-gray-800"
+            className="bg-white dark:bg-ink-900 rounded-2xl p-6 w-full max-w-md shadow-lift border border-gray-100 dark:border-ink-800"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3">

@@ -20,14 +20,88 @@ const SYMBOL_GROUPS = [
   { label: 'Arrows & misc', items: ['←', '↑', '→', '↓', '↔', '↕', '⇐', '⇑', '⇒', '⇓', '⇔', '°', '′', '″', '·', '…', '•', '∴', '∵'] },
 ]
 
-// Template LaTeX — klik untuk menambahkan ke draft formula
-const FORMULA_TEMPLATES = [
-  { label: 'a/b', tex: '\\frac{a}{b}' },
-  { label: 'x²', tex: 'x^{2}' },
-  { label: '√', tex: '\\sqrt{x}' },
-  { label: '∑', tex: '\\sum_{i=1}^{n} a_i' },
-  { label: '∫', tex: '\\int_{a}^{b} f(x)\\,dx' },
-  { label: 'lim', tex: '\\lim_{x \\to \\infty} f(x)' },
+// Template LaTeX — klik untuk menambahkan ke draft formula.
+// Dikelompokkan per materi sekolah agar mudah dicari (matriks, aljabar,
+// geometri, trigonometri, statistika, kalkulus dasar, fisika).
+const FORMULA_GROUPS = [
+  {
+    label: 'Dasar',
+    items: [
+      { label: 'a/b', tex: '\\frac{a}{b}' },
+      { label: 'x²', tex: 'x^{2}' },
+      { label: '√', tex: '\\sqrt{x}' },
+      { label: 'ⁿ√', tex: '\\sqrt[n]{x}' },
+      { label: '±', tex: 'x = \\pm a' },
+    ],
+  },
+  {
+    label: 'Aljabar',
+    items: [
+      { label: '(a+b)²', tex: '(a+b)^{2}' },
+      { label: 'a²−b²', tex: 'a^{2}-b^{2}' },
+      { label: 'abc', tex: 'x = \\frac{-b \\pm \\sqrt{b^{2}-4ac}}{2a}' },
+      { label: 'aᵐ·aⁿ', tex: 'a^{m} \\cdot a^{n}' },
+      { label: 'log', tex: '\\log_{a}{b}' },
+    ],
+  },
+  {
+    label: 'Matriks',
+    items: [
+      { label: '2×2', tex: '\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}' },
+      { label: 'det', tex: '\\det\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}' },
+      { label: '3×3', tex: '\\begin{pmatrix} a & b & c \\\\ d & e & f \\\\ g & h & i \\end{pmatrix}' },
+      { label: 'SPL', tex: '\\begin{cases} ax + by = c \\\\ dx + ey = f \\end{cases}' },
+    ],
+  },
+  {
+    label: 'Geometri',
+    items: [
+      { label: '△', tex: 'L = \\frac{1}{2} \\cdot a \\cdot t' },
+      { label: 'a²+b²', tex: 'a^{2}+b^{2}=c^{2}' },
+      { label: '○', tex: 'L = \\pi r^{2}' },
+      { label: 'bola', tex: 'V = \\frac{4}{3}\\pi r^{3}' },
+    ],
+  },
+  {
+    label: 'Trigonometri',
+    items: [
+      { label: 'sin', tex: '\\sin{\\theta}' },
+      { label: 'cos', tex: '\\cos{\\theta}' },
+      { label: 'tan', tex: '\\tan{\\theta}' },
+      { label: 'sin²+cos²', tex: '\\sin^{2}{x} + \\cos^{2}{x} = 1' },
+    ],
+  },
+  {
+    label: 'Statistika',
+    items: [
+      { label: 'x̄', tex: '\\bar{x} = \\frac{\\sum x_i}{n}' },
+      { label: '∑', tex: '\\sum_{i=1}^{n} a_i' },
+    ],
+  },
+  {
+    label: 'Kalkulus',
+    items: [
+      { label: 'lim', tex: '\\lim_{x \\to \\infty} f(x)' },
+      { label: 'dy/dx', tex: '\\frac{dy}{dx}' },
+      { label: '∫', tex: '\\int_{a}^{b} f(x)\\,dx' },
+    ],
+  },
+  {
+    label: 'Fisika',
+    items: [
+      { label: 'v=s/t', tex: 'v = \\frac{s}{t}' },
+      { label: 'F=ma', tex: 'F = m \\cdot a' },
+      { label: 'W', tex: 'W = F \\cdot s' },
+      { label: 'ρ', tex: '\\rho = \\frac{m}{V}' },
+    ],
+  },
+  {
+    label: 'Vektor',
+    items: [
+      { label: 'ā', tex: '\\vec{a}' },
+      { label: 'AB→', tex: '\\overrightarrow{AB}' },
+    ],
+  },
 ]
 
 export function RichTextEditor({ value = '', onChange, placeholder = '', compact = false, minHeight = 140, showPreview = true, headline = false }) {
@@ -361,7 +435,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:contents" role="presentation">
           <div className="fixed inset-0 bg-ink/30 backdrop-blur-sm sm:hidden" onClick={() => setFormula(null)} aria-hidden="true" />
           <div
-            className={`relative z-10 bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 rounded-2xl sm:rounded-xl shadow-xl p-3 w-[calc(100vw-2rem)] max-w-[360px] max-h-[80dvh] overflow-y-auto sm:w-[360px] sm:max-w-[calc(100vw-2rem)] sm:max-h-none sm:overflow-visible sm:absolute ${compact ? 'sm:top-[38px]' : 'sm:top-[52px]'} sm:left-2`}
+            className={`relative z-10 bg-white dark:bg-ink-800 border border-gray-200 dark:border-ink-700 rounded-2xl sm:rounded-xl shadow-xl p-3 w-[calc(100vw-2rem)] max-w-[360px] max-h-[80dvh] overflow-y-auto sm:w-[360px] sm:max-w-[calc(100vw-2rem)] sm:max-h-none sm:overflow-visible sm:absolute ${compact ? 'sm:top-[38px]' : 'sm:top-[52px]'} sm:left-2`}
             role="dialog"
             aria-label="Insert LaTeX formula"
           >
@@ -402,8 +476,27 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
             )}
           </div>
 
-          <div className="flex flex-wrap gap-1 mt-2">
-            {FORMULA_TEMPLATES.map((t) => (
+          <div className="mt-2 flex gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Kategori template">
+            {FORMULA_GROUPS.map((g, i) => (
+              <button
+                key={g.label}
+                type="button"
+                role="tab"
+                aria-selected={(formula.group ?? 0) === i}
+                onClick={() => setFormula((f) => (f ? { ...f, group: i } : f))}
+                className={`h-7 shrink-0 rounded-full px-2.5 text-xs font-medium transition-colors ${
+                  (formula.group ?? 0) === i
+                    ? 'bg-primary text-white'
+                    : 'border border-gray-200 text-gray-500 hover:border-primary hover:text-primary dark:border-gray-700 dark:text-gray-400'
+                }`}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {(FORMULA_GROUPS[formula.group ?? 0] ?? FORMULA_GROUPS[0]).items.map((t) => (
               <button
                 key={t.label}
                 type="button"

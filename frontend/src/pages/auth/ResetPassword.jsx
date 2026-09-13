@@ -106,7 +106,7 @@ function OtpModal({ open, email, onVerified, onClose, t, forgotPassword, verifyR
     <AnimatePresence>
       {open && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 backdrop-blur-sm p-4" onClick={onClose}>
-          <motion.div initial={{ scale: 0.96, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.96, opacity: 0, y: 8 }} className="bg-white dark:bg-ink-900 rounded-2xl p-6 w-full max-w-md shadow-lift border border-gray-100 dark:border-gray-800" onClick={(e) => e.stopPropagation()}>
+          <motion.div initial={{ scale: 0.96, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.96, opacity: 0, y: 8 }} className="bg-white dark:bg-ink-900 rounded-2xl p-6 w-full max-w-md shadow-lift border border-gray-100 dark:border-ink-800" onClick={(e) => e.stopPropagation()}>
           
             <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100">{t('auth.verifyCodeTitle')}</h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('auth.verifyCodeDesc')} <span className="font-medium text-ink dark:text-gray-200">{email}</span></p>
