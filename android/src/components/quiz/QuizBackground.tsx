@@ -36,7 +36,6 @@ function mixHex(a: string, b: string, t: number) {
 
 export function getThemeGradientColors(hex?: string): [string, string] {
   const base = hex || '#6C5CE7';
-  // Editorial: hanya 2 stop, tanpa putih mengkilap — lebih kalem, tidak AI gradient
   const c2 = mixHex(base, '#0B0F19', 0.22);
   return [base, c2];
 }
@@ -82,32 +81,47 @@ export function QuizBackground({ children, themeColor, isQuizDesign }: QuizBackg
           </View>
         ))}
 
-        {/* Top-Left Accent Dot Element */}
-        <View style={styles.topLeftAccent}>
-          <View style={[styles.outerRing, { borderColor: accentColor + '60' }]}>
-            <View style={[styles.innerDot, { backgroundColor: accentColor }]} />
+        {/* Top-Left Accent Dot Cluster (4 rows triangle: outlines on top/right, solids on bottom/left) */}
+        <View style={styles.topLeftCluster}>
+          <View style={styles.clusterRow}>
+            <View style={[styles.outlineDot, { borderColor: accentColor + '70' }]} />
+            <View style={[styles.outlineDot, { borderColor: accentColor + '70' }]} />
+            <View style={[styles.outlineDot, { borderColor: accentColor + '70' }]} />
+            <View style={[styles.outlineDot, { borderColor: accentColor + '70' }]} />
+          </View>
+          <View style={styles.clusterRow}>
+            <View style={[styles.solidDot, { backgroundColor: accentColor }]} />
+            <View style={[styles.outlineDot, { borderColor: accentColor + '70' }]} />
+            <View style={[styles.outlineDot, { borderColor: accentColor + '70' }]} />
+          </View>
+          <View style={styles.clusterRow}>
+            <View style={[styles.solidDot, { backgroundColor: accentColor }]} />
+            <View style={[styles.solidDot, { backgroundColor: accentColor }]} />
+          </View>
+          <View style={styles.clusterRow}>
+            <View style={[styles.solidDot, { backgroundColor: accentColor }]} />
           </View>
         </View>
 
-        {/* Bottom-Right Staircase/Triangular Dot Cluster */}
+        {/* Bottom-Right Accent Dot Cluster (Mirrored: outlines on bottom/left, solids on top/right) */}
         <View style={styles.bottomRightCluster}>
           <View style={styles.clusterRow}>
-            <View style={[styles.activeDot, { backgroundColor: accentColor }]} />
-            <View style={[styles.activeDot, { backgroundColor: accentColor }]} />
-            <View style={[styles.activeDot, { backgroundColor: accentColor }]} />
-            <View style={[styles.activeDot, { backgroundColor: accentColor }]} />
+            <View style={[styles.solidDot, { backgroundColor: accentColor }]} />
           </View>
           <View style={styles.clusterRow}>
-            <View style={[styles.activeDot, { backgroundColor: accentColor }]} />
-            <View style={[styles.activeDot, { backgroundColor: accentColor }]} />
-            <View style={[styles.activeDot, { backgroundColor: accentColor }]} />
+            <View style={[styles.solidDot, { backgroundColor: accentColor }]} />
+            <View style={[styles.solidDot, { backgroundColor: accentColor }]} />
           </View>
           <View style={styles.clusterRow}>
-            <View style={[styles.activeDot, { backgroundColor: accentColor }]} />
-            <View style={[styles.activeDot, { backgroundColor: accentColor }]} />
+            <View style={[styles.outlineDot, { borderColor: accentColor + '70' }]} />
+            <View style={[styles.outlineDot, { borderColor: accentColor + '70' }]} />
+            <View style={[styles.solidDot, { backgroundColor: accentColor }]} />
           </View>
           <View style={styles.clusterRow}>
-            <View style={[styles.activeDot, { backgroundColor: accentColor }]} />
+            <View style={[styles.outlineDot, { borderColor: accentColor + '70' }]} />
+            <View style={[styles.outlineDot, { borderColor: accentColor + '70' }]} />
+            <View style={[styles.outlineDot, { borderColor: accentColor + '70' }]} />
+            <View style={[styles.outlineDot, { borderColor: accentColor + '70' }]} />
           </View>
         </View>
       </View>
@@ -122,10 +136,11 @@ const styles = StyleSheet.create({
   absoluteFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   gridRow: { position: 'absolute' },
   bgDot: { position: 'absolute', width: 4, height: 4, borderRadius: 2 },
-  topLeftAccent: { position: 'absolute', top: 50, left: 20 },
-  outerRing: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  innerDot: { width: 6, height: 6, borderRadius: 3 },
-  bottomRightCluster: { position: 'absolute', bottom: 30, right: 20, alignItems: 'flex-end', gap: 6 },
-  clusterRow: { flexDirection: 'row', gap: 6 },
-  activeDot: { width: 5, height: 5, borderRadius: 2.5 },
+  
+  topLeftCluster: { position: 'absolute', top: 40, left: 20, alignItems: 'flex-start', gap: 10 },
+  bottomRightCluster: { position: 'absolute', bottom: 30, right: 20, alignItems: 'flex-end', gap: 10 },
+  clusterRow: { flexDirection: 'row', gap: 10 },
+  
+  solidDot: { width: 10, height: 10, borderRadius: 5 },
+  outlineDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 2 },
 });

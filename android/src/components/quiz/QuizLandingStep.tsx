@@ -99,7 +99,7 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
                 <View style={styles.pillBadgeQuizStyle}>
                   <Ionicons name="help-circle-outline" size={16 * fontSizeScale} color="#FFF" />
                   <Text style={[styles.pillBadgeTextQuizStyle, { fontSize: 13 * fontSizeScale }]}>
-                    {language === 'ID' ? `${qCount} questions` : `${qCount} questions`}
+                    {language === 'ID' ? `${qCount} soal` : `${qCount} questions`}
                   </Text>
                 </View>
 
@@ -107,8 +107,8 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
                   <Ionicons name="time-outline" size={16 * fontSizeScale} color="#FFF" />
                   <Text style={[styles.pillBadgeTextQuizStyle, { fontSize: 13 * fontSizeScale }]}>
                     {timeLimit
-                      ? (language === 'ID' ? `${timeLimit} min` : `${timeLimit} min`)
-                      : (language === 'ID' ? 'No time limit' : 'No time limit')}
+                      ? (language === 'ID' ? `${timeLimit} menit` : `${timeLimit} min`)
+                      : (language === 'ID' ? 'Tanpa batas waktu' : 'No time limit')}
                   </Text>
                 </View>
               </View>
@@ -125,7 +125,7 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
                 ) : (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Text style={[styles.startButtonTextQuizStyle, { color: themeColor, fontSize: 16 * fontSizeScale }]}>
-                      {language === 'ID' ? 'Start' : 'Start'}
+                      {language === 'ID' ? 'Mulai' : 'Start'}
                     </Text>
                     <Ionicons name="arrow-forward" size={18} color={themeColor} />
                   </View>
