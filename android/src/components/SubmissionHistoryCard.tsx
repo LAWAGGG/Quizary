@@ -10,6 +10,7 @@ interface SubmissionHistoryCardProps {
 
 export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardProps) {
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
+  if (!item || typeof item !== 'object') return null;
 
   const isSubmitted = item.status === 'submitted';
   const isAutoSubmitted = item.status === 'auto_submitted';
@@ -54,8 +55,30 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
     accent = colors.primary;
   }
 
-  // Format date string
-  const dateStr = item.submitted_at || item.created_at || '';
+  // Bulletproof sanitization for formTitle, dateStr, and scoreVal
+  let formTitle = language === 'ID' ? 'Form Tanpa Judul' : 'Untitled Form';
+  if (typeof item.form_title === 'string' && item.form_title.trim()) {
+    formTitle = item.form_title;
+  } else if (typeof item.title === 'string' && item.title.trim()) {
+    formTitle = item.title;
+  } else if (item.form && typeof item.form === 'object' && typeof item.form.title === 'string' && item.form.title.trim()) {
+    formTitle = item.form.title;
+  }
+
+  let dateStr = '';
+  const rawDate = item.submitted_at || item.created_at || item.updated_at;
+  if (typeof rawDate === 'string') {
+    dateStr = rawDate;
+  } else if (typeof rawDate === 'number') {
+    dateStr = String(rawDate);
+  }
+
+  let scoreVal: string | number | null = null;
+  if (item.reveal_score && item.score !== null && item.score !== undefined) {
+    if (typeof item.score === 'number' || typeof item.score === 'string') {
+      scoreVal = item.score;
+    }
+  }
 
   return (
     <TouchableOpacity
@@ -73,7 +96,7 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
             style={[styles.title, { color: colors.text, fontSize: 14.5 * fontSizeScale }]}
             numberOfLines={1}
           >
-            {item.form_title || (language === 'ID' ? 'Form Tanpa Judul' : 'Untitled Form')}
+            {formTitle}
           </Text>
           <Ionicons name="open-outline" size={12 * fontSizeScale} color={colors.textMuted} style={styles.linkIcon} />
         </View>
@@ -93,11 +116,11 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
             : `Submitted: ${dateStr || '-'}`}
         </Text>
 
-        {item.reveal_score && item.score !== null && item.score !== undefined && (
+        {scoreVal !== null && (
           <View style={[styles.scoreBadge, { backgroundColor: isDark ? '#064E3B' : '#ECFDF5' }]}>
             <Ionicons name="trophy" size={12 * fontSizeScale} color="#10B981" />
             <Text style={[styles.scoreText, { fontSize: 11 * fontSizeScale }]}>
-              {item.score}
+              {scoreVal}
             </Text>
           </View>
         )}

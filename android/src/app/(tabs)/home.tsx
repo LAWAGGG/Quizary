@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, RefreshControl, ActivityIndicator, Image, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, ActivityIndicator, Image, FlatList } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getMySubmissions, getSubmissionDetail, getMe, getStoredUser, BASE_URL } from '../../services/api_service';
@@ -20,7 +20,7 @@ export default function HomeScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [total, setTotal] = useState<number | null>(null);
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<any>(null);
 
   // Modal states
   const [selectedSubId, setSelectedSubId] = useState<number | null>(null);
@@ -50,7 +50,8 @@ export default function HomeScreen() {
     try {
       const res: any = await getMySubmissions({ page: pageNum, per_page: PER_PAGE }).catch(() => null);
       if (res) {
-        const list: any[] = Array.isArray(res) ? res : res.data || [];
+        const rawList: any[] = Array.isArray(res) ? res : res.data || [];
+        const list: any[] = rawList.filter((it: any) => it && it.id != null);
         const meta = res?.meta;
         const serverTotal = meta?.total;
         if (typeof serverTotal === 'number') setTotal(serverTotal);
@@ -302,20 +303,39 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      <FlatList
-        ref={flatListRef}
-        data={submissions}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderItem}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={ListEmpty}
-        ListFooterComponent={ListFooter}
+      <ScrollView
+        ref={flatListRef as any}
         contentContainerStyle={styles.scrollContent}
-        onEndReached={onEndReached}
-        onEndReachedThreshold={0.4}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        onScroll={(e) => {
+          const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+          if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 600) {
+            onEndReached();
+          }
+        }}
+        scrollEventThrottle={400}
         showsVerticalScrollIndicator={false}
-      />
+      >
+        {ListHeader()}
+        {loading && submissions.length === 0 ? (
+          ListEmpty()
+        ) : submissions.length === 0 ? (
+          ListEmpty()
+        ) : (
+          <>
+            {submissions
+              .filter((it: any) => it && typeof it === 'object' && it.id != null)
+              .map((item, idx) => (
+                <SubmissionHistoryCard
+                  key={`sub-${item.id ?? idx}`}
+                  item={item}
+                  onPress={() => openSubDetail(item)}
+                />
+              ))}
+            {ListFooter()}
+          </>
+        )}
+      </ScrollView>
 
       {/* Modular Submission Detail Modal */}
       <SubmissionDetailModal
