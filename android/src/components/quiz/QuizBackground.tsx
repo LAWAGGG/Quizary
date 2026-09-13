@@ -36,7 +36,6 @@ function mixHex(a: string, b: string, t: number) {
 
 export function getThemeGradientColors(hex?: string): [string, string] {
   const base = hex || '#6C5CE7';
-  // Editorial: hanya 2 stop, tanpa putih mengkilap — lebih kalem, tidak AI gradient
   const c2 = mixHex(base, '#0B0F19', 0.22);
   return [base, c2];
 }
