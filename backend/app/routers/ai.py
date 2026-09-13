@@ -121,7 +121,7 @@ async def ai_generate_stream(
                 return
             ext = Path(f.filename or "").suffix.lower()
             if ext not in ALLOWED_REF_EXT:
-                yield err(f"Tipe file tidak didukung ({f.filename or 'tanpa nama'}). Pakai docx, pdf, atau pptx.", 422)
+                yield err(f"Tipe file tidak didukung ({f.filename or 'tanpa nama'}). Pakai docx, pdf, ppt, atau pptx.", 422)
                 return
             try:
                 blob = await asyncio.to_thread(read_limited, f.file, MAX_REF_FILE_BYTES)
@@ -218,7 +218,7 @@ def ai_generate(
     for f in files:
         ext = Path(f.filename or "").suffix.lower()
         if ext not in ALLOWED_REF_EXT:
-            raise HTTPException(status_code=422, detail=f"Tipe file tidak didukung ({f.filename or 'tanpa nama'}). Pakai docx, pdf, atau pptx.")
+            raise HTTPException(status_code=422, detail=f"Tipe file tidak didukung ({f.filename or 'tanpa nama'}). Pakai docx, pdf, ppt, atau pptx.")
         try:
             text = extract_ref_text(f.filename or "referensi", read_limited(f.file, MAX_REF_FILE_BYTES))
         except HTTPException:

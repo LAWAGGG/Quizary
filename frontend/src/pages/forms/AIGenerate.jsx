@@ -10,7 +10,7 @@ import { Button, Card, RichTextEditor, RichText, Badge, Toggle, Select, Input, A
 
 const humanizeType = (t) => (t || '').replace(/_/g, ' ')
 
-const ACCEPT_EXT = '.docx,.pdf,.pptx'
+const ACCEPT_EXT = '.docx,.pdf,.ppt,.pptx'
 const MAX_FILES = 5
 
 function QuotaPill({ quota }) {

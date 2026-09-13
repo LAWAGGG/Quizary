@@ -86,6 +86,9 @@ export default function FormEdit() {
   const titleRef = useRef(null)
   const timerRef = useRef(null)
   const designRef = useRef(null)
+  const scheduleRef = useRef(null)
+  const accessRef = useRef(null)
+  const behaviorRef = useRef(null)
 
   // Scroll ke input yang error supaya user langsung lihat apa yang kurang.
   const revealError = (ref) => {
@@ -143,6 +146,22 @@ export default function FormEdit() {
       }
       return next
     })
+    setErrors((prev) => {
+      const next = { ...prev, [key]: undefined }
+      if (key === 'is_restricted' && value) {
+        next.submission_limit = undefined
+        next.require_login = undefined
+      }
+      if (key === 'submission_limit' && value === 'once') {
+        next.require_login = undefined
+      }
+      return next
+    })
+  }
+
+  const updateSetting = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setErrors((prev) => ({ ...prev, [key]: undefined }))
   }
 
   function toBackendDate(str) {
@@ -233,20 +252,51 @@ export default function FormEdit() {
     timer_seconds: timerMinutes ? Number(timerMinutes) * 60 : null,
   })
 
+  const localizeFieldError = (field, msg) => {
+    const text = String(msg || '')
+    const lower = text.toLowerCase()
+    if (field === 'starts_at' || field === 'ends_at') {
+      if (lower.includes('before') || lower.includes('starts_at')) return t('formEdit.scheduleInvalid')
+      if (lower.includes('format') || lower.includes('datetime') || lower.includes('parse')) return t('formEdit.scheduleInvalidFormat')
+    }
+    if (field === '_schema' && (lower.includes('starts_at') || lower.includes('ends_at') || lower.includes('before'))) {
+      return t('formEdit.scheduleInvalid')
+    }
+    return text
+  }
+
   const applyFieldErrors = (err) => {
     const data = err.response?.data
     if (data?.errors) {
       const mapped = {}
       data.errors.forEach((entry) => {
-        Object.entries(entry).forEach(([k, v]) => { mapped[k] = v })
+        Object.entries(entry).forEach(([k, v]) => {
+          if (k === '_schema') {
+            mapped._schema = localizeFieldError(k, v)
+          } else {
+            mapped[k] = localizeFieldError(k, v)
+          }
+        })
       })
+      if (mapped._schema && !mapped.starts_at && !mapped.ends_at) {
+        const msg = String(mapped._schema)
+        const lower = msg.toLowerCase()
+        if (lower.includes('dibuka') || lower.includes('ditutup') || lower.includes('starts_at') || lower.includes('ends_at') || lower.includes('before') || lower.includes('opens') || lower.includes('closes')) {
+          mapped.starts_at = msg
+          mapped.ends_at = msg
+        }
+      }
+      delete mapped._schema
       setErrors(mapped)
-      if (mapped.title) revealError(titleRef)
-      if (mapped.timer_seconds) revealError(timerRef)
-      if (mapped.display_style || mapped.theme_color) revealError(designRef)
-      const unresolved = data.errors.filter((entry) => Object.keys(entry)[0] === '_schema')
-      if (unresolved.length || data.message) {
-        toast.error(data.message || t('formEdit.invalidFields'))
+      if (mapped.title || mapped.description || mapped.status) revealError(titleRef)
+      else if (mapped.starts_at || mapped.ends_at) revealError(scheduleRef)
+      else if (mapped.timer_seconds) revealError(timerRef)
+      else if (mapped.submission_limit || mapped.require_login || mapped.show_in_history) revealError(accessRef)
+      else if (mapped.display_style || mapped.theme_color) revealError(designRef)
+      else if (mapped.type || mapped.scoring_mode || mapped.show_leaderboard || mapped.is_restricted || mapped.shuffle_questions || mapped.shuffle_options || mapped.thank_you_message) revealError(behaviorRef)
+      const knownKeys = Object.keys(mapped)
+      if (knownKeys.length === 0) {
+        toast.error(data.message && data.message !== 'Invalid fields' ? data.message : t('formEdit.invalidFields'))
       }
     } else {
       toast.error(data?.message || data?.detail || t('formEdit.saveFailed'))
@@ -264,6 +314,15 @@ export default function FormEdit() {
       setErrors({ timer_seconds: t('formEdit.timerRequired') })
       revealError(timerRef)
       return
+    }
+    if (form.starts_at && form.ends_at) {
+      const startTs = new Date(toInputDate(form.starts_at)).getTime()
+      const endTs = new Date(toInputDate(form.ends_at)).getTime()
+      if (Number.isFinite(startTs) && Number.isFinite(endTs) && startTs >= endTs) {
+        setErrors({ starts_at: t('formEdit.scheduleInvalid'), ends_at: t('formEdit.scheduleInvalid') })
+        revealError(scheduleRef)
+        return
+      }
     }
     setSaving(true)
     try {
@@ -356,6 +415,7 @@ export default function FormEdit() {
   const handleScoringModeChange = (mode) => {
     if (!form || mode === (form.scoring_mode || 'auto')) return
     setForm((prev) => ({ ...prev, scoring_mode: mode }))
+    setErrors((prev) => ({ ...prev, scoring_mode: undefined }))
     if (mode === 'auto') {
       api.get(`/forms/${id}/questions`).then((qRes) => setQuestions(qRes.data.data)).catch(() => { })
     }
@@ -400,30 +460,30 @@ export default function FormEdit() {
                 <span className="field-label">{t('formEdit.titleLabel')}</span>
                 <RichTextEditor
                   value={form.title || ''}
-                  onChange={(html) => setForm((prev) => ({ ...prev, title: html }))}
+                  onChange={(html) => { setForm((prev) => ({ ...prev, title: html })); setErrors((p) => ({ ...p, title: undefined })) }}
                   placeholder={t('formEdit.titlePlaceholder')}
                   minHeight={60}
                   headline
                 />
-                {errors.title && <p className="field-error mt-1">{errors.title}</p>}
+                {errors.title && <p className="field-error mt-1" role="alert">{errors.title}</p>}
               </div>
               <div>
                 <span className="field-label">{t('formEdit.descLabel')}</span>
                 <RichTextEditor
                   value={form.description || ''}
-                  onChange={(html) => setForm((prev) => ({ ...prev, description: html }))}
+                  onChange={(html) => { setForm((prev) => ({ ...prev, description: html })); setErrors((p) => ({ ...p, description: undefined })) }}
                   placeholder={t('formEdit.descPlaceholder')}
                   minHeight={120}
                 />
-                {errors.description && <p className="field-error">{errors.description}</p>}
+                {errors.description && <p className="field-error" role="alert">{errors.description}</p>}
               </div>
 
               <div>
                 <label className="field-label !mb-1.5">{t('formEdit.publicStatus')}</label>
-                <div className="flex h-11 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className={`flex h-11 rounded-xl border overflow-hidden ${errors.status ? 'border-incorrect' : 'border-gray-200 dark:border-gray-700'}`}>
                   <button
                     type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, status: 'published' }))}
+                    onClick={() => updateSetting('status', 'published')}
                     className={`flex-1 text-sm font-semibold transition-colors ${form.status === 'published' ? 'bg-correct text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
                       }`}
                   >
@@ -431,7 +491,7 @@ export default function FormEdit() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, status: 'draft' }))}
+                    onClick={() => updateSetting('status', 'draft')}
                     className={`flex-1 text-sm font-semibold transition-colors ${form.status !== 'published' && form.status !== 'closed' ? 'bg-gray-700 text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
                       }`}
                   >
@@ -439,7 +499,7 @@ export default function FormEdit() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, status: 'closed' }))}
+                    onClick={() => updateSetting('status', 'closed')}
                     className={`flex-1 text-sm font-semibold transition-colors ${form.status === 'closed' ? 'bg-incorrect text-white' : 'bg-white dark:bg-ink-900 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-ink-800'
                       }`}
                   >
@@ -447,7 +507,7 @@ export default function FormEdit() {
                   </button>
                 </div>
                 {errors.status && (
-                  <p className="field-error">{errors.status}</p>
+                  <p className="field-error" role="alert">{errors.status}</p>
                 )}
               </div>
 
@@ -455,7 +515,7 @@ export default function FormEdit() {
           </SectionCard>
 
           <SectionCard title={t('formEdit.access')} icon={<Lock className="w-4 h-4" />}>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            <div ref={accessRef} className="divide-y divide-gray-100 dark:divide-gray-800">
               <SettingRow
                 title={t('formEdit.limitOneResponse')}
                 control={
@@ -467,7 +527,7 @@ export default function FormEdit() {
                   />
                 }
               />
-              {errors.submission_limit && <p className="field-error px-4 pb-1 -mt-1">{errors.submission_limit}</p>}
+              {errors.submission_limit && <p className="field-error px-4 pb-1 -mt-1" role="alert">{errors.submission_limit}</p>}
               <SettingRow
                 title={t('formEdit.requireLogin')}
                 desc={onceLocked ? t('formEdit.requireLoginDescLocked') : t('formEdit.requireLoginDesc')}
@@ -480,6 +540,7 @@ export default function FormEdit() {
                   />
                 }
               />
+              {errors.require_login && <p className="field-error px-4 pb-1 -mt-1" role="alert">{errors.require_login}</p>}
               <SettingRow
                 title={t('formEdit.showInHistory')}
                 desc={form.show_in_history === false ? t('formEdit.showInHistoryDescOff') : t('formEdit.showInHistoryDescOn')}
@@ -487,10 +548,11 @@ export default function FormEdit() {
                   <Toggle
                     label={t('formEdit.showInHistory')}
                     checked={form.show_in_history !== false}
-                    onChange={(v) => setForm((prev) => ({ ...prev, show_in_history: v }))}
+                    onChange={(v) => updateSetting('show_in_history', v)}
                   />
                 }
               />
+              {errors.show_in_history && <p className="field-error px-4 pb-1 -mt-1" role="alert">{errors.show_in_history}</p>}
             </div>
           </SectionCard>
 
@@ -498,13 +560,16 @@ export default function FormEdit() {
             <div ref={designRef} className="space-y-5">
               <div>
                 <label className="field-label">{t('formEdit.designType')}</label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className={`grid grid-cols-2 gap-3 rounded-xl ${errors.display_style ? 'ring-2 ring-incorrect/40 p-1' : ''}`}>
                   <button
                     type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, display_style: 'card' }))}
+                    onClick={() => updateSetting('display_style', 'card')}
+                    aria-invalid={!!errors.display_style}
                     className={`relative rounded-xl border-2 overflow-hidden transition-all ${(form.display_style || 'card') === 'card'
                       ? 'border-primary ring-2 ring-primary/20'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                      : errors.display_style
+                        ? 'border-incorrect hover:border-incorrect'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                       }`}
                   >
                     <img src="/preview-form.png" alt="Card style" className="w-full h-32 object-cover" />
@@ -517,10 +582,13 @@ export default function FormEdit() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, display_style: 'quiz' }))}
+                    onClick={() => updateSetting('display_style', 'quiz')}
+                    aria-invalid={!!errors.display_style}
                     className={`relative rounded-xl border-2 overflow-hidden transition-all ${form.display_style === 'quiz'
                       ? 'border-primary ring-2 ring-primary/20'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                      : errors.display_style
+                        ? 'border-incorrect hover:border-incorrect'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                       }`}
                   >
                     <img src="/preview-quiz.png" alt="Quiz style" className="w-full h-32 object-cover" />
@@ -532,7 +600,7 @@ export default function FormEdit() {
                     )}
                   </button>
                 </div>
-                {errors.display_style && <p className="field-error">{errors.display_style}</p>}
+                {errors.display_style && <p className="field-error" role="alert">{errors.display_style}</p>}
               </div>
 
               <div>
@@ -543,24 +611,26 @@ export default function FormEdit() {
                     name="theme_color"
                     value={form.theme_color || '#6C5CE7'}
                     onChange={handleChange}
-                    className={`w-11 h-11 rounded-xl cursor-pointer border border-gray-200 dark:border-gray-700 shrink-0 ${errors.theme_color ? 'border-incorrect' : ''}`}
+                    aria-invalid={!!errors.theme_color}
+                    className={`w-11 h-11 rounded-xl cursor-pointer border shrink-0 ${errors.theme_color ? 'border-incorrect' : 'border-gray-200 dark:border-gray-700'}`}
                     aria-label="Theme color"
                   />
                   <input
                     name="theme_color"
                     value={form.theme_color || ''}
                     onChange={handleChange}
+                    aria-invalid={!!errors.theme_color}
                     className={`input-field font-mono ${errors.theme_color ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
                     placeholder="#6C5CE7"
                   />
                 </div>
-                {errors.theme_color && <p className="field-error">{errors.theme_color}</p>}
+                {errors.theme_color && <p className="field-error" role="alert">{errors.theme_color}</p>}
               </div>
             </div>
           </SectionCard>
 
           <SectionCard title={t('formEdit.behavior')} icon={<Settings2 className="w-4 h-4" />}>
-            <div className="divide-y divide-gray-100 dark:divide-gray-800 rounded-xl overflow-hidden">
+            <div ref={behaviorRef} className="divide-y divide-gray-100 dark:divide-gray-800 rounded-xl overflow-hidden">
               <SettingRow
                 title={t('formEdit.makeQuiz')}
                 control={
@@ -571,12 +641,12 @@ export default function FormEdit() {
                       const nt = v ? 'quiz' : 'form'
                       if (nt === 'form') setForm((prev) => ({ ...prev, type: nt, show_leaderboard: false, is_restricted: false }))
                       else setForm((prev) => ({ ...prev, type: nt }))
-                      setErrors((prev) => ({ ...prev, type: undefined }))
+                      setErrors((prev) => ({ ...prev, type: undefined, show_leaderboard: undefined, is_restricted: undefined }))
                     }}
                   />
                 }
               />
-              {errors.type && <p className="field-error px-4 pb-2 -mt-1">{errors.type}</p>}
+              {errors.type && <p className="field-error px-4 pb-2 -mt-1" role="alert">{errors.type}</p>}
               {isQuiz && (
                 <div className="ml-4 pl-4 border-l-2 border-primary/25 dark:border-primary/30 divide-y divide-gray-100 dark:divide-gray-800">
                   <div className="py-3">
@@ -590,27 +660,32 @@ export default function FormEdit() {
                         onManualPointsChange={handleManualPointsChange}
                       />
                     </div>
+                    {errors.scoring_mode && <p className="field-error mt-1" role="alert">{errors.scoring_mode}</p>}
                   </div>
                   <SettingRow
                     title={t('formEdit.showLeaderboard')}
                     desc={t('formEdit.showLeaderboardDesc')}
                     control={<Toggle label="Show leaderboard" checked={!!form.show_leaderboard} onChange={(v) => toggleSetting('show_leaderboard', v)} />}
                   />
+                  {errors.show_leaderboard && <p className="field-error px-4 pb-2 -mt-1" role="alert">{errors.show_leaderboard}</p>}
                   <SettingRow
                     title={t('formEdit.showFinalScore')}
                     desc={t('formEdit.showFinalScoreDesc')}
-                    control={<Toggle label={t('formEdit.showFinalScore')} checked={form.reveal_score !== false} onChange={(v) => setForm((prev) => ({ ...prev, reveal_score: v }))} />}
+                    control={<Toggle label={t('formEdit.showFinalScore')} checked={form.reveal_score !== false} onChange={(v) => updateSetting('reveal_score', v)} />}
                   />
+                  {errors.reveal_score && <p className="field-error px-4 pb-2 -mt-1" role="alert">{errors.reveal_score}</p>}
                   <SettingRow
                     title={t('formEdit.showAnswerReview')}
                     desc={t('formEdit.showAnswerReviewDesc')}
-                    control={<Toggle label={t('formEdit.showAnswerReview')} checked={form.reveal_answers !== false} onChange={(v) => setForm((prev) => ({ ...prev, reveal_answers: v }))} />}
+                    control={<Toggle label={t('formEdit.showAnswerReview')} checked={form.reveal_answers !== false} onChange={(v) => updateSetting('reveal_answers', v)} />}
                   />
+                  {errors.reveal_answers && <p className="field-error px-4 pb-2 -mt-1" role="alert">{errors.reveal_answers}</p>}
                   <SettingRow
                     title={t('formEdit.restrictMode')}
                     desc={t('formEdit.restrictModeDesc')}
                     control={<Toggle label="Restrict mode" checked={isRestricted} onChange={(v) => toggleSetting('is_restricted', v)} />}
                   />
+                  {errors.is_restricted && <p className="field-error px-4 pb-2 -mt-1" role="alert">{errors.is_restricted}</p>}
                 </div>
               )}
             </div>
@@ -618,13 +693,15 @@ export default function FormEdit() {
               <SettingRow
                 title={t('formEdit.shuffleQuestions')}
                 desc={t('formEdit.shuffleQuestionsDesc')}
-                control={<Toggle label="Shuffle questions" checked={form.shuffle_questions} onChange={(v) => setForm((prev) => ({ ...prev, shuffle_questions: v }))} />}
+                control={<Toggle label="Shuffle questions" checked={form.shuffle_questions} onChange={(v) => updateSetting('shuffle_questions', v)} />}
               />
+              {errors.shuffle_questions && <p className="field-error px-4 pb-2 -mt-1" role="alert">{errors.shuffle_questions}</p>}
               <SettingRow
                 title={t('formEdit.shuffleOptions')}
                 desc={t('formEdit.shuffleOptionsDesc')}
-                control={<Toggle label="Shuffle options" checked={form.shuffle_options} onChange={(v) => setForm((prev) => ({ ...prev, shuffle_options: v }))} />}
+                control={<Toggle label="Shuffle options" checked={form.shuffle_options} onChange={(v) => updateSetting('shuffle_options', v)} />}
               />
+              {errors.shuffle_options && <p className="field-error px-4 pb-2 -mt-1" role="alert">{errors.shuffle_options}</p>}
               <div className="py-4">
                 <Input
                   label={t('formEdit.timeLimit') + (isQuiz ? ' *' : '')}
@@ -639,7 +716,7 @@ export default function FormEdit() {
                   ref={timerRef}
                 />
               </div>
-              <div className="py-4">
+              <div className="py-4" ref={scheduleRef}>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="field-label">{t('formEdit.opensAt')}</label>
@@ -647,10 +724,11 @@ export default function FormEdit() {
                       type="datetime-local"
                       name="starts_at"
                       value={toInputDate(form.starts_at)}
-                      onChange={(e) => setForm((p) => ({ ...p, starts_at: e.target.value }))}
+                      onChange={(e) => { setForm((p) => ({ ...p, starts_at: e.target.value })); setErrors((p) => ({ ...p, starts_at: undefined, ends_at: p.ends_at && e.target.value ? undefined : p.ends_at })) }}
+                      aria-invalid={!!errors.starts_at}
                       className={`input-field ${errors.starts_at ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
                     />
-                    {errors.starts_at && <p className="field-error">{errors.starts_at}</p>}
+                    {errors.starts_at && <p className="field-error" role="alert">{errors.starts_at}</p>}
                   </div>
                   <div>
                     <label className="field-label">{t('formEdit.closesAt')}</label>
@@ -658,10 +736,11 @@ export default function FormEdit() {
                       type="datetime-local"
                       name="ends_at"
                       value={toInputDate(form.ends_at)}
-                      onChange={(e) => setForm((p) => ({ ...p, ends_at: e.target.value }))}
+                      onChange={(e) => { setForm((p) => ({ ...p, ends_at: e.target.value })); setErrors((p) => ({ ...p, ends_at: undefined, starts_at: p.starts_at && e.target.value ? undefined : p.starts_at })) }}
+                      aria-invalid={!!errors.ends_at}
                       className={`input-field ${errors.ends_at ? 'border-incorrect focus:border-incorrect focus:ring-incorrect/10' : ''}`}
                     />
-                    {errors.ends_at && <p className="field-error">{errors.ends_at}</p>}
+                    {errors.ends_at && <p className="field-error" role="alert">{errors.ends_at}</p>}
                   </div>
                 </div>
               </div>
@@ -670,11 +749,11 @@ export default function FormEdit() {
                   <span className="field-label">{t('formEdit.thankYou')}</span>
                   <RichTextEditor
                     value={form.thank_you_message || ''}
-                    onChange={(html) => setForm((prev) => ({ ...prev, thank_you_message: html }))}
+                    onChange={(html) => { setForm((prev) => ({ ...prev, thank_you_message: html })); setErrors((p) => ({ ...p, thank_you_message: undefined })) }}
                     placeholder={t('formEdit.thankYouPlaceholder')}
                     minHeight={90}
                   />
-                  {errors.thank_you_message && <p className="field-error">{errors.thank_you_message}</p>}
+                  {errors.thank_you_message && <p className="field-error" role="alert">{errors.thank_you_message}</p>}
                 </div>
               </div>
               <div className="pt-3 mt-1 border-t border-gray-100 dark:border-gray-800">

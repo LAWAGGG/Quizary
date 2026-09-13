@@ -20,7 +20,7 @@ logger = logging.getLogger("quizary.ai")
 
 AI_DAILY_LIMIT = 3
 
-ALLOWED_REF_EXT = {".docx", ".pdf", ".pptx"}
+ALLOWED_REF_EXT = {".docx", ".pdf", ".ppt", ".pptx"}
 MAX_REF_FILES = 5
 MAX_REF_FILE_BYTES = 5 * 1024 * 1024  # 5 MB per file
 MAX_REF_TOTAL_CHARS = 30_000
@@ -65,8 +65,72 @@ class AiFailed(Exception):
     pass
 
 
+def _scan_ppt_records(data: bytes) -> list[str]:
+    """Scan record PowerPoint: TextCharsAtom (0x0FA0, UTF-16LE) dan
+    TextBytesAtom (0x0FA1/0x0FA8, single-byte). Container (ver 0xF) direkursi."""
+    parts: list[str] = []
+
+    def _scan(buf: bytes) -> None:
+        off = 0
+        n = len(buf)
+        while off + 8 <= n:
+            ver = buf[off] & 0x0F
+            rtype = int.from_bytes(buf[off + 2:off + 4], "little")
+            rlen = int.from_bytes(buf[off + 4:off + 8], "little")
+            start = off + 8
+            end = start + rlen
+            if rlen < 0 or end > n:
+                break
+            payload = buf[start:end]
+            if ver == 0x0F:
+                _scan(payload)
+            elif rtype == 0x0FA0:
+                try:
+                    t = payload.decode("utf-16-le").strip()
+                except Exception:
+                    t = ""
+                if t:
+                    parts.append(t)
+            elif rtype in (0x0FA1, 0x0FA8):
+                try:
+                    t = payload.decode("cp1252").strip()
+                except Exception:
+                    t = ""
+                if t:
+                    parts.append(t)
+            off = end
+
+    _scan(data)
+    return parts
+
+
+def _extract_ppt_text(raw: bytes) -> str:
+    """Ambil teks dari .ppt biner lama (OLE) tanpa LibreOffice.
+
+    OLE valid tanpa stream teks (image-only) -> string kosong (router ubah
+    jadi 422 "kosong atau tidak ada teksnya"). Bukan OLE / stream rusak ->
+    raise (olefile) dan router ubah jadi 422 "tidak bisa dibaca".
+    """
+    import olefile  # type: ignore
+
+    with olefile.OleFileIO(io.BytesIO(raw)) as ole:
+        target = None
+        for entry in ole.listdir():
+            if len(entry) == 1 and entry[0].lower() == "powerpoint document":
+                target = "/".join(entry)
+                break
+        if target is None:
+            return ""
+        data = ole.openstream(target).read()
+
+    parts = _scan_ppt_records(data)
+    seen: set[str] = set()
+    uniq = [p for p in parts if p.strip() and not (p in seen or seen.add(p))]
+    return "\n".join(uniq)
+
+
 def extract_ref_text(filename: str, raw: bytes) -> str:
-    """Ambil teks dari file referensi (docx/pdf/pptx)."""
+    """Ambil teks dari file referensi (docx/pdf/ppt/pptx)."""
     name = (filename or "").lower()
     if name.endswith(".docx"):
         from docx import Document  # type: ignore
@@ -98,7 +162,9 @@ def extract_ref_text(filename: str, raw: bytes) -> str:
                     for row in shape.table.rows:
                         parts.append(" | ".join(c.text.strip() for c in row.cells if c.text.strip()))
         return "\n".join(parts)
-    raise AiFailed(f"Tipe file tidak didukung ({filename}). Pakai docx, pdf, atau pptx.")
+    if name.endswith(".ppt"):
+        return _extract_ppt_text(raw)
+    raise AiFailed(f"Tipe file tidak didukung ({filename}). Pakai docx, pdf, ppt, atau pptx.")
 
 _EXAMPLE_DRAFT = {
     "sections": [

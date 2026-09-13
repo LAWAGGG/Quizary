@@ -234,7 +234,7 @@ Import langsung membuat soal sekaligus menyimpan gambar yang ditemukan di dokume
 
 | Method | Path | Auth | Deskripsi |
 |---|---|---|---|
-| POST | `/api/ai/generate` | Bearer | Buat draf section/soal + pengaturan dari prompt + file `docx/pdf/pptx` (hemat token via `group_id`) |
+| POST | `/api/ai/generate` | Bearer | Buat draf section/soal + pengaturan dari prompt + file `docx/pdf/ppt/pptx` (hemat token via `group_id`) |
 | POST | `/api/ai/accept` | Bearer | Simpan draf yang sudah direview menjadi form baru |
 | GET | `/api/ai/quota` | Bearer | Cek sisa kuota harian (3/hari) |
 
