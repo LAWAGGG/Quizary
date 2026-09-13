@@ -359,12 +359,20 @@ def get_analytics(form: Form = Depends(verify_form_owner), db: Session = Depends
             ))
 
         completion = total_answers / (total * len(questions)) if total and questions else 0
+        durations = []
+        for s in subs:
+            if s.started_at and s.submitted_at:
+                diff = (s.submitted_at - s.started_at).total_seconds()
+                if diff >= 0:
+                    durations.append(diff)
+        avg_duration = int(sum(durations) / len(durations)) if durations else None
         return AnalyticsResponse(
             type="form",
             total_participants=total,
             total_answers=total_answers,
             completion_rate=round(completion, 2),
             avg_answers=round(total_answers / total, 1) if total else 0,
+            avg_duration_seconds=avg_duration,
             question_stats=question_stats,
         )
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, memo } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Users, Trophy, TrendingUp, TrendingDown, ClipboardList, ChevronDown, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Users, Trophy, TrendingUp, TrendingDown, ClipboardList, ChevronDown, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
 import api from '../../api/client'
 import { Card, PageHeader, FormSubNav, FormBackButton, CardSkeleton, RichText } from '../../components/ui'
 import { stripTags, resolveRichHtml } from '../../lib/sanitize'
@@ -134,6 +134,18 @@ const QuestionRow = memo(function QuestionRow({ q, i, total, open, onToggle }) {
   )
 })
 
+function formatDuration(seconds, t) {
+  if (seconds == null) return '-'
+  const s = Math.round(seconds)
+  if (s < 60) return t('analytics.durationSec', { count: s })
+  const m = Math.floor(s / 60)
+  const rest = s % 60
+  if (m < 60) return rest ? t('analytics.durationMinSec', { m, s: rest }) : t('analytics.durationMin', { count: m })
+  const h = Math.floor(m / 60)
+  const mm = m % 60
+  return mm ? t('analytics.durationHrMin', { h, m: mm }) : t('analytics.durationHr', { count: h })
+}
+
 function FormAnalytics({ data }) {
   const { t } = useTranslation()
   const [openIds, setOpenIds] = useState({})
@@ -143,7 +155,7 @@ function FormAnalytics({ data }) {
   const stats = [
     { label: t('analytics.participants'), value: total, icon: Users, tint: 'bg-primary-50 text-primary' },
     { label: t('analytics.totalAnswers'), value: data.total_answers, icon: ClipboardList, tint: 'bg-correct-soft text-correct' },
-    { label: t('analytics.avgPerParticipant'), value: data.avg_answers, icon: TrendingDown, tint: 'bg-warn-soft text-warn' },
+    { label: t('analytics.avgDuration'), value: formatDuration(data.avg_duration_seconds, t), icon: Clock, tint: 'bg-warn-soft text-warn' },
   ]
 
   return (
