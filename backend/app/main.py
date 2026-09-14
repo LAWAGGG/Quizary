@@ -60,6 +60,7 @@ _CORS_STATIC_ORIGINS = {
     "exp://localhost:8081",
     "exp://127.0.0.1:8081",
     "exp://localhost:19006",
+    "https://quizary.vercel.app"
 }
 
 # Domain prod eksak via env (tanpa wildcard) — cth: CORS_EXTRA_ORIGINS=https://quizary.id,https://app.quizary.id
