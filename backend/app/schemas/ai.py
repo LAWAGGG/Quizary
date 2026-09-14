@@ -108,6 +108,7 @@ class AiGenerateResponse(BaseModel):
     remaining: int
     limit: int
     ignored: list[str] = []
+    warnings: list[str] = []
 
 
 class AiQuotaResponse(BaseModel):

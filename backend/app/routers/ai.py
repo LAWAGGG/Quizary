@@ -181,9 +181,10 @@ async def ai_generate_stream(
         db.commit()
         left = AI_DAILY_LIMIT - (used + 1)
         ignored = draft.pop("ignored", []) if isinstance(draft, dict) else []
+        warnings = draft.pop("warnings", []) if isinstance(draft, dict) else []
         yield _sse(
             "done",
-            {"draft": draft, "model": model_used, "remaining": max(0, left), "limit": AI_DAILY_LIMIT, "ignored": ignored},
+            {"draft": draft, "model": model_used, "remaining": max(0, left), "limit": AI_DAILY_LIMIT, "ignored": ignored, "warnings": warnings},
         )
 
     return StreamingResponse(
@@ -253,7 +254,8 @@ def ai_generate(
     db.commit()
     left = AI_DAILY_LIMIT - (used + 1)
     ignored = draft.pop("ignored", []) if isinstance(draft, dict) else []
-    return {"draft": draft, "model": model_used, "remaining": max(0, left), "limit": AI_DAILY_LIMIT, "ignored": ignored}
+    warnings = draft.pop("warnings", []) if isinstance(draft, dict) else []
+    return {"draft": draft, "model": model_used, "remaining": max(0, left), "limit": AI_DAILY_LIMIT, "ignored": ignored, "warnings": warnings}
 
 
 @router.post("/ai/accept", status_code=201, response_model=AiAcceptResponse)

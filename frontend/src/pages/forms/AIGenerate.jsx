@@ -70,6 +70,23 @@ function IgnoredBox({ items }) {
   )
 }
 
+function CountWarnBox({ items }) {
+  const { t } = useTranslation()
+  if (!items?.length) return null
+  return (
+    <div className="rounded-xl border border-warn/30 bg-warn-soft dark:bg-warn-soft px-4 py-3 flex gap-2.5" role="status">
+      <Info className="w-4 h-4 text-warn shrink-0 mt-0.5" />
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-ink">{t('aiGenerate.countWarnTitle')}</p>
+        <p className="text-xs text-ink mt-0.5">{t('aiGenerate.countWarnDesc')}</p>
+        {items.map((w, i) => (
+          <p key={i} className="text-xs font-medium text-ink mt-1">{w}</p>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function SettingRow({ title, desc, control }) {
   return (
     <div className="flex items-center justify-between gap-4 py-2.5">
@@ -100,6 +117,7 @@ export default function AIGenerate() {
   const [quota, setQuota] = useState(null)
   const [draft, setDraft] = useState(null)
   const [ignored, setIgnored] = useState([])
+  const [warnings, setWarnings] = useState([])
   const [modelUsed, setModelUsed] = useState('')
   const [generating, setGenerating] = useState(false)
   const [accepting, setAccepting] = useState(false)
@@ -260,6 +278,7 @@ export default function AIGenerate() {
   const applyDone = (data) => {
     setDraft(data.draft)
     setIgnored(data.ignored || [])
+    setWarnings(data.warnings || [])
     setModelUsed(data.model || '')
     setQuota((q) => (q ? { ...q, remaining: data.remaining, used: q.limit - data.remaining } : q))
     setGenProgress({ percent: 100, key: '', done: 0, total: 0 })
@@ -642,6 +661,7 @@ export default function AIGenerate() {
               </div>
               <SettingChips settings={draft.settings} />
               <IgnoredBox items={ignored} />
+              <CountWarnBox items={warnings} />
               <div>
                 <span className="field-label">{t('aiGenerate.titleLabel')}</span>
                 <RichTextEditor value={title} onChange={setTitle} minHeight={60} />
@@ -706,7 +726,7 @@ export default function AIGenerate() {
                       {q.is_required && <span className="text-incorrect font-bold">*</span>}
                       {q.points > 0 && <span className="text-xs text-gray-400">{t('aiGenerate.points', { points: q.points })}</span>}
                     </div>
-                    <div className="text-sm text-ink dark:text-gray-100"><RichText html={q.question_text} /></div>
+                    <div className="text-sm text-ink dark:text-gray-100"><RichText html={q.question_text} className="rich-text block" /></div>
                     {q.options?.length > 0 && (
                       <ul className="space-y-1">
                         {q.options.map((o, oi) => (

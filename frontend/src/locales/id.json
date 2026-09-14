@@ -296,6 +296,8 @@
     "settingsHint": "AI mengisi dari prompt — koreksi di sini sebelum buat form agar tidak buang jatah generate.",
     "ignoredTitle": "Tidak ikut diatur AI",
     "ignoredDesc": "Kamu meminta ini di prompt tapi AI tidak menyetelnya. Atur manual di halaman edit form setelah Accept:",
+    "countWarnTitle": "Jumlah soal tidak maksimal",
+    "countWarnDesc": "Soal kompleks memakan banyak token sehingga AI berhenti sebelum target. Generate sisa soal terpisah bila kurang.",
     "leaderboard": "Leaderboard",
     "restricted": "Mode terbatas",
     "history": "Tampil di riwayat",

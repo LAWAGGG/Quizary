@@ -214,6 +214,7 @@ Aturan WAJIB (B-light: tanpa group/wacana):
 - SETIAP soal WAJIB standalone & mandiri — tidak bergantung soal lain. DILARANG pakai group_id (selalu null), DILARANG pakai delimiter "---" atau "--", DILARANG buat wacana/passage bersama untuk banyak soal. Jika prompt minta cerita, buat tiap soal lengkap sendiri tanpa mengulang cerita yang sama di soal lain.
 - Contoh SALAH (jangan ditiru): "Saat sidang BPUPKI ... --- Pada tanggal 18 Agustus ..." (2 topik beda disambung ---, cerita tidak nyambung dengan pertanyaan). Contoh BENAR: 2 soal terpisah lengkap tanpa ---, masing-masing pertanyaan jelas.
 - Kualitas: question_text ringkas, jelas, langsung ke inti, hindari pengulangan frasa. Untuk HOTS/story: pastikan cerita/stimulus RELEVAN langsung dengan pertanyaan yang mengikutinya. Jangan karang fakta sejarah/tanggal/nama jika tidak yakin — pakai fakta dari file referensi jika ada, atau buat soal konseptual tanpa tanggal spesifik. Jangan halusinasi.
+- JSON vs fence: kamu menulis SATU objek JSON valid — TAPI isi field question_text/option_text WAJIB memakai konvensi fence ``` untuk kode (JSON hanya pembungkus, bukan alasan menulis kode sebaris). Newline di dalam string JSON ditulis \n biasa; fence pembuka/penutup TETAP ditulis ``` apa adanya.
 - options HANYA untuk multiple_choice/checkbox/dropdown (2-4 opsi); tipe lain: options [] dan password_keyword null.
 - password_keyword HANYA untuk type password (isi kata sandinya), selain itu null.
 - answer_key SELALU null — JANGAN mengarang kunci jawaban (creator mengisinya saat review; kunci salah = penilaian otomatis salah).
@@ -224,7 +225,9 @@ Aturan WAJIB (B-light: tanpa group/wacana):
 - starts_at/ends_at: ISO "YYYY-MM-DDTHH:MM:SS" atau null; starts_at harus sebelum ends_at.
 - question_text/option_text = teks polos, TANPA tag HTML (HTML mentah tampil sebagai teks, bukan render).
 - Rumus/simbol: tulis LaTeX dengan delimiter \\(...\\) inline atau \\[...\\] display. JANGAN art Unicode (√½) dan JANGAN ejaan kata ("akar kuadrat dari").
-- Kode: fence ```bahasa ... ``` (satu blok per snippet, bahasa opsional: python, javascript, java, sql, cpp, html). Kode inline: `satu backtick`.
+- Kode: fence ```bahasa ... ``` (satu blok per snippet; bahasa: python, javascript, typescript, java, php, sql, cpp, html, css, json — framework dipetakan: Laravel->php, React/Vue->javascript). Kode inline: `satu backtick` untuk nama fungsi/variabel sebaris SAJA.
+- Format soal kode: SEMUA kode WAJIB dalam SATU fence per soal — gabung semua baris kode dalam satu blok (JANGAN satu fence per baris, JANGAN ditempel sebaris dalam kalimat). Bahasa ditulis SEKALI di pembuka fence, JANGAN diulang di tiap baris kode. Contoh BENAR: "Perhatikan kode berikut:\n```javascript\nconst a = useState(0);\nconst b = () => setA(1);\n```\nMengapa...?". Contoh SALAH: "```javascript\nconst a = 1;\n```\n```javascript\nconst b = 2;\n```" (dua blok terpisah) atau "javascript const a = 1;\njavascript const b = 2;" (nama bahasa di tiap baris).
+- Prioritas kode vs rumus: bila permintaan menyebut kode/program/koding (atau nama bahasa: python, javascript, java, sql, cpp, html), SEMUA potongan kode WAJIB pakai fence — JANGAN tulis kode dengan delimiter LaTeX \\(...\\) / \\[...\\]. LaTeX HANYA untuk rumus matematika asli, bukan untuk kode.
 - Link: [teks](https://...) — hanya http(s); jangan link lain.
 - Maksimal 10 sections, total maksimal 40 soal. Hemat token: jangan ulang teks yang sama di banyak soal, tiap soal beda.
 """ % _EXAMPLE_JSON
@@ -235,6 +238,139 @@ IGNORED_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("kategori", ("kategori", "category", "kelompok form")),
 )
 
+# Bahasa fence yang didukung konverter (lihat _LANG_OK_RE). Tanpa "c"/"go"
+# satu-suku-kata — terlalu ambigu ("[C::class", "let's go").
+_CODE_LANGS = (
+    "python", "javascript", "typescript", "java", "php", "sql",
+    "cpp", "c++", "c#", "html", "css", "json", "rust", "kotlin",
+)
+# Pola sintaks khas -> bahasa (dipakai saat teks soal tak menyebut nama
+# bahasa, mis. AI tulis "Route::get(..)" tanpa kata "laravel"/"php").
+_CODE_SMELL_LANGS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("php", ("::", "->")),
+    ("javascript", ("=>", "useState", "useEffect", "console.", "jsx", "tsx",
+                    "<h1", "<h2", "<div", "<p", "<span", "const ", "let ")),
+    ("sql", ("SELECT", "FROM", "WHERE")),
+    ("python", ("def ", "print(", "import ", "elif", "except")),
+)
+
+
+def _sniff_code_lang(text: str | None, preferred: str | list[str] | None = None) -> str | None:
+    """Tebak bahasa dari sintaks khas di teks soal. Skor per bahasa dari jumlah
+    penanda cocok; SQL butuh 2+ penanda (FROM/WHERE umum di prosa). Seri
+    dipecah via preferred (intent prompt), lalu urutan peta."""
+    t = f" {(text or '')} "
+    tl = t.lower()
+    scores: dict[str, int] = {}
+    for lang, markers in _CODE_SMELL_LANGS:
+        s = 0
+        for mk in markers:
+            if not mk:
+                continue
+            if mk[0].isalpha():
+                if re.search(r"(?<![a-z0-9_])" + re.escape(mk.lower()), tl):
+                    s += 1
+            elif mk in t:
+                s += 1
+        if lang == "sql" and s < 2:
+            s = 0
+        if s:
+            scores[lang] = s
+    if not scores:
+        return None
+    best = max(scores.values())
+    winners = [lang for lang, s in scores.items() if s == best]
+    if len(winners) == 1:
+        return winners[0]
+    order = preferred if isinstance(preferred, list) else ([preferred] if preferred else [])
+    for lang in order:
+        if lang in winners:
+            return lang
+    return winners[0]
+# Framework/library -> bahasa fence. Cek peta ini DULU sebelum bahasa umum
+# (mis. "react" harus jadi javascript, bukan lolos tanpa bahasa).
+_CODE_FRAMEWORK_MAP = {
+    "laravel": "php", "codeigniter": "php", "symfony": "php",
+    "react": "javascript", "vue": "javascript", "angular": "typescript",
+    "nextjs": "javascript", "next.js": "javascript", "nuxt": "javascript",
+    "express": "javascript", "nodejs": "javascript", "node.js": "javascript",
+    "django": "python", "flask": "python", "fastapi": "python",
+    "spring": "java", "tailwind": "css", "jsx": "javascript",
+    "tsx": "typescript", "blade": "php", "eloquent": "php",
+}
+# Keyword umum bermakna soal kode/program. Sengaja tanpa "fungsi"/"variabel"/
+# "method" — terlalu ambigu dengan soal matematika ("fungsi kuadrat").
+# "soal"/"analisa"/"analisis" disengaja absen: terlalu umum, bukan sinyal kode.
+_CODE_HINTS = (
+    "kode", "koding", "coding", "program", "source code", "sourcecode",
+    "script", "snippet", "output", "error", "exception", "debug",
+    "loop", "sintaks", "syntax", "algoritma", "algorithm",
+    "baris kode", "baris program", "analisa kode", "analisis kode",
+    "code review", "trace", "tracing",
+)
+
+
+def _word_hit(t: str, kw: str) -> bool:
+    return bool(re.search(rf"(?<![a-z0-9+#_.-]){re.escape(kw)}(?![a-z0-9+#_-])", t))
+
+
+def _parse_requested_count(text: str | None) -> int | None:
+    """Ambil jumlah soal yang diminta user ('30 soal', '10 pertanyaan').
+
+    Ambil angka terbesar yang diikuti kata soal/pertanyaan/question,
+    clamp 1-50 (sinkron MAX_QUESTIONS). None bila tak disebut eksplisit.
+    """
+    if not text:
+        return None
+    nums = [
+        int(m.group(1))
+        for m in re.finditer(
+            r"(\d{1,3})\s*(soal|pertanyaan|questions?)",
+            text,
+            re.IGNORECASE,
+        )
+    ]
+    if not nums:
+        return None
+    return max(1, min(MAX_QUESTIONS, max(nums)))
+
+
+def _output_budget(user_text: str | None) -> int:
+    """Budget maxOutputTokens dinamis: hemat untuk request kecil, cukup untuk
+    soal kode multiline. Per soal kode ~450 token, non-kode ~300."""
+    n = _parse_requested_count(user_text) or 10
+    per_q = 450 if detect_code_intent(user_text) is not None else 300
+    raw = 800 + n * per_q
+    stepped = ((raw + 1023) // 1024) * 1024
+    return max(4096, min(16384, stepped))
+
+
+def detect_code_intent(text: str | None) -> str | list[str] | None:
+    """Deteksi intent soal kode dari teks bebas.
+
+    Return: bahasa fence (str) bila satu bahasa dominan, list[str] bila
+    multi-bahasa (mis. "laravel dan react" -> ["php", "javascript"]),
+    "" bila intent kode tanpa bahasa jelas, None bila bukan soal kode.
+    Urutan: framework dulu (laravel->php, react->javascript), lalu bahasa
+    umum, lalu keyword umum. Batas kata agar "decode" tak dikira intent kode.
+    """
+    t = f" {(text or '').lower()} "
+    found: list[str] = []
+    for fw, lang in _CODE_FRAMEWORK_MAP.items():
+        if _word_hit(t, fw) and lang not in found:
+            found.append(lang)
+    for lang in _CODE_LANGS:
+        if _word_hit(t, lang) and lang not in found:
+            found.append(lang)
+    if len(found) > 1:
+        return found
+    if len(found) == 1:
+        return found[0]
+    for hint in _CODE_HINTS:
+        if _word_hit(t, hint):
+            return ""
+    return None
+
 
 def build_user_text(title: str, description: str | None, form_type: str, prompt: str, refs: list[tuple[str, str]]) -> str:
     parts = [
@@ -244,6 +380,33 @@ def build_user_text(title: str, description: str | None, form_type: str, prompt:
     if description:
         parts.append(f"Deskripsi: {description}")
     parts.append(f"Permintaan creator:\n{prompt}")
+    lang = detect_code_intent(f"{title} {description or ''} {prompt}")
+    if lang is not None:
+        n = _parse_requested_count(prompt)
+        count_rule = f"Tulis TEPAT {n} soal, tidak kurang. " if n else ""
+        code_rule = (
+            "SETIAP soal WAJIB memuat potongan kode dalam fence (1-8 baris; 1 baris pun tetap fence, jangan sebaris dalam kalimat). "
+            "Struktur question_text: kalimat pembuka (mis. 'Perhatikan kode berikut:'), "
+            "lalu fence berisi kode, lalu kalimat pertanyaan. "
+            "Di dalam fence pakai petik tunggal (') bukan petik ganda (\") bila memungkinkan. "
+            "Penutup fence (```) WAJIB di baris sendiri. Jangan delimiter LaTeX untuk kode."
+        )
+        if isinstance(lang, list):
+            fences = ", ".join(f"```{l}" for l in lang)
+            parts.append(
+                "Konteks: soal ini tentang KODE/PROGRAM, bukan rumus matematika. "
+                f"{count_rule}"
+                f"{code_rule} "
+                f"Sebar fence sesuai materi ({fences})."
+            )
+        else:
+            fence = f"```{lang}" if (lang and re.match(r'^[A-Za-z0-9+#_-]{1,20}$', lang)) else "```python"
+            parts.append(
+                "Konteks: soal ini tentang KODE/PROGRAM, bukan rumus matematika. "
+                f"{count_rule}"
+                f"{code_rule} "
+                f"Pakai fence {fence} ... ``` ."
+            )
     for fname, text in refs:
         parts.append(f"--- Isi file referensi {fname} ---\n{text}")
     return "\n\n".join(parts)
@@ -377,6 +540,39 @@ def _repair_json_escapes(text: str) -> str:
     return "".join(out)
 
 
+def _repair_json_controls(text: str) -> str:
+    """Escape newline/tab asli di dalam string JSON (AI tulis fence multiline
+    dengan newline mentah, bukan \\n — json.loads gagal 'Invalid control
+    character'). Sadar-string: struktur di luar string tak disentuh."""
+    out: list[str] = []
+    in_string = False
+    escaped = False
+    for ch in text:
+        if in_string:
+            if escaped:
+                out.append(ch)
+                escaped = False
+            elif ch == "\\":
+                out.append(ch)
+                escaped = True
+            elif ch == '"':
+                out.append(ch)
+                in_string = False
+            elif ch == "\n":
+                out.append("\\n")
+            elif ch == "\r":
+                out.append("\\r")
+            elif ch == "\t":
+                out.append("\\t")
+            else:
+                out.append(ch)
+            continue
+        out.append(ch)
+        if ch == '"':
+            in_string = True
+    return "".join(out)
+
+
 def _parse_gemini_text(data: dict) -> dict:
     if data.get("promptFeedback", {}).get("blockReason"):
         raise AiFailed("Prompt ditolak filter keamanan AI. Coba ubah kata-katanya.")
@@ -384,24 +580,34 @@ def _parse_gemini_text(data: dict) -> dict:
     text = (cands[0].get("content", {}).get("parts") or [{}])[0].get("text", "") if cands else ""
     # ponytail: cek finishReason truncated
     finish = (cands[0].get("finishReason") or "") if cands else ""
-    if finish == "MAX_TOKENS":
+    truncated = finish == "MAX_TOKENS"
+    if truncated:
         logger.warning("gemini: finishReason MAX_TOKENS, coba repair truncated")
     try:
         parsed = json.loads(text)
     except (ValueError, TypeError):
-        try:  # ponytail: 1x repair LaTeX mentah sebelum menyerah (hemat retry)
+        try:  # ponytail: repair LaTeX mentah sebelum menyerah (hemat retry)
             parsed = json.loads(_repair_json_escapes(text))
             logger.info("gemini: JSON diperbaiki via escape-repair")
         except (ValueError, TypeError):
-            try:
-                # ponytail: 2nd repair untuk terpotong karena 20 soal passage (8192→16384 overflow)
-                repaired = _repair_truncated_json(_repair_json_escapes(text))
-                parsed = json.loads(repaired)
-                logger.info("gemini: JSON diperbaiki via truncated-repair")
+            try:  # newline/tab mentah di string (fence kode multiline) ->
+                # escape control dulu, lalu LaTeX (urutan penting: \f mentah
+                # harus digandakan SEBELUM loads agar tak korup jadi formfeed)
+                parsed = json.loads(_repair_json_escapes(_repair_json_controls(text)))
+                logger.info("gemini: JSON diperbaiki via control-repair")
             except (ValueError, TypeError):
-                raise AiFailed("AI gagal menyusun draf (output terpotong). Coba generate ulang dengan 10 soal per batch.")
+                try:
+                    # ponytail: repair untuk terpotong karena passage (overflow)
+                    repaired = _repair_truncated_json(_repair_json_escapes(_repair_json_controls(text)))
+                    parsed = json.loads(repaired)
+                    logger.info("gemini: JSON diperbaiki via truncated-repair")
+                    truncated = True
+                except (ValueError, TypeError):
+                    raise AiFailed("AI gagal menyusun draf (output terpotong). Coba generate ulang dengan 10 soal per batch.")
     if not isinstance(parsed, dict):
         raise AiFailed("AI gagal menyusun draf. Coba generate ulang.")
+    if truncated:
+        parsed["_truncated"] = True
     return parsed
 
 
@@ -420,10 +626,11 @@ def call_gemini(user_text: str, user_id: int | None = None) -> tuple[dict, str]:
     est_tokens = len(user_text) // 4 + 8192
     if est_tokens > 100_000:
         raise AiFailed("Prompt + file referensi terlalu panjang untuk 20 soal. Coba 10 soal per batch atau kurangi teks passage.")
+    budget = _output_budget(user_text)
     payload = {
         "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION}]},
         "contents": [{"parts": [{"text": user_text}]}],
-        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7, "maxOutputTokens": 16384},
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7, "maxOutputTokens": budget},
     }
     headers = {"x-goog-api-key": GEMINI_API_KEY}
     last_err: Exception | None = None
@@ -549,7 +756,156 @@ def _inline_rich(esc: str, parts: list[str]) -> str:
     return esc
 
 
-def _rich_lite_to_html(text: str) -> str:
+# Tanda kode sebaris panjang (AI lupa fence): 2+ pola khas kode dalam satu
+# baris — mis. "const [a, b] = useState(..); ...setX(..);".
+_CODE_SMELL_RES = (
+    re.compile(r"\b(const|let|var|function|return|import|from|useState|useEffect|Route|SELECT|FROM|WHERE)\b", re.IGNORECASE),
+    re.compile(r"=>|===|!==|::|->|\$[A-Za-z_]"),
+    re.compile(r"[A-Za-z_$][\w$]*\s*\([^)]*\)\s*;"),
+    re.compile(r";.*;\s*\S"),
+    re.compile(r"<[a-zA-Z][a-zA-Z0-9]*(\s[^<>]*)?/?>"),  # tag HTML/JSX
+    re.compile(r"\?.*:"),  # ternary a ? b : c
+)
+
+# Tanda baca kode: bedakan kode asli dari prosa yang menyebut nama kode.
+# "useEffect tidak diperbolehkan..." (tanpa (), {}, ;, =) = prosa, bukan kode.
+_CODE_PUNCT_RES = (
+    re.compile(r"=>|::|->"),
+    re.compile(r"<[a-zA-Z][a-zA-Z0-9]*(\s[^<>]*)?/?>"),
+    re.compile(r"[A-Za-z_$][\w$]*\s*\("),
+    re.compile(r"[;{}]"),
+    re.compile(r"\$[A-Za-z_]"),
+    re.compile(r"\b(const|let|var)\b\s*[\w${}\[\]\s,]*="),
+    re.compile(r"[A-Za-z0-9_\)\]]\s*=\s*[^=]"),
+)
+
+# Kata kunci kode — HANYA dihitung bila ditemani tanda baca kode di atas.
+_STRONG_KW_RES = (
+    re.compile(r"\b(const|let|var|function|return|import|from|useState|useEffect|Route|SELECT|FROM|WHERE|def|elif|except|console)\b", re.IGNORECASE),
+)
+
+
+def _looks_like_unfenced_code(line: str, strict: bool = False) -> bool:
+    """True bila baris tanpa fence tapi sarat pola kode.
+
+    strict=True (soal coding): butuh tanda baca kode — 2+ tanda, atau
+    1 tanda + kata kunci (panjang >=25). Prosa tanpa (), {}, ;, =
+    ("useEffect tidak diperbolehkan...") TIDAK dianggap kode.
+    strict=False: ambang normal 60 char + 2 pola (anti false-positive prosa).
+    """
+    s = line.strip()
+    if "```" in s:
+        return False
+    if strict and len(s) >= 25:
+        n_punct = sum(1 for rx in _CODE_PUNCT_RES if rx.search(s))
+        if n_punct >= 2:
+            return True
+        if n_punct >= 1 and any(rx.search(s) for rx in _STRONG_KW_RES):
+            return True
+        return False
+    if len(s) < 60:
+        return False
+    return sum(1 for rx in _CODE_SMELL_RES if rx.search(s)) >= 2
+
+
+def _wrap_unfenced_code_lines(text: str, lang: str = "plain", strict: bool = False) -> str:
+    """Bungkus baris kode sebaris AI jadi fence agar render code-block.
+
+    Baris kode BERURUTAN digabung dalam SATU fence (bukan satu fence per
+    baris) agar tidak tumpang-tindih blok. Nama bahasa di awal baris
+    ("javascript const x = ...") dikupas jadi atribut fence.
+    """
+    out: list[str] = []
+    buf: list[str] = []
+    buf_indent = ""
+    in_fence = False
+
+    def flush() -> None:
+        if buf:
+            out.append(f"{buf_indent}```{lang}\n" + "\n".join(buf) + f"\n{buf_indent}```")
+            buf.clear()
+
+    for line in text.split("\n"):
+        # Sudah dalam fence AI -> biarkan utuh, jangan bungkus ulang.
+        if "```" in line:
+            flush()
+            in_fence = not in_fence if line.count("```") % 2 else in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        if _looks_like_unfenced_code(line, strict):
+            s = line.strip()
+            # kupas label bahasa nyangkut ("javascript const x" -> "const x")
+            if strict:
+                w = s.split(None, 1)
+                if len(w) == 2 and w[0].lower() in (
+                    *_CODE_LANGS, *_CODE_FRAMEWORK_MAP, "plain", "text",
+                    "code", "kode", "js", "py", "ts",
+                ):
+                    s = w[1].lstrip()
+            if not buf:
+                buf_indent = line[: len(line) - len(line.lstrip())]
+            buf.append(s)
+        else:
+            flush()
+            out.append(line)
+    flush()
+    return "\n".join(out)
+
+
+_LANG_LABEL_WORDS = frozenset((
+    *_CODE_LANGS, *_CODE_FRAMEWORK_MAP,
+    "plain", "text", "code", "kode", "js", "py", "ts",
+))
+
+
+def _strip_lang_label(code: str) -> str:
+    """Kupas label bahasa nyangkut di awal isi fence ('javascript const x')."""
+    first, sep, rest = code.partition("\n")
+    w = first.strip().split(None, 1)
+    if w and w[0].lower() in _LANG_LABEL_WORDS and (sep or len(w) == 2):
+        return (w[1] if len(w) == 2 else "") + ("\n" + rest if sep else "")
+    return code
+
+
+def _merge_adjacent_fences(text: str) -> str:
+    """Gabung fence berurutan (pemisah hanya whitespace) jadi satu blok."""
+    matches = list(_FENCE_RE.finditer(text))
+    if len(matches) < 2:
+        return text
+    out: list[str] = []
+    pos = 0
+    i = 0
+    while i < len(matches):
+        m = matches[i]
+        group = [m]
+        j = i + 1
+        while j < len(matches) and matches[j].start() >= group[-1].end() and not text[group[-1].end():matches[j].start()].strip():
+            group.append(matches[j])
+            j += 1
+        if len(group) == 1:
+            out.append(text[pos:m.end()])
+            pos = m.end()
+        else:
+            lang = ""
+            bodies: list[str] = []
+            for g in group:
+                if not lang:
+                    lang = (g.group(1) or "").strip().lower()
+                body = _strip_lang_label(g.group(2).strip("\n")).strip("\n")
+                if body:
+                    bodies.append(body)
+            merged = (f"```{lang}\n" if lang else "```\n") + "\n".join(bodies) + "\n```"
+            out.append(text[pos:group[0].start()] + merged)
+            pos = group[-1].end()
+        i = j
+    out.append(text[pos:])
+    return "".join(out)
+
+
+def _rich_lite_to_html(text: str, code_lang: str = "plain", strict_code: bool = False) -> str:
     """Ubah konvensi rich-lite AI -> HTML allowlist frontend.
 
     Aman by construction: tiap segmen teks di-escape dulu, lalu hanya tag yang
@@ -557,16 +913,37 @@ def _rich_lite_to_html(text: str) -> str:
     HTML mentah dari AI TIDAK pernah passthrough (tampil sebagai teks).
     Delimiter LaTeX dibiarkan — KaTeX auto-render di client (pre/div kode
     dikecualikan render via ignoredTags).
+    Baris kode sebaris (AI lupa fence) otomatis dibungkus fence; strict_code
+    (soal coding) pakai ambang rendah agar kode 1-baris ikut tertangkap.
     """
+    text = _wrap_unfenced_code_lines(text, code_lang, strict_code)
+    # AI bandel: banyak fence 1-baris berurutan -> gabung jadi satu blok agar
+    # tidak tumpang-tindih. Hanya teks polos di antaranya yang digabung juga;
+    # bila ada kalimat prosa di tengah, biarkan terpisah.
+    text = _merge_adjacent_fences(text)
     parts: list[str] = []
     out: list[str] = []
     pos = 0
     for m in _FENCE_RE.finditer(text):
         out.append(_inline_rich(html.escape(text[pos:m.start()], quote=True), parts))
-        lang = (m.group(1) or "").strip().lower() or "plain"
+        lang = (m.group(1) or "").strip().lower()
+        code = m.group(2).strip("\n")
+        # AI bandel: bahasa di baris pertama kode ("```\njavascript const X..."
+        # atau "```\njavascript" saja) -> angkat jadi atribut.
+        if not lang:
+            first, _, rest = code.partition("\n")
+            w = first.strip().split()
+            tok = w[0].lower() if w else ""
+            if tok and re.fullmatch(r"[a-z0-9+#_-]{1,20}", tok) and (tok in _CODE_LANGS or tok in _CODE_FRAMEWORK_MAP or tok in ("plain", "text", "code", "kode", "js", "py", "ts")):
+                lang = {"js": "javascript", "py": "python", "ts": "typescript"}.get(tok, tok)
+                if lang in _CODE_FRAMEWORK_MAP:
+                    lang = _CODE_FRAMEWORK_MAP[lang]
+                tail = first.strip()[len(w[0]):].lstrip()
+                code = (tail + "\n" + rest).lstrip("\n") if tail else rest.lstrip("\n")
+        lang = lang or "plain"
         if not _LANG_OK_RE.match(lang):
             lang = "plain"
-        code = m.group(2).strip("\n")[:4000]
+        code = code[:4000]
         parts.append(
             '<div class="ql-code-block-container">'
             f'<div class="ql-code-block" data-language="{lang}">'
@@ -583,7 +960,18 @@ def _rich_lite_to_html(text: str) -> str:
     return esc
 
 
-def _coerce_question(raw: dict) -> dict | None:
+def _primary_code_lang(intent: str | list[str] | None) -> str:
+    """Ambil bahasa utama dari hasil detect_code_intent untuk safety-net fence."""
+    if isinstance(intent, list):
+        lang = intent[0] if intent else ""
+    else:
+        lang = intent or ""
+    if lang and _LANG_OK_RE.match(lang):
+        return lang.lower()
+    return "plain"
+
+
+def _coerce_question(raw: dict, code_intent: str | list[str] | None = None) -> dict | None:
     """Bersihkan 1 soal AI -> dict valid QuestionCreate, atau None bila sampah."""
     if not isinstance(raw, dict):
         return None
@@ -597,7 +985,20 @@ def _coerce_question(raw: dict) -> dict | None:
     if " --- " in text:
         # kasus AI nakal: "cerita --- soal" dalam 1 baris
         text = text.split(" --- ")[-1].strip()
-    text = _rich_lite_to_html(text[:5000 - _RICH_HEADROOM])
+    # Bahasa safety-net: deteksi per-soal dulu (tepat untuk prompt campuran
+    # laravel+react), lalu sintaks khas (Route:: -> php meski soal tak sebut
+    # bahasa), fallback ke intent level-prompt.
+    opt_texts = " ".join(
+        str(o.get("option_text") or "")
+        for o in ((raw.get("options") or []) if isinstance(raw.get("options"), list) else [])
+        if isinstance(o, dict)
+    )
+    q_text = f"{text} {opt_texts}"
+    q_intent = detect_code_intent(q_text)
+    sniffed = _sniff_code_lang(q_text, q_intent or code_intent)
+    code_lang = sniffed or _primary_code_lang(q_intent if q_intent else code_intent)
+    strict = bool(code_intent or q_intent or sniffed or code_lang != "plain")
+    text = _rich_lite_to_html(text[:5000 - _RICH_HEADROOM], code_lang, strict)
     opts: list[dict] = []
     if q_type in OPTION_TYPES:
         for o in (raw.get("options") or [])[:MAX_OPTIONS]:
@@ -605,7 +1006,7 @@ def _coerce_question(raw: dict) -> dict | None:
                 continue
             t = str(o.get("option_text") or "").strip()
             if t:
-                opts.append({"option_text": _rich_lite_to_html(t[:2000 - _RICH_HEADROOM]), "is_correct": bool(o.get("is_correct"))})
+                opts.append({"option_text": _rich_lite_to_html(t[:2000 - _RICH_HEADROOM], code_lang, strict), "is_correct": bool(o.get("is_correct"))})
         if not opts:
             return None
     try:
@@ -638,6 +1039,7 @@ def _coerce_question(raw: dict) -> dict | None:
 
 def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
     """Bersihkan output AI -> draf valid. Raise AiFailed bila tak ada soal layak."""
+    code_intent = detect_code_intent(prompt_text)
     sections: list[dict] = []
     total = 0
     for s in (raw.get("sections") or [])[:MAX_SECTIONS]:
@@ -646,7 +1048,7 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
         for q in ((s or {}).get("questions") or []):
             if total >= MAX_QUESTIONS:
                 break
-            clean = _coerce_question(q)
+            clean = _coerce_question(q, code_intent)
             if clean:
                 questions.append(clean)
                 total += 1
@@ -715,7 +1117,30 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
         else:
             raise AiFailed("AI tidak menyertakan timer untuk kuis. Coba generate ulang.")
     draft["ignored"] = detect_ignored(prompt_text, draft["settings"])
+    draft["warnings"] = detect_count_warnings(prompt_text, total, truncated=bool(raw.get("_truncated")))
     return draft
+
+
+def detect_count_warnings(prompt_text: str, actual: int, truncated: bool = False) -> list[str]:
+    """Warning jumlah soal: minta N dapat M (<N) karena token/kompleksitas.
+
+    Tanpa panggilan AI tambahan (hemat kuota). Kembalikan list string siap
+    tampil, mis. 'Minta 30 soal, AI membuat 18 (batas token)'.
+    """
+    requested = _parse_requested_count(prompt_text)
+    out: list[str] = []
+    if requested and actual < requested:
+        reason = "batas token" if truncated else "soal kompleks"
+        out.append(
+            f"Minta {requested} soal, AI membuat {actual} ({reason}). "
+            "Kurangi kompleksitas per soal atau generate sisa soal terpisah."
+        )
+    elif truncated:
+        out.append(
+            f"AI membuat {actual} soal (output mencapai batas token). "
+            "Generate sisa soal terpisah bila kurang."
+        )
+    return out
 
 
 def detect_ignored(prompt_text: str, settings: dict) -> list[str]:

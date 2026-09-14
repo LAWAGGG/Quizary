@@ -296,6 +296,8 @@
     "settingsHint": "AI fills these from your prompt — correct them here before creating the form to save quota.",
     "ignoredTitle": "Not applied by AI",
     "ignoredDesc": "You asked for this in the prompt but AI did not set it. Adjust manually on the form edit page after Accept:",
+    "countWarnTitle": "Question count fell short",
+    "countWarnDesc": "Complex questions use many tokens, so AI stopped before the target. Generate the remaining questions separately if needed.",
     "leaderboard": "Leaderboard",
     "restricted": "Restricted mode",
     "history": "Show in history",
