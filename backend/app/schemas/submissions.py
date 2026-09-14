@@ -83,6 +83,9 @@ class SavedAnswer(BaseModel):
     question_id: int
     question_text: str
     question_type: str
+    # Posisi tampil soal di sesi ini (ikut questions payload, hormati shuffle).
+    # Review responden + detail creator sort pakai ini, bukan urutan insert Answer.
+    order_index: int = 0
     question_image: Optional[str] = None  # full URL to question image, if any
     question_audio: Optional[str] = None  # full URL to question audio, if any
     # What the respondent saved so far (populated regardless of submission status)

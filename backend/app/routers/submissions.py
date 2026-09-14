@@ -378,6 +378,7 @@ def _build_saved_answers(sub_id: int, request: Request, db: Session) -> list[Sav
         .all()
     )
     q_map = {q.id: q for q in questions}
+    q_order = {q.id: i for i, q in enumerate(sorted(questions, key=lambda q: q.order_index or 0))}
     answers_data: list[SavedAnswer] = []
     for answer in db.query(Answer).options(selectinload(Answer.selected_options)).filter(Answer.submission_id == sub.id).all():
         q = q_map.get(answer.question_id)
@@ -390,12 +391,14 @@ def _build_saved_answers(sub_id: int, request: Request, db: Session) -> list[Sav
             question_id=q.id,
             question_text=q.question_text,
             question_type=q.type.value,
+            order_index=q_order.get(q.id, len(q_order)),
             question_image=q_image_url,
             question_audio=q_audio_url,
             selected_option_ids=selected_ids,
             answer_text=answer.answer_text,
             answer_file=file_url(request, answer.answer_file),
         ))
+    answers_data.sort(key=lambda a: a.order_index)
     return answers_data
 
 
@@ -1051,6 +1054,10 @@ def get_submission(
     reveal_score = completed and (non_quiz or form.reveal_score or is_owner)
     reveal_answers = completed and (non_quiz or form.reveal_answers or is_owner)
 
+    # Urutan tampil sesi ini (hormati shuffle per-submission + blok section).
+    # Review responden sort pakai ini, bukan urutan insert Answer yang acak.
+    q_order = {q.id: i for i, q in enumerate(questions)}
+
     answers_data: list[SavedAnswer] = []
     for answer in db.query(Answer).options(selectinload(Answer.selected_options)).filter(Answer.submission_id == sub.id).all():
         q = q_map.get(answer.question_id)
@@ -1070,6 +1077,7 @@ def get_submission(
             question_id=q.id,
             question_text=q.question_text,
             question_type=q.type.value,
+            order_index=q_order.get(q.id, len(q_order)),
             question_image=q_image_url,
             question_audio=q_audio_url,
             selected_option_ids=selected_ids,
@@ -1079,6 +1087,7 @@ def get_submission(
             is_correct=answer.is_correct if reveal_answers else None,
             points_earned=float(answer.points_earned) if reveal_answers and answer.points_earned is not None else None,
         ))
+    answers_data.sort(key=lambda a: a.order_index)
 
     sections = [
         {"id": s.id, "title": s.title}

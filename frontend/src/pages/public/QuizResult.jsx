@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check, X, Minus, Eye, EyeOff, ArrowRight, ClipboardList, Trophy, AlertTriangle } from 'lucide-react'
@@ -73,6 +73,15 @@ export default function QuizResult() {
       .then((res) => setLeaderboard(res.data))
       .catch(() => setLeaderboard(null))
   }, [formType, formCode, publicForm?.show_leaderboard, submissionId])
+
+  // Review ikut urutan soal yang dilihat responden (hormati shuffle).
+  // Backend sudah sort, ini pengaman untuk data lama / payload lain.
+  const reviewAnswers = useMemo(
+    () => [...(data?.answers || [])].sort(
+      (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0),
+    ),
+    [data?.answers],
+  )
 
   if (loading) {
     return (
@@ -334,7 +343,7 @@ export default function QuizResult() {
                   exit={{ opacity: 0 }}
                   className="space-y-3"
                 >
-                  {data.answers.map((answer, i) => (
+                  {reviewAnswers.map((answer, i) => (
                     <motion.div key={answer.question_id} variants={item}>
                       <Card className="p-5">
                         <div className="flex items-start gap-3">
@@ -362,17 +371,28 @@ export default function QuizResult() {
                               {(answer.question_type === 'multiple_choice' || answer.question_type === 'checkbox' || answer.question_type === 'dropdown')
                                 ? (<>
                                   {answer.selected_options?.length > 0
-                                    ? answer.selected_options.map((s) => stripTags(s) || s).join(', ')
+                                    ? (
+                                      <span className="flex flex-wrap items-baseline gap-x-1.5">
+                                        {answer.selected_options.map((s, si) => (
+                                          <span key={si} className="inline-flex items-baseline gap-x-1.5">
+                                            {si > 0 && <span className="text-gray-400">·</span>}
+                                            <RichText html={resolveRichHtml(s)} className="rich-text inline" />
+                                          </span>
+                                        ))}
+                                      </span>
+                                    )
                                     : (!answer.answer_text && <span className="text-gray-400 italic">{t('quizResult.notAnswered')}</span>)}
                                   {answer.answer_text && (
-                                    <span className="block mt-1 text-gray-500 dark:text-gray-400">{t('quizResult.otherAnswer', { text: answer.answer_text })}</span>
+                                    <span className="block mt-1 text-gray-500 dark:text-gray-400">{t('quizResult.otherAnswer', { text: stripTags(answer.answer_text) })}</span>
                                   )}
                                 </>)
                                 : answer.question_type === 'file_upload'
                                   ? (answer.answer_file
                                     ? <a href={resolveMediaUrl(answer.answer_file)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-primary dark:text-primary-300 underline">{t('quizResult.viewAnswerFile')}</a>
                                     : <span className="text-gray-400 italic">{t('quizResult.notAnswered')}</span>)
-                                  : (answer.answer_text || <span className="text-gray-400 italic">{t('quizResult.notAnswered')}</span>)}
+                                  : (answer.answer_text
+                                    ? <RichText html={resolveRichHtml(answer.answer_text)} className="rich-text" />
+                                    : <span className="text-gray-400 italic">{t('quizResult.notAnswered')}</span>)}
                             </div>
                           </div>
                         </div>

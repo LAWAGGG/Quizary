@@ -20,9 +20,6 @@ const SYMBOL_GROUPS = [
   { label: 'Arrows & misc', items: ['←', '↑', '→', '↓', '↔', '↕', '⇐', '⇑', '⇒', '⇓', '⇔', '°', '′', '″', '·', '…', '•', '∴', '∵'] },
 ]
 
-// Template LaTeX — klik untuk menambahkan ke draft formula.
-// Dikelompokkan per materi sekolah agar mudah dicari (matriks, aljabar,
-// geometri, trigonometri, statistika, kalkulus dasar, fisika).
 const FORMULA_GROUPS = [
   {
     label: 'Dasar',
