@@ -12,6 +12,9 @@ const humanizeType = (t) => (t || '').replace(/_/g, ' ')
 
 const ACCEPT_EXT = '.docx,.pdf,.ppt,.pptx'
 const MAX_FILES = 5
+const PROMPT_MAX = 5000
+const PROMPT_MIN = 10
+const normPrompt = (s) => String(s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
 
 function QuotaPill({ quota }) {
   const { t } = useTranslation()
@@ -348,7 +351,9 @@ export default function AIGenerate() {
   const handleGenerate = async (e) => {
     e?.preventDefault()
     if (!stripTags(title)) { setError(t('aiGenerate.titleRequired')); return }
-    if (prompt.trim().length < 10) { setError(t('aiGenerate.promptMin')); return }
+    const cleanLen = normPrompt(prompt).length
+    if (cleanLen < PROMPT_MIN) { setError(t('aiGenerate.promptMin', { current: cleanLen, max: PROMPT_MAX })); return }
+    if (cleanLen > PROMPT_MAX) { setError(t('aiGenerate.promptMax', { current: cleanLen, max: PROMPT_MAX })); return }
     abortRef.current?.abort()
     abortRef.current = new AbortController()
     cancelledRef.current = false
@@ -420,7 +425,9 @@ export default function AIGenerate() {
 
   const quotaEmpty = quota && quota.remaining <= 0
   const templates = [t('aiGenerate.templateQuiz'), t('aiGenerate.templateForm'), t('aiGenerate.templateSchedule')]
-  const canSend = !generating && !quotaEmpty && prompt.trim().length >= 10 && !!stripTags(title)
+  const promptLen = normPrompt(prompt).length
+  const promptOver = promptLen > PROMPT_MAX
+  const canSend = !generating && !quotaEmpty && promptLen >= PROMPT_MIN && !promptOver && !!stripTags(title)
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -569,7 +576,9 @@ export default function AIGenerate() {
                   ))}
                 </div>
               )}
-              <label className="sr-only" htmlFor="ai-prompt">{t('aiGenerate.promptLabel')}</label>
+              <div className="flex items-center justify-end px-1 pb-2">
+                <span className={`text-xs tabular-nums ${promptOver ? 'text-incorrect font-semibold' : 'text-gray-400 dark:text-gray-500'}`}>{promptLen}/{PROMPT_MAX}</span>
+              </div>
               <textarea
                 id="ai-prompt"
                 value={prompt}

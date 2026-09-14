@@ -37,14 +37,6 @@ export function answerAudioUrl(a) {
 
 const API_ROOT = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace(/\/api\/?$/, '')
 
-/**
- * Samakan origin request media (img/audio/file) di vite dev.
- * <img>/<audio> tidak bisa kirim header ngrok-skip-browser-warning, sehingga
- * request cross-origin ke tunnel ngrok dapat interstitial HTML → browser blokir
- * (OpaqueResponseBlocking). Rewrite ke path relatif same-origin agar lewat
- * proxy vite (lihat vite.config.js) yang menyuntik header skip server-side.
- * Prod (/dist, tanpa proxy): URL absolut dikembalikan apa adanya.
- */
 export function resolveMediaUrl(url) {
   if (!url || typeof url !== 'string') return url
   if (url.startsWith('data:') || url.startsWith('blob:')) return url

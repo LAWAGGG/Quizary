@@ -37,6 +37,13 @@ from app.utils import now_wib, read_limited
 
 router = APIRouter(tags=["ai"])
 
+PROMPT_MAX = 5000
+PROMPT_MIN = 10
+
+
+def _norm_prompt(s: str | None) -> str:
+    return (s or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+
 
 def _used_today(db: Session, user_id: int) -> int:
     start = now_wib().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -99,12 +106,12 @@ async def ai_generate_stream(
         if description and len(description) > 5000:
             yield err("Description maksimal 5000 karakter", 422)
             return
-        clean_prompt = (prompt or "").strip()
-        if len(clean_prompt) < 10:
-            yield err("Prompt minimal 10 karakter agar AI paham maumu", 422)
+        clean_prompt = _norm_prompt(prompt)
+        if len(clean_prompt) < PROMPT_MIN:
+            yield err(f"Prompt minimal {PROMPT_MIN} karakter agar AI paham maumu ({len(clean_prompt)}/{PROMPT_MAX})", 422)
             return
-        if len(clean_prompt) > 5000:
-            yield err("Prompt maksimal 5000 karakter", 422)
+        if len(clean_prompt) > PROMPT_MAX:
+            yield err(f"Prompt maksimal {PROMPT_MAX} karakter ({len(clean_prompt)}/{PROMPT_MAX})", 422)
             return
         if len(files) > MAX_REF_FILES:
             yield err(f"Maksimal {MAX_REF_FILES} file referensi", 422)
@@ -204,11 +211,11 @@ def ai_generate(
         raise HTTPException(status_code=422, detail="Title maksimal 1000 karakter")
     if description and len(description) > 5000:
         raise HTTPException(status_code=422, detail="Description maksimal 5000 karakter")
-    prompt = (prompt or "").strip()
-    if len(prompt) < 10:
-        raise HTTPException(status_code=422, detail="Prompt minimal 10 karakter agar AI paham maumu")
-    if len(prompt) > 5000:
-        raise HTTPException(status_code=422, detail="Prompt maksimal 5000 karakter")
+    prompt = _norm_prompt(prompt)
+    if len(prompt) < PROMPT_MIN:
+        raise HTTPException(status_code=422, detail=f"Prompt minimal {PROMPT_MIN} karakter agar AI paham maumu ({len(prompt)}/{PROMPT_MAX})")
+    if len(prompt) > PROMPT_MAX:
+        raise HTTPException(status_code=422, detail=f"Prompt maksimal {PROMPT_MAX} karakter ({len(prompt)}/{PROMPT_MAX})")
     if len(files) > MAX_REF_FILES:
         raise HTTPException(status_code=422, detail=f"Maksimal {MAX_REF_FILES} file referensi")
 
