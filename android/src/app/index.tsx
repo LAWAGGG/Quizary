@@ -46,8 +46,23 @@ export default function LoginScreen() {
 
       router.replace('/(tabs)/home');
     } catch (e: any) {
-      console.error('[LOGIN ERROR]', e);
-      showAlert({ type: 'error', title: 'Login gagal', message: e.message || 'Email atau password salah.' });
+      console.log('[LOGIN ERROR]', e.message);
+      const errorMsg = e.message || '';
+
+      // Cek apakah pesan error mengindikasikan email belum terverifikasi
+      if (
+        errorMsg.toLowerCase().includes('not verified') ||
+        errorMsg.toLowerCase().includes('belum diverifikasi') ||
+        errorMsg.toLowerCase().includes('otp')
+      ) {
+        router.push({
+          pathname: '/verify_otp',
+          params: { email: email.trim() },
+        } as any);
+        return;
+      }
+
+      showAlert({ type: 'error', title: 'Login gagal', message: errorMsg || 'Email atau password salah.' });
     } finally {
       setLoading(false);
     }
@@ -72,7 +87,7 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-          <View style={[styles.container, { backgroundColor: colors.bg }]}>
+        <View style={[styles.container, { backgroundColor: colors.bg }]}>
           <View style={styles.header}>
             <Image
               source={isDark ? require('../../assets/images/Quizary_Logo_White.png') : require('../../assets/images/Quizary_Logo_Original.png')}

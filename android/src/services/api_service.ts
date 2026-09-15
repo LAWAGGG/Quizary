@@ -178,6 +178,12 @@ export async function apiLogin(body: { email: string; password: string }) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.log('[DEBUG AUTH] POST /login failed:', res.status, err);
+      if (res.status === 404) {
+        throw new Error('Server atau tunnel ngrok offline / tidak ditemukan (404). Pastikan backend dan ngrok aktif.');
+      }
+      if (res.status >= 500) {
+        throw new Error(`Terjadi kendala pada server (${res.status}).`);
+      }
       throw new Error(extractErrorMessage(err, 'Email atau password salah.'));
     }
     const data = await res.json();
@@ -212,6 +218,12 @@ export async function apiRegister(body: {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.log('[DEBUG AUTH] POST /register failed:', res.status, err);
+      if (res.status === 404) {
+        throw new Error('Server atau tunnel ngrok offline / tidak ditemukan (404). Pastikan backend dan ngrok aktif.');
+      }
+      if (res.status >= 500) {
+        throw new Error(`Terjadi kendala pada server (${res.status}).`);
+      }
       throw new Error(extractErrorMessage(err, 'Registrasi gagal. Email mungkin sudah terdaftar.'));
     }
     const data = await res.json();
@@ -246,6 +258,12 @@ export async function verifyOtpApi(body: { email: string; code: string }) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.log('[DEBUG AUTH] POST /otp/verify failed:', res.status, err);
+      if (res.status === 404) {
+        throw new Error('Server atau tunnel ngrok offline / tidak ditemukan (404). Pastikan backend dan ngrok aktif.');
+      }
+      if (res.status >= 500) {
+        throw new Error(`Terjadi kendala pada server (${res.status}).`);
+      }
       throw new Error(extractErrorMessage(err, 'Verifikasi OTP gagal. Kode salah atau sudah kadaluarsa.'));
     }
     const data = await res.json();
@@ -283,6 +301,12 @@ export async function resendOtpApi(body: { email: string }) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.log('[DEBUG AUTH] POST /otp/resend failed:', res.status, err);
+      if (res.status === 404) {
+        throw new Error('Server atau tunnel ngrok offline / tidak ditemukan (404). Pastikan backend dan ngrok aktif.');
+      }
+      if (res.status >= 500) {
+        throw new Error(`Terjadi kendala pada server (${res.status}).`);
+      }
       throw new Error(extractErrorMessage(err, 'Gagal mengirim ulang kode OTP.'));
     }
     const data = await res.json();
