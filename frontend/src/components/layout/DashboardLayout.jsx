@@ -43,9 +43,6 @@ function BottomNav({ hidden }) {
   )
 }
 
-/* ── FAB: buat form dengan AI (hanya di /forms) ────────────────────
-   Ikut status bottom nav mobile: nav tampil -> di atas bar,
-   nav sembunyi (scroll) -> turun ke pojok kanan. Durasi samakan nav. */
 function AiFab({ navHidden }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -62,7 +59,7 @@ function AiFab({ navHidden }) {
         hover:bg-primary-600 hover:scale-[1.06] active:scale-[0.96]
         transition-all duration-300 ease-out overflow-visible
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-paper
-        ${navHidden ? 'bottom-6' : 'bottom-[4.5rem]'} lg:bottom-6`}
+        ${navHidden ? 'bottom-[1rem]' : 'bottom-[4.5rem]'} lg:bottom-6`}
     >
       <span aria-hidden="true" className="pointer-events-none absolute -inset-3 rounded-[26px] bg-primary/30 blur-xl opacity-0 group-hover:opacity-70 group-focus-visible:opacity-70 transition-opacity duration-500" />
       <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[18px] rounded-br-[6px] overflow-hidden">

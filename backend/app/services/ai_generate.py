@@ -726,8 +726,7 @@ def call_gemini(user_text: str, user_id: int | None = None) -> tuple[dict, str]:
     raise AiFailed("AI tidak merespons. Periksa koneksi lalu coba lagi.")
 
 
-GIBBERISH_MSG = "Prompt terdeteksi tidak jelas/aneh. Tulis instruksi serius (jumlah soal, topik, tipe soal) agar AI bisa buat form."
-
+GIBBERISH_MSG = "Prompt terdeteksi tidak jelas/aneh"
 
 def detect_gibberish(text: str | None, min_len: int = 12) -> bool:
     """Heuristik prompt aneh/gibberish (hemat kuota, tanpa panggil AI).
