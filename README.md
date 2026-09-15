@@ -78,7 +78,7 @@ Referensi lengkap (source of truth) ada di `config/`:
 
 1. **Mode Form/Survey** — pengalaman formal dan minimalis untuk survey, feedback, pendataan.
 2. **Mode Quiz** — pengalaman gamified, satu soal per layar, timer, auto-grading, leaderboard, anti-cheat.
-3. **Bantuan AI** — buat draf form/quiz dari prompt deskriptif (mis. “20 soal HOTS reading comprehension”) beserta file referensi `docx/pdf/pptx`. AI menyusun section, soal pilihan ganda/isi-an, dan pengaturan dasar untuk direview sebelum disimpan.
+3. **Bantuan AI** — buat draf form/quiz dari prompt deskriptif (mis. “20 soal HOTS reading comprehension”) beserta file referensi `docx/pdf/ppt/pptx`. AI menyusun section, soal pilihan ganda/isi-an, dan pengaturan dasar untuk direview sebelum disimpan.
 
 ## Sorotan Terbaru
 

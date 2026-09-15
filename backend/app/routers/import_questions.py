@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import verify_form_owner
 from app.models.form import Form, ScoringMode
+from app.routers.questions import _insert_order_for_section
 from app.models.image import Image
 from app.models.question import Question, QuestionType, Section
 from app.models.question_option import QuestionOption
@@ -419,7 +420,12 @@ def import_docx(
         )
 
     # Ensure at least one section exists — auto-create "Default" if needed.
-    sections = db.query(Section).filter(Section.form_id == form.id).all()
+    sections = (
+        db.query(Section)
+        .filter(Section.form_id == form.id)
+        .order_by(Section.order_index, Section.id)
+        .all()
+    )
     if not sections:
         auto = Section(form_id=form.id, title="Default", order_index=0, created_at=now_wib())
         db.add(auto)
@@ -452,13 +458,9 @@ def import_docx(
             detail="No questions could be imported, check document format",
         )
 
-    max_order = (
-        db.query(Question.order_index)
-        .filter(Question.form_id == form.id, Question.is_deleted.is_(False))
-        .order_by(Question.order_index.desc())
-        .first()
-    )
-    next_order = (max_order[0] + 1) if max_order else 0
+    # Batch import menempel di akhir section target lalu geser bawahnya —
+    # sama seperti tambah soal satuan (16, bukan 31).
+    next_order = _insert_order_for_section(db, form.id, target_section_id, sections, gap=len(parsed))
     now = now_wib()
     count = 0
 

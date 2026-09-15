@@ -11,6 +11,3 @@ quizary-*
 **/.env
 **/.env.local
 secrets/
-
-docker-compose.prod.yml
-DOCKER-PRODUCTION.md

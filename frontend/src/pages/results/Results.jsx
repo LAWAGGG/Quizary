@@ -6,8 +6,8 @@ import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll'
-import { stripTags } from '../../lib/sanitize'
-import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, FormBackButton, EmptyState, CardSkeleton, RichText, ConfirmModal, sanitizeHtml } from '../../components/ui'
+import { stripTags, resolveRichHtml } from '../../lib/sanitize'
+import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, FormBackButton, EmptyState, CardSkeleton, RichText, ConfirmModal } from '../../components/ui'
 import { resolveMediaUrl, questionImageUrl, questionAudioUrl } from '../../lib/media'
 import { formatCheatReason } from '../../lib/cheatReason'
 import { useTranslation } from 'react-i18next'
@@ -348,7 +348,11 @@ export default function Results() {
     let qg = []
     if (detail) {
       for (const a of detail.answers) abq[a.question_id] = a
-      const qs = detail.questions || []
+      // Ikut urutan tampil sesi (hormati shuffle) — pengaman bila backend
+      // mengirim questions tak berurutan.
+      const qs = [...(detail.questions || [])].sort(
+        (a, b) => (a.order_index ?? 0) - (b.order_index ?? 0),
+      )
       const sectionIds = new Set((detail.sections || []).map((s) => s.id))
       for (const s of detail.sections || []) {
         qg.push({ title: s.title, items: qs.filter((q) => q.section_id === s.id) })
@@ -670,7 +674,7 @@ export default function Results() {
                                   </span>
                                   <div className="flex-1 min-w-0">
                                     <div className="text-sm text-ink dark:text-gray-100 leading-snug">
-                                      <RichText html={q.question_text} className="rich-text" />
+                                      <RichText html={resolveRichHtml(q.question_text)} className="rich-text" />
                                     </div>
                                     {questionImageUrl(q) && (
                                       <img src={resolveMediaUrl(questionImageUrl(q))} alt="" loading="lazy" decoding="async" className="max-h-32 w-auto rounded-lg object-cover mt-3" />
@@ -691,13 +695,20 @@ export default function Results() {
                                             <a href={resolveMediaUrl(a.answer_file)} target="_blank" rel="noopener noreferrer" className="text-primary dark:text-primary-300 underline">{t('results.viewAnswerFile')}</a>
                                           ) : ['multiple_choice', 'checkbox', 'dropdown'].includes(a.question_type) ? (
                                             <>
-                                              <RichText html={a.selected_options.map((s) => sanitizeHtml(s).replace(/<[^>]*>/g, '') || s).join(' · ')} className="rich-text" />
+                                              <span className="flex flex-wrap items-baseline gap-x-1.5">
+                                                {a.selected_options.map((s, si) => (
+                                                  <span key={si} className="inline-flex items-baseline gap-x-1.5">
+                                                    {si > 0 && <span className="text-gray-400">·</span>}
+                                                    <RichText html={resolveRichHtml(s)} className="rich-text inline" />
+                                                  </span>
+                                                ))}
+                                              </span>
                                               {a.answer_text && (
-                                                <span className="block mt-1 text-xs text-gray-500 dark:text-gray-400">{t('results.otherAnswer', { text: a.answer_text })}</span>
+                                                <span className="block mt-1 text-xs text-gray-500 dark:text-gray-400">{t('results.otherAnswer', { text: stripTags(a.answer_text) })}</span>
                                               )}
                                             </>
                                           ) : (
-                                            <RichText html={a.answer_text} className="rich-text" />
+                                            <RichText html={resolveRichHtml(a.answer_text)} className="rich-text" />
                                           )}
                                         </div>
                                         {a?.is_correct === true && (

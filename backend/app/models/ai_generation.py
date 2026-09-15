@@ -4,7 +4,7 @@ from app.database import Base
 
 
 class AiGeneration(Base):
-    """Jejak pemakaian generate AI per user (kuota 3/hari).
+    """Jejak pemakaian generate AI per user (kuota 5/hari).
 
     Tabel DB (bukan memori) supaya kuota tetap efektif lintas worker
     dan tetap hidup setelah restart. Satu baris = 1x generate/regenerate.

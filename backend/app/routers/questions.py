@@ -306,6 +306,128 @@ def delete_section(
     }
 
 
+def _insert_order_for_section(
+    db: Session, form_id: int, target_section_id: int, sections: list[Section], gap: int = 1
+) -> int:
+    """Order index agar soal baru menempel di akhir section target.
+
+    Soal baru disisip tepat setelah soal terakhir section tersebut dalam
+    urutan global, lalu semua soal di bawahnya digeser +gap — jadi nomor
+    tampil berurutan (16, bukan 31) dan section lain ikut menyesuaikan.
+    Section kosong: selip sebelum soal pertama section berikutnya (urutan
+    section); bila tak ada, taruh di ujung form.
+    Return order index untuk soal baru pertama (batch: +0..gap-1).
+    """
+    last = (
+        db.query(Question.order_index)
+        .filter(
+            Question.form_id == form_id,
+            Question.section_id == target_section_id,
+            Question.is_deleted.is_(False),
+        )
+        .order_by(Question.order_index.desc())
+        .first()
+    )
+    if last is not None and last[0] is not None:
+        insert = last[0] + 1
+    else:
+        ordered_ids = [s.id for s in sorted(sections, key=lambda s: (s.order_index or 0, s.id))]
+        insert = None
+        if target_section_id in ordered_ids:
+            for sid in ordered_ids[ordered_ids.index(target_section_id) + 1:]:
+                first = (
+                    db.query(Question.order_index)
+                    .filter(
+                        Question.form_id == form_id,
+                        Question.section_id == sid,
+                        Question.is_deleted.is_(False),
+                    )
+                    .order_by(Question.order_index.asc())
+                    .first()
+                )
+                if first is not None and first[0] is not None:
+                    insert = first[0]
+                    break
+        if insert is None:
+            gmax = (
+                db.query(Question.order_index)
+                .filter(Question.form_id == form_id, Question.is_deleted.is_(False))
+                .order_by(Question.order_index.desc())
+                .first()
+            )
+            insert = (gmax[0] + 1) if gmax is not None and gmax[0] is not None else 0
+    db.query(Question).filter(
+        Question.form_id == form_id,
+        Question.is_deleted.is_(False),
+        Question.order_index >= insert,
+    ).update({Question.order_index: Question.order_index + gap}, synchronize_session=False)
+    return insert
+
+
+def _relocate_to_section_end(db: Session, question: Question, sections: list[Section]) -> None:
+    """Tempel soal yang pindah section di akhir section barunya.
+
+    section_id diasumsikan sudah diganti + flush. Soal lama di section asal
+    menutup celah (geser -1), soal di bawah posisi baru membuka ruang (+1) —
+    nomor tampil tetap berurutan tanpa lubang.
+    """
+    last = (
+        db.query(Question.order_index)
+        .filter(
+            Question.form_id == question.form_id,
+            Question.section_id == question.section_id,
+            Question.is_deleted.is_(False),
+            Question.id != question.id,
+        )
+        .order_by(Question.order_index.desc())
+        .first()
+    )
+    if last is not None and last[0] is not None:
+        insert = last[0] + 1
+    else:
+        ordered_ids = [s.id for s in sorted(sections, key=lambda s: (s.order_index or 0, s.id))]
+        insert = None
+        if question.section_id in ordered_ids:
+            for sid in ordered_ids[ordered_ids.index(question.section_id) + 1:]:
+                first = (
+                    db.query(Question.order_index)
+                    .filter(
+                        Question.form_id == question.form_id,
+                        Question.section_id == sid,
+                        Question.is_deleted.is_(False),
+                        Question.id != question.id,
+                    )
+                    .order_by(Question.order_index.asc())
+                    .first()
+                )
+                if first is not None and first[0] is not None:
+                    insert = first[0]
+                    break
+        if insert is None:
+            insert = question.order_index
+    if insert == question.order_index:
+        return
+    old = question.order_index
+    if insert > old:
+        db.query(Question).filter(
+            Question.form_id == question.form_id,
+            Question.is_deleted.is_(False),
+            Question.id != question.id,
+            Question.order_index > old,
+            Question.order_index < insert,
+        ).update({Question.order_index: Question.order_index - 1}, synchronize_session=False)
+        question.order_index = insert - 1
+    else:
+        db.query(Question).filter(
+            Question.form_id == question.form_id,
+            Question.is_deleted.is_(False),
+            Question.id != question.id,
+            Question.order_index >= insert,
+        ).update({Question.order_index: Question.order_index + 1}, synchronize_session=False)
+        question.order_index = insert
+    db.flush()
+
+
 # ── POST /forms/{form_id}/questions ───────────────────────────────────────────
 
 @router.post("/forms/{form_id}/questions", status_code=201)
@@ -315,16 +437,13 @@ def create_question(
     form: Form = Depends(verify_form_owner),
     db: Session = Depends(get_db),
 ):
-    max_order = (
-        db.query(Question.order_index)
-        .filter(Question.form_id == form.id, Question.is_deleted.is_(False))
-        .order_by(Question.order_index.desc())
-        .first()
-    )
-    next_order = (max_order[0] + 1) if max_order else 0
-
     # Ensure at least one section exists — auto-create "Default" if needed.
-    sections = db.query(Section).filter(Section.form_id == form.id).all()
+    sections = (
+        db.query(Section)
+        .filter(Section.form_id == form.id)
+        .order_by(Section.order_index, Section.id)
+        .all()
+    )
     if not sections:
         auto = Section(form_id=form.id, title="Default", order_index=0, created_at=now_wib())
         db.add(auto)
@@ -333,8 +452,10 @@ def create_question(
     if body.section_id is not None:
         if not any(s.id == body.section_id for s in sections):
             raise HTTPException(status_code=422, detail="Section tidak ditemukan pada form ini")
+        target_section_id = body.section_id
     else:
-        body.section_id = sections[0].id
+        target_section_id = sections[0].id
+        body.section_id = target_section_id
 
     # multiple_choice hanya wajib punya tepat 1 jawaban benar untuk quiz yang
     # dinilai (count points). Form biasa / kuesioner & soal tidak dinilai bebas.
@@ -383,6 +504,10 @@ def create_question(
                 o.is_correct = False
         if body.type == "password":
             body.is_scored = False
+
+    # Sisip tepat setelah soal terakhir section target lalu geser bawahnya —
+    # nomor tampil berurutan (16, bukan 31).
+    next_order = _insert_order_for_section(db, form.id, target_section_id, sections)
 
     question = Question(
         form_id=form.id,
@@ -435,10 +560,12 @@ def update_question(
     update_data = body.model_dump(exclude_unset=True)
     options_data = update_data.pop("options", None)
 
-    if update_data.get("section_id") is not None:
+    moving_section = False
+    if update_data.get("section_id") is not None and update_data["section_id"] != question.section_id:
         section = db.get(Section, update_data["section_id"])
         if not section or section.form_id != question.form_id:
             raise HTTPException(status_code=422, detail="Section tidak ditemukan pada form ini")
+        moving_section = True
 
     # Determine the effective type after this update
     new_type_str = update_data.get("type") or question.type.value
@@ -593,6 +720,17 @@ def update_question(
         if value is None:
             continue  # jangan tulis NULL ke kolom NOT NULL (mis. points)
         setattr(question, field, value)
+
+    if moving_section:
+        # Pindah section = tempel di akhir section baru, nomor tetap berurutan.
+        db.flush()
+        sections = (
+            db.query(Section)
+            .filter(Section.form_id == question.form_id)
+            .order_by(Section.order_index, Section.id)
+            .all()
+        )
+        _relocate_to_section_end(db, question, sections)
 
     question.updated_at = now_wib()
 

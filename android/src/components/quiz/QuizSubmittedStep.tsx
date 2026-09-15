@@ -274,15 +274,9 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
           
           {/* Header Container */}
           <View style={styles.headerContainer}>
-            {/* Eyebrow Form Title with Dots Decor */}
+            {/* Eyebrow Form Title */}
             {cleanTitle ? (
               <View style={styles.eyebrowRow}>
-                <View style={styles.eyebrowDots}>
-                  <View style={[styles.dot, { backgroundColor: themeColor }]} />
-                  <View style={[styles.dot, { backgroundColor: themeColor }]} />
-                  <View style={[styles.dot, { backgroundColor: themeColor }]} />
-                  <View style={[styles.dot, { backgroundColor: themeColor }]} />
-                </View>
                 <Text style={[styles.eyebrowText, { color: themeColor }]} numberOfLines={1}>
                   {cleanTitle.toUpperCase()}
                 </Text>
@@ -644,18 +638,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
     marginBottom: 8,
-  },
-  eyebrowDots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
   },
   eyebrowText: {
     fontSize: 12,

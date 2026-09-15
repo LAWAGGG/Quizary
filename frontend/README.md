@@ -13,7 +13,7 @@ Web app untuk platform Quizary. Menyediakan dashboard admin (manajemen form/soal
 | Drag & drop | @dnd-kit (reorder soal/section) |
 | Editor rich text | Quill + highlight.js |
 | Lainnya | qrcode.react, lucide-react |
-| AI Builder | Gemini API (via backend), file referensi `docx/pdf/pptx` |
+| AI Builder | Gemini API (via backend), file referensi `docx/pdf/ppt/pptx` |
 
 ## Setup
 
@@ -91,7 +91,7 @@ Agar tetap lancar dengan puluhan soal, pembaruan terbaru mengurangi render berul
 
 ## Bantuan AI
 
-Halaman `Buat dengan AI` (`/forms/ai`) membantu menyusun draf awal dari instruksi berbahasa sehari-hari. Cukup tulis kebutuhan soal — misalnya jumlah soal, tipe, atau tema — dan tambahkan file `docx/pdf/pptx` sebagai referensi jika ada. Sistem menampilkan pratinjau section, soal, dan pengaturan untuk ditinjau sebelum disimpan. Kuota harian ditampilkan di atas form dan draf yang dihasilkan tetap bisa diedit sebelum disimpan.
+Halaman `Buat dengan AI` (`/forms/ai`) membantu menyusun draf awal dari instruksi berbahasa sehari-hari. Cukup tulis kebutuhan soal — misalnya jumlah soal, tipe, atau tema — dan tambahkan file `docx/pdf/ppt/pptx` sebagai referensi jika ada. Sistem menampilkan pratinjau section, soal, dan pengaturan untuk ditinjau sebelum disimpan. Kuota harian ditampilkan di atas form dan draf yang dihasilkan tetap bisa diedit sebelum disimpan.
 
 ## Struktur Folder
 

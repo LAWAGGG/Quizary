@@ -108,6 +108,30 @@ class AiGenerateResponse(BaseModel):
     remaining: int
     limit: int
     ignored: list[str] = []
+    warnings: list[str] = []
+
+
+class AiEditRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=1000)
+    type: str = "form"
+    instruction: str = Field(min_length=10, max_length=5000)
+    draft: dict
+    previous_prompts: list[str] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="after")
+    def validate_edit(self):
+        _title_has_text(self.title)
+        if self.type not in ("form", "quiz"):
+            raise ValueError("type harus 'form' atau 'quiz'")
+        if len(self.instruction.strip()) < 10:
+            raise ValueError("Instruksi minimal 10 karakter agar AI paham maumu")
+        for p in self.previous_prompts:
+            if len(p) > 5000:
+                raise ValueError("Riwayat prompt maksimal 5000 karakter per item")
+        sections = (self.draft or {}).get("sections")
+        if not isinstance(sections, list) or not sections:
+            raise ValueError("Draft harus berisi sections yang valid")
+        return self
 
 
 class AiQuotaResponse(BaseModel):

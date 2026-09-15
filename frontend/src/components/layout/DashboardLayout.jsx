@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, ClipboardList, ListChecks, UserRound, Settings, X, Sun, Moon, Sparkles } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, ListChecks, UserRound, Settings, X, Sun, Moon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
@@ -43,9 +43,6 @@ function BottomNav({ hidden }) {
   )
 }
 
-/* ── FAB: buat form dengan AI (hanya di /forms) ────────────────────
-   Ikut status bottom nav mobile: nav tampil -> di atas bar,
-   nav sembunyi (scroll) -> turun ke pojok kanan. Durasi samakan nav. */
 function AiFab({ navHidden }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -62,7 +59,7 @@ function AiFab({ navHidden }) {
         hover:bg-primary-600 hover:scale-[1.06] active:scale-[0.96]
         transition-all duration-300 ease-out overflow-visible
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 focus-visible:ring-offset-2 focus-visible:ring-offset-paper
-        ${navHidden ? 'bottom-6' : 'bottom-[4.5rem]'} lg:bottom-6`}
+        ${navHidden ? 'bottom-[1rem]' : 'bottom-[4.5rem]'} lg:bottom-6`}
     >
       <span aria-hidden="true" className="pointer-events-none absolute -inset-3 rounded-[26px] bg-primary/30 blur-xl opacity-0 group-hover:opacity-70 group-focus-visible:opacity-70 transition-opacity duration-500" />
       <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[18px] rounded-br-[6px] overflow-hidden">
@@ -221,6 +218,11 @@ export default function DashboardLayout() {
     return () => el.removeEventListener('scroll', onScroll)
   }, [])
 
+  useEffect(() => {
+    document.documentElement.style.setProperty('--mobile-nav-offset', navHidden ? '0px' : '0.1rem')
+    return () => document.documentElement.style.removeProperty('--mobile-nav-offset')
+  }, [navHidden])
+
   const handleLogout = async () => {
     setDropdownOpen(false)
     await logout()
@@ -336,7 +338,7 @@ export default function DashboardLayout() {
           </div>
         </div>
 
-        <main ref={mainRef} className="flex-1 overflow-y-auto pb-16 lg:pb-0">
+        <main ref={mainRef} data-nav-hidden={navHidden ? 'true' : 'false'} className="flex-1 overflow-y-auto pb-16 lg:pb-0">
           <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8">
             <Outlet />
           </div>
