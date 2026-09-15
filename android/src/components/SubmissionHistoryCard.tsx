@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
+import { isSubmissionExpired } from '../utils/api';
 
 interface SubmissionHistoryCardProps {
   item: any;
@@ -12,8 +13,9 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
   if (!item || typeof item !== 'object') return null;
 
+  const isExpired = isSubmissionExpired(item);
   const isSubmitted = item.status === 'submitted';
-  const isAutoSubmitted = item.status === 'auto_submitted';
+  const isAutoSubmitted = item.status === 'auto_submitted' || (item.status === 'in_progress' && isExpired);
   const isCheating = item.status === 'cheating';
   const isLocked = item.status === 'locked';
 

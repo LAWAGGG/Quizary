@@ -2,7 +2,8 @@ import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, ActivityIndicator, Image, FlatList } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getMySubmissions, getSubmissionDetail, getMe, getStoredUser, BASE_URL } from '../../services/api_service';
+import { getMySubmissions, getSubmissionDetail, getMe, getStoredUser, finalizeSubmission, BASE_URL } from '../../services/api_service';
+import { isSubmissionExpired } from '../../utils/api';
 import { ThemeToggleBtn } from '../../components/ThemeToggleBtn';
 import { useAppTheme } from '../../context/ThemeContext';
 import { QuickJoinBanner } from '../../components/QuickJoinBanner';
@@ -55,7 +56,15 @@ export default function HomeScreen() {
       const res: any = await getMySubmissions({ page: pageNum, per_page: PER_PAGE }).catch(() => null);
       if (res) {
         const rawList: any[] = Array.isArray(res) ? res : res.data || [];
-        const list: any[] = rawList.filter((it: any) => it && typeof it === 'object' && it.id != null);
+        const list: any[] = rawList
+          .filter((it: any) => it && typeof it === 'object' && it.id != null)
+          .map((it: any) => {
+            if (it.status === 'in_progress' && isSubmissionExpired(it)) {
+              finalizeSubmission(it.id).catch(() => {});
+              return { ...it, status: 'auto_submitted' };
+            }
+            return it;
+          });
         const meta = res?.meta;
         const serverTotal = meta?.total;
         if (typeof serverTotal === 'number') setTotal(serverTotal);
@@ -154,9 +163,10 @@ export default function HomeScreen() {
   }, [loading, loadingMore, refreshing, hasMore, page, fetchPage]);
 
   const openSubDetail = async (subItem: any) => {
-    // Khusus in_progress: langsung lanjut mengerjakan
-    if (subItem.status === 'in_progress') {
-      // Jika ada short_code langsung pakai, jika tidak fetch detail dulu untuk dapat short_code/form
+    const isExpired = isSubmissionExpired(subItem);
+
+    // Khusus in_progress yang belum expired: langsung lanjut mengerjakan
+    if (subItem.status === 'in_progress' && !isExpired) {
       const shortCode = subItem.short_code;
       if (shortCode) {
         router.push({ pathname: '/quiz', params: { shortCode: shortCode, resumeSubmissionId: String(subItem.id) } } as any);
@@ -167,7 +177,6 @@ export default function HomeScreen() {
           if (code) {
             router.push({ pathname: '/quiz', params: { shortCode: code, resumeSubmissionId: String(subItem.id) } } as any);
           } else {
-            // Fallback: langsung pakai submissionId saja, quiz akan fetch detail
             router.push({ pathname: '/quiz', params: { submissionId: String(subItem.id) } } as any);
           }
         } catch {
@@ -175,6 +184,12 @@ export default function HomeScreen() {
         }
       }
       return;
+    }
+
+    // Jika in_progress tetapi expired: auto update status ke server & local
+    if (subItem.status === 'in_progress' && isExpired) {
+      subItem.status = 'auto_submitted';
+      finalizeSubmission(subItem.id).catch(() => {});
     }
     setSelectedSubItem(subItem);
     setSelectedSubId(subItem.id);

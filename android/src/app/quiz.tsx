@@ -52,6 +52,7 @@ import { useCheatSound } from '../hooks/useCheatSound';
 import { useLockedVolume } from '../hooks/useLockedVolume';
 import { useFloatingBlock } from '../hooks/useFloatingBlock';
 import { stripHtmlTags } from '../components/RichTextRenderer';
+import { isSubmissionExpired } from '../utils/api';
 
 function parseWibDate(dateStr: string): Date | null {
   if (!dateStr) return null;
@@ -169,6 +170,18 @@ export default function QuizScreen() {
       setLoading(true);
       try {
         const detail: any = await getSubmissionDetail(resumeId);
+        if (detail.status !== 'in_progress' || isSubmissionExpired(detail)) {
+          if (detail.status === 'in_progress' && isSubmissionExpired(detail)) {
+            await finalizeSubmission(detail.id).catch(() => {});
+          }
+          showAlert({
+            type: 'info',
+            title: language === 'ID' ? 'Waktu Pengerjaan Habis' : 'Time Expired',
+            message: language === 'ID' ? 'Waktu pengerjaan kuis telah berakhir dan jawaban Anda telah terkirim.' : 'Quiz time has expired and your submission has been completed.',
+            onConfirm: () => router.replace('/(tabs)/home'),
+          });
+          return;
+        }
         // Public form untuk tema/header — fallback minimal jika getPublicForm gagal (mis. form draft/privat)
         if (detail.short_code) {
           try {
