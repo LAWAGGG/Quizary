@@ -248,7 +248,7 @@
     "promptMax": "Prompt max {{max}} characters ({{current}}/{{max}})",
     "filesLabel": "Reference files (optional)",
     "filesAdd": "Add files",
-    "filesHint": "docx, pdf, ppt, or pptx files 5MB",
+    "filesHint": "Insert file",
     "removeFile": "Remove file",
     "dropFiles": "Drop files here to attach",
     "invalidFile": "{{count}} file(s) rejected — use docx, pdf, ppt, or pptx",
@@ -327,7 +327,15 @@
     "overlayGenerating": "Composing questions...",
     "overlaySanitizing": "Polishing draft...",
     "cancelGenerate": "Cancel",
-    "generateCancelled": "Generation cancelled. Quota untouched."
+    "generateCancelled": "Generation cancelled. Quota untouched.",
+    "editing": "AI is editing the draft...",
+    "editPlaceholder": "Ask for changes: delete question 3, add 5 fraction questions...",
+    "sendEdit": "Send instruction",
+    "editFailed": "Failed to edit draft. Try again.",
+    "editCancelled": "Edit cancelled. Quota untouched.",
+    "editSuccess": "Draft updated",
+    "freshRegen": "Fresh",
+    "freshRegenHint": "Discard draft and regenerate from scratch (uses 1 new credit)."
   },
   "formEdit": {
     "backToForms": "Back to forms",

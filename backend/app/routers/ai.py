@@ -17,7 +17,7 @@ from app.models.question_option import QuestionOption
 from app.models.user import User
 from app.routers.forms import _apply_setting_chain, _generate_short_code, _parse_enum
 from app.routers.questions import _NO_GRADE_TYPES
-from app.schemas.ai import AiAcceptRequest, AiAcceptResponse, AiGenerateResponse, AiQuotaResponse
+from app.schemas.ai import AiAcceptRequest, AiAcceptResponse, AiEditRequest, AiGenerateResponse, AiQuotaResponse
 from app.schemas.question import check_allow_other, check_answer_key
 from app.services.ai_generate import (
     AI_DAILY_LIMIT,
@@ -26,8 +26,11 @@ from app.services.ai_generate import (
     MAX_REF_FILE_BYTES,
     AiFailed,
     AiNotConfigured,
+    GIBBERISH_MSG,
+    build_edit_text,
     build_user_text,
     call_gemini,
+    detect_gibberish,
     extract_ref_text,
     sanitize_draft,
     truncate_refs,
@@ -112,6 +115,9 @@ async def ai_generate_stream(
             return
         if len(clean_prompt) > PROMPT_MAX:
             yield err(f"Prompt maksimal {PROMPT_MAX} karakter ({len(clean_prompt)}/{PROMPT_MAX})", 422)
+            return
+        if detect_gibberish(clean_prompt):
+            yield err(GIBBERISH_MSG, 422)
             return
         if len(files) > MAX_REF_FILES:
             yield err(f"Maksimal {MAX_REF_FILES} file referensi", 422)
@@ -217,6 +223,8 @@ def ai_generate(
         raise HTTPException(status_code=422, detail=f"Prompt minimal {PROMPT_MIN} karakter agar AI paham maumu ({len(prompt)}/{PROMPT_MAX})")
     if len(prompt) > PROMPT_MAX:
         raise HTTPException(status_code=422, detail=f"Prompt maksimal {PROMPT_MAX} karakter ({len(prompt)}/{PROMPT_MAX})")
+    if detect_gibberish(prompt):
+        raise HTTPException(status_code=422, detail=GIBBERISH_MSG)
     if len(files) > MAX_REF_FILES:
         raise HTTPException(status_code=422, detail=f"Maksimal {MAX_REF_FILES} file referensi")
 
@@ -250,6 +258,39 @@ def ai_generate(
     except AiFailed as e:
         raise HTTPException(status_code=502, detail=str(e))
 
+    db.add(AiGeneration(user_id=user.id, created_at=now_wib()))
+    db.commit()
+    left = AI_DAILY_LIMIT - (used + 1)
+    ignored = draft.pop("ignored", []) if isinstance(draft, dict) else []
+    warnings = draft.pop("warnings", []) if isinstance(draft, dict) else []
+    return {"draft": draft, "model": model_used, "remaining": max(0, left), "limit": AI_DAILY_LIMIT, "ignored": ignored, "warnings": warnings}
+
+
+@router.post("/ai/edit", response_model=AiGenerateResponse)
+async def ai_edit(request: Request, body: AiEditRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if detect_gibberish(body.instruction.strip()):
+        raise HTTPException(status_code=422, detail=GIBBERISH_MSG)
+    used = _quota_or_429(db, user.id)
+    try:
+        raw, model_used = await asyncio.to_thread(
+            call_gemini,
+            build_edit_text(body.title, body.type, body.instruction.strip(), body.draft, body.previous_prompts or []),
+            user.id,
+        )
+        try:
+            draft = await asyncio.to_thread(sanitize_draft, raw, body.type, body.instruction.strip())
+        except AiFailed as e:
+            if "tidak menghasilkan soal yang valid" in str(e):
+                draft = {"sections": [], "settings": (body.draft or {}).get("settings", {}), "ignored": [], "warnings": ["Semua soal dihapus sesuai instruksi."]}
+            else:
+                raise
+    except AiNotConfigured:
+        raise HTTPException(status_code=503, detail="Fitur AI belum dikonfigurasi server. Hubungi admin.")
+    except AiFailed as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    if await request.is_disconnected():
+        raise HTTPException(status_code=499, detail="Client menutup koneksi. Kuota tidak berkurang.")
     db.add(AiGeneration(user_id=user.id, created_at=now_wib()))
     db.commit()
     left = AI_DAILY_LIMIT - (used + 1)

@@ -18,7 +18,7 @@ from app.schemas.question import QuestionCreate
 
 logger = logging.getLogger("quizary.ai")
 
-AI_DAILY_LIMIT = 3
+AI_DAILY_LIMIT = 5
 
 ALLOWED_REF_EXT = {".docx", ".pdf", ".ppt", ".pptx"}
 MAX_REF_FILES = 5
@@ -412,6 +412,31 @@ def build_user_text(title: str, description: str | None, form_type: str, prompt:
     return "\n\n".join(parts)
 
 
+def build_edit_text(title: str, form_type: str, instruction: str, draft: dict, previous_prompts: list[str]) -> str:
+    """Prompt edit hemat token: instruksi + draf JSON + riwayat prompt.
+
+    Tanpa teks file referensi — draf sudah mengandung hasilnya. LLM hanya
+    boleh tambah/ubah/hapus soal dalam JSON yang diberikan.
+    """
+    parts = [
+        f"Jenis: {'KUIS (ada nilai & kunci jawaban)' if form_type == 'quiz' else 'FORMULIR/pendataan (tanpa nilai)'}",
+        f"Judul: {title}",
+        "Konteks: ini EDIT draf yang sudah ada, BUKAN generate dari awal. "
+        "Ubah JSON draf berikut SESUAI instruksi saja — bagian yang tak disebut "
+        "instruksi JANGAN diubah. Kembalikan JSON penuh yang valid "
+        "(bentuk sama: sections + settings). "
+        "Operasi didukung: hapus 1 soal, hapus semua soal, ubah 1 soal, "
+        "ubah semua soal, tambah N soal. Hapus semua = kembalikan sections "
+        "dengan questions kosong. Jangan karang di luar instruksi.",
+        f"Instruksi creator:\n{instruction}",
+    ]
+    hist = [p.strip() for p in (previous_prompts or []) if p and p.strip()][:5]
+    if hist:
+        parts.append("Riwayat permintaan (konteks anti-halusinasi, jangan ditampilkan):\n" + "\n".join(f"- {p[:1000]}" for p in hist))
+    parts.append(f"Draf saat ini (JSON):\n{json.dumps(draft, ensure_ascii=False)}")
+    return "\n\n".join(parts)
+
+
 def _gemini_models() -> list[str]:
     """Model utama + cadangan (dedupe). Kosong = tanpa fallback."""
     models = [m.strip() for m in (GEMINI_MODEL, GEMINI_FALLBACK_MODEL) if m and m.strip()]
@@ -622,7 +647,7 @@ def call_gemini(user_text: str, user_id: int | None = None) -> tuple[dict, str]:
     """
     if not GEMINI_API_KEY:
         raise AiNotConfigured("Fitur AI belum dikonfigurasi server.")
-    # ponytail: guard estimasi token sebelum panggil, hemat quota 3/hari
+    # ponytail: guard estimasi token sebelum panggil, hemat quota 5/hari
     est_tokens = len(user_text) // 4 + 8192
     if est_tokens > 100_000:
         raise AiFailed("Prompt + file referensi terlalu panjang untuk 20 soal. Coba 10 soal per batch atau kurangi teks passage.")
@@ -699,6 +724,49 @@ def call_gemini(user_text: str, user_id: int | None = None) -> tuple[dict, str]:
     if isinstance(last_err, AiFailed):
         raise last_err
     raise AiFailed("AI tidak merespons. Periksa koneksi lalu coba lagi.")
+
+
+GIBBERISH_MSG = "Prompt terdeteksi tidak jelas/aneh. Tulis instruksi serius (jumlah soal, topik, tipe soal) agar AI bisa buat form."
+
+
+def detect_gibberish(text: str | None, min_len: int = 12) -> bool:
+    """Heuristik prompt aneh/gibberish (hemat kuota, tanpa panggil AI).
+
+    Trigger bila: kumulasi karakter sama (>=5), teks tanpa vokal, teks
+    dengan vokal terlalu sada (dense konsonan, mash keyboard), <40% token
+    ber-vokal, atau kadena alfanumerik/token berterusan aneh.
+    """
+    t = (text or "").strip()
+    if not t or len(t) < min_len:
+        return False
+    if re.search(r"(.)\1{4,}", t, re.IGNORECASE):
+        return True
+    if re.search(r"(?i)([a-z]{2,})\1{2,}", t):  # bigram ulang ("asis asis asis")
+        return True
+    letters = [c for c in t if c.isalpha()]
+    if letters:
+        vowels = sum(1 for c in letters if c in "aeiouyAEIOUY")
+        if not vowels:
+            return True
+        if len(letters) >= 10 and vowels / len(letters) < 0.2:
+            return True
+    if not any(c.isalpha() for c in t) and len(t) >= 10:
+        return True  # cuma digit/simbol
+    alpha_tokens = re.findall(r"[A-Za-z]+", t)
+    if alpha_tokens:
+        word_like = sum(
+            1
+            for tok in alpha_tokens
+            if any(c in "aeiouyAEIOUY" for c in tok) and any(c not in "aeiouyAEIOUY" for c in tok)
+        )
+        if len(alpha_tokens) >= 3 and word_like / len(alpha_tokens) < 0.4:
+            return True
+        # Kadena aneh berterusan (mash keyboard) tanpa spasi.
+        if len(alpha_tokens) == 1 and letters:
+            vowels = sum(1 for c in letters if c in "aeiouyAEIOUY")
+            if len(letters) >= 12 and vowels / len(letters) < 0.25:
+                return True
+    return False
 
 
 # Konvensi rich-lite yang boleh dipakai AI di question_text/option_text:

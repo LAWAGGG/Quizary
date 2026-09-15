@@ -236,7 +236,7 @@ Import langsung membuat soal sekaligus menyimpan gambar yang ditemukan di dokume
 |---|---|---|---|
 | POST | `/api/ai/generate` | Bearer | Buat draf section/soal + pengaturan dari prompt + file `docx/pdf/ppt/pptx` (hemat token via `group_id`) |
 | POST | `/api/ai/accept` | Bearer | Simpan draf yang sudah direview menjadi form baru |
-| GET | `/api/ai/quota` | Bearer | Cek sisa kuota harian (3/hari) |
+| GET | `/api/ai/quota` | Bearer | Cek sisa kuota harian (5/hari) |
 
 Alur: prompt deskriptif → AI menyusun draf untuk ditinjau → diterima menjadi form. File referensi dibatasi per file 5MB, total teks 30 ribu karakter.
 

@@ -1047,6 +1047,49 @@ Content-Disposition: attachment; filename="hasil-QZM002B.xlsx"
 
 ---
 
+### `GET /api/ai/quota` — preview in code block below
+
+## 4b. AI Edit (tambah/mengubah soal dalam draf)
+
+### `POST /ai/edit`
+Auth: Bearer Token — JSON-only (tanpa file referensi; hemat token)
+```json
+// Request
+{
+  "title": "Kuis Matematika Kelas 5",
+  "type": "quiz",
+  "instruction": "hapus soal nomor 3, tambah 5 soal pecahan",
+  "draft": { "sections": [], "settings": {} },
+  "previous_prompts": ["buat 10 soal penjumlahan..."]
+}
+```
+```json
+// Response 200 — sama seperti ai/generate
+{
+  "draft": { "sections": [...], "settings": {...} },
+  "model": "gemini-3.6-flash",
+  "remaining": 4,
+  "limit": 5,
+  "ignored": [],
+  "warnings": []
+}
+```
+```json
+// Response 429 (kuota harian habis)
+{ "message": "Batas generate AI hari ini habis (5/hari). Coba lagi besok." }
+```
+```json
+// Response 499 (client disconnect sebelum server commit — kuota tak berkurang)
+{ "message": "Client menutup koneksi. Kuota tidak berkurang." }
+```
+- `instruction`: 10–5000 char. `draft`: draf terakhir (`sections` wajib list non-empty).
+- `previous_prompts`: maks 5 item × 5000 char (riwayat printf tak halusinasi, tak ditampilkan).
+- LLM hanya boleh tambah/ubah/hapus soal + patch settings dalam JSON. Hapus semua → `sections` kosong + warning.
+- Makan **1 kuota** per panggil sukses. Generate ulang dari awal tetap `POST /ai/generate`.
+- Status: 200 · 422 · 401 · 429 · 502 · 499. 403/409 N/A (draf milik client, belum ada form).
+
+---
+
 ## 9. Dashboard
 
 ### `GET /dashboard/summary`

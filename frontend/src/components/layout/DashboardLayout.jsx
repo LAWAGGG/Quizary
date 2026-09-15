@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LayoutDashboard, ClipboardList, ListChecks, UserRound, Settings, X, Sun, Moon, Sparkles } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, ListChecks, UserRound, Settings, X, Sun, Moon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
@@ -221,6 +221,11 @@ export default function DashboardLayout() {
     return () => el.removeEventListener('scroll', onScroll)
   }, [])
 
+  useEffect(() => {
+    document.documentElement.style.setProperty('--mobile-nav-offset', navHidden ? '0px' : '0.1rem')
+    return () => document.documentElement.style.removeProperty('--mobile-nav-offset')
+  }, [navHidden])
+
   const handleLogout = async () => {
     setDropdownOpen(false)
     await logout()
@@ -336,7 +341,7 @@ export default function DashboardLayout() {
           </div>
         </div>
 
-        <main ref={mainRef} className="flex-1 overflow-y-auto pb-16 lg:pb-0">
+        <main ref={mainRef} data-nav-hidden={navHidden ? 'true' : 'false'} className="flex-1 overflow-y-auto pb-16 lg:pb-0">
           <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8">
             <Outlet />
           </div>

@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'framer-motion'
-import { ArrowLeft, ArrowUp, Paperclip, Sparkles, RefreshCw, Check, X, FileText, Clock, Shuffle, Lock, ListChecks, Trophy, EyeOff, CalendarDays, Info } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Paperclip, Sparkles, Check, X, FileText, Clock, Shuffle, Lock, ListChecks, Trophy, EyeOff, CalendarDays, Info, RefreshCw } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { stripTags } from '../../lib/sanitize'
-import { Button, Card, RichTextEditor, RichText, Badge, Toggle, Select, Input, AiLoadingOverlay, AnswerKeyEditor } from '../../components/ui'
+import { Button, Card, RichTextEditor, RichText, Badge, Toggle, Select, Input, AnswerKeyEditor } from '../../components/ui'
 
 const humanizeType = (t) => (t || '').replace(/_/g, ' ')
 
@@ -14,6 +14,7 @@ const ACCEPT_EXT = '.docx,.pdf,.ppt,.pptx'
 const MAX_FILES = 5
 const PROMPT_MAX = 5000
 const PROMPT_MIN = 10
+const MAX_PREV_PROMPTS = 5
 const normPrompt = (s) => String(s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
 
 function QuotaPill({ quota }) {
@@ -99,6 +100,36 @@ function SettingRow({ title, desc, control }) {
   )
 }
 
+// Titik-titik loading ala chat di dalam komposer saat generate/edit.
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center gap-1" aria-hidden="true">
+      {[0, 1, 2].map((i) => (
+        <span key={i} className="h-2 w-2 rounded-full bg-primary-500 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+      ))}
+    </span>
+  )
+}
+
+// Skeleton question card yang bertambah satu-per-satu (pengganti modal loading).
+function SkeletonCards({ count }) {
+  return (
+    <div className="space-y-3" aria-hidden="true">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-ink-900 p-4 space-y-3 animate-pulse">
+          <div className="h-4 w-1/3 rounded bg-gray-200 dark:bg-gray-700" />
+          <div className="h-3 w-full rounded bg-gray-100 dark:bg-gray-800" />
+          <div className="h-3 w-5/6 rounded bg-gray-100 dark:bg-gray-800" />
+          <div className="flex gap-2">
+            <div className="h-8 flex-1 rounded-lg bg-gray-100 dark:bg-gray-800" />
+            <div className="h-8 flex-1 rounded-lg bg-gray-100 dark:bg-gray-800" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // datetime-local butuh "YYYY-MM-DDTHH:MM"; backend kirim ISO detik — potong menit.
 const toInputDateTime = (v) => (v ? String(v).slice(0, 16) : '')
 
@@ -107,6 +138,7 @@ export default function AIGenerate() {
   const navigate = useNavigate()
   const toast = useToast()
   const fileRef = useRef(null)
+  const composerRef = useRef(null)
 
   const [step, setStep] = useState(1)
   const [title, setTitle] = useState('')
@@ -120,26 +152,33 @@ export default function AIGenerate() {
   const [warnings, setWarnings] = useState([])
   const [modelUsed, setModelUsed] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [accepting, setAccepting] = useState(false)
   const [error, setError] = useState('')
   const [genProgress, setGenProgress] = useState({ percent: 0, key: '', done: 0, total: 0 })
+  const [skeletonCount, setSkeletonCount] = useState(0)
+  // Riwayat prompt tersembunyi (tak dirender) — konteks anti-halusinasi untuk /ai/edit.
+  const [prevPrompts, setPrevPrompts] = useState([])
   const abortRef = useRef(null)
   const tickRef = useRef(null)
   const cancelledRef = useRef(false)
+
+  // Edit lock anti race-condition: komposer dikunci selama busy,
+  // instruksi ke-2 diblokir sampai request pertama done/gagal/cancel.
+  const busy = generating || editing
 
   useEffect(() => {
     api.get('/ai/quota').then((r) => setQuota(r.data)).catch(() => {})
   }, [])
 
-  // Kunci scroll + cegah interaksi halaman saat overlay loading tampil.
+  // Skeleton tumbuh satu-per-satu saat generate pertama (belum ada draf).
   useEffect(() => {
-    if (!generating && !accepting) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [generating, accepting])
+    if (!generating) { setSkeletonCount(0); return }
+    setSkeletonCount(1)
+    const id = setInterval(() => setSkeletonCount((c) => (c >= 8 ? c : c + 1)), 600)
+    return () => clearInterval(id)
+  }, [generating])
 
-  const questionCount = draft ? draft.sections.reduce((n, s) => n + s.questions.length, 0) : 0
   const steps = [
     { id: 1, label: t('aiGenerate.stepShape'), desc: t('aiGenerate.stepShapeDesc') },
     { id: 2, label: t('aiGenerate.stepPrompt'), desc: t('aiGenerate.stepPromptDesc') },
@@ -154,6 +193,7 @@ export default function AIGenerate() {
   }
 
   const canGoTo = (id) => {
+    if (busy) return false
     if (id === step) return false
     if (id === 1 || id === 2) return true
     return !!draft
@@ -193,6 +233,7 @@ export default function AIGenerate() {
   }
 
   const addFiles = (list) => {
+    if (draft) return
     const incoming = Array.from(list || [])
     if (!incoming.length) return
     const allowed = ACCEPT_EXT.split(',').map((s) => s.trim().toLowerCase())
@@ -268,20 +309,23 @@ export default function AIGenerate() {
     }, 2000)
   }
 
-  // Batalkan generate: putus stream, backend deteksi disconnect dan
-  // tidak mencatat kuota. Tanpa error merah — cukup toast info.
-  const cancelGenerate = () => {
+  // Batalkan generate/edit: putus koneksi. Generate dibatalkan sebelum
+  // done = tanpa kuota; edit dibatalkan sebelum server commit = tanpa kuota.
+  // Tanpa error merah — cukup toast info.
+  const cancelBusy = () => {
     cancelledRef.current = true
     abortRef.current?.abort()
   }
 
-  const applyDone = (data) => {
+  const applyDone = (data, usedPrompt) => {
     setDraft(data.draft)
     setIgnored(data.ignored || [])
     setWarnings(data.warnings || [])
     setModelUsed(data.model || '')
     setQuota((q) => (q ? { ...q, remaining: data.remaining, used: q.limit - data.remaining } : q))
     setGenProgress({ percent: 100, key: '', done: 0, total: 0 })
+    if (usedPrompt) setPrevPrompts((prev) => [...prev, usedPrompt].slice(-MAX_PREV_PROMPTS))
+    setPrompt('')
     setStep(3)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -296,9 +340,18 @@ export default function AIGenerate() {
     toast.error(serverMsg || msg)
   }
 
+  const failEdit = (status, serverMsg, fallbackCode) => {
+    let msg
+    if (status === 429) msg = serverMsg || t('aiGenerate.quotaEmpty')
+    else if (fallbackCode === 'ECONNABORTED') msg = t('aiGenerate.timeout')
+    else msg = serverMsg || t('aiGenerate.editFailed')
+    setError(typeof msg === 'string' ? msg : t('aiGenerate.editFailed'))
+    toast.error(serverMsg || msg)
+  }
+
   // Generate via SSE stream (fetch + getReader; axios tak bisa stream).
   // Fallback ke endpoint non-stream bila respons bukan event-stream.
-  const streamGenerate = async (fd, signal) => {
+  const streamGenerate = async (fd, signal, usedPrompt) => {
     const token = localStorage.getItem('token')
     const res = await fetch(`${api.defaults.baseURL}/ai/generate/stream`, {
       method: 'POST',
@@ -312,7 +365,7 @@ export default function AIGenerate() {
     const ctype = res.headers.get('content-type') || ''
     if (!ctype.includes('text/event-stream')) {
       const res2 = await api.post('/ai/generate', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 180000 })
-      applyDone(res2.data)
+      applyDone(res2.data, usedPrompt)
       return
     }
     const reader = res.body.getReader()
@@ -333,7 +386,7 @@ export default function AIGenerate() {
         }
       } else if (event === 'done') {
         stopTick()
-        applyDone(data)
+        applyDone(data, usedPrompt)
         return true
       } else if (event === 'error') {
         stopTick()
@@ -369,10 +422,11 @@ export default function AIGenerate() {
 
   const handleGenerate = async (e) => {
     e?.preventDefault()
-    if (!stripTags(title)) { setError(t('aiGenerate.titleRequired')); return }
-    const cleanLen = normPrompt(prompt).length
-    if (cleanLen < PROMPT_MIN) { setError(t('aiGenerate.promptMin', { current: cleanLen, max: PROMPT_MAX })); return }
-    if (cleanLen > PROMPT_MAX) { setError(t('aiGenerate.promptMax', { current: cleanLen, max: PROMPT_MAX })); return }
+    if (busy) return
+    if (!stripTags(title)) { setError(t('aiGenerate.titleRequired')); setStep(1); return }
+    const clean = normPrompt(prompt)
+    if (clean.length < PROMPT_MIN) { setError(t('aiGenerate.promptMin', { current: clean.length, max: PROMPT_MAX })); return }
+    if (clean.length > PROMPT_MAX) { setError(t('aiGenerate.promptMax', { current: clean.length, max: PROMPT_MAX })); return }
     abortRef.current?.abort()
     abortRef.current = new AbortController()
     cancelledRef.current = false
@@ -386,7 +440,7 @@ export default function AIGenerate() {
       fd.append('type', formType)
       fd.append('prompt', prompt)
       files.forEach((f) => fd.append('files', f))
-      await streamGenerate(fd, abortRef.current.signal)
+      await streamGenerate(fd, abortRef.current.signal, clean)
     } catch (err) {
       if (cancelledRef.current || err?.name === 'AbortError' || err?.name === 'CanceledError') {
         toast.info(t('aiGenerate.generateCancelled'))
@@ -401,7 +455,43 @@ export default function AIGenerate() {
     }
   }
 
-  // Bersihkan interval + stream bila user pindah halaman saat generate.
+  // Edit via prompt: kirim draf JSON + instruksi + riwayat prompt tersembunyi.
+  // Makan 1 kuota. Draf lama utuh bila gagal.
+  const handleEdit = async (e) => {
+    e?.preventDefault()
+    if (busy || !draft) return
+    const instruction = normPrompt(prompt)
+    if (instruction.length < PROMPT_MIN) { setError(t('aiGenerate.promptMin', { current: instruction.length, max: PROMPT_MAX })); return }
+    if (instruction.length > PROMPT_MAX) { setError(t('aiGenerate.promptMax', { current: instruction.length, max: PROMPT_MAX })); return }
+    abortRef.current?.abort()
+    abortRef.current = new AbortController()
+    cancelledRef.current = false
+    setEditing(true)
+    setError('')
+    try {
+      const res = await api.post('/ai/edit', {
+        title,
+        type: formType,
+        instruction,
+        draft,
+        previous_prompts: prevPrompts,
+      }, { signal: abortRef.current.signal, timeout: 180000 })
+      applyDone(res.data, instruction)
+      toast.success(t('aiGenerate.editSuccess'))
+    } catch (err) {
+      if (cancelledRef.current || err?.name === 'AbortError' || err?.name === 'CanceledError' || err.response?.status === 499) {
+        toast.info(t('aiGenerate.editCancelled'))
+      } else {
+        const status = err.response?.status
+        const serverMsg = err.response?.data?.message || err.response?.data?.detail
+        failEdit(status, serverMsg, err.code)
+      }
+    } finally {
+      setEditing(false)
+    }
+  }
+
+  // Bersihkan interval + stream bila user pindah halaman saat proses jalan.
   useEffect(() => () => { stopTick(); abortRef.current?.abort() }, [])
 
   const genStageText =
@@ -409,8 +499,10 @@ export default function AIGenerate() {
     : genProgress.key === 'generating' ? t('aiGenerate.overlayGenerating')
     : genProgress.key === 'sanitizing' ? t('aiGenerate.overlaySanitizing')
     : ''
+  const busyStatus = generating ? genStageText : t('aiGenerate.editing')
 
   const handleAccept = async () => {
+    if (busy || accepting || !draft) return
     if (!stripTags(title)) { setError(t('aiGenerate.titleRequired')); window.scrollTo({ top: 0, behavior: 'smooth' }); return }
     setAccepting(true)
     setError('')
@@ -420,13 +512,11 @@ export default function AIGenerate() {
         title,
         description: description || null,
         type: formType,
-        settings: {
-          ...s,
-        },
+        settings: { ...s },
         // Kunci kosong (cuma spasi) dinull-kan agar lolos min_length backend.
-        sections: draft.sections.map((s) => ({
-          ...s,
-          questions: s.questions.map((q) => ({
+        sections: draft.sections.map((sec) => ({
+          ...sec,
+          questions: sec.questions.map((q) => ({
             ...q,
             answer_key: (q.answer_key || '').trim() || null,
           })),
@@ -442,11 +532,200 @@ export default function AIGenerate() {
     }
   }
 
+  // Generate ulang dari awal: buang draf, kembalikan prompt asli ke komposer.
+  // User kirim ulang = panggil /ai/generate (1 kuota baru).
+  const handleFreshRegen = () => {
+    if (busy) return
+    setDraft(null)
+    setIgnored([])
+    setWarnings([])
+    setModelUsed('')
+    setError('')
+    setPrompt(prevPrompts[0] || '')
+    setStep(2)
+    setTimeout(() => composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
+  }
+
   const quotaEmpty = quota && quota.remaining <= 0
-  const templates = [t('aiGenerate.templateQuiz'), t('aiGenerate.templateForm'), t('aiGenerate.templateSchedule')]
   const promptLen = normPrompt(prompt).length
   const promptOver = promptLen > PROMPT_MAX
-  const canSend = !generating && !quotaEmpty && promptLen >= PROMPT_MIN && !promptOver && !!stripTags(title)
+  const canGenerate = !busy && !quotaEmpty && promptLen >= PROMPT_MIN && !promptOver && !!stripTags(title)
+  const promptEmpty = promptLen === 0
+  const canEdit = !!draft && !busy && !quotaEmpty && !promptEmpty && promptLen >= PROMPT_MIN && !promptOver
+
+  const handleComposerKey = (e) => {
+    if (e.key !== 'Enter') return
+    // Modifier + Enter selalu menambah baris; Enter polos mengirim.
+    if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) {
+      e.preventDefault()
+      const field = e.currentTarget
+      const start = field.selectionStart
+      const end = field.selectionEnd
+      const next = `${prompt.slice(0, start)}\n${prompt.slice(end)}`
+      setPrompt(next)
+      requestAnimationFrame(() => {
+        field.selectionStart = start + 1
+        field.selectionEnd = start + 1
+      })
+      return
+    }
+    e.preventDefault()
+    if (busy) return
+    if (!draft && canGenerate) handleGenerate()
+    else if (draft && canEdit) handleEdit()
+  }
+
+  const handlePrimaryButton = () => {
+    if (busy) return
+    if (!draft) { handleGenerate(); return }
+    if (promptEmpty) handleAccept()
+    else handleEdit()
+  }
+
+  const primaryDisabled = !draft ? !canGenerate : promptEmpty ? (busy || accepting || !stripTags(title)) : !canEdit
+  const primaryLabel = !draft ? t('aiGenerate.generate') : promptEmpty ? t('aiGenerate.accept') : t('aiGenerate.sendEdit')
+
+  const composer = (
+    <div
+      ref={composerRef}
+      onDragEnter={onComposerDragEnter}
+      onDragLeave={onComposerDragLeave}
+      onDragOver={onComposerDragOver}
+      onDrop={onComposerDrop}
+      aria-busy={busy}
+      data-testid="ai-composer"
+      className={`relative rounded-[1.75rem] border bg-white p-4 shadow-lift transition-colors focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 dark:bg-ink-900 dark:focus-within:border-primary dark:focus-within:ring-primary/20 ${dragActive ? 'border-primary ring-4 ring-primary/15' : 'border-primary-100 dark:border-gray-700'}`}
+    >
+      {dragActive && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[1.75rem] border-2 border-dashed border-primary bg-primary-50/90 backdrop-blur-sm dark:bg-primary-950/90" aria-hidden>
+          <Paperclip className="h-6 w-6 text-primary-600 dark:text-primary-300" />
+          <p className="text-sm font-semibold text-primary-700 dark:text-primary-200">{t('aiGenerate.dropFiles')}</p>
+        </div>
+      )}
+      {!draft && files.length > 0 && (
+        <div className="mb-3 mt-2 flex flex-wrap gap-2">
+          {files.map((f, i) => (
+            <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 rounded-full bg-primary-50 py-1.5 pl-3 pr-1.5 text-xs font-medium text-primary-700 dark:bg-primary-900/25 dark:text-primary-300">
+              <FileText className="h-3.5 w-3.5" />
+              <span className="max-w-[120px] truncate" title={f.name}>{f.name.split(/\s+/).slice(0, 3).join(' ')}</span>
+              <button
+                type="button"
+                onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                aria-label={t('aiGenerate.removeFile')}
+                className="flex h-6 w-6 items-center justify-center rounded-full text-primary-400 transition-colors hover:bg-primary-100 hover:text-primary-700 dark:hover:bg-primary-900/40"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-2 px-1 pb-2">
+        {busy && (
+          <span className="flex items-center gap-2 text-xs font-medium text-primary-600 dark:text-primary-300" role="status">
+            <TypingDots />
+            {busyStatus}
+          </span>
+        )}
+      </div>
+      <textarea
+        id="ai-prompt"
+        value={prompt}
+        onChange={(e) => { setPrompt(e.target.value); setError('') }}
+        onKeyDown={handleComposerKey}
+        placeholder={draft ? t('aiGenerate.editPlaceholder') : t('aiGenerate.promptComposerPlaceholder')}
+        rows={1}
+        readOnly={busy}
+        aria-busy={busy}
+        className="w-full resize-none bg-transparent px-1 pb-14 text-[15px] leading-6 text-ink placeholder:text-gray-400 focus:outline-none focus:ring-0 focus:border-transparent dark:text-gray-100 dark:placeholder:text-gray-500 [field-sizing:content] min-h-11 max-h-[200px]"
+      />
+      {promptOver && <p className="field-error mt-1">{t('aiGenerate.promptMax', { current: promptLen, max: PROMPT_MAX })}</p>}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-24 rounded-b-[1.75rem] bg-gradient-to-t from-white via-white/100 to-transparent dark:from-ink-900 dark:via-ink-900/100" aria-hidden="true" />
+      <div className="absolute bottom-4 left-4 right-4 z-20 flex items-center justify-between gap-2">
+        {!draft && (
+          <>
+            <input ref={fileRef} type="file" multiple accept={ACCEPT_EXT} onChange={pickFiles} className="hidden outline-hidden" />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={files.length >= MAX_FILES || busy}
+              aria-label={t('aiGenerate.filesLabel')}
+              title={t('aiGenerate.filesLabel')}
+              className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-primary-50 hover:text-primary-600 disabled:opacity-40 dark:text-gray-500 dark:hover:bg-primary-900/25 dark:hover:text-primary-300"
+            >
+              <Paperclip className="h-5 w-5" />
+            </button>
+            <span className="min-w-0 flex-1 truncate text-xs text-gray-400 dark:text-gray-500">{files.length}/{MAX_FILES} · {t('aiGenerate.filesHint')}</span>
+          </>
+        )}
+        {draft && <span className="flex-1" /> }
+        {busy ? (
+          <button
+            type="button"
+            onClick={cancelBusy}
+            className="inline-flex h-11 shrink-0 items-center justify-center rounded-full px-5 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-gray-100 transition-colors"
+          >
+            {t('aiGenerate.cancelGenerate')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handlePrimaryButton}
+            disabled={primaryDisabled}
+            aria-label={primaryLabel}
+            title={primaryLabel}
+            className={`flex shrink-0 items-center justify-center gap-1.5 rounded-full text-white shadow-chip transition-all hover:from-primary-600 hover:to-primary-800 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 bg-gradient-to-br from-primary-500 to-primary-700 ${!draft || !promptEmpty ? 'h-11 w-11' : 'h-11 px-5 text-sm font-semibold'}`}
+          >
+            {!draft || !promptEmpty ? <ArrowUp className="h-5 w-5" strokeWidth={2.5} /> : <><Check className="h-4 w-4" />{t('aiGenerate.accept')}</>}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+
+  const stepper = (
+    <div className={busy ? 'opacity-50 pointer-events-none' : ''}>
+      <div className="relative flex items-center justify-between px-5" aria-hidden>
+        <div className="absolute left-10 right-10 top-1/2 h-px -translate-y-1/2 bg-gray-200 dark:bg-gray-700" />
+        <div
+          className="absolute left-10 top-1/2 h-0.5 -translate-y-1/2 bg-primary transition-all duration-300"
+          style={{ width: `calc(${((step - 1) / (steps.length - 1)) * 100}% - ${((step - 1) / (steps.length - 1)) * 2.5}rem)` }}
+        />
+        {steps.map((item) => (
+          <span
+            key={item.id}
+            className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-bold tabular-nums transition-colors ${
+              step > item.id
+                ? 'border-primary bg-primary text-white'
+                : step === item.id
+                  ? 'border-primary bg-white dark:bg-ink-900 text-primary'
+                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 text-gray-400'
+            }`}
+          >
+            {step > item.id ? <Check className="h-4 w-4" strokeWidth={3} /> : String(item.id).padStart(2, '0')}
+          </span>
+        ))}
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-3">
+        {steps.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            disabled={!canGoTo(item.id)}
+            onClick={() => goToStep(item.id)}
+            className={`rounded-2xl border p-3 text-left transition-colors ${
+              step === item.id
+                ? 'border-primary bg-primary-50/60 dark:bg-primary-900/20'
+                : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-ink-900 opacity-70'
+            } ${canGoTo(item.id) ? 'cursor-pointer hover:border-primary/50' : 'cursor-default'}`}
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">Step {item.id}</p>
+            <p className="mt-1 text-sm font-semibold text-ink dark:text-gray-100">{item.label}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -463,50 +742,9 @@ export default function AIGenerate() {
           <QuotaPill quota={quota} />
         </div>
 
-        {/* Stepper: node bernomor di atas rel, kartu caption di bawah — satu lebar kolom. */}
-        <div>
-          <div className="relative flex items-center justify-between px-5" aria-hidden>
-            <div className="absolute left-10 right-10 top-1/2 h-px -translate-y-1/2 bg-gray-200 dark:bg-gray-700" />
-            <div
-              className="absolute left-10 top-1/2 h-0.5 -translate-y-1/2 bg-primary transition-all duration-300"
-              style={{ width: `calc(${((step - 1) / (steps.length - 1)) * 100}% - ${((step - 1) / (steps.length - 1)) * 2.5}rem)` }}
-            />
-            {steps.map((item) => (
-              <span
-                key={item.id}
-                className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-bold tabular-nums transition-colors ${
-                  step > item.id
-                    ? 'border-primary bg-primary text-white'
-                    : step === item.id
-                      ? 'border-primary bg-white dark:bg-ink-900 text-primary'
-                      : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 text-gray-400'
-                }`}
-              >
-                {step > item.id ? <Check className="h-4 w-4" strokeWidth={3} /> : String(item.id).padStart(2, '0')}
-              </span>
-            ))}
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-3">
-            {steps.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                disabled={!canGoTo(item.id)}
-                onClick={() => goToStep(item.id)}
-                className={`rounded-2xl border p-3 text-left transition-colors ${
-                  step === item.id
-                    ? 'border-primary bg-primary-50/60 dark:bg-primary-900/20'
-                    : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-ink-900 opacity-70'
-                } ${canGoTo(item.id) ? 'cursor-pointer hover:border-primary/50' : 'cursor-default'}`}
-              >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">Step {item.id}</p>
-                <p className="mt-1 text-sm font-semibold text-ink dark:text-gray-100">{item.label}</p>
-              </button>
-            ))}
-          </div>
-        </div>
+        {stepper}
 
-        {step === 1 ? (
+        {step === 1 && (
           <form onSubmit={(e) => { e.preventDefault(); goToPrompt() }} className="space-y-5">
             <Card className="space-y-5">
               <div>
@@ -538,126 +776,55 @@ export default function AIGenerate() {
                 </div>
               </div>
             </Card>
-
             {error && <p className="field-error">{error}</p>}
-
             <Button type="submit" className="w-full" size="lg">
               {t('aiGenerate.nextPrompt')}
             </Button>
           </form>
-        ) : step === 2 ? (
-          <form onSubmit={handleGenerate} className="space-y-4">
-            <div>
-              <p className="field-label">{t('aiGenerate.templatesLabel')}</p>
-              <div className="flex flex-wrap gap-2">
-                {templates.map((tpl) => (
-                  <button
-                    key={tpl}
-                    type="button"
-                    onClick={() => { setPrompt(tpl); setError('') }}
-                    className={`rounded-full border px-3.5 h-9 text-xs font-medium transition-colors ${prompt === tpl ? 'border-primary bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 text-gray-600 dark:text-gray-300 hover:border-primary/50'}`}
-                  >
-                    {tpl.length > 64 ? `${tpl.slice(0, 64)}…` : tpl}
-                  </button>
-                ))}
-              </div>
-            </div>
+        )}
 
-            {/* Komposer chat: mengikuti tema — terang di light, ink-900 di dark, aksen violet. */}
-            <div
-              onDragEnter={onComposerDragEnter}
-              onDragLeave={onComposerDragLeave}
-              onDragOver={onComposerDragOver}
-              onDrop={onComposerDrop}
-              className={`relative rounded-[1.75rem] border bg-white p-4 shadow-lift transition-colors focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 dark:bg-ink-900 dark:focus-within:border-primary dark:focus-within:ring-primary/20 ${dragActive ? 'border-primary ring-4 ring-primary/15' : 'border-primary-100 dark:border-gray-700'}`}
-            >
-              {dragActive && (
-                <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[1.75rem] border-2 border-dashed border-primary bg-primary-50/90 backdrop-blur-sm dark:bg-primary-950/90" aria-hidden>
-                  <Paperclip className="h-6 w-6 text-primary-600 dark:text-primary-300" />
-                  <p className="text-sm font-semibold text-primary-700 dark:text-primary-200">{t('aiGenerate.dropFiles')}</p>
+        {step === 2 && (
+          <div className="space-y-4">
+            {busy && (
+              <div aria-busy="true">
+                <SkeletonCards count={skeletonCount} />
+              </div>
+            )}
+            <div className={busy ? 'sticky bottom-[var(--mobile-nav-offset,4.5rem)] md:bottom-4 z-40 mt-2 pb-2' : ''}>{composer}</div>
+            {!busy && (
+              <>
+                {error && <p className="field-error">{error}</p>}
+                {quotaEmpty && <p className="field-error">{t('aiGenerate.quotaEmpty')}</p>}
+                <div className="flex gap-3">
+                  <Button type="button" variant="secondary" className="flex-1" onClick={() => setStep(1)}>{t('aiGenerate.back')}</Button>
                 </div>
-              )}
-              {files.length > 0 && (
-                <div className="mb-3 mt-2 flex flex-wrap gap-2">
-                  {files.map((f, i) => (
-                    <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 rounded-full bg-primary-50 py-1.5 pl-3 pr-1.5 text-xs font-medium text-primary-700 dark:bg-primary-900/25 dark:text-primary-300">
-                      <FileText className="h-3.5 w-3.5" />
-                      <span className="max-w-[180px] truncate">{f.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                        aria-label={t('aiGenerate.removeFile')}
-                        className="flex h-6 w-6 items-center justify-center rounded-full text-primary-400 transition-colors hover:bg-primary-100 hover:text-primary-700 dark:hover:bg-primary-900/40"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="flex items-center justify-end px-1 pb-2">
-                <span className={`text-xs tabular-nums ${promptOver ? 'text-incorrect font-semibold' : 'text-gray-400 dark:text-gray-500'}`}>{promptLen}/{PROMPT_MAX}</span>
-              </div>
-              <textarea
-                id="ai-prompt"
-                value={prompt}
-                onChange={(e) => { setPrompt(e.target.value); setError('') }}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (canSend) handleGenerate() } }}
-                placeholder={t('aiGenerate.promptComposerPlaceholder')}
-                rows={5}
-                className="w-full resize-none bg-transparent px-1 text-[15px] leading-6 text-ink placeholder:text-gray-400 focus:outline-none focus:ring-0 focus:border-transparent dark:text-gray-100 dark:placeholder:text-gray-500"
-              />
-              <div className="mt-2 flex items-center gap-2 border-t border-gray-300 pt-3 dark:border-gray-800">
-                <input ref={fileRef} type="file" multiple accept={ACCEPT_EXT} onChange={pickFiles} className="hidden outline-hidden" />
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={files.length >= MAX_FILES}
-                  aria-label={t('aiGenerate.filesLabel')}
-                  title={t('aiGenerate.filesLabel')}
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-primary-50 hover:text-primary-600 disabled:opacity-40 dark:text-gray-500 dark:hover:bg-primary-900/25 dark:hover:text-primary-300"
-                >
-                  <Paperclip className="h-5 w-5" />
-                </button>
-                <span className="min-w-0 flex-1 truncate text-xs text-gray-400 dark:text-gray-500">{files.length}/{MAX_FILES} · {t('aiGenerate.filesHint')}</span>
-                <button
-                  type="submit"
-                  disabled={!canSend}
-                  aria-label={t('aiGenerate.generate')}
-                  title={t('aiGenerate.generate')}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-chip transition-all hover:from-primary-600 hover:to-primary-800 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {generating ? (
-                    <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                  ) : (
-                    <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
-                  )}
-                </button>
-              </div>
-            </div>
+              </>
+            )}
+          </div>
+        )}
 
-            {error && <p className="field-error">{error}</p>}
-            {quotaEmpty && <p className="field-error">{t('aiGenerate.quotaEmpty')}</p>}
-
-            <div className="flex gap-3">
-              <Button type="button" variant="secondary" className="flex-1" onClick={() => setStep(1)}>{t('aiGenerate.back')}</Button>
-            </div>
-          </form>
-        ) : (
+        {step === 3 && (
           <div className="space-y-5">
             <Card className="space-y-4">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <h2 className="font-display font-semibold text-ink dark:text-gray-100">
-                  {t('aiGenerate.previewTitle', { count: questionCount })}
+                  {t('aiGenerate.stepPolish')}
                 </h2>
-                {modelUsed && (
-                  <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[11px] font-medium bg-gray-100 dark:bg-ink-800 text-gray-500 dark:text-gray-400">
-                    <Sparkles className="w-3 h-3" />{modelUsed}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {modelUsed && (
+                    <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[11px] font-medium bg-gray-100 dark:bg-ink-800 text-gray-500 dark:text-gray-400">
+                      <Sparkles className="w-3 h-3" />{modelUsed}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleFreshRegen}
+                    title={t('aiGenerate.freshRegenHint')}
+                    className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full text-[11px] font-medium bg-gray-100 dark:bg-ink-800 text-gray-500 dark:text-gray-400 hover:text-primary-600 transition-colors"
+                  >
+                    <RefreshCw className="w-3 h-3" />{t('aiGenerate.freshRegen')}
+                  </button>
+                </div>
               </div>
               <SettingChips settings={draft.settings} />
               <IgnoredBox items={ignored} />
@@ -716,79 +883,61 @@ export default function AIGenerate() {
               </div>
             </Card>
 
-            {draft.sections.map((sec, si) => (
-              <Card key={si} className="space-y-3">
-                <h3 className="font-display font-semibold text-ink dark:text-gray-100">{si + 1}. {sec.title}</h3>
-                {sec.questions.map((q, qi) => (
-                  <div key={qi} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3.5 space-y-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge scheme="blue">{humanizeType(q.type)}</Badge>
-                      {q.is_required && <span className="text-incorrect font-bold">*</span>}
-                      {q.points > 0 && <span className="text-xs text-gray-400">{t('aiGenerate.points', { points: q.points })}</span>}
+            <div className={editing ? 'opacity-60 pointer-events-none select-none' : ''} aria-busy={editing}>
+              {draft.sections.map((sec, si) => (
+                <Card key={si} className="space-y-3">
+                  <h3 className="font-display font-semibold text-ink dark:text-gray-100">{si + 1}. {sec.title}</h3>
+                  {sec.questions.map((q, qi) => (
+                    <div key={qi} data-qi={`${si}-${qi}`} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3.5 space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge scheme="blue">{humanizeType(q.type)}</Badge>
+                        {q.is_required && <span className="text-incorrect font-bold">*</span>}
+                        {q.points > 0 && <span className="text-xs text-gray-400">{t('aiGenerate.points', { points: q.points })}</span>}
+                      </div>
+                      <div className="text-sm text-ink dark:text-gray-100"><RichText html={q.question_text} className="rich-text block" /></div>
+                      {q.options?.length > 0 && (
+                        <ul className="space-y-1">
+                          {q.options.map((o, oi) => (
+                            <li key={oi} className={`flex items-start gap-2 text-sm px-2.5 py-1.5 rounded-lg ${o.is_correct ? 'bg-correct-soft text-correct font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
+                              {o.is_correct ? <Check className="w-4 h-4 shrink-0 mt-0.5" /> : <span className="w-4 h-4 shrink-0 mt-0.5 text-center leading-4 text-gray-300">·</span>}
+                              <span className="flex-1 min-w-0 [&>p]:mb-0"><RichText html={o.option_text} className="rich-text" /></span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {(q.type === 'multiple_choice' || q.type === 'checkbox') && (
+                        <label className="flex items-center gap-2.5 pt-1 cursor-pointer">
+                          <Toggle
+                            label={t('aiGenerate.allowOther')}
+                            checked={!!q.allow_other}
+                            onChange={(v) => patchQuestion(si, qi, { allow_other: v })}
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-sm text-gray-600 dark:text-gray-400">{t('aiGenerate.allowOther')}</span>
+                            <span className="block text-xs text-gray-400 dark:text-gray-500">{t('aiGenerate.allowOtherHint')}</span>
+                          </span>
+                        </label>
+                      )}
+                        {formType === 'quiz' && (q.type === 'essay' || q.type === 'short_answer') && (
+                         <div className="pt-1">
+                           <AnswerKeyEditor
+                             value={q.answer_key || ''}
+                             onChange={(value) => patchQuestion(si, qi, { answer_key: value })}
+                           />
+                         </div>
+                       )}
                     </div>
-                    <div className="text-sm text-ink dark:text-gray-100"><RichText html={q.question_text} className="rich-text block" /></div>
-                    {q.options?.length > 0 && (
-                      <ul className="space-y-1">
-                        {q.options.map((o, oi) => (
-                          <li key={oi} className={`flex items-start gap-2 text-sm px-2.5 py-1.5 rounded-lg ${o.is_correct ? 'bg-correct-soft text-correct font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
-                            {o.is_correct ? <Check className="w-4 h-4 shrink-0 mt-0.5" /> : <span className="w-4 h-4 shrink-0 mt-0.5 text-center leading-4 text-gray-300">·</span>}
-                            <span className="flex-1 min-w-0 [&>p]:mb-0"><RichText html={o.option_text} className="rich-text" /></span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {(q.type === 'multiple_choice' || q.type === 'checkbox') && (
-                      <label className="flex items-center gap-2.5 pt-1 cursor-pointer">
-                        <Toggle
-                          label={t('aiGenerate.allowOther')}
-                          checked={!!q.allow_other}
-                          onChange={(v) => patchQuestion(si, qi, { allow_other: v })}
-                        />
-                        <span className="min-w-0">
-                          <span className="block text-sm text-gray-600 dark:text-gray-400">{t('aiGenerate.allowOther')}</span>
-                          <span className="block text-xs text-gray-400 dark:text-gray-500">{t('aiGenerate.allowOtherHint')}</span>
-                        </span>
-                      </label>
-                    )}
-                      {formType === 'quiz' && (q.type === 'essay' || q.type === 'short_answer') && (
-                       <div className="pt-1">
-                         <AnswerKeyEditor
-                           value={q.answer_key || ''}
-                           onChange={(value) => patchQuestion(si, qi, { answer_key: value })}
-                         />
-                       </div>
-                     )}
-                  </div>
-                ))}
-              </Card>
-            ))}
+                  ))}
+                </Card>
+              ))}
+            </div>
 
             {error && <p className="field-error">{error}</p>}
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button onClick={handleAccept} loading={accepting} className="w-full flex-1 min-h-[56px] sm:w-auto sm:min-h-[52px]" size="lg" icon={<Check className="w-4 h-4" />}>
-                {accepting ? t('aiGenerate.accepting') : t('aiGenerate.accept')}
-              </Button>
-              <Button
-                variant="secondary"
-                size="lg"
-                onClick={() => goToStep(2)}
-                icon={<RefreshCw className="w-4 h-4" />}
-                title={t('aiGenerate.regenerateHint')}
-              >
-                {t('aiGenerate.regenerate')}
-              </Button>
-            </div>
+            <div className="sticky bottom-[var(--mobile-nav-offset,4.5rem)] md:bottom-4 z-40 mt-2 pb-2">{composer}</div>
           </div>
         )}
       </motion.div>
-      <AiLoadingOverlay
-        open={generating || accepting}
-        mode={generating ? 'generate' : 'accept'}
-        percent={genProgress.percent}
-        stage={genStageText}
-        onCancel={generating ? cancelGenerate : undefined}
-      />
     </div>
   )
 }
