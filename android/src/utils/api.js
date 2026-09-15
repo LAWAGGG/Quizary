@@ -1,4 +1,3 @@
-import 'expo-blob';
 export const getBaseUrl = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL || "";
   return envUrl.replace(/\/+$/, "");
