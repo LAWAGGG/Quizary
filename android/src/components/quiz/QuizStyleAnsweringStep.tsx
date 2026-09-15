@@ -28,7 +28,6 @@ import { isAudioUrl, getQuestionImageUrl, getQuestionAudioUrl } from '../../util
 import { CustomDateTimePickerModal } from './CustomDateTimePickerModal';
 import { checkPassword } from '../../services/api_service';
 import { useKeyboardHeight } from '../../hooks/useKeyboardHeight';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 interface QuizStyleAnsweringStepProps {
   publicForm: any;
@@ -87,73 +86,8 @@ export function QuizStyleAnsweringStep({
   const [showPicker, setShowPicker] = useState<{ qId: number; mode: 'date' | 'time' | 'datetime' } | null>(null);
   const [showDropdownModal, setShowDropdownModal] = useState<number | null>(null);
 
-  const openPicker = (qId: number, mode: 'date' | 'time') => {
-    const currentVal = answers[qId];
-    let d = new Date();
-    if (typeof currentVal === 'string' && currentVal.trim().length > 0) {
-      if (mode === 'date') {
-        const parts = currentVal.trim().split('-');
-        if (parts.length === 3) {
-          const y = parseInt(parts[0], 10);
-          const m = parseInt(parts[1], 10) - 1;
-          const day = parseInt(parts[2], 10);
-          if (!isNaN(y) && !isNaN(m) && !isNaN(day)) {
-            d = new Date(y, m, day);
-          }
-        }
-      } else if (mode === 'time') {
-        const parts = currentVal.trim().split(':');
-        if (parts.length >= 2) {
-          const h = parseInt(parts[0], 10);
-          const min = parseInt(parts[1], 10);
-          if (!isNaN(h) && !isNaN(min)) {
-            d = new Date();
-            d.setHours(h, min, 0, 0);
-          }
-        }
-      }
-    }
-    setPickerDate(d);
+  const openPicker = (qId: number, mode: 'date' | 'time' | 'datetime') => {
     setShowPicker({ qId, mode });
-  };
-
-  const handlePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    const activePicker = showPicker;
-
-    if (event.type === 'dismissed') {
-      setShowPicker(null);
-      return;
-    }
-
-    if (event.type === 'set' || (Platform.OS === 'ios' && selectedDate)) {
-      setShowPicker(null);
-
-      let dateToSave = selectedDate;
-      if (!dateToSave && (event as any)?.nativeEvent?.timestamp) {
-        const ts = Number((event as any).nativeEvent.timestamp);
-        if (!isNaN(ts)) {
-          dateToSave = new Date(ts);
-        }
-      }
-      if (!dateToSave || isNaN(dateToSave.getTime())) {
-        dateToSave = pickerDate;
-      }
-
-      setPickerDate(dateToSave);
-
-      if (activePicker) {
-        if (activePicker.mode === 'date') {
-          const yyyy = dateToSave.getFullYear();
-          const mm = String(dateToSave.getMonth() + 1).padStart(2, '0');
-          const dd = String(dateToSave.getDate()).padStart(2, '0');
-          onTextChange(activePicker.qId, `${yyyy}-${mm}-${dd}`);
-        } else if (activePicker.mode === 'time') {
-          const hh = String(dateToSave.getHours()).padStart(2, '0');
-          const min = String(dateToSave.getMinutes()).padStart(2, '0');
-          onTextChange(activePicker.qId, `${hh}:${min}`);
-        }
-      }
-    }
   };
 
   const themeColor =
@@ -853,14 +787,17 @@ export function QuizStyleAnsweringStep({
                     </View>
                   )}
 
-                  {showPicker && showPicker.mode !== 'datetime' && (
-                    <DateTimePicker
-                      value={pickerDate}
-                      mode={showPicker.mode as any}
-                      display="spinner"
-                      is24Hour={true}
-                      onChange={handlePickerChange}
-                      onDismiss={() => setShowPicker(null)}
+                  {showPicker && (
+                    <CustomDateTimePickerModal
+                      visible={!!showPicker}
+                      mode={showPicker.mode}
+                      initialValue={typeof answers[showPicker.qId] === 'string' ? answers[showPicker.qId] : ''}
+                      themeColor={themeColor}
+                      onConfirm={(formattedVal) => {
+                        onTextChange(showPicker.qId, formattedVal);
+                        setShowPicker(null);
+                      }}
+                      onCancel={() => setShowPicker(null)}
                     />
                   )}
 
