@@ -142,13 +142,12 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       loadData();
-      // polling silent tiap 4 detik biar status auto_submitted/cheating/locked langsung kelihatan tanpa refresh manual
+      // polling silent tiap 4 detik khusus status submission
       const id = setInterval(() => {
         fetchPage(1, true, true);
-        fetchUser().catch(() => {});
       }, 4000);
       return () => clearInterval(id);
-    }, [loadData, fetchPage, fetchUser])
+    }, [loadData, fetchPage])
   );
 
   const onRefresh = useCallback(() => {
@@ -249,11 +248,11 @@ export default function HomeScreen() {
           >
             {user?.avatar ? (
               <Image
-              source={{
-                uri: user.avatar.startsWith('http')
-                ? `${user.avatar}?t=${Date.now()}`
-                : `${BASE_URL.replace('/api', '')}${user.avatar}?t=${Date.now()}`,
-              }}
+                source={{
+                  uri: user.avatar.startsWith('http')
+                    ? user.avatar
+                    : `${BASE_URL.replace('/api', '')}${user.avatar}`,
+                }}
               style={styles.avatarImg}
               />
             ) : (

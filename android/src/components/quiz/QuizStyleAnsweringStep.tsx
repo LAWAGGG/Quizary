@@ -554,44 +554,70 @@ export function QuizStyleAnsweringStep({
                             key={opt.id || i}
                             style={[
                               styles.optionTile,
-                              { backgroundColor: bgCol, flexDirection: optIsAudio ? 'column' : 'row', alignItems: optIsAudio ? 'stretch' : 'center' },
+                              { backgroundColor: bgCol, flexDirection: (optImgUrl && !optIsAudio) || optIsAudio ? 'column' : 'row', alignItems: (optImgUrl && !optIsAudio) || optIsAudio ? 'stretch' : 'center' },
                               selected && styles.optionTileSelected,
                             ]}
                             onPress={() => onSelectOption(currentQ.id, opt.id, isCheckbox)}
                             activeOpacity={0.85}
                           >
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
-                              {isCheckbox ? (
-                                <View style={[styles.checkboxBox, selected && { backgroundColor: bgCol, borderColor: bgCol }]}>
-                                  {selected && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                            {optImgUrl && !optIsAudio ? (
+                              <View style={{ width: '100%', gap: 12 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                                    {isCheckbox ? (
+                                      <View style={[styles.checkboxBox, selected && { backgroundColor: bgCol, borderColor: bgCol }]}>
+                                        {selected && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                                      </View>
+                                    ) : (
+                                      <View style={styles.letterCircle}>
+                                        <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
+                                      </View>
+                                    )}
+                                    <View style={{ flex: 1 }}>
+                                      <RichTextRenderer
+                                        html={opt.option_text || opt.text || ''}
+                                        style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
+                                      />
+                                    </View>
+                                  </View>
+                                  {selected && !isCheckbox && (
+                                    <View style={styles.selectedBadgeCircle}>
+                                      <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                                    </View>
+                                  )}
                                 </View>
-                              ) : (
-                                <View style={styles.letterCircle}>
-                                  <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
-                                </View>
-                              )}
-
-                              {optImgUrl && !optIsAudio && (
                                 <Image
                                   source={{ uri: optImgUrl }}
-                                  style={styles.optionImgStyle}
+                                  style={styles.optionImgLarge}
                                   resizeMode="contain"
                                 />
-                              )}
-
-                              <View style={{ flex: 1 }}>
-                                <RichTextRenderer
-                                  html={opt.option_text || opt.text || ''}
-                                  style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
-                                />
                               </View>
+                            ) : (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
+                                {isCheckbox ? (
+                                  <View style={[styles.checkboxBox, selected && { backgroundColor: bgCol, borderColor: bgCol }]}>
+                                    {selected && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                                  </View>
+                                ) : (
+                                  <View style={styles.letterCircle}>
+                                    <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
+                                  </View>
+                                )}
 
-                              {selected && !isCheckbox && (
-                                <View style={styles.selectedBadgeCircle}>
-                                  <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                                <View style={{ flex: 1 }}>
+                                  <RichTextRenderer
+                                    html={opt.option_text || opt.text || ''}
+                                    style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
+                                  />
                                 </View>
-                              )}
-                            </View>
+
+                                {selected && !isCheckbox && (
+                                  <View style={styles.selectedBadgeCircle}>
+                                    <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                                  </View>
+                                )}
+                              </View>
+                            )}
                             {optIsAudio && optImgUrl && (
                               <View style={{ marginTop: 12 }} onTouchEnd={(e: any) => e.stopPropagation?.()}>
                                 <AudioPlayer uri={optImgUrl} themeColor="#FFF" compact />
@@ -1122,6 +1148,12 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  optionImgLarge: {
+    width: '100%',
+    height: 160,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
 
   zoomCenterWrapper: { width: '100%', alignItems: 'center', marginBottom: 12 },
