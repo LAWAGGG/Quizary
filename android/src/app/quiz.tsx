@@ -52,6 +52,7 @@ import { useCheatSound } from '../hooks/useCheatSound';
 import { useLockedVolume } from '../hooks/useLockedVolume';
 import { useFloatingBlock } from '../hooks/useFloatingBlock';
 import { stripHtmlTags } from '../components/RichTextRenderer';
+import { isSubmissionExpired } from '../utils/api';
 
 function parseWibDate(dateStr: string): Date | null {
   if (!dateStr) return null;
@@ -62,7 +63,8 @@ function parseWibDate(dateStr: string): Date | null {
 }
 
 function formatTimer(ms: number | null) {
-  if (ms === null || ms <= 0) return '00:00';
+  if (ms === null) return null;
+  if (ms <= 0) return '00:00';
   const totalSec = Math.floor(ms / 1000);
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
@@ -169,6 +171,18 @@ export default function QuizScreen() {
       setLoading(true);
       try {
         const detail: any = await getSubmissionDetail(resumeId);
+        if (detail.status !== 'in_progress' || isSubmissionExpired(detail)) {
+          if (detail.status === 'in_progress' && isSubmissionExpired(detail)) {
+            await finalizeSubmission(detail.id).catch(() => {});
+          }
+          showAlert({
+            type: 'info',
+            title: language === 'ID' ? 'Waktu Pengerjaan Habis' : 'Time Expired',
+            message: language === 'ID' ? 'Waktu pengerjaan kuis telah berakhir dan jawaban Anda telah terkirim.' : 'Quiz time has expired and your submission has been completed.',
+            onConfirm: () => router.replace('/(tabs)/home'),
+          });
+          return;
+        }
         // Public form untuk tema/header — fallback minimal jika getPublicForm gagal (mis. form draft/privat)
         if (detail.short_code) {
           try {
@@ -1246,28 +1260,34 @@ export default function QuizScreen() {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
           <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-            <View style={[styles.formHeader, { borderBottomColor: colors.inputBorder, backgroundColor: colors.cardBg }]}>
-            {!publicForm?.is_restricted && (
-              <TouchableOpacity
-                onPress={async () => {
-                  await unpin().catch(() => {});
-                  await unlockVolume().catch(() => {});
-                  await stopCheat().catch(() => {});
-                  router.replace('/(tabs)/home' as any);
-                }}
-                style={{ padding: 6 }}
-              >
-                <Ionicons name="close" size={22} color={colors.text} />
-              </TouchableOpacity>
-            )}
-            <Text style={[styles.formHeaderTitle, { color: colors.text }]} numberOfLines={1}>
-              {publicForm.title?.replace(/<[^>]*>/g, '') || 'Form'}
-            </Text>
-            <View style={[styles.timerPill, { backgroundColor: timeLeft !== null && timeLeft < 60000 ? '#EF4444' : colors.inputBg }]}>
-              <Ionicons name="timer-outline" size={14} color={timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text} />
-              <Text style={[styles.timerText, { color: timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text }]}>{formattedTimer}</Text>
+            <View style={[styles.formHeader, { borderBottomColor: colors.inputBorder, backgroundColor: colors.cardBg, position: 'relative', minHeight: 48, justifyContent: 'space-between', alignItems: 'center' }]}>
+              {!publicForm?.is_restricted ? (
+                <TouchableOpacity
+                  onPress={async () => {
+                    await unpin().catch(() => {});
+                    await unlockVolume().catch(() => {});
+                    await stopCheat().catch(() => {});
+                    router.replace('/(tabs)/home' as any);
+                  }}
+                  style={{ padding: 6, zIndex: 10 }}
+                >
+                  <Ionicons name="close" size={22} color={colors.text} />
+                </TouchableOpacity>
+              ) : <View style={{ width: 34 }} />}
+
+              <View style={{ position: 'absolute', left: 80, right: 80, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={[styles.formHeaderTitle, { color: colors.text, textAlign: 'center', marginHorizontal: 0 }]} numberOfLines={1}>
+                  {publicForm.title?.replace(/<[^>]*>/g, '') || 'Form'}
+                </Text>
+              </View>
+
+              {formattedTimer ? (
+                <View style={[styles.timerPill, { backgroundColor: timeLeft !== null && timeLeft < 60000 ? '#EF4444' : colors.inputBg, zIndex: 10 }]}>
+                  <Ionicons name="timer-outline" size={14} color={timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text} />
+                  <Text style={[styles.timerText, { color: timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text }]}>{formattedTimer}</Text>
+                </View>
+              ) : <View style={{ width: 34 }} />}
             </View>
-          </View>
 
           <ScrollView
             ref={cardScrollRef}

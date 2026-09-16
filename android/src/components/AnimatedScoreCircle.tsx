@@ -25,7 +25,7 @@ export default function AnimatedScoreCircle({
   strokeWidth = 10,
 }: AnimatedScoreCircleProps) {
   const animatedValue = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.6)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const [displayScore, setDisplayScore] = useState(0);
 
@@ -36,7 +36,7 @@ export default function AnimatedScoreCircle({
     if (!ready) return;
 
     animatedValue.setValue(0);
-    scaleAnim.setValue(0.6);
+    scaleAnim.setValue(0.8);
     opacityAnim.setValue(0);
     setDisplayScore(0);
 
@@ -51,18 +51,18 @@ export default function AnimatedScoreCircle({
     Animated.parallel([
       Animated.timing(scaleAnim, {
         toValue: 1,
-        duration: 600,
-        easing: Easing.out(Easing.back(1.4)),
+        duration: 500,
+        easing: Easing.out(Easing.back(1.2)),
         useNativeDriver: true,
       }),
       Animated.timing(opacityAnim, {
         toValue: 1,
-        duration: 400,
+        duration: 350,
         useNativeDriver: true,
       }),
       Animated.timing(animatedValue, {
         toValue: percentage,
-        duration: 1200,
+        duration: 1000,
         easing: Easing.bezier(0.16, 1, 0.3, 1),
         useNativeDriver: false,
       }),
@@ -102,7 +102,6 @@ export default function AnimatedScoreCircle({
   const capSize = strokeWidth;
   const capRadius = capSize / 2;
   const capLeft = halfSize - capRadius;
-  const innerSize = size - strokeWidth * 2;
 
   return (
     <Animated.View
@@ -116,7 +115,7 @@ export default function AnimatedScoreCircle({
         },
       ]}
     >
-      {/* 1. Track Lingkaran Abu-abu (Selalu 360 derajat penuh di latar belakang) */}
+      {/* 1. Track Lingkaran Abu-abu Penuh 360° */}
       <View
         style={[
           styles.trackCircle,
@@ -138,6 +137,7 @@ export default function AnimatedScoreCircle({
             width: halfSize,
             height: size,
             left: halfSize,
+            top: 0,
           },
         ]}
       >
@@ -148,6 +148,7 @@ export default function AnimatedScoreCircle({
               width: size,
               height: size,
               left: -halfSize,
+              top: 0,
               transform: [{ rotate: firstHalfRotate }],
             },
           ]}
@@ -159,6 +160,7 @@ export default function AnimatedScoreCircle({
                 width: halfSize,
                 height: size,
                 left: 0,
+                top: 0,
               },
             ]}
           >
@@ -172,6 +174,7 @@ export default function AnimatedScoreCircle({
                   borderWidth: strokeWidth,
                   borderColor: ringColor,
                   left: 0,
+                  top: 0,
                 },
               ]}
             />
@@ -187,6 +190,7 @@ export default function AnimatedScoreCircle({
             width: halfSize,
             height: size,
             left: 0,
+            top: 0,
           },
         ]}
       >
@@ -197,6 +201,7 @@ export default function AnimatedScoreCircle({
               width: size,
               height: size,
               left: 0,
+              top: 0,
               transform: [{ rotate: secondHalfRotate }],
             },
           ]}
@@ -208,6 +213,7 @@ export default function AnimatedScoreCircle({
                 width: halfSize,
                 height: size,
                 left: halfSize,
+                top: 0,
               },
             ]}
           >
@@ -221,6 +227,7 @@ export default function AnimatedScoreCircle({
                   borderWidth: strokeWidth,
                   borderColor: ringColor,
                   left: -halfSize,
+                  top: 0,
                 },
               ]}
             />
@@ -229,64 +236,70 @@ export default function AnimatedScoreCircle({
       </View>
 
       {/* 4. Rounded Cap di Titik Mulai (Jam 12) */}
-      <Animated.View
-        style={[
-          styles.startCapDot,
-          {
-            width: capSize,
-            height: capSize,
-            borderRadius: capRadius,
-            left: capLeft,
-            backgroundColor: ringColor,
-            opacity: capOpacity,
-          },
-        ]}
-      />
-
-      {/* 5. Rounded Cap Bergerak di Ujung Progress */}
-      <Animated.View
-        style={[
-          styles.tipRotator,
-          {
-            width: size,
-            height: size,
-            opacity: capOpacity,
-            transform: [{ rotate: tipRotate }],
-          },
-        ]}
-      >
-        <View
+      {percentage > 0 && (
+        <Animated.View
           style={[
-            styles.capDot,
+            styles.startCapDot,
             {
               width: capSize,
               height: capSize,
               borderRadius: capRadius,
               left: capLeft,
+              top: 0,
               backgroundColor: ringColor,
+              opacity: capOpacity,
             },
           ]}
         />
-      </Animated.View>
+      )}
+
+      {/* 5. Rounded Cap Bergerak di Ujung Progress */}
+      {percentage > 0 && (
+        <Animated.View
+          style={[
+            styles.tipRotator,
+            {
+              width: size,
+              height: size,
+              top: 0,
+              left: 0,
+              opacity: capOpacity,
+              transform: [{ rotate: tipRotate }],
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.capDot,
+              {
+                width: capSize,
+                height: capSize,
+                borderRadius: capRadius,
+                left: capLeft,
+                top: 0,
+                backgroundColor: ringColor,
+              },
+            ]}
+          />
+        </Animated.View>
+      )}
 
       {/* 6. Teks Nilai di Tengah Lingkaran */}
-      <View
-        style={[
-          styles.innerContent,
-          {
-            width: innerSize,
-            height: innerSize,
-          },
-        ]}
-      >
-        <Text style={[styles.scoreText, { color: textColor }]}>{displayScore}</Text>
-        {maxScore > 0 && (
-          <Text style={[styles.maxScoreText, { color: textSubColor }]}>/{Math.round(maxScore)}</Text>
-        )}
+      <View style={styles.innerContent} pointerEvents="none">
+        <Text style={[styles.scoreText, { color: textColor }]}>
+          {displayScore}
+          {maxScore > 0 && (
+            <Text style={[styles.maxScoreText, { color: textSubColor }]}>
+              /{Math.round(maxScore)}
+            </Text>
+          )}
+        </Text>
       </View>
     </Animated.View>
   );
 }
+
+export { AnimatedScoreCircle };
 
 const styles = StyleSheet.create({
   container: {
@@ -329,6 +342,11 @@ const styles = StyleSheet.create({
     top: 0,
   },
   innerContent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
@@ -338,10 +356,10 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '800',
     letterSpacing: -0.5,
+    textAlign: 'center',
   },
   maxScoreText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    marginTop: -2,
   },
 });

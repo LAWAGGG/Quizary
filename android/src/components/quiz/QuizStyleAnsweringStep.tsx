@@ -28,7 +28,6 @@ import { isAudioUrl, getQuestionImageUrl, getQuestionAudioUrl } from '../../util
 import { CustomDateTimePickerModal } from './CustomDateTimePickerModal';
 import { checkPassword } from '../../services/api_service';
 import { useKeyboardHeight } from '../../hooks/useKeyboardHeight';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 interface QuizStyleAnsweringStepProps {
   publicForm: any;
@@ -87,73 +86,8 @@ export function QuizStyleAnsweringStep({
   const [showPicker, setShowPicker] = useState<{ qId: number; mode: 'date' | 'time' | 'datetime' } | null>(null);
   const [showDropdownModal, setShowDropdownModal] = useState<number | null>(null);
 
-  const openPicker = (qId: number, mode: 'date' | 'time') => {
-    const currentVal = answers[qId];
-    let d = new Date();
-    if (typeof currentVal === 'string' && currentVal.trim().length > 0) {
-      if (mode === 'date') {
-        const parts = currentVal.trim().split('-');
-        if (parts.length === 3) {
-          const y = parseInt(parts[0], 10);
-          const m = parseInt(parts[1], 10) - 1;
-          const day = parseInt(parts[2], 10);
-          if (!isNaN(y) && !isNaN(m) && !isNaN(day)) {
-            d = new Date(y, m, day);
-          }
-        }
-      } else if (mode === 'time') {
-        const parts = currentVal.trim().split(':');
-        if (parts.length >= 2) {
-          const h = parseInt(parts[0], 10);
-          const min = parseInt(parts[1], 10);
-          if (!isNaN(h) && !isNaN(min)) {
-            d = new Date();
-            d.setHours(h, min, 0, 0);
-          }
-        }
-      }
-    }
-    setPickerDate(d);
+  const openPicker = (qId: number, mode: 'date' | 'time' | 'datetime') => {
     setShowPicker({ qId, mode });
-  };
-
-  const handlePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    const activePicker = showPicker;
-
-    if (event.type === 'dismissed') {
-      setShowPicker(null);
-      return;
-    }
-
-    if (event.type === 'set' || (Platform.OS === 'ios' && selectedDate)) {
-      setShowPicker(null);
-
-      let dateToSave = selectedDate;
-      if (!dateToSave && (event as any)?.nativeEvent?.timestamp) {
-        const ts = Number((event as any).nativeEvent.timestamp);
-        if (!isNaN(ts)) {
-          dateToSave = new Date(ts);
-        }
-      }
-      if (!dateToSave || isNaN(dateToSave.getTime())) {
-        dateToSave = pickerDate;
-      }
-
-      setPickerDate(dateToSave);
-
-      if (activePicker) {
-        if (activePicker.mode === 'date') {
-          const yyyy = dateToSave.getFullYear();
-          const mm = String(dateToSave.getMonth() + 1).padStart(2, '0');
-          const dd = String(dateToSave.getDate()).padStart(2, '0');
-          onTextChange(activePicker.qId, `${yyyy}-${mm}-${dd}`);
-        } else if (activePicker.mode === 'time') {
-          const hh = String(dateToSave.getHours()).padStart(2, '0');
-          const min = String(dateToSave.getMinutes()).padStart(2, '0');
-          onTextChange(activePicker.qId, `${hh}:${min}`);
-        }
-      }
-    }
   };
 
   const themeColor =
@@ -416,27 +350,28 @@ export function QuizStyleAnsweringStep({
   const isFileUploadType = rawType === 'file_upload' || rawType === 'file';
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar style="light" />
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0B0F19' : colors.bg }]} edges={['top']}>
+      <StatusBar style={isDark ? "light" : "dark"} />
 
       {/* TOP HEADER BAR — editorial solid, bukan gradient mengkilap AI */}
       <View style={[styles.headerBar, { backgroundColor: themeColor, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.14)' }]}>
         {/* Row 1: Info (i), Quiz Title, and Timer Pill */}
-        <View style={styles.headerRowTop}>
-          <View style={styles.headerLeftGroup}>
-            <TouchableOpacity
-              style={styles.infoIconBtn}
-              onPress={() => setShowInfoModal(true)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="information-circle-outline" size={22} color="#FFF" />
-            </TouchableOpacity>
-            <Text style={[styles.headerQuizTitle, { fontSize: 15 * fontSizeScale }]} numberOfLines={1}>
+        <View style={[styles.headerRowTop, { position: 'relative', minHeight: 32, justifyContent: 'space-between', alignItems: 'center' }]}>
+          <TouchableOpacity
+            style={[styles.infoIconBtn, { zIndex: 10 }]}
+            onPress={() => setShowInfoModal(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="information-circle-outline" size={22} color="#FFF" />
+          </TouchableOpacity>
+
+          <View style={{ position: 'absolute', left: 80, right: 80, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={[styles.headerQuizTitle, { fontSize: 15 * fontSizeScale, textAlign: 'center', marginHorizontal: 0 }]} numberOfLines={1}>
               {stripHtmlTags(publicForm?.title) || 'Kuis'}
             </Text>
           </View>
 
-          <View style={styles.headerRightGroup}>
+          <View style={[styles.headerRightGroup, { zIndex: 10 }]}>
             {formattedTimerStr ? (
               <View style={styles.timerBadge}>
                 <Ionicons name="timer-outline" size={14} color="#FFF" />
@@ -514,7 +449,7 @@ export function QuizStyleAnsweringStep({
                         styles.reviewFlagBtn,
                         reviewed[currentQ.id]
                           ? styles.reviewFlagBtnActive
-                          : { backgroundColor: 'rgba(255, 255, 255, 0.1)' },
+                          : { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : colors.inputBg, borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : colors.inputBorder },
                       ]}
                       onPress={() => toggleReview(currentQ.id)}
                       activeOpacity={0.75}
@@ -522,12 +457,12 @@ export function QuizStyleAnsweringStep({
                       <Ionicons
                         name={reviewed[currentQ.id] ? 'bookmark' : 'bookmark-outline'}
                         size={14}
-                        color={reviewed[currentQ.id] ? '#FFF' : '#94A3B8'}
+                        color={reviewed[currentQ.id] ? '#FFF' : (isDark ? '#94A3B8' : colors.textSub)}
                       />
                       <Text
                         style={[
                           styles.reviewFlagText,
-                          { color: reviewed[currentQ.id] ? '#FFF' : '#94A3B8' },
+                          { color: reviewed[currentQ.id] ? '#FFF' : (isDark ? '#94A3B8' : colors.textSub) },
                         ]}
                       >
                         {reviewed[currentQ.id] ? 'Marked' : 'Mark for review'}
@@ -540,7 +475,7 @@ export function QuizStyleAnsweringStep({
                     <View style={{ flex: 1 }}>
                       <RichTextRenderer
                         html={currentQ.question_text || ''}
-                        style={{ color: '#FFFFFF', fontSize: 22 * fontSizeScale, fontWeight: '800', textAlign: 'center', lineHeight: Math.round(22 * fontSizeScale * 1.45) }}
+                        style={{ color: isDark ? '#FFFFFF' : colors.text, fontSize: 22 * fontSizeScale, fontWeight: '800', textAlign: 'center', lineHeight: Math.round(22 * fontSizeScale * 1.45) }}
                       />
                     </View>
                     {currentQ.is_required !== false ? (
@@ -557,7 +492,7 @@ export function QuizStyleAnsweringStep({
                       <>
                         {imageUrl && (
                           <TouchableOpacity
-                            style={styles.qImageContainer}
+                            style={[styles.qImageContainer, { backgroundColor: isDark ? 'rgba(15, 23, 42, 0.6)' : colors.inputBg, borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : colors.inputBorder }]}
                             onPress={() => onOpenZoom(currentQ)}
                             activeOpacity={0.85}
                           >
@@ -584,12 +519,12 @@ export function QuizStyleAnsweringStep({
                   {/* Zoom Button Pill */}
                   <View style={styles.zoomCenterWrapper}>
                     <TouchableOpacity
-                      style={styles.zoomPillBtn}
+                      style={[styles.zoomPillBtn, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.7)' : colors.inputBg, borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : colors.inputBorder }]}
                       onPress={() => onOpenZoom(currentQ)}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="search-outline" size={14} color="#94A3B8" />
-                      <Text style={[styles.zoomPillText, { fontSize: 13 * fontSizeScale }]}>
+                      <Ionicons name="search-outline" size={14} color={colors.textSub} />
+                      <Text style={[styles.zoomPillText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
                         Zoom in on question
                       </Text>
                     </TouchableOpacity>
@@ -597,7 +532,7 @@ export function QuizStyleAnsweringStep({
 
                   {/* Helper Text (Pick one answer / Pick all that apply) */}
                   {isOptionType && (
-                    <Text style={styles.helperText}>
+                    <Text style={[styles.helperText, { color: colors.textSub, fontSize: 12 * fontSizeScale }]}>
                       {rawType === 'checkbox' ? 'Pick all that apply' : 'Pick one answer'}
                     </Text>
                   )}
@@ -620,44 +555,70 @@ export function QuizStyleAnsweringStep({
                             key={opt.id || i}
                             style={[
                               styles.optionTile,
-                              { backgroundColor: bgCol, flexDirection: optIsAudio ? 'column' : 'row', alignItems: optIsAudio ? 'stretch' : 'center' },
+                              { backgroundColor: bgCol, flexDirection: (optImgUrl && !optIsAudio) || optIsAudio ? 'column' : 'row', alignItems: (optImgUrl && !optIsAudio) || optIsAudio ? 'stretch' : 'center' },
                               selected && styles.optionTileSelected,
                             ]}
                             onPress={() => onSelectOption(currentQ.id, opt.id, isCheckbox)}
                             activeOpacity={0.85}
                           >
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
-                              {isCheckbox ? (
-                                <View style={[styles.checkboxBox, selected && { backgroundColor: bgCol, borderColor: bgCol }]}>
-                                  {selected && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                            {optImgUrl && !optIsAudio ? (
+                              <View style={{ width: '100%', gap: 12 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                                    {isCheckbox ? (
+                                      <View style={[styles.checkboxBox, selected && { backgroundColor: bgCol, borderColor: bgCol }]}>
+                                        {selected && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                                      </View>
+                                    ) : (
+                                      <View style={styles.letterCircle}>
+                                        <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
+                                      </View>
+                                    )}
+                                    <View style={{ flex: 1 }}>
+                                      <RichTextRenderer
+                                        html={opt.option_text || opt.text || ''}
+                                        style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
+                                      />
+                                    </View>
+                                  </View>
+                                  {selected && !isCheckbox && (
+                                    <View style={styles.selectedBadgeCircle}>
+                                      <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                                    </View>
+                                  )}
                                 </View>
-                              ) : (
-                                <View style={styles.letterCircle}>
-                                  <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
-                                </View>
-                              )}
-
-                              {optImgUrl && !optIsAudio && (
                                 <Image
                                   source={{ uri: optImgUrl }}
-                                  style={styles.optionImgStyle}
+                                  style={styles.optionImgLarge}
                                   resizeMode="contain"
                                 />
-                              )}
-
-                              <View style={{ flex: 1 }}>
-                                <RichTextRenderer
-                                  html={opt.option_text || opt.text || ''}
-                                  style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
-                                />
                               </View>
+                            ) : (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
+                                {isCheckbox ? (
+                                  <View style={[styles.checkboxBox, selected && { backgroundColor: bgCol, borderColor: bgCol }]}>
+                                    {selected && <Ionicons name="checkmark" size={14} color="#FFF" />}
+                                  </View>
+                                ) : (
+                                  <View style={styles.letterCircle}>
+                                    <Text style={styles.letterText}>{LETTERS[i % LETTERS.length]}</Text>
+                                  </View>
+                                )}
 
-                              {selected && !isCheckbox && (
-                                <View style={styles.selectedBadgeCircle}>
-                                  <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                                <View style={{ flex: 1 }}>
+                                  <RichTextRenderer
+                                    html={opt.option_text || opt.text || ''}
+                                    style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
+                                  />
                                 </View>
-                              )}
-                            </View>
+
+                                {selected && !isCheckbox && (
+                                  <View style={styles.selectedBadgeCircle}>
+                                    <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                                  </View>
+                                )}
+                              </View>
+                            )}
                             {optIsAudio && optImgUrl && (
                               <View style={{ marginTop: 12 }} onTouchEnd={(e: any) => e.stopPropagation?.()}>
                                 <AudioPlayer uri={optImgUrl} themeColor="#FFF" compact />
@@ -760,9 +721,9 @@ export function QuizStyleAnsweringStep({
                   {isShortAnswerType && (
                     <View style={styles.textInputBox}>
                       <TextInput
-                        style={[styles.shortAnswerInput, { height: 110, textAlignVertical: 'top', color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                        style={[styles.shortAnswerInput, { height: 110, textAlignVertical: 'top', color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                         placeholder="Write your answer here..."
-                        placeholderTextColor="#64748B"
+                        placeholderTextColor={colors.textMuted}
                         value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                         onChangeText={(text) => onTextChange(currentQ.id, text)}
                         multiline
@@ -774,9 +735,9 @@ export function QuizStyleAnsweringStep({
                   {isEssayType && (
                     <View style={styles.textInputBox}>
                       <TextInput
-                        style={[styles.shortAnswerInput, { height: 160, textAlignVertical: 'top', color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                        style={[styles.shortAnswerInput, { height: 160, textAlignVertical: 'top', color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                         placeholder="Write your answer here..."
-                        placeholderTextColor="#64748B"
+                        placeholderTextColor={colors.textMuted}
                         value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                         onChangeText={(text) => onTextChange(currentQ.id, text)}
                         multiline
@@ -787,12 +748,12 @@ export function QuizStyleAnsweringStep({
                   {/* Date Input */}
                   {isDateType && (
                     <View style={styles.textInputBox}>
-                      <Text style={styles.inputHelperLabel}>Format: YYYY-MM-DD (contoh: 2026-08-25)</Text>
+                      <Text style={[styles.inputHelperLabel, { color: colors.textSub }]}>Format: YYYY-MM-DD (contoh: 2026-08-25)</Text>
                       <View style={styles.pickerFieldRow}>
                         <TextInput
-                          style={[styles.shortAnswerInput, { flex: 1, color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                          style={[styles.shortAnswerInput, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                           placeholder="YYYY-MM-DD"
-                          placeholderTextColor="#64748B"
+                          placeholderTextColor={colors.textMuted}
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                           onChangeText={(text) => onTextChange(currentQ.id, text)}
                         />
@@ -810,12 +771,12 @@ export function QuizStyleAnsweringStep({
                   {/* Time Input */}
                   {isTimeType && (
                     <View style={styles.textInputBox}>
-                      <Text style={styles.inputHelperLabel}>Format: HH:MM (contoh: 14:30)</Text>
+                      <Text style={[styles.inputHelperLabel, { color: colors.textSub }]}>Format: HH:MM (contoh: 14:30)</Text>
                       <View style={styles.pickerFieldRow}>
                         <TextInput
-                          style={[styles.shortAnswerInput, { flex: 1, color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                          style={[styles.shortAnswerInput, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                           placeholder="HH:MM"
-                          placeholderTextColor="#64748B"
+                          placeholderTextColor={colors.textMuted}
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                           onChangeText={(text) => onTextChange(currentQ.id, text)}
                         />
@@ -833,12 +794,12 @@ export function QuizStyleAnsweringStep({
                   {/* Datetime Input — tgl dan waktu */}
                   {isDatetimeType && (
                     <View style={styles.textInputBox}>
-                      <Text style={styles.inputHelperLabel}>Format: YYYY-MM-DDTHH:MM (contoh: 2026-08-25T14:30)</Text>
+                      <Text style={[styles.inputHelperLabel, { color: colors.textSub }]}>Format: YYYY-MM-DDTHH:MM (contoh: 2026-08-25T14:30)</Text>
                       <View style={styles.pickerFieldRow}>
                         <TextInput
-                          style={[styles.shortAnswerInput, { flex: 1, color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                          style={[styles.shortAnswerInput, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                           placeholder="YYYY-MM-DDTHH:MM"
-                          placeholderTextColor="#64748B"
+                          placeholderTextColor={colors.textMuted}
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                           onChangeText={(text) => onTextChange(currentQ.id, text)}
                         />
@@ -853,18 +814,19 @@ export function QuizStyleAnsweringStep({
                     </View>
                   )}
 
-                  {showPicker && showPicker.mode !== 'datetime' && (
-                    <DateTimePicker
-                      value={pickerDate}
-                      mode={showPicker.mode as any}
-                      display="spinner"
-                      is24Hour={true}
-                      onChange={handlePickerChange}
-                      onDismiss={() => setShowPicker(null)}
+                  {showPicker && (
+                    <CustomDateTimePickerModal
+                      visible={!!showPicker}
+                      mode={showPicker.mode}
+                      initialValue={typeof answers[showPicker.qId] === 'string' ? answers[showPicker.qId] : ''}
+                      themeColor={themeColor}
+                      onConfirm={(formattedVal) => {
+                        onTextChange(showPicker.qId, formattedVal);
+                        setShowPicker(null);
+                      }}
+                      onCancel={() => setShowPicker(null)}
                     />
                   )}
-
-
 
                   {/* Password Input — blocked until correct */}
                   {isPasswordType && (
@@ -873,8 +835,8 @@ export function QuizStyleAnsweringStep({
                         style={[
                           styles.passwordContainer,
                           {
-                            backgroundColor: '#1E293B',
-                            borderColor: pwWrong[currentQ.id] ? '#EF4444' : 'rgba(255, 255, 255, 0.15)',
+                            backgroundColor: colors.inputBg,
+                            borderColor: pwWrong[currentQ.id] ? '#EF4444' : colors.inputBorder,
                           },
                           pwWrong[currentQ.id] && { borderWidth: 2 },
                         ]}
@@ -882,10 +844,10 @@ export function QuizStyleAnsweringStep({
                         <TextInput
                           style={[
                             styles.passwordInput,
-                            { color: '#FFF', fontSize: 16 * fontSizeScale },
+                            { color: colors.text, fontSize: 16 * fontSizeScale },
                           ]}
                           placeholder="Enter password"
-                          placeholderTextColor="#64748B"
+                          placeholderTextColor={colors.textMuted}
                           secureTextEntry={!showPassword}
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                           onChangeText={(text) => {
@@ -901,7 +863,7 @@ export function QuizStyleAnsweringStep({
                           <Ionicons
                             name={showPassword ? 'eye-outline' : 'eye-off-outline'}
                             size={20}
-                            color="#94A3B8"
+                            color={colors.textSub}
                           />
                         </TouchableOpacity>
                       </View>
@@ -920,16 +882,16 @@ export function QuizStyleAnsweringStep({
                   {isFileUploadType && (
                     <View style={styles.fileUploadBox}>
                       <TouchableOpacity
-                        style={styles.fileUploadBtn}
+                        style={[styles.fileUploadBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
                         onPress={() => onPickFile(currentQ.id)}
                         disabled={fileUploading[currentQ.id]}
                       >
                         {fileUploading[currentQ.id] ? (
-                          <ActivityIndicator color="#FFF" />
+                          <ActivityIndicator color={themeColor} />
                         ) : (
                           <>
-                            <Ionicons name="cloud-upload-outline" size={24} color="#FFF" />
-                            <Text style={styles.fileUploadBtnText}>
+                            <Ionicons name="cloud-upload-outline" size={24} color={colors.text} />
+                            <Text style={[styles.fileUploadBtnText, { color: colors.text }]}>
                               {answers[currentQ.id] ? 'File Attached' : 'Upload File'}
                             </Text>
                           </>
@@ -959,16 +921,16 @@ export function QuizStyleAnsweringStep({
       )}
 
       {/* BOTTOM ACTION BAR (Matching Web Screenshot 1 with Previous Text & Bright Green Next Button) */}
-      <View style={[styles.bottomActionBar, { paddingBottom: insets.bottom > 0 ? insets.bottom + 14 : 14 }]}>
+      <View style={[styles.bottomActionBar, { backgroundColor: isDark ? '#0F172A' : colors.cardBg, borderTopColor: colors.cardBorder, paddingBottom: insets.bottom > 0 ? insets.bottom + 14 : 14 }]}>
         <View style={styles.bottomButtonsRow}>
           {currentIdx > 0 && (
             <TouchableOpacity
-              style={styles.prevBtnWithText}
+              style={[styles.prevBtnWithText, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : colors.inputBg, borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : colors.inputBorder }]}
               onPress={handlePrev}
               activeOpacity={0.8}
             >
-              <Ionicons name="chevron-back" size={18} color="#94A3B8" />
-              <Text style={[styles.prevBtnText, { fontSize: 15 * fontSizeScale }]}>
+              <Ionicons name="chevron-back" size={18} color={colors.textSub} />
+              <Text style={[styles.prevBtnText, { color: colors.textSub, fontSize: 15 * fontSizeScale }]}>
                 {language === 'ID' ? 'Sebelumnya' : 'Previous'}
               </Text>
             </TouchableOpacity>
@@ -1185,6 +1147,12 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  optionImgLarge: {
+    width: '100%',
+    height: 160,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
   },
 
   zoomCenterWrapper: { width: '100%', alignItems: 'center', marginBottom: 12 },

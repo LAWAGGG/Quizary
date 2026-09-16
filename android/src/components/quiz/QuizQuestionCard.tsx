@@ -190,7 +190,7 @@ function QuizQuestionCardComponent({
                   </View>
                 )}
                 {!optIsAudio && optMedia && (
-                  <Image source={{ uri: optMedia }} style={{ width: '100%', height: 80, borderRadius: 10, marginTop: 10 }} resizeMode="contain" />
+                  <Image source={{ uri: optMedia }} style={{ width: '100%', height: 160, borderRadius: 12, marginTop: 12, backgroundColor: 'rgba(255,255,255,0.04)' }} resizeMode="contain" />
                 )}
               </TouchableOpacity>
             );

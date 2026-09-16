@@ -320,8 +320,8 @@ export default function ProfileScreen() {
     : user?.avatar
     ? {
         uri: user.avatar.startsWith('http')
-          ? `${user.avatar}?t=${Date.now()}`
-          : `${BASE_URL.replace('/api', '')}${user.avatar}?t=${Date.now()}`,
+          ? user.avatar
+          : `${BASE_URL.replace('/api', '')}${user.avatar}`,
       }
     : null;
 
