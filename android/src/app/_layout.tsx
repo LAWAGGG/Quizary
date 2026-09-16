@@ -1,14 +1,34 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View, LogBox } from 'react-native';
+import { ActivityIndicator, StyleSheet, View, LogBox, Text, TextInput } from 'react-native';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import {
+  useFonts,
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+} from '@expo-google-fonts/poppins';
 import { ThemeProvider as AppThemeProvider, useAppTheme } from '../context/ThemeContext';
 import { getMe, getToken, getStoredUser, removeToken } from '../services/api_service';
 import { AlertProvider } from '../context/AlertContext';
 
 import { processPendingSubmissions } from '../services/offline_sync_service';
+
+// Set global default font family to Poppins
+if ((Text as any).defaultProps) {
+  (Text as any).defaultProps.style = { fontFamily: 'Poppins_400Regular', ...((Text as any).defaultProps.style || {}) };
+} else {
+  (Text as any).defaultProps = { style: { fontFamily: 'Poppins_400Regular' } };
+}
+
+if ((TextInput as any).defaultProps) {
+  (TextInput as any).defaultProps.style = { fontFamily: 'Poppins_400Regular', ...((TextInput as any).defaultProps.style || {}) };
+} else {
+  (TextInput as any).defaultProps = { style: { fontFamily: 'Poppins_400Regular' } };
+}
 
 LogBox.ignoreLogs([
   'Cannot connect to Expo CLI',
@@ -26,6 +46,12 @@ SplashScreen.preventAutoHideAsync();
 function RootStack() {
   const { colors, isDark } = useAppTheme();
   const [checkingSession, setCheckingSession] = useState(true);
+  const [fontsLoaded] = useFonts({
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -90,7 +116,7 @@ function RootStack() {
     };
   }, []);
 
-  if (checkingSession) {
+  if (checkingSession || !fontsLoaded) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.bg }]}>
         <ActivityIndicator size="large" color={colors.primary} />

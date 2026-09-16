@@ -57,6 +57,8 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
     accent = colors.primary;
   }
 
+  const isInProgress = item.status === 'in_progress' && !isExpired;
+
   // Bulletproof sanitization for formTitle, dateStr, and scoreVal
   let formTitle = language === 'ID' ? 'Form Tanpa Judul' : 'Untitled Form';
   if (typeof item.form_title === 'string' && item.form_title.trim()) {
@@ -68,12 +70,23 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
   }
 
   let dateStr = '';
-  const rawDate = item.submitted_at || item.created_at || item.updated_at;
+  const rawDate = isInProgress
+    ? (item.started_at || item.created_at || item.updated_at)
+    : (item.submitted_at || item.updated_at || item.created_at);
+
   if (typeof rawDate === 'string') {
     dateStr = rawDate;
   } else if (typeof rawDate === 'number') {
     dateStr = String(rawDate);
   }
+
+  const getDateLabel = () => {
+    if (!dateStr) return '-';
+    if (isInProgress) {
+      return language === 'ID' ? `Dimulai: ${dateStr}` : `Started: ${dateStr}`;
+    }
+    return language === 'ID' ? `Dikirim: ${dateStr}` : `Submitted: ${dateStr}`;
+  };
 
   let scoreVal: string | number | null = null;
   if (item.reveal_score && item.score !== null && item.score !== undefined) {
@@ -113,9 +126,7 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
       {/* Bottom Row: Timestamp */}
       <View style={styles.bottomRow}>
         <Text style={[styles.dateText, { color: colors.textSub, fontSize: 12 * fontSizeScale }]}>
-          {language === 'ID'
-            ? `Dikirim: ${dateStr || '-'}`
-            : `Submitted: ${dateStr || '-'}`}
+          {getDateLabel()}
         </Text>
 
         {scoreVal !== null && (
