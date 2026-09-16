@@ -350,8 +350,8 @@ export function QuizStyleAnsweringStep({
   const isFileUploadType = rawType === 'file_upload' || rawType === 'file';
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar style="light" />
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0B0F19' : colors.bg }]} edges={['top']}>
+      <StatusBar style={isDark ? "light" : "dark"} />
 
       {/* TOP HEADER BAR — editorial solid, bukan gradient mengkilap AI */}
       <View style={[styles.headerBar, { backgroundColor: themeColor, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.14)' }]}>
@@ -448,7 +448,7 @@ export function QuizStyleAnsweringStep({
                         styles.reviewFlagBtn,
                         reviewed[currentQ.id]
                           ? styles.reviewFlagBtnActive
-                          : { backgroundColor: 'rgba(255, 255, 255, 0.1)' },
+                          : { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : colors.inputBg, borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : colors.inputBorder },
                       ]}
                       onPress={() => toggleReview(currentQ.id)}
                       activeOpacity={0.75}
@@ -456,12 +456,12 @@ export function QuizStyleAnsweringStep({
                       <Ionicons
                         name={reviewed[currentQ.id] ? 'bookmark' : 'bookmark-outline'}
                         size={14}
-                        color={reviewed[currentQ.id] ? '#FFF' : '#94A3B8'}
+                        color={reviewed[currentQ.id] ? '#FFF' : (isDark ? '#94A3B8' : colors.textSub)}
                       />
                       <Text
                         style={[
                           styles.reviewFlagText,
-                          { color: reviewed[currentQ.id] ? '#FFF' : '#94A3B8' },
+                          { color: reviewed[currentQ.id] ? '#FFF' : (isDark ? '#94A3B8' : colors.textSub) },
                         ]}
                       >
                         {reviewed[currentQ.id] ? 'Marked' : 'Mark for review'}
@@ -474,7 +474,7 @@ export function QuizStyleAnsweringStep({
                     <View style={{ flex: 1 }}>
                       <RichTextRenderer
                         html={currentQ.question_text || ''}
-                        style={{ color: '#FFFFFF', fontSize: 22 * fontSizeScale, fontWeight: '800', textAlign: 'center', lineHeight: Math.round(22 * fontSizeScale * 1.45) }}
+                        style={{ color: isDark ? '#FFFFFF' : colors.text, fontSize: 22 * fontSizeScale, fontWeight: '800', textAlign: 'center', lineHeight: Math.round(22 * fontSizeScale * 1.45) }}
                       />
                     </View>
                     {currentQ.is_required !== false ? (
@@ -491,7 +491,7 @@ export function QuizStyleAnsweringStep({
                       <>
                         {imageUrl && (
                           <TouchableOpacity
-                            style={styles.qImageContainer}
+                            style={[styles.qImageContainer, { backgroundColor: isDark ? 'rgba(15, 23, 42, 0.6)' : colors.inputBg, borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : colors.inputBorder }]}
                             onPress={() => onOpenZoom(currentQ)}
                             activeOpacity={0.85}
                           >
@@ -518,12 +518,12 @@ export function QuizStyleAnsweringStep({
                   {/* Zoom Button Pill */}
                   <View style={styles.zoomCenterWrapper}>
                     <TouchableOpacity
-                      style={styles.zoomPillBtn}
+                      style={[styles.zoomPillBtn, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.7)' : colors.inputBg, borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : colors.inputBorder }]}
                       onPress={() => onOpenZoom(currentQ)}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="search-outline" size={14} color="#94A3B8" />
-                      <Text style={[styles.zoomPillText, { fontSize: 13 * fontSizeScale }]}>
+                      <Ionicons name="search-outline" size={14} color={colors.textSub} />
+                      <Text style={[styles.zoomPillText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
                         Zoom in on question
                       </Text>
                     </TouchableOpacity>
@@ -531,7 +531,7 @@ export function QuizStyleAnsweringStep({
 
                   {/* Helper Text (Pick one answer / Pick all that apply) */}
                   {isOptionType && (
-                    <Text style={styles.helperText}>
+                    <Text style={[styles.helperText, { color: colors.textSub, fontSize: 12 * fontSizeScale }]}>
                       {rawType === 'checkbox' ? 'Pick all that apply' : 'Pick one answer'}
                     </Text>
                   )}
@@ -720,9 +720,9 @@ export function QuizStyleAnsweringStep({
                   {isShortAnswerType && (
                     <View style={styles.textInputBox}>
                       <TextInput
-                        style={[styles.shortAnswerInput, { height: 110, textAlignVertical: 'top', color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                        style={[styles.shortAnswerInput, { height: 110, textAlignVertical: 'top', color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                         placeholder="Write your answer here..."
-                        placeholderTextColor="#64748B"
+                        placeholderTextColor={colors.textMuted}
                         value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                         onChangeText={(text) => onTextChange(currentQ.id, text)}
                         multiline
@@ -734,9 +734,9 @@ export function QuizStyleAnsweringStep({
                   {isEssayType && (
                     <View style={styles.textInputBox}>
                       <TextInput
-                        style={[styles.shortAnswerInput, { height: 160, textAlignVertical: 'top', color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                        style={[styles.shortAnswerInput, { height: 160, textAlignVertical: 'top', color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                         placeholder="Write your answer here..."
-                        placeholderTextColor="#64748B"
+                        placeholderTextColor={colors.textMuted}
                         value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                         onChangeText={(text) => onTextChange(currentQ.id, text)}
                         multiline
@@ -747,12 +747,12 @@ export function QuizStyleAnsweringStep({
                   {/* Date Input */}
                   {isDateType && (
                     <View style={styles.textInputBox}>
-                      <Text style={styles.inputHelperLabel}>Format: YYYY-MM-DD (contoh: 2026-08-25)</Text>
+                      <Text style={[styles.inputHelperLabel, { color: colors.textSub }]}>Format: YYYY-MM-DD (contoh: 2026-08-25)</Text>
                       <View style={styles.pickerFieldRow}>
                         <TextInput
-                          style={[styles.shortAnswerInput, { flex: 1, color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                          style={[styles.shortAnswerInput, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                           placeholder="YYYY-MM-DD"
-                          placeholderTextColor="#64748B"
+                          placeholderTextColor={colors.textMuted}
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                           onChangeText={(text) => onTextChange(currentQ.id, text)}
                         />
@@ -770,12 +770,12 @@ export function QuizStyleAnsweringStep({
                   {/* Time Input */}
                   {isTimeType && (
                     <View style={styles.textInputBox}>
-                      <Text style={styles.inputHelperLabel}>Format: HH:MM (contoh: 14:30)</Text>
+                      <Text style={[styles.inputHelperLabel, { color: colors.textSub }]}>Format: HH:MM (contoh: 14:30)</Text>
                       <View style={styles.pickerFieldRow}>
                         <TextInput
-                          style={[styles.shortAnswerInput, { flex: 1, color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                          style={[styles.shortAnswerInput, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                           placeholder="HH:MM"
-                          placeholderTextColor="#64748B"
+                          placeholderTextColor={colors.textMuted}
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                           onChangeText={(text) => onTextChange(currentQ.id, text)}
                         />
@@ -793,12 +793,12 @@ export function QuizStyleAnsweringStep({
                   {/* Datetime Input — tgl dan waktu */}
                   {isDatetimeType && (
                     <View style={styles.textInputBox}>
-                      <Text style={styles.inputHelperLabel}>Format: YYYY-MM-DDTHH:MM (contoh: 2026-08-25T14:30)</Text>
+                      <Text style={[styles.inputHelperLabel, { color: colors.textSub }]}>Format: YYYY-MM-DDTHH:MM (contoh: 2026-08-25T14:30)</Text>
                       <View style={styles.pickerFieldRow}>
                         <TextInput
-                          style={[styles.shortAnswerInput, { flex: 1, color: '#FFF', fontSize: 16 * fontSizeScale }]}
+                          style={[styles.shortAnswerInput, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                           placeholder="YYYY-MM-DDTHH:MM"
-                          placeholderTextColor="#64748B"
+                          placeholderTextColor={colors.textMuted}
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                           onChangeText={(text) => onTextChange(currentQ.id, text)}
                         />
@@ -827,8 +827,6 @@ export function QuizStyleAnsweringStep({
                     />
                   )}
 
-
-
                   {/* Password Input — blocked until correct */}
                   {isPasswordType && (
                     <View style={styles.textInputBox}>
@@ -836,8 +834,8 @@ export function QuizStyleAnsweringStep({
                         style={[
                           styles.passwordContainer,
                           {
-                            backgroundColor: '#1E293B',
-                            borderColor: pwWrong[currentQ.id] ? '#EF4444' : 'rgba(255, 255, 255, 0.15)',
+                            backgroundColor: colors.inputBg,
+                            borderColor: pwWrong[currentQ.id] ? '#EF4444' : colors.inputBorder,
                           },
                           pwWrong[currentQ.id] && { borderWidth: 2 },
                         ]}
@@ -845,10 +843,10 @@ export function QuizStyleAnsweringStep({
                         <TextInput
                           style={[
                             styles.passwordInput,
-                            { color: '#FFF', fontSize: 16 * fontSizeScale },
+                            { color: colors.text, fontSize: 16 * fontSizeScale },
                           ]}
                           placeholder="Enter password"
-                          placeholderTextColor="#64748B"
+                          placeholderTextColor={colors.textMuted}
                           secureTextEntry={!showPassword}
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
                           onChangeText={(text) => {
@@ -864,7 +862,7 @@ export function QuizStyleAnsweringStep({
                           <Ionicons
                             name={showPassword ? 'eye-outline' : 'eye-off-outline'}
                             size={20}
-                            color="#94A3B8"
+                            color={colors.textSub}
                           />
                         </TouchableOpacity>
                       </View>
@@ -883,16 +881,16 @@ export function QuizStyleAnsweringStep({
                   {isFileUploadType && (
                     <View style={styles.fileUploadBox}>
                       <TouchableOpacity
-                        style={styles.fileUploadBtn}
+                        style={[styles.fileUploadBtn, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}
                         onPress={() => onPickFile(currentQ.id)}
                         disabled={fileUploading[currentQ.id]}
                       >
                         {fileUploading[currentQ.id] ? (
-                          <ActivityIndicator color="#FFF" />
+                          <ActivityIndicator color={themeColor} />
                         ) : (
                           <>
-                            <Ionicons name="cloud-upload-outline" size={24} color="#FFF" />
-                            <Text style={styles.fileUploadBtnText}>
+                            <Ionicons name="cloud-upload-outline" size={24} color={colors.text} />
+                            <Text style={[styles.fileUploadBtnText, { color: colors.text }]}>
                               {answers[currentQ.id] ? 'File Attached' : 'Upload File'}
                             </Text>
                           </>
@@ -922,16 +920,16 @@ export function QuizStyleAnsweringStep({
       )}
 
       {/* BOTTOM ACTION BAR (Matching Web Screenshot 1 with Previous Text & Bright Green Next Button) */}
-      <View style={[styles.bottomActionBar, { paddingBottom: insets.bottom > 0 ? insets.bottom + 14 : 14 }]}>
+      <View style={[styles.bottomActionBar, { backgroundColor: isDark ? '#0F172A' : colors.cardBg, borderTopColor: colors.cardBorder, paddingBottom: insets.bottom > 0 ? insets.bottom + 14 : 14 }]}>
         <View style={styles.bottomButtonsRow}>
           {currentIdx > 0 && (
             <TouchableOpacity
-              style={styles.prevBtnWithText}
+              style={[styles.prevBtnWithText, { backgroundColor: isDark ? 'rgba(30, 41, 59, 0.6)' : colors.inputBg, borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : colors.inputBorder }]}
               onPress={handlePrev}
               activeOpacity={0.8}
             >
-              <Ionicons name="chevron-back" size={18} color="#94A3B8" />
-              <Text style={[styles.prevBtnText, { fontSize: 15 * fontSizeScale }]}>
+              <Ionicons name="chevron-back" size={18} color={colors.textSub} />
+              <Text style={[styles.prevBtnText, { color: colors.textSub, fontSize: 15 * fontSizeScale }]}>
                 {language === 'ID' ? 'Sebelumnya' : 'Previous'}
               </Text>
             </TouchableOpacity>
