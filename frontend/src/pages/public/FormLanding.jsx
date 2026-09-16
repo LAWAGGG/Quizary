@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Lock, Clock, ArrowRight, CheckCircle2, HelpCircle } from 'lucide-react'
+import { Lock, Clock, ArrowRight, CheckCircle2, HelpCircle, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button, Input, Card, AppMark, FallbackPage, DotCorner, SpotlightCard, AuroraBg, RichText } from '../../components/ui'
 import { useTheme } from '../../hooks/useTheme'
@@ -46,6 +46,7 @@ export default function FormLanding() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [starting, setStarting] = useState(false)
 
   useEffect(() => {
     api.get(`/q/${shortCode}`)
@@ -55,6 +56,8 @@ export default function FormLanding() {
   }, [shortCode])
 
   const handleStart = async () => {
+    if (starting) return
+    setStarting(true)
     try {
       const res = await api.get(`/q/${shortCode}/start`)
       const data = res.data
@@ -73,6 +76,8 @@ export default function FormLanding() {
       } else {
         setError(err.response?.data?.message || err.response?.data?.detail || 'Something went wrong')
       }
+    } finally {
+      setStarting(false)
     }
   }
 
@@ -158,8 +163,8 @@ export default function FormLanding() {
           <p className="text-white/70 text-sm mt-2 mb-6">
             {t('landing.sessionExpiredDesc')}
           </p>
-          <Button variant="secondary" size="xl" onClick={handleStart}>
-            {t('landing.startNewSession')}
+          <Button variant="secondary" size="xl" onClick={handleStart} disabled={starting} loading={starting}>
+            {starting ? t('landing.starting') : t('landing.startNewSession')}
           </Button>
         </BlockedState>
       )
@@ -321,10 +326,20 @@ export default function FormLanding() {
           >
             <button
               onClick={handleStart}
-              className="inline-flex items-center gap-2 h-14 px-10 rounded-full bg-white text-base font-bold text-[var(--color-primary)] hover:scale-[1.03] active:scale-95 transition-transform shadow-lift"
+              disabled={starting}
+              className="inline-flex items-center gap-2 h-14 px-10 rounded-full bg-white text-base font-bold text-[var(--color-primary)] hover:scale-[1.03] active:scale-95 transition-transform shadow-lift disabled:opacity-70 disabled:cursor-wait disabled:hover:scale-100"
             >
-              {t('landing.start')}
-              <ArrowRight className="w-5 h-5" />
+              {starting ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  {t('landing.starting')}
+                </>
+              ) : (
+                <>
+                  {t('landing.start')}
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
             </button>
           </motion.div>
         </div>
@@ -358,8 +373,8 @@ export default function FormLanding() {
           <Card className="p-6 md:p-7 h-full" style={{ borderColor: palette.border }}>
             <h1 className="font-display text-2xl font-bold text-ink dark:text-gray-100 mb-2"><RichText html={resolveRichHtml(form.title)} /></h1>
             {form.description && <p className="text-gray-600 dark:text-gray-400 mb-6"><RichText html={resolveRichHtml(form.description)} className="rich-text" /></p>}
-            <Button onClick={handleStart} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }} icon={<ArrowRight className="w-4 h-4" />}>
-              {t('landing.start')}
+            <Button onClick={handleStart} disabled={starting} loading={starting} className="w-full" size="lg" style={{ background: palette.cta, color: palette.onBase }} icon={<ArrowRight className="w-4 h-4" />}>
+              {starting ? t('landing.starting') : t('landing.start')}
             </Button>
           </Card>
         </SpotlightCard>

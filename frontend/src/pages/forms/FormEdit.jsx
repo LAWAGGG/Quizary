@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Copy, Check, Save, Trash2, ImageUp, Link2, Info, Lock, Settings2, Download, QrCode, X, Palette, ExternalLink } from 'lucide-react'
+import { Copy, Check, Save, Trash2, ImageUp, Link2, Info, Lock, Settings2, Download, QrCode, X, Palette, ExternalLink, Loader2 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
@@ -76,6 +76,8 @@ export default function FormEdit() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [bannerUploading, setBannerUploading] = useState(false)
+  const [bannerRemoving, setBannerRemoving] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const [showQr, setShowQr] = useState(false)
   const [errors, setErrors] = useState({})
@@ -385,9 +387,11 @@ export default function FormEdit() {
 
   const handleBanner = async (e) => {
     const file = e.target.files[0]
-    if (!file) return
+    if (!file || bannerUploading) return
+    e.target.value = ''
     const fd = new FormData()
     fd.append('banner', file)
+    setBannerUploading(true)
     try {
       const res = await api.post(`/forms/${id}/banner`, fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -398,10 +402,14 @@ export default function FormEdit() {
       toast.success(t('formEdit.bannerUploaded'))
     } catch (err) {
       toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to upload banner')
+    } finally {
+      setBannerUploading(false)
     }
   }
 
   const handleRemoveBanner = async () => {
+    if (bannerRemoving) return
+    setBannerRemoving(true)
     try {
       await api.delete(`/forms/${id}/banner`)
       setForm((prev) => ({ ...prev, banner_path: null }))
@@ -409,6 +417,8 @@ export default function FormEdit() {
       toast.success('Banner removed')
     } catch (err) {
       toast.error(err.response?.data?.message || err.response?.data?.detail || 'Failed to remove banner')
+    } finally {
+      setBannerRemoving(false)
     }
   }
 
@@ -789,25 +799,34 @@ export default function FormEdit() {
           </SectionCard>
           <SectionCard title={t('formEdit.banner')} icon={<ImageUp className="w-4 h-4" />}>
             {form.banner_path ? (
-              <img src={resolveMediaUrl(form.banner_path)} alt="Banner" className="w-full h-36 object-cover rounded-xl mb-4" />
+              <div className="relative mb-4">
+                <img src={resolveMediaUrl(form.banner_path)} alt="Banner" className="w-full h-36 object-cover rounded-xl" />
+                {bannerUploading && (
+                  <div className="absolute inset-0 rounded-xl bg-ink/50 flex items-center justify-center gap-2 text-white text-sm font-medium">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    {t('formEdit.uploading')}
+                  </div>
+                )}
+              </div>
             ) : (
               <button
                 type="button"
+                disabled={bannerUploading}
                 onClick={() => fileRef.current?.click()}
-                className="w-full h-36 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-2 text-gray-400 dark:text-gray-500 hover:text-primary"
+                className="w-full h-36 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-primary/50 transition-colors flex flex-col items-center justify-center gap-2 text-gray-400 dark:text-gray-500 hover:text-primary disabled:opacity-60 disabled:cursor-wait disabled:hover:border-gray-200 dark:disabled:hover:border-gray-700"
               >
-                <ImageUp className="w-6 h-6" />
-                <span className="text-sm font-medium">{t('formEdit.uploadBanner')}</span>
+                {bannerUploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <ImageUp className="w-6 h-6" />}
+                <span className="text-sm font-medium">{bannerUploading ? t('formEdit.uploading') : t('formEdit.uploadBanner')}</span>
               </button>
             )}
-            <input ref={fileRef} type="file" accept="image/*" onChange={handleBanner} className="hidden" />
+            <input ref={fileRef} type="file" accept="image/*" onChange={handleBanner} className="hidden" disabled={bannerUploading} />
             {form.banner_path && (
               <div className="flex gap-2">
-                <Button type="button" variant="secondary" size="sm" className="flex-1" onClick={() => fileRef.current?.click()} icon={<ImageUp className="w-4 h-4" />}>
-                  {t('formEdit.changeBanner')}
+                <Button type="button" variant="secondary" size="sm" className="flex-1" disabled={bannerUploading || bannerRemoving} loading={bannerUploading} onClick={() => fileRef.current?.click()} icon={<ImageUp className="w-4 h-4" />}>
+                  {bannerUploading ? t('formEdit.uploading') : t('formEdit.changeBanner')}
                 </Button>
-                <Button type="button" variant="ghost-danger" size="sm" className="flex-1" onClick={handleRemoveBanner} icon={<Trash2 className="w-4 h-4" />}>
-                  {t('formEdit.removeBanner')}
+                <Button type="button" variant="ghost-danger" size="sm" className="flex-1" disabled={bannerUploading || bannerRemoving} loading={bannerRemoving} onClick={handleRemoveBanner} icon={<Trash2 className="w-4 h-4" />}>
+                  {bannerRemoving ? t('formEdit.removing') : t('formEdit.removeBanner')}
                 </Button>
               </div>
             )}

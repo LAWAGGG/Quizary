@@ -406,6 +406,8 @@
     "uploadBanner": "Unggah banner",
     "changeBanner": "Ganti banner",
     "removeBanner": "Hapus",
+    "uploading": "Mengunggah...",
+    "removing": "Menghapus...",
     "unsavedChanges": "Ada perubahan belum disimpan",
     "discard": "Buang",
     "saveChanges": "Simpan Perubahan",
@@ -655,6 +657,7 @@
     "namePlaceholder": "Nama kamu",
     "emailOptional": "Email (opsional)",
     "start": "Mulai",
+    "starting": "Memulai...",
     "questionCount": "{{count}} soal",
     "timeMin": "{{minutes}} menit",
     "previewMode": "Mode pratinjau — belum dipublikasikan"

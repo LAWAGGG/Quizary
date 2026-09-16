@@ -6,6 +6,7 @@ quizary-*
 .superpowers/
 
 .env
+.env.prod
 .env.local
 .env.*.local
 **/.env
