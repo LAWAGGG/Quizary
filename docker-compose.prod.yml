@@ -61,6 +61,8 @@ services:
       - secret_key
     volumes:
       - backend_uploads:/app/uploads
+    ports:
+      - "8000:8000"
     networks:
       - internal
       - web

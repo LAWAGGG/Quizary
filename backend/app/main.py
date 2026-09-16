@@ -36,9 +36,7 @@ if not _quizary_logger.handlers:
     _quizary_logger.addHandler(_handler)
 _quizary_logger.setLevel(logging.INFO)
 
-# Hormati X-Forwarded-Proto/Host dari ngrok/nginx supaya request.base_url
-# (dipakai file_url) berskema https — tanpa ini URL file jadi http dan
-# diblokir browser sebagai mixed-content di halaman https.
+
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 logger = logging.getLogger("quizary")
