@@ -15,7 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
-import { stripHtmlTags } from '../RichTextRenderer';
+import { stripHtmlTags, RichTextRenderer } from '../RichTextRenderer';
 import { getSubmissionDetail, getLeaderboard } from '../../services/api_service';
 import { isAudioUrl, extractMediaUrl } from '../../utils/media';
 import { AudioPlayer } from '../AudioPlayer';
@@ -175,10 +175,19 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
                 {language === 'ID' ? 'TERKIRIM' : 'SUBMITTED'}
               </Text>
 
-              {/* Title */}
-              <Text style={[styles.formMainTitle, { color: colors.text }]}>
-                {thankYouText}
-              </Text>
+              {/* Title / Thank you message */}
+              {hasThanks ? (
+                <View style={{ width: '100%', marginVertical: 10 }}>
+                  <RichTextRenderer
+                    html={rawThanks}
+                    style={{ textAlign: 'center', color: colors.text, fontSize: 16 }}
+                  />
+                </View>
+              ) : (
+                <Text style={[styles.formMainTitle, { color: colors.text }]}>
+                  {thankYouText}
+                </Text>
+              )}
 
               {/* Offline Pending Sync Badge */}
               {isOfflinePending && (
@@ -284,9 +293,18 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
             ) : null}
 
             {/* Main Success / Thank you Title */}
-            <Text style={[styles.mainTitle, { color: colors.text }]}>
-              {thankYouText}
-            </Text>
+            {hasThanks ? (
+              <View style={{ width: '100%', marginVertical: 10 }}>
+                <RichTextRenderer
+                  html={rawThanks}
+                  style={{ textAlign: 'center', color: colors.text, fontSize: 18, fontWeight: 'bold' }}
+                />
+              </View>
+            ) : (
+              <Text style={[styles.mainTitle, { color: colors.text }]}>
+                {thankYouText}
+              </Text>
+            )}
 
             {/* Cheating Warning Badge if applicable */}
             {isCheating && (

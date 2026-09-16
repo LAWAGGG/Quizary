@@ -131,10 +131,9 @@ interface RichTextRendererProps {
 }
 
 function needsRichWebView(html: string): boolean {
+  if (!html || typeof html !== 'string') return false;
   if (hasMathFormulas(html)) return true;
-  // ONLY use WebView for math formulas, code blocks, tables, or images that cannot be rendered with native Text
-  return /<(pre|code|table|img)[\s>]/i.test(html)
-    || /class="[^"]*ql-(code-block|syntax)/i.test(html);
+  return /<[a-z][\s\S]*>/i.test(html);
 }
 
 export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendererProps) {
@@ -154,7 +153,7 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
   const lineHeight = (flattenedStyle.lineHeight as number) || Math.round(fontSize * 1.45);
 
   if (needsWebView) {
-    // Mirrors frontend/src/index.css rich-text section (code block dark bg, inline code, lists, blockquote, katex, etc)
+    // Mirrors frontend/src/index.css rich-text section (code block dark bg, inline code, lists, blockquote, katex, links, etc)
     const richHtml = `
       <!DOCTYPE html>
       <html>
@@ -178,21 +177,34 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
             overflow: hidden;
             word-break: break-word;
           }
-          .rich-text { display: block; }
-          .rich-text p { margin: 0; }
+          .rich-text { display: block; width: 100%; }
+          .rich-text p { margin: 0; padding: 0; }
           .rich-text p + p { margin-top: 0.5em; }
-          .rich-text a { color: #6C5CE7; text-decoration: underline; word-break: break-word; }
-          .rich-text h1, .rich-text h2, .rich-text h3 { font-weight: 600; line-height: 1.3; margin: 0.6em 0 0.3em; }
-          .rich-text h1 { font-size: 2em; } .rich-text h2 { font-size: 1.5em; } .rich-text h3 { font-size: 1.17em; }
-          .rich-text blockquote { border-left: 4px solid rgba(108,92,231,0.4); padding-left: 16px; margin: 0.5em 0; }
-          /* Code block — match frontend index.css dark #0f0f0f — HANYA container yang punya bg/border */
-          .rich-text .ql-code-block-container, .rich-text pre.ql-syntax, .rich-text pre.ql-code-block {
+          .rich-text a { color: #3B82F6; text-decoration: underline; word-break: break-all; font-weight: 500; }
+          .rich-text h1, .rich-text h2, .rich-text h3, .rich-text h4, .rich-text h5, .rich-text h6 { font-weight: 700; line-height: 1.3; margin: 0.5em 0 0.25em; color: inherit; }
+          .rich-text h1 { font-size: 1.8em; } .rich-text h2 { font-size: 1.4em; } .rich-text h3 { font-size: 1.2em; }
+          .rich-text strong, .rich-text b { font-weight: 700; }
+          .rich-text em, .rich-text i { font-style: italic; }
+          .rich-text u { text-decoration: underline; }
+          .rich-text s, .rich-text strike, .rich-text del { text-decoration: line-through; }
+          .rich-text sub { vertical-align: sub; font-size: 0.75em; }
+          .rich-text sup { vertical-align: super; font-size: 0.75em; }
+          .rich-text blockquote { border-left: 4px solid #6C5CE7; padding-left: 12px; margin: 0.5em 0; color: rgba(255,255,255,0.7); font-style: italic; }
+          .rich-text .ql-size-small { font-size: 0.75em; }
+          .rich-text .ql-size-large { font-size: 1.35em; }
+          .rich-text .ql-size-huge { font-size: 2.0em; }
+          .rich-text .ql-font-serif { font-family: Georgia, Times, "Times New Roman", serif; }
+          .rich-text .ql-font-monospace { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; }
+          .rich-text .ql-align-center { text-align: center; }
+          .rich-text .ql-align-right { text-align: right; }
+          .rich-text .ql-align-justify { text-align: justify; }
+          /* Code block container & syntax (matches Web #0f0f0f dark background) */
+          .rich-text .ql-code-block-container, .rich-text pre.ql-syntax, .rich-text pre.ql-code-block, .rich-text pre {
             background: #0f0f0f !important; color: #f5f5f5 !important; border: 1px solid #27272a !important;
-            border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-            font-size: 0.8125rem; line-height: 1.6; padding: 0.75rem 1rem; margin: 0.6em 0;
+            border-radius: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+            font-size: 0.85rem; line-height: 1.6; padding: 0.85rem 1rem; margin: 0.6em 0;
             white-space: pre-wrap; word-break: break-word; overflow-x: auto; tab-size: 4; display: block; text-align: left !important; width: 100%; box-sizing: border-box;
           }
-          /* Inner lines — transparan, tanpa border, biar tidak jadi kotak-kotak terpisah seperti di screenshot */
           .rich-text .ql-code-block-container .ql-code-block, .rich-text div.ql-code-block {
             background: transparent !important; border: none !important; padding: 0 !important; margin: 0 !important; border-radius: 0 !important; white-space: pre-wrap; display: block;
           }
@@ -201,15 +213,11 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
           .rich-text code { background: #0f0f0f !important; border: 1px solid #27272a !important; border-radius: 0.375rem;
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85em; padding: 0.15em 0.4em; color: #f5f5f5 !important; word-break: break-word; }
           .rich-text pre code, .rich-text .ql-code-block code, .rich-text .ql-code-block-container code { background: transparent !important; border: none !important; padding: 0 !important; color: inherit !important; }
-          /* Lists — match frontend */
-          .rich-text ul, .rich-text ol { margin: 0.5em 0; padding-left: 0; }
-          .rich-text li { list-style-type: none; padding-left: 1.5em; position: relative; margin: 0.15em 0; }
-          .rich-text li::before { display: inline-block; margin-left: -1.5em; margin-right: 0.3em; text-align: right; width: 1.2em; }
-          .rich-text ol { counter-reset: list-0; } .rich-text li[data-list="ordered"] { counter-increment: list-0; }
-          .rich-text li[data-list="ordered"]::before { content: counter(list-0, decimal) '. '; }
-          .rich-text li[data-list="bullet"]::before { content: '\\2022'; }
-          .rich-text li[data-list="checked"]::before { content: '\\2611'; } .rich-text li[data-list="unchecked"]::before { content: '\\2610'; }
-          .rich-text .ql-align-center { text-align: center; } .rich-text .ql-align-right { text-align: right; } .rich-text .ql-align-justify { text-align: justify; }
+          /* Lists */
+          .rich-text ul, .rich-text ol { margin: 0.5em 0; padding-left: 1.2em; }
+          .rich-text li { margin: 0.25em 0; }
+          .rich-text li[data-list="bullet"] { list-style-type: disc; }
+          .rich-text li[data-list="ordered"] { list-style-type: decimal; }
           .rich-text .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; padding: 0.15em 0; }
           .rich-text .katex { font-size: 1.1em; color: ${textColor}; }
           .rich-text img { max-width: 100%; height: auto; border-radius: 8px; }
@@ -225,6 +233,18 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'HEIGHT_CHANGE', height: h }));
             }
           }
+          document.addEventListener('click', function(e) {
+            var target = e.target;
+            while (target && target.tagName !== 'A') {
+              target = target.parentElement;
+            }
+            if (target && target.href) {
+              e.preventDefault();
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'OPEN_LINK', url: target.href }));
+              }
+            }
+          });
           try {
             var formulas = document.querySelectorAll('.ql-formula');
             formulas.forEach(function(el) {
@@ -268,6 +288,8 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
               const data = JSON.parse(event.nativeEvent.data);
               if (data.type === 'HEIGHT_CHANGE' && data.height) {
                 setWebViewHeight(data.height + 6);
+              } else if (data.type === 'OPEN_LINK' && data.url) {
+                import('react-native').then(({ Linking }) => Linking.openURL(data.url).catch(() => {}));
               }
             } catch (e) {}
           }}
