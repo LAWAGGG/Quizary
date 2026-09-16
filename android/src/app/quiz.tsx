@@ -63,7 +63,8 @@ function parseWibDate(dateStr: string): Date | null {
 }
 
 function formatTimer(ms: number | null) {
-  if (ms === null || ms <= 0) return '00:00';
+  if (ms === null) return null;
+  if (ms <= 0) return '00:00';
   const totalSec = Math.floor(ms / 1000);
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
@@ -1276,10 +1277,12 @@ export default function QuizScreen() {
             <Text style={[styles.formHeaderTitle, { color: colors.text }]} numberOfLines={1}>
               {publicForm.title?.replace(/<[^>]*>/g, '') || 'Form'}
             </Text>
-            <View style={[styles.timerPill, { backgroundColor: timeLeft !== null && timeLeft < 60000 ? '#EF4444' : colors.inputBg }]}>
-              <Ionicons name="timer-outline" size={14} color={timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text} />
-              <Text style={[styles.timerText, { color: timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text }]}>{formattedTimer}</Text>
-            </View>
+            {formattedTimer ? (
+              <View style={[styles.timerPill, { backgroundColor: timeLeft !== null && timeLeft < 60000 ? '#EF4444' : colors.inputBg }]}>
+                <Ionicons name="timer-outline" size={14} color={timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text} />
+                <Text style={[styles.timerText, { color: timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text }]}>{formattedTimer}</Text>
+              </View>
+            ) : null}
           </View>
 
           <ScrollView
