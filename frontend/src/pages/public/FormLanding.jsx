@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Lock, Clock, ArrowRight, CheckCircle2, HelpCircle, Loader2 } from 'lucide-react'
@@ -12,6 +12,29 @@ import { stripTags, resolveRichHtml } from '../../lib/sanitize'
 import { resolveMediaUrl } from '../../lib/media'
 
 const BUBBLES = Array.from({ length: 12 }, (_, i) => i)
+
+// Countdown "dibuka dalam" dari starts_in_seconds (detik, jam server).
+// Tick pakai performance.now agar ubah jam device tidak menggeser hitungan.
+// Hanya tampil bila diset; jam server tetap background (tidak ditampilkan).
+function OpensInCountdown({ seconds, format }) {
+  const [left, setLeft] = useState(Math.max(0, Number(seconds) || 0))
+  const endRef = useRef(performance.now() + Math.max(0, Number(seconds) || 0) * 1000)
+  useEffect(() => {
+    endRef.current = performance.now() + Math.max(0, Number(seconds) || 0) * 1000
+    setLeft(Math.max(0, Number(seconds) || 0))
+    const id = setInterval(() => {
+      setLeft(Math.max(0, Math.ceil((endRef.current - performance.now()) / 1000)))
+    }, 1000)
+    return () => clearInterval(id)
+  }, [seconds])
+  const h = Math.floor(left / 3600)
+  const m = Math.floor((left % 3600) / 60)
+  const s = left % 60
+  const time = h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  return <span className="font-mono font-bold tabular-nums">{format(time)}</span>
+}
 
 function BlockedState({ background, icon, title, children }) {
   return (
@@ -218,6 +241,11 @@ export default function FormLanding() {
             {startState.reason === 'already_submitted' && t('landing.alreadySubmitted')}
             {!['not_started', 'closed', 'draft', 'already_submitted'].includes(startState.reason) && t('landing.accessDenied')}
           </p>
+          {startState.reason === 'not_started' && Number.isFinite(Number(startState.starts_in_seconds)) && Number(startState.starts_in_seconds) > 0 && (
+            <p className="text-white text-base mb-6">
+              <OpensInCountdown seconds={Number(startState.starts_in_seconds)} format={(time) => t('landing.opensIn', { time })} />
+            </p>
+          )}
         </BlockedState>
       )
     }

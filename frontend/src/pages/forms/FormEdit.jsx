@@ -230,8 +230,15 @@ export default function FormEdit() {
     }
   }
 
-  function toInputDate(str) {
-    if (!str) return ''
+  // "d-m-Y H:i:s" WIB dari API → instant absolut (tanpa tampil UI).
+  function parseServerNow(str) {
+    if (!str) return null
+    const [d, m, Y, H, M, S] = str.split(/[\s:-]+/).map(Number)
+    if (!Y || !m || !d) return null
+    return new Date(Date.UTC(Y, m - 1, d, (H || 0) - 7, M || 0, S || 0))
+  }
+
+  function toInputDate(str) {    if (!str) return ''
     if (/^\d{2}-\d{2}-\d{4}/.test(str)) {
       const [date, time] = str.split(' ')
       const [day, month, year] = date.split('-')
@@ -322,6 +329,18 @@ export default function FormEdit() {
       const endTs = new Date(toInputDate(form.ends_at)).getTime()
       if (Number.isFinite(startTs) && Number.isFinite(endTs) && startTs >= endTs) {
         setErrors({ starts_at: t('formEdit.scheduleInvalid'), ends_at: t('formEdit.scheduleInvalid') })
+        revealError(scheduleRef)
+        return
+      }
+    }
+    // ends_at lampau vs jam server = publish langsung tutup. Backend menolak,
+    // tapi cegah di klien agar creator sadar sebelum save (jam server dari
+    // GET /forms, background saja — tidak ditampilkan).
+    if (form.ends_at && form.status === 'published') {
+      const endTs = new Date(toInputDate(form.ends_at)).getTime()
+      const serverMs = parseServerNow(base?.server_now)?.getTime()
+      if (Number.isFinite(endTs) && serverMs && endTs <= serverMs) {
+        setErrors({ ends_at: t('formEdit.schedulePast') })
         revealError(scheduleRef)
         return
       }

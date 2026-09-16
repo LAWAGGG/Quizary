@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Check, Timer, ChevronLeft, ChevronRight, Grid3x3, Flag, CheckCheck, AlertTriangle, Info, ZoomIn, ZoomOut, X, Lock, FileUp, RefreshCw, PenLine } from 'lucide-react'
 import { Button, Input, Textarea, Card, Select, FallbackPage, QuestionMap, ConfirmSubmitModal, RichText } from '../../components/ui'
 import { useAutosave, loadDraft, clearDraft } from '../../hooks/useAutosave'
+import { useServerClock } from '../../hooks/useServerClock'
 import { useTheme } from '../../hooks/useTheme'
 import { themePalette } from '../../lib/theme'
 import { isAudioUrl, resolveMediaUrl, questionImageUrl, questionAudioUrl } from '../../lib/media'
@@ -50,8 +51,9 @@ function lockedInfoFromSubmission(submission, previous = null) {
   const serverLockedAt = parseDate(submission.locked_at)?.getTime()
   return {
     reason: submission.cheat_reason || '',
-    // Preserve the first local timestamp only as a fallback for old API data.
-    lockedAt: serverLockedAt || previous?.lockedAt || Date.now(),
+    // Murni jam server — tanpa fallback Date.now() agar ubah jam device
+    // tidak menggeser countdown auto-finalize.
+    lockedAt: serverLockedAt || previous?.lockedAt || null,
   }
 }
 
@@ -240,8 +242,8 @@ export default function AnswerQuiz() {
     const id = setTimeout(scrollPageToTop, 260)
     return () => clearTimeout(id)
   }, [currentIdx])
-  // ponytail: cheat alert — loop infinite selama grace 5s, lazy hanya untuk quiz restricted
   const alertAudioRef = useRef(null)
+  // ponytail: cheat alert — loop infinite selama grace 5s, lazy hanya untuk quiz restricted
   useEffect(() => {
     if (effectiveType !== 'quiz' || !publicForm?.is_restricted || !data?.id) {
       if (alertAudioRef.current) {
@@ -263,6 +265,16 @@ export default function AnswerQuiz() {
   const graceIntervalRef = useRef(null)
   const graceEndAtRef = useRef(0)
   const graceReasonRef = useRef('')
+  const { syncClock, serverNowMs } = useServerClock()
+  const syncClockRef = useRef(syncClock)
+  syncClockRef.current = syncClock
+  const serverNowMsRef = useRef(serverNowMs)
+  serverNowMsRef.current = serverNowMs
+  const syncFromPayload = useCallback((payload) => {
+    if (!payload?.server_now) return
+    const ms = parseDate(payload.server_now)?.getTime()
+    if (ms) syncClockRef.current(ms)
+  }, [])
 
   const goToResult = useCallback(() => {
     const aa = alertAudioRef.current
@@ -288,6 +300,7 @@ export default function AnswerQuiz() {
     try {
       const res = await api.post(`/submissions/${submissionId}/tab-exit`, reason ? { reason } : undefined, { headers: sessionTokenHeaders(submissionId) })
       const d = res.data
+      syncFromPayload(d)
       if (d.status === 'locked') {
         setCheatWarn(null)
         setLockedInfo((previous) => lockedInfoFromSubmission({ ...d, cheat_reason: d.cheat_reason || reason }, previous))
@@ -299,9 +312,9 @@ export default function AnswerQuiz() {
     } catch (err) {
       if (err.response?.status === 410) goToResult()
     }
-  }, [submissionId, goToResult])
+  }, [submissionId, goToResult, syncFromPayload])
 
-  const { statuses, save, flushAll, clearTimers } = useAutosave({ submissionId, onExpired })
+  const { statuses, save, flushAll, clearTimers } = useAutosave({ submissionId, onExpired, onServerNow: (v) => syncFromPayload({ server_now: v }) })
 
   // Mirror state answers untuk listener retry (online/focus) tanpa re-register.
   const answersRef = useRef({})
@@ -316,6 +329,7 @@ export default function AnswerQuiz() {
         return
       }
       setLockedInfo((previous) => lockedInfoFromSubmission(d, previous))
+      syncFromPayload(d)
       // ponytail: unlock ke in_progress — reset overlay & grace biar tidak perlu 2x update (bug double-lock)
       if (d.status === 'in_progress') {
         setKioskLocked(false)
@@ -359,7 +373,7 @@ export default function AnswerQuiz() {
     } finally {
       setLoading(false)
     }
-  }, [submissionId, goToResult])
+  }, [submissionId, goToResult, syncFromPayload])
 
   useEffect(() => {
     fetchSubmission()
@@ -393,16 +407,40 @@ export default function AnswerQuiz() {
 
   // Koneksi kembali / tab fokus → hanya kirim yang belum 'saved' (bulk 1 request + 30s guard)
   // cegah N×PATCH sekuensial tiap alt-tab (sebelumnya >100 request per sesi).
+  // Kalau tak ada yang perlu dikirim, tetap sync jam server 1 GET ringan agar
+  // offset countdown tidak basi (user ubah jam device saat tab hidden).
   useEffect(() => {
     if (!submissionId) return
-    const retry = () => flushAll(answersRef.current, { onlyUnsaved: true }).catch(() => {})
+    const lightSync = () => {
+      api.get(`/submissions/${submissionId}`, { headers: sessionTokenHeaders(submissionId) })
+        .then((res) => {
+          const d = res.data
+          if (d.status === 'submitted' || d.status === 'auto_submitted' || d.status === 'cheating') {
+            goToResult()
+            return
+          }
+          syncFromPayload(d)
+        })
+        .catch(() => {})
+    }
+    const retry = () => {
+      const hasPending = Object.entries(answersRef.current).some(([, v]) => {
+        if (Array.isArray(v)) return v.length > 0
+        if (v && typeof v === 'object') return (v.ids || []).length > 0 || String(v.text || '').trim()
+        return !!v
+      })
+      if (hasPending) flushAll(answersRef.current, { onlyUnsaved: true }).catch(() => {})
+      else lightSync()
+    }
+    const periodic = setInterval(lightSync, 60000)
     window.addEventListener('online', retry)
     window.addEventListener('focus', retry)
     return () => {
+      clearInterval(periodic)
       window.removeEventListener('online', retry)
       window.removeEventListener('focus', retry)
     }
-  }, [submissionId, flushAll])
+  }, [submissionId, flushAll, goToResult, syncFromPayload])
 
   // ponytail: auto-poll 10 detik dihapus — traffic tinggi bikin server lemot.
   // Cek status locked / update soal sekarang hanya via tombol manual
@@ -433,6 +471,7 @@ export default function AnswerQuiz() {
           return
         }
         setLockedInfo((previous) => lockedInfoFromSubmission(d, previous))
+        syncFromPayload(d)
         // ponytail: unlock ke in_progress — reset overlay & grace biar tidak perlu 2x update
         if (d.status === 'in_progress') {
           setKioskLocked(false)
@@ -449,7 +488,7 @@ export default function AnswerQuiz() {
         }
         setData((prev) => {
           if (!prev) return prev
-          return { ...prev, questions: d.questions, sections: d.sections, expired_at: d.expired_at }
+          return { ...prev, questions: d.questions, sections: d.sections, expired_at: d.expired_at, server_now: d.server_now || prev.server_now }
         })
         // clamp currentIdx jika soal/section berkurang — pakai display_style terbaru dari publicForm
         const newQuestions = d.questions || []
@@ -518,12 +557,14 @@ export default function AnswerQuiz() {
     // Countdown jalan untuk SEMUA tipe form (quiz & form) selama ada deadline
     // nyata dari backend (timer creator atau jadwal tutup). Batas internal
     // 24 jam anti-sesi zombie tidak pernah diekspos.
+    // Acuan jam = serverNowMs (server_now + performance.now), BUKAN Date.now —
+    // ubah jam device tidak menggeser deadline.
     if (!data || !data.expired_at) return
     const deadline = parseDate(data.expired_at)
     if (!deadline) return
 
     timerRef.current = setInterval(() => {
-      const diff = deadline.getTime() - Date.now()
+      const diff = deadline.getTime() - serverNowMsRef.current()
       if (diff <= 0) {
         clearInterval(timerRef.current)
         setTimeLeft(0)
@@ -535,7 +576,7 @@ export default function AnswerQuiz() {
 
     return () => clearInterval(timerRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.id, effectiveType, data?.expired_at, handleAutoSubmit])
+  }, [data?.id, effectiveType, data?.expired_at, data?.server_now, handleAutoSubmit])
 
   useEffect(() => {
     return () => clearTimers()
@@ -667,10 +708,12 @@ export default function AnswerQuiz() {
     const startGrace = (reason) => {
       if (graceTimerRef.current) return // already counting — debounce burst
       graceReasonRef.current = reason
-      graceEndAtRef.current = Date.now() + GRACE_MS
+      // Grace 5 detik = durasi wall-clock monotonik, bukan jam device —
+      // pakai performance.now agar ubah jam tidak memperpanjang grace.
+      graceEndAtRef.current = performance.now() + GRACE_MS
       setGraceCountdown(5)
       graceIntervalRef.current = setInterval(() => {
-        const remaining = Math.max(0, Math.ceil((graceEndAtRef.current - Date.now()) / 1000))
+        const remaining = Math.max(0, Math.ceil((graceEndAtRef.current - performance.now()) / 1000))
         setGraceCountdown(remaining)
       }, 200)
       graceTimerRef.current = setTimeout(() => {
@@ -961,9 +1004,14 @@ export default function AnswerQuiz() {
     fd.append('file', file)
     try {
       const res = await api.post(`/submissions/${submissionId}/answers/${qId}/file`, fd, { headers: sessionTokenHeaders(submissionId) })
+      syncFromPayload(res.data)
       setFileAnswers((f) => ({ ...f, [qId]: { url: res.data.answer_file, filename: res.data.filename || file.name } }))
       setValidationErrors((e) => { const n = { ...e }; delete n[qId]; return n })
     } catch (err) {
+      if (err.response?.status === 410 || err.response?.status === 409) {
+        goToResult()
+        return
+      }
       setSubmitError(err.response?.data?.detail || err.response?.data?.message || t('answerQuiz.submitFailed'))
     } finally {
       setUploading((u) => ({ ...u, [qId]: false }))
@@ -974,10 +1022,15 @@ export default function AnswerQuiz() {
     if (!fileAnswers[qId] || removingFile[qId]) return
     setRemovingFile((r) => ({ ...r, [qId]: true }))
     try {
-      await api.delete(`/submissions/${submissionId}/answers/${qId}/file`, { headers: sessionTokenHeaders(submissionId) })
+      const res = await api.delete(`/submissions/${submissionId}/answers/${qId}/file`, { headers: sessionTokenHeaders(submissionId) })
+      syncFromPayload(res.data)
       setFileAnswers((f) => { const n = { ...f }; delete n[qId]; return n })
       setAnswers((a) => { const n = { ...a }; delete n[qId]; return n })
     } catch (err) {
+      if (err.response?.status === 410 || err.response?.status === 409) {
+        goToResult()
+        return
+      }
       setSubmitError(err.response?.data?.detail || err.response?.data?.message || t('answerQuiz.fileRemoveFailed'))
     } finally {
       setRemovingFile((r) => { const n = { ...r }; delete n[qId]; return n })
@@ -1763,7 +1816,7 @@ export default function AnswerQuiz() {
           onResume={pinToFullscreen}
           countdown={graceCountdown}
         />
-        <CheatLockOverlay info={lockedInfo} onRefresh={handleRefresh} refreshing={refreshing} />
+        <CheatLockOverlay info={lockedInfo} serverNowMs={serverNowMs} onRefresh={handleRefresh} refreshing={refreshing} />
         <ExamInfoDrawer show={showInfo} onClose={() => setShowInfo(false)} form={publicForm} data={data} />
         <ZoomModal
           target={zoomTarget}
@@ -2138,7 +2191,7 @@ export default function AnswerQuiz() {
       </footer>
 
       <KioskLockOverlay locked={kioskLocked} palette={palette} onResume={pinToFullscreen} countdown={graceCountdown} />
-      <CheatLockOverlay info={lockedInfo} onRefresh={handleRefresh} refreshing={refreshing} />
+      <CheatLockOverlay info={lockedInfo} serverNowMs={serverNowMs} onRefresh={handleRefresh} refreshing={refreshing} />
       <ExamInfoDrawer show={showInfo} onClose={() => setShowInfo(false)} form={publicForm} data={data} />
 
       <ZoomModal
@@ -2280,23 +2333,23 @@ function FileAnswer({ value, uploading, removing, onFile, onRemove, error }) {
   )
 }
 
-function CheatLockOverlay({ info, onRefresh, refreshing }) {
+function CheatLockOverlay({ info, serverNowMs, onRefresh, refreshing }) {
   const { t } = useTranslation()
-  // Countdown sinkron ke lockedAt lokal — bukan penanda pasti dari server,
-  // tapi cukup buat kasih gambaran ke responden berapa lama lagi menunggu
-  // sebelum sweep otomatis. Refresh manual tetap sumber kebenaran status asli.
+  // Countdown acuan jam server (lockedAt dari locked_at API) + tick monotonik —
+  // ubah jam device tidak menggeser estimasi auto-finalize 5 menit.
+  // Bukan penanda pasti: refresh manual tetap sumber kebenaran status asli.
   const [remaining, setRemaining] = useState(300)
 
   useEffect(() => {
     if (!info?.lockedAt) return
     const tick = () => {
-      const elapsed = Math.floor((Date.now() - info.lockedAt) / 1000)
+      const elapsed = Math.floor((serverNowMs() - info.lockedAt) / 1000)
       setRemaining(Math.max(0, 300 - elapsed))
     }
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [info?.lockedAt])
+  }, [info?.lockedAt, serverNowMs])
 
   const mm = String(Math.floor(remaining / 60)).padStart(2, '0')
   const ss = String(remaining % 60).padStart(2, '0')

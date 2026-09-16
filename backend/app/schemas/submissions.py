@@ -38,6 +38,8 @@ class SubmissionCreateResponse(BaseModel):
     status: Optional[str] = "in_progress"
     started_at: Optional[str] = None    # "d-m-Y H:i:s"
     expired_at: Optional[str] = None
+    # Jam server (WIB, format sama) — klien hitung offset dari ini, bukan jam device.
+    server_now: Optional[str] = None
     questions: list[QuestionWithOptions]
     sections: list[dict] = []
     answers: list['SavedAnswer'] = []
@@ -105,6 +107,8 @@ class SubmissionDetailResponse(BaseModel):
     status: str
     started_at: Optional[str] = None
     expired_at: Optional[str] = None
+    # Jam server (WIB) — acuan offset countdown klien.
+    server_now: Optional[str] = None
     score: Optional[float] = None
     max_score: Optional[float] = None
     submitted_at: Optional[str] = None

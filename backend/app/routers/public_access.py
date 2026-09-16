@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_optional_user
-from app.utils import file_url, now_wib
+from app.utils import file_url, fmt_dt, now_wib
 from app.models.form import Form, FormStatus, SubmissionLimit
 from app.models.question import Question
 from app.models.submission import Submission, SubmissionStatus
@@ -89,12 +89,12 @@ def start_form_check(
     # to log in — the status message is what matters.
     if form.status == FormStatus.draft:
         if is_owner:
-            return {"can_start": True, "form_id": form.id, "require_identity": False, "is_preview": True}
+            return {"can_start": True, "form_id": form.id, "require_identity": False, "is_preview": True, "server_now": fmt_dt(now)}
         return {"can_start": False, "reason": "draft"}
 
     if form.status == FormStatus.closed:
         if is_owner:
-            return {"can_start": True, "form_id": form.id, "require_identity": False, "is_preview": True}
+            return {"can_start": True, "form_id": form.id, "require_identity": False, "is_preview": True, "server_now": fmt_dt(now)}
         return {"can_start": False, "reason": "closed"}
 
     if form.require_login and not user:
@@ -107,7 +107,12 @@ def start_form_check(
     # Form published hanya bisa diisi dalam rentang waktu tersebut — pemilik
     # tidak dapat preview lebih awal (preview khusus status draft/closed di atas).
     if starts and now < starts:
-        return {"can_start": False, "reason": "not_started"}
+        return {
+            "can_start": False,
+            "reason": "not_started",
+            "server_now": fmt_dt(now),
+            "starts_in_seconds": max(0, int((starts - now).total_seconds())),
+        }
 
     if ends and now > ends:
         return {"can_start": False, "reason": "closed"}
@@ -131,7 +136,7 @@ def start_form_check(
     # form require_login, user yang belum login sudah ditolak 401 di atas, dan
     # identitas user yang login otomatis diambil dari akun — jadi tidak perlu
     # meminta nama/email tambahan.
-    return {"can_start": True, "form_id": form.id, "require_identity": bool(form.require_login and not user)}
+    return {"can_start": True, "form_id": form.id, "require_identity": bool(form.require_login and not user), "server_now": fmt_dt(now)}
 
 
 @router.get("/q/{short_code}/leaderboard")

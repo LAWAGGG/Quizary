@@ -33,7 +33,7 @@ export function clearDraft(submissionId) {
  * flushAll: bulk 1 request (PATCH /autosave/bulk) + onlyUnsaved + 30s guard
  * untuk fokus/online — cegah N×PATCH sekuensial tiap alt-tab.
  */
-export function useAutosave({ submissionId, onExpired }) {
+export function useAutosave({ submissionId, onExpired, onServerNow }) {
   const timers = useRef({})
   const [statuses, setStatuses] = useState({})
   const statusesRef = useRef({})
@@ -108,6 +108,7 @@ export function useAutosave({ submissionId, onExpired }) {
     const attempt = async (retriesLeft = 2) => {
       try {
         const res = await api.patch(`/submissions/${submissionId}/autosave`, payload, { headers: sessionTokenHeaders(submissionId) })
+        if (res?.data?.server_now) onServerNow?.(res.data.server_now)
         if (res.status === 410 || (res.data && res.data.detail && String(res.data.detail).toLowerCase().includes('expired'))) {
           onExpired?.()
           return
@@ -129,7 +130,7 @@ export function useAutosave({ submissionId, onExpired }) {
       }
     }
     await attempt()
-  }, [submissionId, onExpired, setStatus, dropDraftEntry])
+  }, [submissionId, onExpired, onServerNow, setStatus, dropDraftEntry])
 
   const save = useCallback((qId, value) => {
     clearTimeout(timers.current[qId])
@@ -173,6 +174,7 @@ export function useAutosave({ submissionId, onExpired }) {
     const attemptBulk = async (retriesLeft = 1) => {
       try {
         const res = await api.patch(`/submissions/${submissionId}/autosave/bulk`, payload, { headers: sessionTokenHeaders(submissionId) })
+        if (res?.data?.server_now) onServerNow?.(res.data.server_now)
         if (res.status === 410 || String(res.data?.detail || '').toLowerCase().includes('expired')) {
           onExpired?.()
           return true
@@ -209,7 +211,7 @@ export function useAutosave({ submissionId, onExpired }) {
       }
     }
     lastBulkAtRef.current = Date.now()
-  }, [flush, submissionId, onExpired, setStatus, dropDraftEntry])
+  }, [flush, submissionId, onExpired, onServerNow, setStatus, dropDraftEntry])
 
   const clearTimers = useCallback(() => {
     Object.values(timers.current).forEach((t) => clearTimeout(t))

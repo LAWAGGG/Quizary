@@ -76,6 +76,13 @@ def _ensure_publishable(form: Form, db: Session) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Quiz harus memiliki waktu pengerjaan (timer) sebelum dipublikasikan",
         )
+    # Jadwal lampau = form langsung tutup saat publish. Tolak agar creator
+    # sadar jamnya salah (jam device/timezone ngaco) sebelum responden masuk.
+    if form.ends_at and form.ends_at <= now_wib():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Waktu tutup sudah lewat — perbarui jadwal sebelum mempublikasikan",
+        )
 
 
 def _verify_category(db: Session, category_id: int | None, user_id: int) -> FormCategory | None:
@@ -138,6 +145,8 @@ def _form_dict(form: Form, request: Request, db: Session | None = None) -> dict:
         "category": cat,
         "created_at": fmt_dt(form.created_at),
         "updated_at": fmt_dt(form.updated_at),
+        # Jam server (WIB) — acuan validasi jadwal di background, tidak ditampilkan.
+        "server_now": fmt_dt(now_wib()),
     }
 
 

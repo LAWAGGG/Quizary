@@ -131,10 +131,19 @@ def upload_answer_file(
     # request di-inject otomatis oleh FastAPI (tipe Request selalu diisi)
     sub = _get_sub_or_404(submission_id, db)
     _verify_submission_access(sub, request, user, db, x_submission_token)
+    form = db.get(Form, sub.form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
     if sub.status == SubmissionStatus.locked:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ujian dikunci — menunggu keputusan pengawas")
     if sub.status != SubmissionStatus.in_progress:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Pengerjaan sudah selesai")
+    if is_expired(sub, form):
+        sub.status = SubmissionStatus.auto_submitted
+        sub.submitted_at = _now()
+        grade_submission(db, sub, form)
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Submission time has expired")
 
     question = _get_question_for_submission(question_id, sub, db)
     if question.type != QuestionType.file_upload:
@@ -171,7 +180,7 @@ def upload_answer_file(
     answer.answer_file = f"answer_files/{fname}"
     answer.updated_at = now_wib()
     db.commit()
-    return {"answer_file": file_url(request, answer.answer_file), "filename": file.filename or fname}
+    return {"answer_file": file_url(request, answer.answer_file), "filename": file.filename or fname, "server_now": fmt_dt(now_wib())}
 
 
 @router.delete("/submissions/{submission_id}/answers/{question_id}/file")
@@ -186,10 +195,19 @@ def delete_answer_file(
     """Remove the respondent's uploaded file from both storage and Answer."""
     sub = _get_sub_or_404(submission_id, db)
     _verify_submission_access(sub, request, user, db, x_submission_token)
+    form = db.get(Form, sub.form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
     if sub.status == SubmissionStatus.locked:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ujian dikunci — menunggu keputusan pengawas")
     if sub.status != SubmissionStatus.in_progress:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Pengerjaan sudah selesai")
+    if is_expired(sub, form):
+        sub.status = SubmissionStatus.auto_submitted
+        sub.submitted_at = _now()
+        grade_submission(db, sub, form)
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Submission time has expired")
 
     question = _get_question_for_submission(question_id, sub, db)
     if question.type != QuestionType.file_upload:
@@ -206,7 +224,7 @@ def delete_answer_file(
     answer.answer_file = None
     answer.updated_at = _now()
     db.commit()
-    return {"message": "File jawaban dihapus", "question_id": question_id}
+    return {"message": "File jawaban dihapus", "question_id": question_id, "server_now": fmt_dt(_now())}
 
 
 def _missing_required(sub: Submission, form: Form, db: Session) -> list[str]:
@@ -503,6 +521,7 @@ def create_submission(
             status=existing.status.value,
             started_at=fmt_dt(existing.started_at),
             expired_at=fmt_dt(display_deadline(existing, form)),
+            server_now=fmt_dt(now),
             questions=_build_questions_response(existing.id, request, db),
             sections=sections,
             answers=_build_saved_answers(existing.id, request, db),
@@ -612,6 +631,7 @@ def create_submission(
         access_token=sub.access_token,
         started_at=fmt_dt(sub.started_at),
         expired_at=fmt_dt(display_deadline(sub, form)),
+        server_now=fmt_dt(now),
         questions=_build_questions_response(sub.id, request, db),
         sections=sections,
         resumed=False,
@@ -721,7 +741,7 @@ def autosave(
 
     answer.updated_at = _now()
     db.commit()
-    return {"message": "Answer saved", "question_id": body.question_id}
+    return {"message": "Answer saved", "question_id": body.question_id, "server_now": fmt_dt(_now())}
 
 
 @router.patch("/submissions/{submission_id}/autosave/bulk")
@@ -804,7 +824,7 @@ def bulk_autosave(
         saved_ids.append(item.question_id)
 
     db.commit()
-    return {"saved": len(saved_ids), "question_ids": saved_ids}
+    return {"saved": len(saved_ids), "question_ids": saved_ids, "server_now": fmt_dt(_now())}
 
 
 # ── POST /submissions/{id}/questions/{question_id}/check-password ─────────────
@@ -865,6 +885,12 @@ def report_tab_exit(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ujian dikunci — menunggu keputusan pengawas")
     if sub.status != SubmissionStatus.in_progress:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Submission already completed")
+    if is_expired(sub, form):
+        sub.status = SubmissionStatus.auto_submitted
+        sub.submitted_at = _now()
+        grade_submission(db, sub, form)
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Submission time has expired")
 
     sub.tab_exit_count = (sub.tab_exit_count or 0) + 1
     sub.updated_at = _now()
@@ -913,6 +939,13 @@ def lock_submission(
     sub = _get_sub_or_404(submission_id, db)
 
     if sub.status == SubmissionStatus.in_progress:
+        form = db.get(Form, sub.form_id)
+        if form and is_expired(sub, form):
+            sub.status = SubmissionStatus.auto_submitted
+            sub.submitted_at = _now()
+            grade_submission(db, sub, form)
+            db.commit()
+            raise HTTPException(status_code=status.HTTP_410_GONE, detail="Submission time has expired")
         sub.status = SubmissionStatus.locked
         sub.tab_exit_count = (sub.tab_exit_count or 0) + 1
         sub.cheat_reason = (body.reason if body else None) or "Keluar dari aplikasi (App background/inactive)"
@@ -1109,6 +1142,7 @@ def get_submission(
         status=sub.status.value,
         started_at=fmt_dt(sub.started_at),
         expired_at=fmt_dt(display_deadline(sub, form)),
+        server_now=fmt_dt(_now()),
         score=float(sub.score) if reveal_score and sub.score is not None else None,
         max_score=float(live_max) if reveal_score else None,
         submitted_at=fmt_dt(sub.submitted_at),
