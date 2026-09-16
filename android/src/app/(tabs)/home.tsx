@@ -233,9 +233,6 @@ export default function HomeScreen() {
       {/* User Header */}
       <View style={styles.userHeader}>
         <View>
-          <Text style={[styles.greetingEyebrow, { color: colors.primary, fontSize: 11 * fontSizeScale }]}>
-            {language === 'ID' ? 'DASHBOARD RESPONDEN' : 'RESPONDENT DASHBOARD'}
-          </Text>
           <Text style={[styles.greetingTitle, { color: colors.text, fontSize: 22 * fontSizeScale }]}>
             {language === 'ID' ? `Halo, ${firstName}!` : `Hello, ${firstName}!`}
           </Text>
