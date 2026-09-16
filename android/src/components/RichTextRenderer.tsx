@@ -171,7 +171,7 @@ function SimpleNativeHtml({
   const parseNodes = (raw: string): React.ReactNode[] => {
     if (!raw) return [];
 
-    const tagRegex = /<(p|br|strong|b|em|i|u|s|strike|del|a|span|h[1-6])([^>]*)>([\s\S]*?)<\/\1>|<br\s*\/?>/gi;
+    const tagRegex = /<(p|br|strong|b|em|i|u|s|strike|del|a|span|code|h[1-6])([^>]*)>([\s\S]*?)<\/\1>|<br\s*\/?>/gi;
     const nodes: React.ReactNode[] = [];
     let lastIdx = 0;
     let match: RegExpExecArray | null;
@@ -193,15 +193,27 @@ function SimpleNativeHtml({
         const children = parseNodes(content);
         const nodeStyle: TextStyle = {};
 
-        if (tag === 'strong' || tag === 'b') nodeStyle.fontWeight = '700';
-        else if (tag === 'em' || tag === 'i') nodeStyle.fontStyle = 'italic';
-        else if (tag === 'u') nodeStyle.textDecorationLine = 'underline';
-        else if (tag === 's' || tag === 'strike' || tag === 'del') nodeStyle.textDecorationLine = 'line-through';
-        else if (tag.startsWith('h')) {
+        if (tag === 'code' || attribs.includes('ql-font-monospace')) {
+          nodeStyle.fontFamily = 'monospace';
+        } else if (tag === 'strong' || tag === 'b') {
+          nodeStyle.fontFamily = 'Poppins_700Bold';
+          nodeStyle.fontWeight = '700';
+        } else if (tag === 'em' || tag === 'i') {
+          nodeStyle.fontFamily = 'Poppins_400Regular';
+          nodeStyle.fontStyle = 'italic';
+        } else if (tag === 'u') {
+          nodeStyle.fontFamily = 'Poppins_400Regular';
+          nodeStyle.textDecorationLine = 'underline';
+        } else if (tag === 's' || tag === 'strike' || tag === 'del') {
+          nodeStyle.fontFamily = 'Poppins_400Regular';
+          nodeStyle.textDecorationLine = 'line-through';
+        } else if (tag.startsWith('h')) {
+          nodeStyle.fontFamily = 'Poppins_700Bold';
           nodeStyle.fontWeight = '700';
           const lvl = parseInt(tag.replace('h', ''), 10);
           nodeStyle.fontSize = Math.round((flattenedStyle.fontSize || 14) * (1.5 - lvl * 0.08));
         } else if (tag === 'a') {
+          nodeStyle.fontFamily = 'Poppins_500Medium';
           nodeStyle.color = '#3B82F6';
           nodeStyle.textDecorationLine = 'underline';
           const hrefMatch = attribs.match(/href=["']([^"']+)["']/i);
