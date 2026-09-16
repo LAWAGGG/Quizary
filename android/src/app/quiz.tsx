@@ -1260,30 +1260,34 @@ export default function QuizScreen() {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
           <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-            <View style={[styles.formHeader, { borderBottomColor: colors.inputBorder, backgroundColor: colors.cardBg }]}>
-            {!publicForm?.is_restricted && (
-              <TouchableOpacity
-                onPress={async () => {
-                  await unpin().catch(() => {});
-                  await unlockVolume().catch(() => {});
-                  await stopCheat().catch(() => {});
-                  router.replace('/(tabs)/home' as any);
-                }}
-                style={{ padding: 6 }}
-              >
-                <Ionicons name="close" size={22} color={colors.text} />
-              </TouchableOpacity>
-            )}
-            <Text style={[styles.formHeaderTitle, { color: colors.text }]} numberOfLines={1}>
-              {publicForm.title?.replace(/<[^>]*>/g, '') || 'Form'}
-            </Text>
-            {formattedTimer ? (
-              <View style={[styles.timerPill, { backgroundColor: timeLeft !== null && timeLeft < 60000 ? '#EF4444' : colors.inputBg }]}>
-                <Ionicons name="timer-outline" size={14} color={timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text} />
-                <Text style={[styles.timerText, { color: timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text }]}>{formattedTimer}</Text>
+            <View style={[styles.formHeader, { borderBottomColor: colors.inputBorder, backgroundColor: colors.cardBg, position: 'relative', minHeight: 48, justifyContent: 'space-between', alignItems: 'center' }]}>
+              {!publicForm?.is_restricted ? (
+                <TouchableOpacity
+                  onPress={async () => {
+                    await unpin().catch(() => {});
+                    await unlockVolume().catch(() => {});
+                    await stopCheat().catch(() => {});
+                    router.replace('/(tabs)/home' as any);
+                  }}
+                  style={{ padding: 6, zIndex: 10 }}
+                >
+                  <Ionicons name="close" size={22} color={colors.text} />
+                </TouchableOpacity>
+              ) : <View style={{ width: 34 }} />}
+
+              <View style={{ position: 'absolute', left: 80, right: 80, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={[styles.formHeaderTitle, { color: colors.text, textAlign: 'center', marginHorizontal: 0 }]} numberOfLines={1}>
+                  {publicForm.title?.replace(/<[^>]*>/g, '') || 'Form'}
+                </Text>
               </View>
-            ) : null}
-          </View>
+
+              {formattedTimer ? (
+                <View style={[styles.timerPill, { backgroundColor: timeLeft !== null && timeLeft < 60000 ? '#EF4444' : colors.inputBg, zIndex: 10 }]}>
+                  <Ionicons name="timer-outline" size={14} color={timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text} />
+                  <Text style={[styles.timerText, { color: timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text }]}>{formattedTimer}</Text>
+                </View>
+              ) : <View style={{ width: 34 }} />}
+            </View>
 
           <ScrollView
             ref={cardScrollRef}

@@ -356,21 +356,22 @@ export function QuizStyleAnsweringStep({
       {/* TOP HEADER BAR — editorial solid, bukan gradient mengkilap AI */}
       <View style={[styles.headerBar, { backgroundColor: themeColor, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.14)' }]}>
         {/* Row 1: Info (i), Quiz Title, and Timer Pill */}
-        <View style={styles.headerRowTop}>
-          <View style={styles.headerLeftGroup}>
-            <TouchableOpacity
-              style={styles.infoIconBtn}
-              onPress={() => setShowInfoModal(true)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="information-circle-outline" size={22} color="#FFF" />
-            </TouchableOpacity>
-            <Text style={[styles.headerQuizTitle, { fontSize: 15 * fontSizeScale }]} numberOfLines={1}>
+        <View style={[styles.headerRowTop, { position: 'relative', minHeight: 32, justifyContent: 'space-between', alignItems: 'center' }]}>
+          <TouchableOpacity
+            style={[styles.infoIconBtn, { zIndex: 10 }]}
+            onPress={() => setShowInfoModal(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="information-circle-outline" size={22} color="#FFF" />
+          </TouchableOpacity>
+
+          <View style={{ position: 'absolute', left: 80, right: 80, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={[styles.headerQuizTitle, { fontSize: 15 * fontSizeScale, textAlign: 'center', marginHorizontal: 0 }]} numberOfLines={1}>
               {stripHtmlTags(publicForm?.title) || 'Kuis'}
             </Text>
           </View>
 
-          <View style={styles.headerRightGroup}>
+          <View style={[styles.headerRightGroup, { zIndex: 10 }]}>
             {formattedTimerStr ? (
               <View style={styles.timerBadge}>
                 <Ionicons name="timer-outline" size={14} color="#FFF" />
