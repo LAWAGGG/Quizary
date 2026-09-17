@@ -162,19 +162,74 @@ M_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/math}"
 
 def _para_text_with_math(p) -> str:
     parts: list[str] = []
+
+    def push(seg: str, math: bool = False):
+        if not seg:
+            return
+        if parts:
+            prev = parts[-1]
+            if prev and ((math and prev[-1].isalnum()) or (prev.endswith("\\)") and seg[0].isalnum())):
+                parts.append(" ")
+        parts.append(seg)
+
     for child in p._p:
         tag = child.tag.split("}", 1)[1] if "}" in child.tag else child.tag
         if tag == "r":
-            parts.append("".join(t.text or "" for t in child.findall(f".//{WORD_NS}t")))
+            text = "".join(t.text or "" for t in child.findall(f".//{WORD_NS}t"))
+            pos = 0
+            for m in _TEXT_LATEX_RE.finditer(text):
+                push(text[pos:m.start()])
+                push("\\(%s\\)" % m.group(0), math=True)
+                pos = m.end()
+            push(text[pos:])
         elif tag in ("oMath", "oMathPara"):
-            latex = _omml_to_latex(child).strip()
+            latex = _omml_fix_pipes(_omml_to_latex(child)).strip()
+            if latex.startswith(".") and parts and re.fullmatch(r"[A-Ja-j]\.?", parts[-1].strip()):
+                parts[-1] = parts[-1].rstrip() + ". "
+                latex = latex[1:].strip()
             if latex:
-                parts.append("\\(%s\\)" % latex)
+                push("\\(%s\\)" % latex, math=True)
         elif tag not in ("pPr", "bookmarkStart", "bookmarkEnd", "proofErr"):
-            parts.append("".join(t.text or "" for t in child.findall(f".//{WORD_NS}t")))
+            push("".join(t.text or "" for t in child.findall(f".//{WORD_NS}t")))
     return "".join(parts)
 
 _LATEX_ESCAPE_RE = re.compile(r"([&%$#_{}])")
+
+_TEXT_LATEX_RE = re.compile(r"\\(?:alpha|beta|gamma|delta|varepsilon|theta|lambda|mu|pi|sigma|phi|omega|Delta)(?![A-Za-z])")
+
+_STRAY_LATEX_CLOSE_RE = re.compile(r"\\\)([})\]])")
+
+
+def _omml_fix_pipes(latex: str) -> str:
+    if "|" not in latex:
+        return latex
+    depth = 0
+    out: list[str] = []
+    i = 0
+    while i < len(latex):
+        c = latex[i]
+        if c == "{":
+            depth += 1
+            out.append(c)
+        elif c == "}":
+            depth = max(0, depth - 1)
+            out.append(c)
+        elif c == "|" and depth == 0:
+            if out and out[-1] in ("{", "(", "[", "+", "-", "=", " "):
+                out.append("\\lvert ")
+            else:
+                out.append(" \\rvert")
+        elif c == "|" and out and out[-1] == "{":
+            out.append("\\lvert ")
+        else:
+            out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def _strip_latex_delims(text: str) -> str:
+    cleaned = _STRAY_LATEX_CLOSE_RE.sub(r"\1", text)
+    return cleaned.replace("\\(", "").replace("\\)", "")
 
 _OMML_UNICODE_MAP = {
     "→": "\\to ",
@@ -457,7 +512,7 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
         # 4) baris "Kunci: ..." (teks panjang) atau "Answer: teks" untuk essay/short_answer
         m = ANSWER_TEXT_RE.match(text)
         if m and current is not None:
-            current["answer_key"] = m.group(1).strip()
+            current["answer_key"] = _strip_latex_delims(m.group(1).strip())
             continue
 
         # 4b) baris "Point: N" / "Poin: N" / "Skor: N" — posisi bebas dalam
@@ -970,4 +1025,19 @@ Answer: A
     assert all("\\(\\)" not in o["text"] for q in parsed for o in q["options"]), "rumus kosong bocor di opsi"
     assert any("\\frac" in o["text"] for q in parsed for o in q["options"]), "opsi pecahan hilang"
     print("ok wiring OMML inline")
+    q3 = parsed[2]
+    assert len(q3["options"]) == 4, [o["text"][:40] for o in q3["options"]]
+    assert any("\\tan" in o["text"] for o in q3["options"]), "opsi B hilang/gabung"
+    assert [o["is_correct"] for o in q3["options"]] == [True, False, True, True], "kunci A,C,D geser"
+    assert _para_text_with_math(ldoc.paragraphs[20]).startswith("B. \\("), _para_text_with_math(ldoc.paragraphs[20])[:60]
+    assert "\\(\\alpha\\)" in parsed[1]["question_text"], parsed[1]["question_text"][:200]
+    assert "\\(x^{2}-5x+6=0\\) adalah" in parsed[1]["question_text"], parsed[1]["question_text"][:200]
+    assert parsed[15]["answer_key"] == "\\frac{11}{15};11/15", parsed[15]["answer_key"]
+    assert "\\(" not in (parsed[15]["answer_key"] or ""), "delimiter bocor ke kunci"
+    assert "\\lvert" in parsed[13]["options"][0]["text"] and "\\rvert" in parsed[13]["options"][0]["text"], parsed[13]["options"][0]["text"]
+    assert "u\\times v" in parsed[7]["question_text"], parsed[7]["question_text"]
+    assert "\\nabla f" in parsed[9]["question_text"], parsed[9]["question_text"]
+    assert "\\) adalah" in parsed[1]["question_text"], parsed[1]["question_text"][:200]
+    assert "\\) dan \\(v=" in parsed[7]["question_text"], parsed[7]["question_text"]
+    print("ok rumus lanjutan")
     print("done")
