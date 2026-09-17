@@ -98,6 +98,8 @@ function OtpModal({ open, email, onVerified, onClose, t, forgotPassword, verifyR
     } catch (err) {
       const s = err.response?.status; const m = err.response?.data?.message
       if (s === 429 || String(m).includes('wait')) fail(t('auth.otpWait'))
+      else if (s === 404) fail(t('auth.resetEmailNotFound'))
+      else if (s === 403) fail(t('auth.resetNotVerified'))
       else fail(m || t('auth.somethingWrong'))
     } finally { setResending(false) }
   }

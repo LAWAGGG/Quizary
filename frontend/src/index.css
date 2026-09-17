@@ -418,6 +418,18 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 }
 
 /* Teks yang dirender dari editor (soal/opsi) — justify elemen inline */
+.rich-text p,
+.rich-text li,
+.rich-text h1,
+.rich-text h2,
+.rich-text h3,
+.rich-text h4,
+.rich-text blockquote,
+.rich-text div {
+  white-space: pre-wrap;
+  tab-size: 4;
+  -moz-tab-size: 4;
+}
 .rich-text p {
   margin: 0;
 }

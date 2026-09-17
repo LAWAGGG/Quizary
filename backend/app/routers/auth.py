@@ -199,24 +199,30 @@ def me(request: Request, user: User = Depends(get_current_user)):
 
 @router.post("/password/forgot", response_model=MessageResponse)
 def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db), _rl: None = Depends(limit_forgot_password)):
-    # Selalu 200 agar tidak bocor enumerasi email; hanya kirim jika akun ada & verified.
+    # Langsung 404/403 bila email tak terdaftar / belum verifikasi — user tahu OTP tak terkirim.
     user = db.query(User).filter(User.email == body.email).first()
-    if user and user.email_verified_at:
-        if not can_resend(user.email):
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Please wait before requesting a new code.",
-            )
-        code = _issue_otp(user, db)
-        try:
-            send_reset_email(user.email, code)
-        except Exception:
-            logger.exception("Failed to send reset email to %s", user.email)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to send the reset email. Please try again.",
-            )
-    return MessageResponse(message="If your email is registered, a reset code has been sent.")
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email tidak terdaftar")
+    if not user.email_verified_at:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email belum diverifikasi. Silakan verifikasi dulu.",
+        )
+    if not can_resend(user.email):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Please wait before requesting a new code.",
+        )
+    code = _issue_otp(user, db)
+    try:
+        send_reset_email(user.email, code)
+    except Exception:
+        logger.exception("Failed to send reset email to %s", user.email)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send the reset email. Please try again.",
+        )
+    return MessageResponse(message="A reset code has been sent to your email.")
 
 
 @router.post("/password/verify", response_model=MessageResponse)

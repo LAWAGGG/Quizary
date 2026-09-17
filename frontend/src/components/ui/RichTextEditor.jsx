@@ -112,6 +112,26 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     if (!html || html === '<p><br></p>') return ''
     return String(html).replace(/<select[^>]*class="ql-ui"[^>]*>[\s\S]*?<\/select>/gi, '')
   }
+  // Clipboard Quill (matchText) collapse leading tab/spasi di <p> saat
+  // dangerouslyPasteHTML — soal berindentasi jadi rata kiri tiap dibuka
+  // untuk edit. Ubah run indentasi awal jadi &nbsp; SEBELUM paste (nbsp
+  // lolos clipboard), tanpa tombol baru. <pre> dilewati (isPre aman).
+  const toNbsp = (ws) => {
+    let n = 0
+    String(ws).replace(/&nbsp;|&#160;|\t| /gi, (t) => { n += (t === '\t' ? 4 : 1); return '' })
+    return '&nbsp;'.repeat(n)
+  }
+  const preserveIndent = (html) => {
+    if (!html) return html
+    return String(html).split(/(<pre[\s\S]*?<\/pre>)/gi).map((chunk, i) => {
+      if (i % 2 === 1) return chunk
+      return chunk
+        .replace(/(<(?:p|li|h1|h2|h3|h4|div|blockquote)[^>]*>)((?:[ \t]|&nbsp;|&#160;)+)/gi,
+          (_m, tag, ws) => tag + toNbsp(ws))
+        .replace(/(<br\s*\/?>)((?:[ \t]|&nbsp;|&#160;)+)/gi,
+          (_m, br, ws) => br + toNbsp(ws))
+    }).join('')
+  }
   const [active, setActive] = useState(false)
   const [symbolsOpen, setSymbolsOpen] = useState(false)
   // Dialog formula: { tex, index, length } — index/length = rentang
@@ -194,17 +214,18 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       return false
     })
 
-    // Tab di dalam code-block → sisipkan tab nyata (preserve indent), bukan pindah focus
-    quill.keyboard.addBinding({ key: 'Tab' }, (range, context) => {
-      if (context.format['code-block']) {
-        quill.insertText(range.index, '\t', 'user')
-        quill.setSelection(range.index + 1, 0, 'silent')
-        return false
-      }
-      return true
+    // Tab → sisipkan tab nyata (preserve indent), bukan pindah focus.
+    // Hanya bila kursor di dalam editor (punya selection); Tab di luar
+    // editor tetap pindah focus normal. Render jaga via pre-wrap.
+    quill.keyboard.addBinding({ key: 'Tab' }, (range) => {
+      if (!range) return true
+      quill.insertText(range.index, '\t', 'user')
+      quill.setSelection(range.index + 1, 0, 'silent')
+      return false
     })
-    quill.keyboard.addBinding({ key: 'Tab', shiftKey: true }, (range, context) => {
-      if (context.format['code-block'] && range.index > 0) {
+    quill.keyboard.addBinding({ key: 'Tab', shiftKey: true }, (range) => {
+      if (!range) return true
+      if (range.index > 0) {
         const text = quill.getText(Math.max(0, range.index - 4), 4)
         // outdent sederhana: hapus hingga 1 tab / 4 spasi di sebelum cursor
         if (text.endsWith('\t')) {
@@ -221,7 +242,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       return true
     })
 
-    if (value) quill.clipboard.dangerouslyPasteHTML(value)
+    if (value) quill.clipboard.dangerouslyPasteHTML(preserveIndent(value))
     quill.on('text-change', (_delta, _old, source) => {
       if (source === 'user') isInternalChange.current = true
       onChangeRef.current?.(normalize(quill.root.innerHTML))
@@ -288,7 +309,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       return
     }
     if (normalize(value) !== normalize(quill.root.innerHTML)) {
-      quill.clipboard.dangerouslyPasteHTML(value || '')
+      quill.clipboard.dangerouslyPasteHTML(preserveIndent(value || ''))
     }
   }, [value])
 

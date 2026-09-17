@@ -41,6 +41,8 @@ export default function ForgotPassword() {
       const status = err.response?.status
       const msg = err.response?.data?.message
       if (status === 429) setError(t('auth.otpWait'))
+      else if (status === 404) setFieldError(t('auth.resetEmailNotFound'))
+      else if (status === 403) setFieldError(t('auth.resetNotVerified'))
       else if (status === 422) {
         const details = err.response?.data?.errors || []
         const f = details.find((x) => Object.keys(x)[0] === 'email')
