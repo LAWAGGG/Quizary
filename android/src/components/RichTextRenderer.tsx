@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Text, View, TextStyle, StyleProp, StyleSheet, Linking } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useAppTheme } from '../context/ThemeContext';
+import { KATEX_CSS, KATEX_JS, KATEX_AUTO_RENDER } from '../utils/katexInline';
 
 const htmlCache = new Map<string, string>();
 
@@ -292,9 +293,7 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
-        <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
-        <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+        <style>${KATEX_CSS}</style>
         <style>
           * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
           html {
@@ -367,6 +366,8 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
       </head>
       <body>
         <div class="rich-text" id="content">${html}</div>
+        <script>${KATEX_JS}</script>
+        <script>${KATEX_AUTO_RENDER}</script>
         <script>
           function sendHeight() {
             var el = document.getElementById('content');
@@ -390,10 +391,15 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
           });
           try {
             var formulas = document.querySelectorAll('.ql-formula');
-            formulas.forEach(function(el) {
+            for (var i = 0; i < formulas.length; i++) {
+              var el = formulas[i];
               var tex = el.getAttribute('data-value');
-              if (tex && window.katex) { try { window.katex.render(tex, el, { throwOnError: false }); } catch(e) {} }
-            });
+              if (tex && window.katex) {
+                try {
+                  el.innerHTML = window.katex.renderToString(tex, { throwOnError: false, displayMode: false });
+                } catch(e) {}
+              }
+            }
             if (window.renderMathInElement) {
               window.renderMathInElement(document.body, {
                 delimiters: [
