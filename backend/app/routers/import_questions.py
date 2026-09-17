@@ -157,6 +157,188 @@ def _para_images(p) -> list[tuple[str, bytes]]:
     return imgs
 
 
+M_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/math}"
+
+_LATEX_ESCAPE_RE = re.compile(r"([&%$#_{}])")
+
+_OMML_UNICODE_MAP = {
+    "→": "\\to ",
+    "←": "\\gets ",
+    "↔": "\\leftrightarrow ",
+    "⇒": "\\Rightarrow ",
+    "⟹": "\\implies ",
+    "≤": "\\le ",
+    "≥": "\\ge ",
+    "≠": "\\neq ",
+    "×": "\\times ",
+    "⋅": "\\cdot ",
+    "−": "-",
+    " ": " ",
+    " ": " ",
+    "∞": "\\infty ",
+    "∂": "\\partial ",
+    "∇": "\\nabla ",
+    "α": "\\alpha ",
+    "β": "\\beta ",
+    "γ": "\\gamma ",
+    "δ": "\\delta ",
+    "ε": "\\varepsilon ",
+    "θ": "\\theta ",
+    "λ": "\\lambda ",
+    "μ": "\\mu ",
+    "π": "\\pi ",
+    "σ": "\\sigma ",
+    "φ": "\\phi ",
+    "ω": "\\omega ",
+    "Δ": "\\Delta ",
+}
+
+_OMML_NARY_MAP = {
+    "∑": "\\sum ",
+    "∏": "\\prod ",
+    "∫": "\\int ",
+    "∬": "\\iint ",
+    "∭": "\\iiint ",
+    "∮": "\\oint ",
+    "⋃": "\\bigcup ",
+    "⋂": "\\bigcap ",
+    "⋁": "\\bigvee ",
+    "⋀": "\\bigwedge ",
+}
+
+_OMML_FUNC_NAMES = (
+    "limsup", "liminf", "sinh", "cosh", "tanh", "sin", "cos", "tan",
+    "sec", "csc", "cot", "log", "ln", "lg", "lim", "det", "exp",
+    "arg", "deg", "gcd", "inf", "sup", "max", "min", "Pr",
+)
+
+_OMML_FUNC_RE = re.compile(r"(?<!\\)\b(" + "|".join(_OMML_FUNC_NAMES) + r")(?![A-Za-z])")
+
+
+def _omml_text(raw: str) -> str:
+    esc = _LATEX_ESCAPE_RE.sub(r"\\\1", raw)
+    for src, dst in _OMML_UNICODE_MAP.items():
+        if src in esc:
+            esc = esc.replace(src, dst)
+    return esc
+
+
+def _omml_child(el, name):
+    return el.find(f"{M_NS}{name}")
+
+
+def _omml_run_text(el) -> str:
+    return "".join(
+        _omml_text(t.text or "")
+        for t in list(el.findall(f".//{M_NS}t")) + list(el.findall(f".//{WORD_NS}t"))
+    )
+
+
+def _omml_delim(el, name: str, default: str) -> str:
+    node = _omml_child(el, name)
+    if node is None:
+        return default
+    val = node.get(f"{WORD_NS}val")
+    return val if val else ""
+
+
+def _omml_to_latex(el) -> str:
+    tag = el.tag.split("}", 1)[1] if "}" in el.tag else el.tag
+    if tag == "t":
+        return _omml_text(el.text or "")
+    if tag == "r":
+        return _omml_run_text(el)
+    if tag in ("oMath", "oMathPara", "e", "num", "den", "deg", "lim", "sub", "sup", "fName"):
+        return "".join(_omml_to_latex(c) for c in el)
+    if tag == "f":
+        num = _omml_child(el, "num")
+        den = _omml_child(el, "den")
+        return "\\frac{%s}{%s}" % (
+            _omml_to_latex(num) if num is not None else "",
+            _omml_to_latex(den) if den is not None else "",
+        )
+    if tag == "sSup":
+        base = _omml_child(el, "e")
+        sup = _omml_child(el, "sup")
+        return "%s^{%s}" % (
+            _omml_to_latex(base) if base is not None else "",
+            _omml_to_latex(sup) if sup is not None else "",
+        )
+    if tag == "sSub":
+        base = _omml_child(el, "e")
+        sub = _omml_child(el, "sub")
+        return "%s_{%s}" % (
+            _omml_to_latex(base) if base is not None else "",
+            _omml_to_latex(sub) if sub is not None else "",
+        )
+    if tag == "sPre":
+        base = _omml_child(el, "e")
+        sub = _omml_child(el, "sub")
+        sup = _omml_child(el, "sup")
+        return "%s_{%s}^{%s}" % (
+            _omml_to_latex(base) if base is not None else "",
+            _omml_to_latex(sub) if sub is not None else "",
+            _omml_to_latex(sup) if sup is not None else "",
+        )
+    if tag == "rad":
+        deg = _omml_child(el, "deg")
+        e = _omml_child(el, "e")
+        body = _omml_to_latex(e) if e is not None else ""
+        d = _omml_to_latex(deg) if deg is not None else ""
+        if d.strip():
+            return "\\sqrt[%s]{%s}" % (d, body)
+        return "\\sqrt{%s}" % body
+    if tag == "d":
+        e = _omml_child(el, "e")
+        return _omml_delim(el, "begChr", "(") + (_omml_to_latex(e) if e is not None else "") + _omml_delim(el, "endChr", ")")
+    if tag == "nary":
+        pr = _omml_child(el, "naryPr")
+        chr_node = pr.find(f"{M_NS}chr") if pr is not None else None
+        chr_val = chr_node.get(f"{WORD_NS}val") if chr_node is not None else None
+        op = _OMML_NARY_MAP.get(chr_val, "\\int " if not chr_val else _omml_text(chr_val))
+        out = op
+        sub = _omml_child(el, "sub")
+        sup = _omml_child(el, "sup")
+        e = _omml_child(el, "e")
+        if sub is not None and _omml_to_latex(sub).strip():
+            out += "_{%s}" % _omml_to_latex(sub)
+        if sup is not None and _omml_to_latex(sup).strip():
+            out += "^{%s}" % _omml_to_latex(sup)
+        if e is not None:
+            out += "{%s}" % _omml_to_latex(e)
+        return out
+    if tag == "m":
+        rows = []
+        for mr in el.findall(f"{M_NS}mr"):
+            rows.append("&".join(_omml_to_latex(c) for c in mr.findall(f"{M_NS}e")))
+        return "\\begin{matrix}%s\\end{matrix}" % "\\\\".join(rows)
+    if tag == "bar":
+        e = _omml_child(el, "e")
+        return "\\overline{%s}" % (_omml_to_latex(e) if e is not None else "")
+    if tag == "limLow":
+        base = _omml_child(el, "e")
+        lim = _omml_child(el, "lim")
+        b = _omml_to_latex(base) if base is not None else ""
+        below = _omml_to_latex(lim) if lim is not None else ""
+        return "%s_{%s}" % (b, below) if below.strip() else b
+    if tag == "limUpp":
+        base = _omml_child(el, "e")
+        lim = _omml_child(el, "lim")
+        b = _omml_to_latex(base) if base is not None else ""
+        above = _omml_to_latex(lim) if lim is not None else ""
+        return "%s^{%s}" % (b, above) if above.strip() else b
+    if tag == "func":
+        name_el = _omml_child(el, "fName")
+        arg_el = _omml_child(el, "e")
+        name = _omml_to_latex(name_el) if name_el is not None else ""
+        name = _OMML_FUNC_RE.sub(r"\\\1", name)
+        arg = _omml_to_latex(arg_el) if arg_el is not None else ""
+        if not arg.strip():
+            return name
+        return "%s{%s}" % (name, arg)
+    return "".join(_omml_to_latex(c) for c in el)
+
+
 def _extract_docx_items(doc) -> list[tuple[str, str | None, list]]:
     """
     Kembalikan list (text, num_id, images) per paragraf yang punya makna.
@@ -741,4 +923,27 @@ Answer: A
         assert all(3 <= len(q["options"]) <= 5 for q in parsed), "opsi 3-5 per soal"
         assert all(o["text"] for q in parsed for o in q["options"]), "ada opsi kosong"
         print(f"ok real docx; {len(parsed)} soal, 20 gambar stem PNG, opsi 3-5 per soal")
+    latex_sample = os.path.join(os.path.dirname(__file__), "../../../frontend/public/Template_Soal_Quizary_Matematika_LaTeX.docx")
+    assert os.path.exists(latex_sample), "contoh docx rumus hilang"
+    ldoc = Document(latex_sample)
+    p53 = ldoc.paragraphs[53]
+    maths53 = [c for c in p53._p if (c.tag.split("}", 1)[1] if "}" in c.tag else c.tag) in ("oMath", "oMathPara")]
+    assert len(maths53) == 2, [c.tag for c in p53._p]
+    assert _omml_to_latex(maths53[0]) == "\\frac{x^{2}-9}{x-3}", _omml_to_latex(maths53[0])
+    assert _omml_to_latex(maths53[1]) == "x\\neq 3", _omml_to_latex(maths53[1])
+    p19 = ldoc.paragraphs[19]
+    maths19 = [c for c in p19._p if (c.tag.split("}", 1)[1] if "}" in c.tag else c.tag) in ("oMath", "oMathPara")]
+    assert _omml_to_latex(maths19[0]) == "\\sin^{2}{(x)}+\\cos^{2}{(x)}=1", _omml_to_latex(maths19[0])
+    p26 = ldoc.paragraphs[26]
+    maths26 = [c for c in p26._p if (c.tag.split("}", 1)[1] if "}" in c.tag else c.tag) in ("oMath", "oMathPara")]
+    assert _omml_to_latex(maths26[0]) == "(\\begin{matrix}2&1\\\\4&3\\end{matrix})", _omml_to_latex(maths26[0])
+    p37 = ldoc.paragraphs[37]
+    maths37 = [c for c in p37._p if (c.tag.split("}", 1)[1] if "}" in c.tag else c.tag) in ("oMath", "oMathPara")]
+    lim37 = _omml_to_latex(maths37[0])
+    assert "\\lim_{x\\to 0}" in lim37, lim37
+    assert "\\frac{\\sin{(4x)}}{2x}" in lim37, lim37
+    p2 = ldoc.paragraphs[2]
+    maths2 = [c for c in p2._p if (c.tag.split("}", 1)[1] if "}" in c.tag else c.tag) in ("oMath", "oMathPara")]
+    assert _omml_to_latex(maths2[0]) == "\\int _{0}^{1}{(3x^{2}+2x+1)} dx", _omml_to_latex(maths2[0])
+    print("ok OMML -> LaTeX")
     print("done")
