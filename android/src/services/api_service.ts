@@ -7,6 +7,9 @@ const getHost = () => {
   let envUrl = process.env.EXPO_PUBLIC_API_URL?.trim() || process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
 
   if (envUrl) {
+    if (!envUrl.startsWith('http://') && !envUrl.startsWith('https://')) {
+      envUrl = `https://${envUrl}`;
+    }
     envUrl = envUrl.replace(/\/+$/, '');
     if (!envUrl.endsWith('/api')) {
       envUrl += '/api';
