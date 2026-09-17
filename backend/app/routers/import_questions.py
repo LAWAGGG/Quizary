@@ -159,6 +159,21 @@ def _para_images(p) -> list[tuple[str, bytes]]:
 
 M_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/math}"
 
+
+def _para_text_with_math(p) -> str:
+    parts: list[str] = []
+    for child in p._p:
+        tag = child.tag.split("}", 1)[1] if "}" in child.tag else child.tag
+        if tag == "r":
+            parts.append("".join(t.text or "" for t in child.findall(f".//{WORD_NS}t")))
+        elif tag in ("oMath", "oMathPara"):
+            latex = _omml_to_latex(child).strip()
+            if latex:
+                parts.append("\\(%s\\)" % latex)
+        elif tag not in ("pPr", "bookmarkStart", "bookmarkEnd", "proofErr"):
+            parts.append("".join(t.text or "" for t in child.findall(f".//{WORD_NS}t")))
+    return "".join(parts)
+
 _LATEX_ESCAPE_RE = re.compile(r"([&%$#_{}])")
 
 _OMML_UNICODE_MAP = {
@@ -359,7 +374,7 @@ def _extract_docx_items(doc) -> list[tuple[str, str | None, list]]:
         style_name = (p.style.name or "").lower() if p.style else ""
         if style_name.startswith("heading"):
             continue
-        text = p.text.strip()
+        text = _para_text_with_math(p).strip()
         numPr = p._p.find(f".//{WORD_NS}numPr")
         num_id = None
         if numPr is not None:
@@ -946,4 +961,13 @@ Answer: A
     maths2 = [c for c in p2._p if (c.tag.split("}", 1)[1] if "}" in c.tag else c.tag) in ("oMath", "oMathPara")]
     assert _omml_to_latex(maths2[0]) == "\\int _{0}^{1}{(3x^{2}+2x+1)} dx", _omml_to_latex(maths2[0])
     print("ok OMML -> LaTeX")
+    items = _extract_docx_items(ldoc)
+    parsed = _parse_docx_items(items)
+    assert len(parsed) == 17, f"harus 17 soal, dapat {len(parsed)}"
+    assert "\\int _{0}^{1}" in parsed[0]["question_text"], parsed[0]["question_text"]
+    assert "\\(" in parsed[0]["question_text"] and "\\)" in parsed[0]["question_text"]
+    assert all("\\(\\)" not in q["question_text"] for q in parsed), "rumus kosong bocor"
+    assert all("\\(\\)" not in o["text"] for q in parsed for o in q["options"]), "rumus kosong bocor di opsi"
+    assert any("\\frac" in o["text"] for q in parsed for o in q["options"]), "opsi pecahan hilang"
+    print("ok wiring OMML inline")
     print("done")
