@@ -1,10 +1,32 @@
 import { useState } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
 import { Button } from './Button'
 
 export const MAX_ANSWER_KEYS = 10
 export const MAX_ANSWER_KEY_LEN = 100
+
+// Kunci disimpan plain ("\\frac{11}{15}") agar grading contains tetap jalan —
+// chip hanya membungkus render KaTeX, tanpa mengubah payload join ";".
+const MATH_HINT_RE = /\\[a-zA-Z]+|[\^_{}]/
+function KeyContent({ k }) {
+  if (MATH_HINT_RE.test(k) && !/[<>]/.test(k)) {
+    try {
+      const html = katex.renderToString(k, { throwOnError: true, displayMode: false })
+      return (
+        <span className="min-w-0 truncate key-katex" title={k}>
+          <span aria-hidden="true" dangerouslySetInnerHTML={{ __html: html }} />
+          <span className="sr-only">{k}</span>
+        </span>
+      )
+    } catch {
+      // fallback ke plain di bawah
+    }
+  }
+  return <span className="min-w-0 truncate font-mono">{k}</span>
+}
 
 export function splitAnswerKeys(raw) {
   return String(raw || '').split(/[;\n]+/).map((k) => k.trim()).filter(Boolean)
@@ -56,7 +78,7 @@ export function AnswerKeyEditor({ value, onChange, required, error, inputRef }) 
               key={`${k}-${i}`}
               className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary-50 dark:bg-primary-900/30 border border-primary/20 pl-3 pr-1.5 py-1 text-sm text-primary-700 dark:text-primary-300"
             >
-              <span className="min-w-0 truncate font-mono">{k}</span>
+              <KeyContent k={k} />
               <button
                 type="button"
                 onClick={() => removeKey(i)}

@@ -692,6 +692,15 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   white-space: nowrap;
 }
 
+/* Chip answer key — rumus KaTeX inline jangan melebar chip */
+.key-katex .katex {
+  font-size: 1em;
+  white-space: nowrap;
+}
+.key-katex .katex-display {
+  margin: 0;
+}
+
 /* Nested list indentation — mirror editor (.ql-indent-*) */
 .rich-text li.ql-indent-1 { padding-left: 4.5em; }
 .rich-text li.ql-indent-2 { padding-left: 7.5em; }
