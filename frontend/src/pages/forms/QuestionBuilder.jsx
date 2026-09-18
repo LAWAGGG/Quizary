@@ -1269,6 +1269,15 @@ export default function QuestionBuilder() {
   const [showImportModal, setShowImportModal] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importSectionId, setImportSectionId] = useState('')
+  const [actionsOpen, setActionsOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const actionsRef = useRef(null)
+  useEffect(() => {
+    if (!actionsOpen) return
+    const onDown = (e) => { if (actionsRef.current && !actionsRef.current.contains(e.target)) setActionsOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [actionsOpen])
 
   const [form, setForm] = useState(null)
   const [questions, setQuestions] = useState([])
@@ -1887,6 +1896,35 @@ export default function QuestionBuilder() {
     }
   }
 
+  const handleExportDocx = async () => {
+    setActionsOpen(false)
+    if (exporting || !questions.length) return
+    setExporting(true)
+    try {
+      const res = await api.get(`/forms/${formId}/export/docx`, { responseType: 'blob' })
+      const cd = res.headers?.['content-disposition'] || ''
+      const m = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(cd)
+      const fallback = (form?.title || '').replace(/<[^>]*>/g, '').trim().replace(/[^\w\-. ]+/g, '_').slice(0, 100) || 'soal'
+      const filename = (m?.[1] || `${fallback}.docx`).replace(/['"]/g, '').trim()
+      const url = URL.createObjectURL(new Blob([res.data]))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success(t('questionBuilder.exportSuccess'))
+    } catch (err) {
+      const msg = err.response?.status === 422
+        ? err.response?.data?.message || t('questionBuilder.exportEmpty')
+        : err.response?.data?.message || t('questionBuilder.exportFailed')
+      toast.error(typeof msg === 'string' ? msg : t('questionBuilder.exportFailed'))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const editQuestion = (q) => {
     setEditing(q)
     setShowForm(true)
@@ -1954,23 +1992,64 @@ export default function QuestionBuilder() {
       <FormBackButton />
 
       <PageHeader
+        rowOnMobile
         eyebrow={form.type === 'quiz' ? t('questionBuilder.quizBuilder') : t('questionBuilder.formBuilder')}
         title={<RichText html={form.title} />}
         description={t('questionBuilder.questionCount', { count: questions.length })}
         actions={
           <>
             <input ref={docxRef} type="file" accept=".docx" onChange={handleDocxImport} className="hidden" />
-            <Button variant="secondary" onClick={() => { if (docxRef.current) docxRef.current.value = ''; setShowImportModal(true) }} icon={<Upload className="w-4 h-4" />}>
-              <span className="hidden sm:inline">{t('questionBuilder.importDocx')}</span>
-            </Button>
-            {sectionsAllowed && (
-              <Button variant="secondary" onClick={() => setShowSectionManager(true)} icon={<Layers className="w-4 h-4" />}>
-                <span className="hidden sm:inline">{t('questionBuilder.manageSections')}</span>
+            <div className="relative flex items-center shrink-0 self-start sm:self-auto" ref={actionsRef}>
+              <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />} className="rounded-r-none">
+                <span className="hidden sm:inline">{t('questionBuilder.addQuestion')}</span>
               </Button>
-            )}
-            <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />}>
-              <span className="hidden sm:inline">{t('questionBuilder.addQuestion')}</span>
-            </Button>
+              <Button
+                onClick={() => setActionsOpen((v) => !v)}
+                aria-label={t('questionBuilder.moreActions')}
+                aria-expanded={actionsOpen}
+                className="rounded-l-none px-2.5 border-l border-white/25"
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${actionsOpen ? 'rotate-180' : ''}`} />
+              </Button>
+              <AnimatePresence>
+                {actionsOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.12 }}
+                    className="absolute right-0 top-full mt-2 w-56 max-w-[calc(100vw-2rem)] origin-top-right bg-white dark:bg-ink-900 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-lift py-1.5 z-50"
+                  >
+                    <button
+                      onClick={() => { setActionsOpen(false); if (docxRef.current) docxRef.current.value = ''; setShowImportModal(true) }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-ink-800 transition-colors text-left"
+                    >
+                      <Upload className="w-4 h-4 shrink-0 text-gray-400" />
+                      {t('questionBuilder.importDocx')}
+                    </button>
+                    <button
+                      onClick={handleExportDocx}
+                      disabled={exporting || !questions.length}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-ink-800 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {exporting
+                        ? <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
+                        : <Download className="w-4 h-4 shrink-0 text-gray-400" />}
+                      {exporting ? t('questionBuilder.exporting') : t('questionBuilder.exportDocx')}
+                    </button>
+                    {sectionsAllowed && (
+                      <button
+                        onClick={() => { setActionsOpen(false); setShowSectionManager(true) }}
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-ink-800 transition-colors text-left"
+                      >
+                        <Layers className="w-4 h-4 shrink-0 text-gray-400" />
+                        {t('questionBuilder.manageSections')}
+                      </button>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </>
         }
       />

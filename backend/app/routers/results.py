@@ -514,13 +514,22 @@ def _safe_cell(value):
 
 
 def _export_columns(form: Form, subs: list[Submission], db: Session, base_url: str | None = None):
-    """Build dynamic export: one column per question + Dikirim/Skor/Status."""
+    """Build export: Timestamp, Status, Nama, Nilai + one column per question."""
     questions = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).order_by(Question.order_index).all()
     q_ids = [q.id for q in questions]
-    headers = [_safe_cell(_strip_html(q.question_text) or f"Soal {i+1}") for i, q in enumerate(questions)] + ["Dikirim", "Skor", "Status"]
+    headers = ["Timestamp", "Status", "Nama", "Nilai"] + [_safe_cell(_strip_html(q.question_text) or f"Soal {i+1}") for i, q in enumerate(questions)]
 
     if not questions:
-        return questions, headers, []
+        rows = [
+            [
+                fmt_dt(to_naive_utc(s.submitted_at)) or "-",
+                s.status.value,
+                _safe_cell(s.respondent_name) or "-",
+                float(s.score) if s.score is not None else "-",
+            ]
+            for s in subs
+        ]
+        return questions, headers, rows
 
     opt_text = {o.id: _strip_html(o.option_text) for o in db.query(QuestionOption).filter(QuestionOption.question_id.in_(q_ids)).all()}
     answers = db.query(Answer).filter(
@@ -560,10 +569,13 @@ def _export_columns(form: Form, subs: list[Submission], db: Session, base_url: s
 
     rows = []
     for s in subs:
-        row = [_safe_cell(answer_map.get((s.id, q.id), "") or "-") for q in questions]
-        row.append(fmt_dt(to_naive_utc(s.submitted_at)) or "-")
-        row.append(float(s.score) if s.score is not None else "-")
-        row.append(s.status.value)
+        row = [
+            fmt_dt(to_naive_utc(s.submitted_at)) or "-",
+            s.status.value,
+            _safe_cell(s.respondent_name) or "-",
+            float(s.score) if s.score is not None else "-",
+        ]
+        row.extend(_safe_cell(answer_map.get((s.id, q.id), "") or "-") for q in questions)
         rows.append(row)
     return questions, headers, rows
 
@@ -626,7 +638,7 @@ def export_excel(
 
     # Soal file_upload → hyperlink klikable (display = nama file, target = URL
     # penuh). Excel render biru-underline; user klik langsung buka file.
-    file_col_idx = {i for i, qq in enumerate(questions) if qq.type == QuestionType.file_upload}
+    file_col_idx = {i + 4 for i, qq in enumerate(questions) if qq.type == QuestionType.file_upload}
     link_font = Font(color="0563C1", underline="single")
     for row in ws.iter_rows(min_row=2, max_row=1 + len(rows)):
         for i in file_col_idx:

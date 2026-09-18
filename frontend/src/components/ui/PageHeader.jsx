@@ -1,7 +1,7 @@
-export function PageHeader({ eyebrow, title, description, actions, className = '' }) {
+export function PageHeader({ eyebrow, title, description, actions, className = '', rowOnMobile = false }) {
   return (
-    <div className={`flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between ${className}`}>
-      <div className="min-w-0">
+    <div className={`${rowOnMobile ? 'flex flex-row items-end justify-between gap-3' : 'flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between'} ${className}`}>
+      <div className={`min-w-0 ${rowOnMobile ? 'flex-1' : ''}`}>
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         <h1 className="mt-1.5 font-display text-2xl md:text-[28px] font-bold tracking-tight text-ink dark:text-gray-100">
           {title}

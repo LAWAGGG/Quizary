@@ -604,6 +604,28 @@ file: <soal.docx>
 
 > **Catatan:** Tidak ada endpoint `/import/text` atau `/import/confirm`. Import langsung menyimpan soal. Untuk menambah/mengedit soal, gunakan endpoint Questions biasa.
 
+### `GET /forms/{form_id}/export/docx`
+Auth: Bearer Token (pemilik) — export seluruh soal ke `.docx` format template import (round-trip).
+
+```
+// Response 200
+Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+Content-Disposition: attachment; filename="{title}.docx"
+[binary file]
+```
+**Isi file (cermin parser import, bisa diimport ulang apa adanya):**
+- Judul form sebagai Heading 1, judul section sebagai Heading 2 (parser skip heading → aman).
+- Nomor soal `N.` urut `order_index`, opsi `A.`–`J.`, `Answer: B` (MC/dropdown) / `Answer: A, C` (checkbox multi).
+- `Kunci: a;b` untuk essay/short_answer ber-kunci; `Point: N` hanya saat `scoring_mode=manual` (is_scored, 1–100) — auto mode di-skip agar import ulang tetap auto-distribusi.
+- Gambar soal/opsi di-embed ulang dari disk; audio tidak ikut (docx tak bisa round-trip audio).
+- Formula LaTeX disimpan sebagai OMML native Word (render alt+=): mendukung `\(...\)`, `\[...\]`, `$...$`, `$$...$$`, dan `<math>` (KaTeX HTML). Import ulang mengubahnya kembali ke LaTeX.
+- Batasan import berlaku: dropdown tanpa kunci & tipe non-opsi (password/date/time/file) kembali sebagai essay/MC polos.
+
+```json
+// Response 422 (form belum punya soal)
+{ "message": "Form belum memiliki soal untuk diekspor" }
+```
+
 ---
 
 ## 6. Share & Access (Publik)
@@ -1144,6 +1166,7 @@ Auth: Bearer Token
 | GET | `/api/forms/{id}/results` | Bearer | Hasil submission (pemilik) |
 | GET | `/api/forms/{id}/analytics` | Bearer | Statistik (pemilik) |
 | GET | `/api/forms/{id}/export/excel` | Bearer | Export Excel (pemilik) |
+| GET | `/api/forms/{id}/export/docx` | Bearer | Export soal ke .docx template (round-trip, formula → OMML) |
 | POST | `/api/forms/{id}/import/docx` | Bearer | Import soal dari .docx |
 | PUT | `/api/questions/{id}` | Bearer | Update soal |
 | DELETE | `/api/questions/{id}` | Bearer | Hapus soal |

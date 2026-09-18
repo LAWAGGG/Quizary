@@ -1,12 +1,13 @@
+import html
 import re
 import io
 import os
 import uuid
 from collections import Counter
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, status
 from fastapi import Form as ApiForm
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import verify_form_owner
@@ -838,6 +839,205 @@ def import_docx(
     distribute_quiz_points(form.id, db)
     db.commit()
     return {"message": f"{count} question(s) imported successfully", "imported_count": count}
+
+
+_EXPORT_LETTERS = "ABCDEFGHIJ"
+
+
+def _export_strip_html(text: str | None) -> str:
+    raw = str(text or "")
+    cleaned = html.unescape(re.sub(r"<[^>]*>", "", raw))
+    if re.search(r"<[a-zA-Z][^>]*>", cleaned):
+        cleaned = html.unescape(re.sub(r"<[^>]*>", "", cleaned))
+    return html.unescape(cleaned).strip()
+
+
+def _export_add_image(paragraph, blob: bytes, width_in=4.5):
+    """Embed gambar ke paragraf docx. Gagal (korup/format aneh) → skip diam-diam."""
+    try:
+        from docx.shared import Inches
+        run = paragraph.add_run()
+        run.add_picture(io.BytesIO(blob), width=Inches(width_in))
+    except Exception:
+        pass
+
+
+# Formula bisa tersimpan dalam 3 bentuk: `\(...\)`/`\[...\]` (import DOCX),
+# `$...$`/`$$...$$` (RichTextEditor/Quill), atau HTML `<math>` (KaTeX export).
+# Urutan alternation penting: delimiter 2-char dulu, `\(` sebelum `$`.
+_FORMULA_SPLIT_RE = re.compile(
+    r"(\\\(.+?\\\)|\\\[.+?\\\]|<math\b[^>]*>.*?</math>|\$\$.+?\$\$|\$.+?\$)",
+    re.S,
+)
+
+
+def _export_add_omml(paragraph, src: str, is_latex: bool) -> bool:
+    """Konversi LaTeX `\\(...\\)`/`\\[...\\]` atau HTML `<math>` ke OMML `<m:oMath>`
+
+    lalu tempel ke paragraf docx → Word render sebagai formula native (alt+=).
+    Gagal (syntax tak dikenal) → False, caller boleh fallback teks biasa.
+    """
+    try:
+        from lxml import etree as ET
+        from latex2mathml.converter import convert as latex_to_mathml
+        from mathml2omml import convert as mathml_to_omml
+        if is_latex:
+            mathml = latex_to_mathml(src.strip())
+        else:
+            mathml = src
+        omml_xml = mathml_to_omml(mathml)
+        if not omml_xml or "<m:oMath" not in omml_xml:
+            return False
+        # mathml2omml.output tanpa xmlns:m — bungkus root untuk mendeklare
+        # namespace Office Math, lalu ambil elemen oMath-nya.
+        ns = M_NS.strip("{}")
+        wrapped = ET.fromstring(
+            f'<root xmlns:m="{ns}">{omml_xml}</root>'.encode("utf-8")
+        )
+        paragraph._p.append(wrapped[0])
+        return True
+    except Exception:
+        return False
+
+
+def _export_add_runs(paragraph, raw: str, prefix: str = ""):
+    """Tambahkan run teks ke paragraf, formula `\\(...\\)`/`\\[...\\]`/HTML
+    `<math>` jadi OMML native; sisanya plain text (strip tag + HTML unescape)."""
+    if prefix:
+        paragraph.add_run(prefix)
+    has_formula = False
+    for seg in _FORMULA_SPLIT_RE.split(raw or ""):
+        seg = seg or ""
+        if seg.startswith("\\(") or seg.startswith("\\["):
+            tex = seg[2:-2]
+            if tex.strip() and _export_add_omml(paragraph, tex, True):
+                has_formula = True
+        elif seg.startswith("$$"):
+            tex = seg[2:-2]
+            if tex.strip() and _export_add_omml(paragraph, tex, True):
+                has_formula = True
+        elif seg.startswith("$"):
+            tex = seg[1:-1]
+            if tex.strip() and _export_add_omml(paragraph, tex, True):
+                has_formula = True
+        elif seg.lower().startswith("<math"):
+            if _export_add_omml(paragraph, seg, False):
+                has_formula = True
+            else:
+                text = _export_strip_html(seg)
+                if text:
+                    paragraph.add_run(text)
+        else:
+            text = _export_strip_html(seg)
+            if text:
+                paragraph.add_run(text)
+    return has_formula
+
+
+def _export_add_answer_key(paragraph, raw: str):
+    """Tulis baris `Kunci: a;b` — kunci yang berupa LaTeX (mengandung \\
+    backslash) jadi OMML native, sisanya plain text. Answer key di DB tanpa
+    delimiter `\\(...\\)` (di-strip saat import), jadi deteksi manual."""
+    paragraph.add_run("Kunci: ")
+    keys = [k.strip() for k in re.split(r"[;\n]+", raw or "") if k.strip()]
+    for i, k in enumerate(keys):
+        if i:
+            paragraph.add_run("; ")
+        if "\\" in k:
+            if not _export_add_omml(paragraph, k, True):
+                paragraph.add_run(k)
+        else:
+            paragraph.add_run(k)
+
+
+@router.get("/forms/{form_id}/export/docx")
+def export_docx(form: Form = Depends(verify_form_owner), db: Session = Depends(get_db)):
+    """Export seluruh soal form ke .docx format template import (round-trip).
+
+    Cermin parser import: nomor `N.`, opsi `A.`-`J.`, `Answer: B` / `A, C`,
+    `Kunci: a;b`, `Point: N` (hanya scoring manual). Judul section jadi
+    Heading (parser skip heading → aman diimport ulang). Gambar soal/opsi
+    di-embed ulang dari disk. Audio tak ikut (docx tak bisa round-trip audio).
+    Batasan import berlaku juga di sini: dropdown tanpa kunci & tipe
+    non-opsi (password/date/time/file) kembali sebagai essay/MC polos.
+    """
+    try:
+        from docx import Document  # type: ignore
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="python-docx is not installed",
+        )
+
+    questions = (
+        db.query(Question)
+        .options(selectinload(Question.options).selectinload(QuestionOption.images), selectinload(Question.images))
+        .filter(Question.form_id == form.id, Question.is_deleted.is_(False))
+        .order_by(Question.order_index, Question.id)
+        .all()
+    )
+    if not questions:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Form belum memiliki soal untuk diekspor",
+        )
+    sections = (
+        db.query(Section)
+        .filter(Section.form_id == form.id)
+        .order_by(Section.order_index, Section.id)
+        .all()
+    )
+    section_title = {s.id: _export_strip_html(s.title) or "Bagian" for s in sections}
+    is_manual = form.scoring_mode == ScoringMode.manual
+
+    doc = Document()
+    doc.add_heading(f"Soal — {_export_strip_html(form.title) or form.short_code}", level=1)
+
+    last_section = object()
+    for n, q in enumerate(questions, 1):
+        if q.section_id != last_section:
+            last_section = q.section_id
+            if q.section_id in section_title:
+                doc.add_heading(section_title[q.section_id], level=2)
+        q_text = _export_strip_html(q.question_text) or f"Soal {n}"
+        par = doc.add_paragraph()
+        _export_add_runs(par, q.question_text, prefix=f"{n}. ")
+        if is_manual and q.is_scored and isinstance(q.points, int) and 1 <= q.points <= 100:
+            doc.add_paragraph(f"Point: {q.points}")
+        for img in sorted(q.images, key=lambda i: i.order_index or 0):
+            if str(img.path or "").lower().endswith((".mp3", ".wav", ".m4a", ".ogg", ".aac", ".webm")):
+                continue
+            full = os.path.join(UPLOAD_DIR, (img.path or "").lstrip("/"))
+            if os.path.isfile(full):
+                with open(full, "rb") as f:
+                    _export_add_image(doc.add_paragraph(), f.read())
+        opts = sorted(q.options, key=lambda o: o.order_index or 0)
+        correct_letters = []
+        for i, opt in enumerate(opts):
+            letter = _EXPORT_LETTERS[i] if i < len(_EXPORT_LETTERS) else chr(ord("K") + i - 10)
+            if opt.is_correct and i < len(_EXPORT_LETTERS):
+                correct_letters.append(letter)
+            opt_par = doc.add_paragraph()
+            _export_add_runs(opt_par, opt.option_text, prefix=f"{letter}. ")
+            for img in sorted(opt.images, key=lambda im: im.order_index or 0):
+                full = os.path.join(UPLOAD_DIR, (img.path or "").lstrip("/"))
+                if os.path.isfile(full):
+                    with open(full, "rb") as f:
+                        _export_add_image(doc.add_paragraph(), f.read())
+        if correct_letters:
+            doc.add_paragraph(f"Answer: {', '.join(correct_letters)}")
+        elif (q.answer_key or "").strip():
+            _export_add_answer_key(doc.add_paragraph(), q.answer_key)
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    safe_title = re.sub(r"[^\w\-. ]+", "_", _export_strip_html(form.title)).strip(" ._")[:100] or "soal"
+    return Response(
+        content=buf.read(),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.docx"'},
+    )
 
 
 if __name__ == "__main__":
