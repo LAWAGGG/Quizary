@@ -301,6 +301,27 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   @apply text-white bg-ink-900;
 }
 
+.dark .rich-editor .ql-editor,
+.dark .rich-editor .ql-editor p,
+.dark .rich-editor .ql-editor li,
+.dark .rich-editor .ql-editor span,
+.dark .rich-editor .ql-editor div,
+.dark .rich-editor .ql-editor * {
+  color: #fff !important;
+}
+
+.rich-editor .ql-editor .katex,
+.rich-editor .ql-editor .katex-display,
+.rich-editor .ql-editor .ql-formula,
+.rich-editor .ql-editor .ql-formula-container {
+  display: none !important;
+}
+
+.rich-editor .ql-editor .katex + *,
+.rich-editor .ql-editor .ql-formula + * {
+  display: none !important;
+}
+
 /* Placeholder mode gelap */
 .dark .rich-editor .ql-editor.ql-blank::before {
   @apply text-gray-500; 

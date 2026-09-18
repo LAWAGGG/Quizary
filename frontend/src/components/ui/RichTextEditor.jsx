@@ -7,6 +7,7 @@ import 'katex/dist/katex.min.css'
 import 'quill/dist/quill.snow.css'
 import { Button } from './Button'
 import { RichText } from './RichText'
+import { convertLatexText, convertMathInHtml } from '../../lib/pasteFormula'
 
 Quill.register('modules/syntax', Syntax, true)
 
@@ -121,6 +122,21 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     String(ws).replace(/&nbsp;|&#160;|\t| /gi, (t) => { n += (t === '\t' ? 4 : 1); return '' })
     return '&nbsp;'.repeat(n)
   }
+  const normalizeFormulaBlots = (html) => {
+    if (!html || typeof html !== 'string') return html
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    doc.querySelectorAll('.katex, .katex-display').forEach((node) => {
+      const annotation = node.querySelector('annotation')?.textContent?.trim()
+      const raw = annotation ? `$${annotation}$` : node.textContent || ''
+      node.replaceWith(doc.createTextNode(raw))
+    })
+    doc.querySelectorAll('.ql-formula, .ql-formula-container').forEach((node) => {
+      const value = node.getAttribute('data-value') || node.textContent || ''
+      if (value.trim()) node.replaceWith(doc.createTextNode(`$${value.trim()}$`))
+      else node.remove()
+    })
+    return doc.body.innerHTML
+  }
   const preserveIndent = (html) => {
     if (!html) return html
     return String(html).split(/(<pre[\s\S]*?<\/pre>)/gi).map((chunk, i) => {
@@ -202,6 +218,26 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     quillRef.current = quill
     quill.root.setAttribute('spellcheck', 'false')
 
+    const onPasteFormula = (event) => {
+      const html = event.clipboardData?.getData('text/html') || ''
+      const text = event.clipboardData?.getData('text/plain') || ''
+      const convertedHtml = convertMathInHtml(html)
+      const convertedText = convertedHtml
+        ? new DOMParser().parseFromString(convertedHtml, 'text/html').body.textContent || ''
+        : convertLatexText(text)
+      if (!convertedText || convertedText === text && !convertedHtml) return
+
+      event.preventDefault()
+      const range = quill.getSelection(true) || { index: Math.max(0, quill.getLength() - 1), length: 0 }
+      quill.deleteText(range.index, range.length, 'silent')
+      const contentLengthBeforeInsert = quill.getLength()
+      const insertValue = convertedText
+      quill.insertText(range.index, insertValue, 'user')
+      const insertedLength = Math.max(0, quill.getLength() - contentLengthBeforeInsert)
+      quill.setSelection(range.index + insertedLength, 0, 'silent')
+    }
+    quill.root.addEventListener('paste', onPasteFormula)
+
     const symbolBtn = container.parentNode?.querySelector('.ql-symbol')
     if (symbolBtn) symbolBtn.title = 'Insert symbol'
 
@@ -242,7 +278,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       return true
     })
 
-    if (value) quill.clipboard.dangerouslyPasteHTML(preserveIndent(value))
+    if (value) quill.clipboard.dangerouslyPasteHTML(preserveIndent(normalizeFormulaBlots(value)))
     quill.on('text-change', (_delta, _old, source) => {
       if (source === 'user') isInternalChange.current = true
       onChangeRef.current?.(normalize(quill.root.innerHTML))
@@ -287,6 +323,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
 
     return () => {
       quill.off('selection-change', onSelectionChange)
+      quill.root.removeEventListener('paste', onPasteFormula)
       wrapper?.removeEventListener('focusin', onFocusIn)
       wrapper?.removeEventListener('focusout', onFocusOut)
       wrapper?.removeEventListener('pointerdown', onPreActive)
@@ -309,7 +346,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       return
     }
     if (normalize(value) !== normalize(quill.root.innerHTML)) {
-      quill.clipboard.dangerouslyPasteHTML(preserveIndent(value || ''))
+      quill.clipboard.dangerouslyPasteHTML(preserveIndent(normalizeFormulaBlots(value || '')))
     }
   }, [value])
 
