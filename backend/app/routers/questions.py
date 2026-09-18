@@ -18,6 +18,7 @@ from app.models.user import User
 from app.services.points import distribute_quiz_points
 from app.utils import file_url, now_wib, write_limited, MAX_QUESTION_MEDIA_BYTES, _delete_file, UPLOAD_DIR
 from app.schemas.question import (
+    BulkMoveSectionRequest,
     GroupAddRequest,
     QuestionCreate,
     QuestionGroupRequest,
@@ -957,6 +958,56 @@ def bulk_delete_questions(
     ).update({Question.is_deleted: True}, synchronize_session=False)
     db.commit()
     return {"message": f"{len(ids)} question(s) deleted"}
+
+
+# ── POST /forms/{form_id}/questions/bulk-move-section ──────────────────────────
+# Pindah banyak soal ke satu section dalam SATU transaksi. Pengganti N request
+# PUT /questions/{id} paralel dari SectionManager yang race di order_index +
+# rebalance poin (cuma 1 yang lolos, sisanya failed).
+
+@router.post("/forms/{form_id}/questions/bulk-move-section")
+def bulk_move_section(
+    form_id: int,
+    body: BulkMoveSectionRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    form = db.get(Form, form_id)
+    if not form or form.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form not found")
+    ids = body.question_ids
+    target_id = body.section_id
+
+    sections = (
+        db.query(Section)
+        .filter(Section.form_id == form.id)
+        .order_by(Section.order_index, Section.id)
+        .all()
+    )
+    if not any(s.id == target_id for s in sections):
+        raise HTTPException(status_code=422, detail="Section tidak ditemukan pada form ini")
+
+    movers = (
+        db.query(Question)
+        .filter(
+            Question.id.in_(ids),
+            Question.form_id == form_id,
+            Question.is_deleted.is_(False),
+            Question.section_id != target_id,
+        )
+        .order_by(Question.order_index, Question.id)
+        .all()
+    )
+    if not movers:
+        return {"moved": 0}
+
+    for q in movers:
+        q.section_id = target_id
+        db.flush()
+        _relocate_to_section_end(db, q, sections)
+    distribute_quiz_points(form_id, db)
+    db.commit()
+    return {"moved": len(movers)}
 
 
 # ── PATCH /questions/reorder ──────────────────────────────────────────────────

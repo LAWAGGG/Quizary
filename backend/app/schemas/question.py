@@ -210,6 +210,17 @@ class GroupAddRequest(BaseModel):
         return self
 
 
+class BulkMoveSectionRequest(BaseModel):
+    question_ids: list[int] = Field(min_length=1, max_length=1000)
+    section_id: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def validate_ids(self):
+        if len(set(self.question_ids)) != len(self.question_ids):
+            raise ValueError("question_ids tidak boleh duplikat")
+        return self
+
+
 class SectionCreate(BaseModel):
     title: str = Field(min_length=1, max_length=150)
 
