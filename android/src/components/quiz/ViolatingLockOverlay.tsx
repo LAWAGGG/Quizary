@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { serverNowMs } from '../../utils/serverClock';
 
 interface Props {
   visible: boolean;
@@ -19,13 +20,15 @@ function formatMMSS(ms: number) {
 }
 
 export function ViolatingLockOverlay({ visible, cheatReason, lockedAt, onRefresh, refreshing }: Props) {
-  const [now, setNow] = useState(Date.now());
+  // now = JAM SERVER (lockedAt juga jam server) — kebal ubahan jam HP
+  const [now, setNow] = useState(serverNowMs());
 
   useEffect(() => {
     if (!visible) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    setNow(serverNowMs());
+    const id = setInterval(() => setNow(serverNowMs()), 1000);
     return () => clearInterval(id);
-  }, [visible]);
+  }, [visible, lockedAt]);
 
   if (!visible) return null;
 

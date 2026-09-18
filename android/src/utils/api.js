@@ -1,3 +1,5 @@
+import { serverNowMs } from "./serverClock";
+
 export const getBaseUrl = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL || "";
   return envUrl.replace(/\/+$/, "");
@@ -103,5 +105,6 @@ export function isSubmissionExpired(item) {
   if (!item.expired_at) return false;
   const expiredTime = parseWibDate(item.expired_at);
   if (!expiredTime) return false;
-  return Date.now() >= expiredTime;
+  // Bandingkan dengan JAM SERVER (bukan jam HP) supaya tak bisa diakali
+  return serverNowMs() >= expiredTime;
 }
