@@ -106,11 +106,11 @@ function replaceMathNodes(doc) {
   }
   doc.querySelectorAll('.katex-display').forEach((node) => replace(node, katexToLatex(node, true)))
   doc.querySelectorAll('.katex').forEach((node) => replace(node, katexToLatex(node, false)))
-  doc.querySelectorAll('math').forEach((node) => replace(node, mathmlToLatex(node)))
-  doc.querySelectorAll('.mjx-container, .MathJax').forEach((node) => replace(node, katexToLatex(node, false)))
+  doc.querySelectorAll('math').forEach((node) => replace(node, mathmlToLatex(node) ?? plainFlatten(node)))
+  doc.querySelectorAll('.mjx-container, .MathJax').forEach((node) => replace(node, katexToLatex(node, false) ?? plainFlatten(node)))
   doc.querySelectorAll('.ql-formula, .ql-formula-container').forEach((node) => {
     const value = node.getAttribute('data-value') || plainFlatten(node)
-    replace(node, value.trim() ? `$${value.trim()}$` : null)
+    replace(node, value.trim() ? `$${value.trim()}$` : '')
   })
   return changed
 }
@@ -153,15 +153,28 @@ export function hasPastedMath(html, text) {
 
 export function extractPastedFormula(html, text) {
   const plain = text || ''
+  let htmlCandidate = null
   if (html && MATH_MARKER_RE.test(html)) {
     const fromHtml = formulaTextFromHtml(html)
-    if (fromHtml != null) return fromHtml
-    const flat = flattenHtmlToText(html)
-    if (flat) return wrapBareLatex(convertLatexText(replaceRawMathml(flat)))
+    if (fromHtml != null) {
+      htmlCandidate = fromHtml
+    } else {
+      const flat = flattenHtmlToText(html)
+      if (flat) htmlCandidate = wrapBareLatex(convertLatexText(replaceRawMathml(flat)))
+    }
   }
-  if (!plain) return null
-  const normalized = wrapBareLatex(convertLatexText(replaceRawMathml(plain)))
-  return normalized !== plain ? normalized : null
+  let plainCandidate = null
+  if (plain) {
+    const normalized = wrapBareLatex(convertLatexText(replaceRawMathml(plain)))
+    if (normalized !== plain) plainCandidate = normalized
+  }
+  // HTML clipboard kadang hanya berisi prefix / render parsial (rumus
+  // kepotong) sementara text/plain memuat sumber penuh — jangan buang
+  // yang lengkap. Pilih kandidat terpanjang; seri → plain (sumber asli).
+  if (htmlCandidate != null && plainCandidate != null) {
+    return plainCandidate.length >= htmlCandidate.length ? plainCandidate : htmlCandidate
+  }
+  return htmlCandidate ?? plainCandidate
 }
 
 // Akhir run rumus telanjang: lacak depth brace; berhenti di spasi + kata
