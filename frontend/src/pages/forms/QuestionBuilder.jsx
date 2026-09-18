@@ -1999,6 +1999,11 @@ export default function QuestionBuilder() {
         actions={
           <>
             <input ref={docxRef} type="file" accept=".docx" onChange={handleDocxImport} className="hidden" />
+            {sectionsAllowed && (
+              <Button variant="secondary" onClick={() => setShowSectionManager(true)} icon={<Layers className="w-4 h-4" />}>
+                <span className="hidden sm:inline">{t('questionBuilder.manageSections')}</span>
+              </Button>
+            )}
             <div className="relative flex items-center shrink-0 self-start sm:self-auto" ref={actionsRef}>
               <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />} className="rounded-r-none">
                 <span className="hidden sm:inline">{t('questionBuilder.addQuestion')}</span>
@@ -2037,15 +2042,6 @@ export default function QuestionBuilder() {
                         : <Download className="w-4 h-4 shrink-0 text-gray-400" />}
                       {exporting ? t('questionBuilder.exporting') : t('questionBuilder.exportDocx')}
                     </button>
-                    {sectionsAllowed && (
-                      <button
-                        onClick={() => { setActionsOpen(false); setShowSectionManager(true) }}
-                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-ink-800 transition-colors text-left"
-                      >
-                        <Layers className="w-4 h-4 shrink-0 text-gray-400" />
-                        {t('questionBuilder.manageSections')}
-                      </button>
-                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
