@@ -7,7 +7,7 @@ import 'katex/dist/katex.min.css'
 import 'quill/dist/quill.snow.css'
 import { Button } from './Button'
 import { RichText } from './RichText'
-import { convertLatexText, convertMathInHtml } from '../../lib/pasteFormula'
+import { hasPastedMath, extractPastedFormula, stripMathToRaw } from '../../lib/pasteFormula'
 
 Quill.register('modules/syntax', Syntax, true)
 
@@ -113,29 +113,28 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     if (!html || html === '<p><br></p>') return ''
     return String(html).replace(/<select[^>]*class="ql-ui"[^>]*>[\s\S]*?<\/select>/gi, '')
   }
-  // Clipboard Quill (matchText) collapse leading tab/spasi di <p> saat
-  // dangerouslyPasteHTML — soal berindentasi jadi rata kiri tiap dibuka
-  // untuk edit. Ubah run indentasi awal jadi &nbsp; SEBELUM paste (nbsp
-  // lolos clipboard), tanpa tombol baru. <pre> dilewati (isPre aman).
+
   const toNbsp = (ws) => {
     let n = 0
     String(ws).replace(/&nbsp;|&#160;|\t| /gi, (t) => { n += (t === '\t' ? 4 : 1); return '' })
     return '&nbsp;'.repeat(n)
   }
-  const normalizeFormulaBlots = (html) => {
-    if (!html || typeof html !== 'string') return html
-    const doc = new DOMParser().parseFromString(html, 'text/html')
-    doc.querySelectorAll('.katex, .katex-display').forEach((node) => {
-      const annotation = node.querySelector('annotation')?.textContent?.trim()
-      const raw = annotation ? `$${annotation}$` : node.textContent || ''
-      node.replaceWith(doc.createTextNode(raw))
+  const normalizeFormulaBlots = (html) => stripMathToRaw(html)
+  // Guard: DOM render rumus (katex/math/mjx) tak boleh tinggal di editor
+  // dalam keadaan apapun — ganti jadi text node $...$ yang bebas diedit.
+  const scrubRenderedMath = (root) => {
+    if (!root || typeof document === 'undefined') return false
+    const decode = (s) => {
+      const tmp = document.createElement('div')
+      tmp.innerHTML = s
+      return tmp.textContent || ''
+    }
+    let removed = false
+    root.querySelectorAll('.katex, .katex-display, .mjx-container, .MathJax, .ql-formula, .ql-formula-container, math').forEach((node) => {
+      node.replaceWith(document.createTextNode(decode(stripMathToRaw(node.outerHTML))))
+      removed = true
     })
-    doc.querySelectorAll('.ql-formula, .ql-formula-container').forEach((node) => {
-      const value = node.getAttribute('data-value') || node.textContent || ''
-      if (value.trim()) node.replaceWith(doc.createTextNode(`$${value.trim()}$`))
-      else node.remove()
-    })
-    return doc.body.innerHTML
+    return removed
   }
   const preserveIndent = (html) => {
     if (!html) return html
@@ -219,24 +218,20 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     quill.root.setAttribute('spellcheck', 'false')
 
     const onPasteFormula = (event) => {
-      const html = event.clipboardData?.getData('text/html') || ''
       const text = event.clipboardData?.getData('text/plain') || ''
-      const convertedHtml = convertMathInHtml(html)
-      const convertedText = convertedHtml
-        ? new DOMParser().parseFromString(convertedHtml, 'text/html').body.textContent || ''
-        : convertLatexText(text)
-      if (!convertedText || convertedText === text && !convertedHtml) return
+      const html = event.clipboardData?.getData('text/html') || ''
+      if (!hasPastedMath(html, text)) return
 
       event.preventDefault()
-      const range = quill.getSelection(true) || { index: Math.max(0, quill.getLength() - 1), length: 0 }
-      quill.deleteText(range.index, range.length, 'silent')
-      const contentLengthBeforeInsert = quill.getLength()
-      const insertValue = convertedText
-      quill.insertText(range.index, insertValue, 'user')
-      const insertedLength = Math.max(0, quill.getLength() - contentLengthBeforeInsert)
-      quill.setSelection(range.index + insertedLength, 0, 'silent')
+      event.stopImmediatePropagation()
+      const converted = extractPastedFormula(html, text) ?? text
+      const range = quill.getSelection() || { index: Math.max(0, quill.getLength() - 1), length: 0 }
+      if (range.length) quill.deleteText(range.index, range.length, 'user')
+      quill.insertText(range.index, converted, 'user')
+      scrubRenderedMath(quill.root)
+      quill.setSelection(range.index + converted.length, 0, 'silent')
     }
-    quill.root.addEventListener('paste', onPasteFormula)
+    quill.root.addEventListener('paste', onPasteFormula, true)
 
     const symbolBtn = container.parentNode?.querySelector('.ql-symbol')
     if (symbolBtn) symbolBtn.title = 'Insert symbol'
@@ -323,7 +318,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
 
     return () => {
       quill.off('selection-change', onSelectionChange)
-      quill.root.removeEventListener('paste', onPasteFormula)
+      quill.root.removeEventListener('paste', onPasteFormula, true)
       wrapper?.removeEventListener('focusin', onFocusIn)
       wrapper?.removeEventListener('focusout', onFocusOut)
       wrapper?.removeEventListener('pointerdown', onPreActive)
@@ -435,8 +430,8 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     setSymbolsOpen(false)
   }
 
-  // Preview hasil render (termasuk KaTeX) langsung di bawah input,
-  // tanpa perlu save. Hanya muncul bila ada kandidat rumus biar hemat tempat.
+  // Paste rumus selalu jadi teks mentah $...$ di editor agar bebas diedit;
+  // render KaTeX hanya di blok "Preview Formula" bawah + halaman publik.
   const hasMath = showPreview && typeof value === 'string' && (value.includes('$') || value.includes('\\(') || value.includes('\\['))
   const focusEditor = () => {
     const q = quillRef.current
