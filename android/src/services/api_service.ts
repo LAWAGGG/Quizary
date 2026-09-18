@@ -2,6 +2,14 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system/legacy';
+import { syncServerClock } from '../utils/serverClock';
+
+/** Sinkron jam server dari setiap payload yang membawa `server_now`. */
+function syncClockFromPayload(data: any) {
+  try {
+    if (data && typeof data.server_now === 'string') syncServerClock(data.server_now);
+  } catch {}
+}
 
 const getHost = () => {
   let envUrl = process.env.EXPO_PUBLIC_API_URL?.trim() || process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
@@ -122,7 +130,9 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
       if (response.status === 401) await removeToken();
       throw new Error(extractErrorMessage(errorData, `Request failed (${response.status})`));
     }
-    return response.json();
+    const data = await response.json();
+    syncClockFromPayload(data);
+    return data;
   } catch (err: any) {
     const msg = String(err?.message || err || '');
     if (msg.includes('CLEARTEXT') || msg.includes('10.0.2.2')) {
@@ -153,7 +163,9 @@ async function fetchMultipart(endpoint: string, method: string, formData: FormDa
       const err = await response.json().catch(() => ({}));
       throw new Error(extractErrorMessage(err, `Upload failed (${response.status})`));
     }
-    return response.json();
+    const data = await response.json();
+    syncClockFromPayload(data);
+    return data;
   } catch (err: any) {
     const msg = String(err?.message || err || '');
     if (msg.includes('CLEARTEXT') || msg.includes('10.0.2.2')) {

@@ -53,6 +53,7 @@ import { useLockedVolume } from '../hooks/useLockedVolume';
 import { useFloatingBlock } from '../hooks/useFloatingBlock';
 import { stripHtmlTags } from '../components/RichTextRenderer';
 import { isSubmissionExpired } from '../utils/api';
+import { serverNowMs, parseServerTime, monoNow, lastSyncMonoMs, wallClockJumpMs } from '../utils/serverClock';
 
 function parseWibDate(dateStr: string): Date | null {
   if (!dateStr) return null;
@@ -302,8 +303,8 @@ export default function QuizScreen() {
     if (lockedVisibleRef.current) return;
     const sid = submissionIdRef.current;
     if (!sid) return;
-    const now = Date.now();
-    setLockedAt(now);
+    // lockedAt dalam WAKTU SERVER (anti manipulasi jam HP)
+    setLockedAt(serverNowMs());
     setCheatReason(reason);
     setLockedVisible(true);
     lockedVisibleRef.current = true;
@@ -334,6 +335,9 @@ export default function QuizScreen() {
         showAlert({ type: 'success', title: language === 'ID' ? 'Dibuka Kembali' : 'Unlocked', message: language === 'ID' ? 'Pengawas telah membuka kembali ujian. Silakan lanjutkan.' : 'Proctor has unlocked the exam. Please continue.' });
       } else if (status === 'locked') {
         setCheatReason(detail.cheat_reason || 'window-blur');
+        // locked_at dari SERVER (lebih akurat dari estimasi lokal)
+        const serverLockedAt = parseServerTime(detail.locked_at);
+        if (serverLockedAt) setLockedAt(serverLockedAt);
         showAlert({ type: 'warning', title: language === 'ID' ? 'Masih Terkunci' : 'Still Locked', message: language === 'ID' ? 'Ujian masih terkunci, tunggu keputusan pengawas.' : 'Exam is still locked, waiting for proctor decision.' });
       } else if (status === 'cheating' || status === 'submitted' || status === 'auto_submitted') {
         await unpin().catch(() => {});
@@ -351,13 +355,48 @@ export default function QuizScreen() {
     }
   }, [language, unpin]);
 
-  // Timer countdown for exam (expired_at)
+  // Sinkron ulang jam ke server bila terdeteksi lompatan jam HP (>2 mnt)
+  // atau anchor basi (>2 mnt tanpa respons API, mis. habis tidur/background).
+  // Respons getSubmissionDetail otomatis me-refresh anchor via api_service.
+  const resyncClockIfNeeded = useCallback(async () => {
+    const sid = submissionIdRef.current;
+    if (!sid || !answeringRef.current) return;
+    const jump = Math.abs(wallClockJumpMs());
+    const staleFor = monoNow() - lastSyncMonoMs();
+    if (jump < 120000 && staleFor < 120000) return;
+    try {
+      const detail: any = await getSubmissionDetail(sid);
+      if (detail?.expired_at) {
+        setSubmission((prev: any) => (prev ? { ...prev, expired_at: detail.expired_at } : prev));
+      }
+      // Kalau status berubah saat kita lengah (locked/cheating/selesai), tangani
+      if (detail && detail.status && detail.status !== 'in_progress') {
+        const st = detail.status;
+        if (st === 'locked') {
+          setCheatReason(detail.cheat_reason || 'window-blur');
+          const serverLockedAt = parseServerTime(detail.locked_at);
+          if (serverLockedAt) setLockedAt(serverLockedAt);
+          setLockedVisible(true);
+          lockedVisibleRef.current = true;
+        } else if (st === 'cheating' || st === 'submitted' || st === 'auto_submitted') {
+          await unpin().catch(() => {});
+          await unlockVolume().catch(() => {});
+          await stopCheat().catch(() => {});
+          setLockedVisible(false);
+          setWarningVisible(false);
+          router.replace({ pathname: '/(tabs)/home' } as any);
+        }
+      }
+    } catch {}
+  }, [unpin, unlockVolume, stopCheat]);
+
+  // Timer countdown for exam (expired_at) — pakai JAM SERVER, kebal ubahan jam HP
   useEffect(() => {
     if (!submission?.expired_at) return;
     const deadline = parseWibDate(submission.expired_at);
     if (!deadline) return;
     const id = setInterval(() => {
-      const diff = deadline.getTime() - Date.now();
+      const diff = deadline.getTime() - serverNowMs();
       if (diff <= 0) {
         clearInterval(id);
         setTimeLeft(0);
@@ -365,6 +404,8 @@ export default function QuizScreen() {
       } else {
         setTimeLeft(diff);
       }
+      // Penjaga anti-manipulasi jam: resync bila ada lompatan/anchor basi
+      resyncClockIfNeeded();
     }, 1000);
     return () => clearInterval(id);
   }, [submission?.expired_at]);
@@ -398,7 +439,8 @@ export default function QuizScreen() {
       if (next === 'background' || next === 'inactive') {
         // Start warning if not already — loop cheat sound during warning
         if (warningVisibleRef.current) return;
-        warningStartRef.current = Date.now();
+        // anchor dalam WAKTU SERVER supaya mundur-memundurkan jam HP tak menghentikan grace 5 detik
+        warningStartRef.current = serverNowMs();
         countdownRef.current = 5;
         setWarningCountdown(5);
         setWarningVisible(true);
@@ -406,7 +448,7 @@ export default function QuizScreen() {
         playCheat().catch(() => {});
         if (warningTimerRef.current) clearInterval(warningTimerRef.current);
         warningTimerRef.current = setInterval(() => {
-          const elapsed = Math.floor((Date.now() - warningStartRef.current) / 1000);
+          const elapsed = Math.floor((serverNowMs() - warningStartRef.current) / 1000);
           const remain = Math.max(0, 5 - elapsed);
           countdownRef.current = remain;
           setWarningCountdown(remain);
@@ -417,8 +459,7 @@ export default function QuizScreen() {
             warningVisibleRef.current = false;
             stopCheat().catch(() => {});
             // Trigger lock — silent at lock
-            const now = Date.now();
-            setLockedAt(now);
+            setLockedAt(serverNowMs());
             setCheatReason('window-blur');
             setLockedVisible(true);
             lockedVisibleRef.current = true;
@@ -427,19 +468,21 @@ export default function QuizScreen() {
           }
         }, 250);
       } else if (next === 'active') {
+        // Pulang dari background: sinkron ulang jam server (jam HP mungkin
+        // diubah atau anchor basi selama tidur) sebelum cek warning.
+        resyncClockIfNeeded();
         // Jika kembali sebelum habis, biarkan user tekan tombol.
         // Jika sudah lewat 5 detik saat di background (timer throttled),
         // cek langsung saat active dan lock jika perlu
         if (warningVisibleRef.current) {
-          const elapsed = Math.floor((Date.now() - warningStartRef.current) / 1000);
+          const elapsed = Math.floor((serverNowMs() - warningStartRef.current) / 1000);
           if (elapsed >= 5) {
             if (warningTimerRef.current) clearInterval(warningTimerRef.current);
             warningTimerRef.current = null;
             setWarningVisible(false);
             warningVisibleRef.current = false;
             stopCheat().catch(() => {});
-            const now = Date.now();
-            setLockedAt(now);
+            setLockedAt(serverNowMs());
             setCheatReason('window-blur');
             setLockedVisible(true);
             lockedVisibleRef.current = true;
@@ -454,7 +497,7 @@ export default function QuizScreen() {
     return () => {
       sub.remove();
     };
-  }, [playCheat, stopCheat, hasFloating]);
+  }, [playCheat, stopCheat, hasFloating, resyncClockIfNeeded]);
 
   const handleReenter = useCallback(async () => {
     // Check floating first

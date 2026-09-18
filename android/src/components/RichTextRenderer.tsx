@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Text, View, TextStyle, StyleProp, StyleSheet, Linking } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useAppTheme } from '../context/ThemeContext';
@@ -6,62 +6,269 @@ import { KATEX_CSS, KATEX_JS, KATEX_AUTO_RENDER } from '../utils/katexInline';
 
 const htmlCache = new Map<string, string>();
 
+function devLog(...args: any[]) {
+  try {
+    if ((globalThis as any).__DEV__) console.log('[RichText]', ...args);
+  } catch {}
+}
+
+if ((globalThis as any).__DEV__) {
+  devLog(`renderer loaded (es5-katex bundle ${KATEX_JS.length} chars)`);
+}
+
+// ── Maps untuk konversi LaTeX → Unicode ─────────────────────────────────────
+
+const SUPERSCRIPTS: Record<string, string> = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+  '+': '⁺', '−': '⁻', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾', 'n': 'ⁿ', 'i': 'ⁱ', 'x': 'ˣ',
+  'a': 'ᵃ', 'b': 'ᵇ', 'c': 'ᶜ', 'd': 'ᵈ', 'e': 'ᵉ', 'f': 'ᶠ', 'g': 'ᵍ', 'h': 'ʰ', 'j': 'ʲ', 'k': 'ᵏ',
+  'm': 'ᵐ', 'o': 'ᵒ', 'p': 'ᵖ', 'r': 'ʳ', 's': 'ˢ', 't': 'ᵗ', 'u': 'ᵘ', 'v': 'ᵛ', 'w': 'ʷ', 'y': 'ʸ', 'z': 'ᶻ',
+};
+
+const SUBSCRIPTS: Record<string, string> = {
+  '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+  '+': '₊', '-': '₋', '−': '₋', '(': '₍', ')': '₎', '=': '₌', 'a': 'ₐ', 'e': 'ₑ', 'h': 'ₕ', 'i': 'ᵢ',
+  'j': 'ⱼ', 'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'o': 'ₒ', 'p': 'ₚ', 'r': 'ᵣ', 's': 'ₛ', 't': 'ₜ',
+  'u': 'ᵤ', 'v': 'ᵥ', 'x': 'ₓ',
+};
+
+const GREEK: Record<string, string> = {
+  alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε', zeta: 'ζ', eta: 'η',
+  theta: 'θ', vartheta: 'ϑ', iota: 'ι', kappa: 'κ', lambda: 'λ', mu: 'μ', nu: 'ν', xi: 'ξ', pi: 'π',
+  varpi: 'ϖ', rho: 'ρ', sigma: 'σ', varsigma: 'ς', tau: 'τ', upsilon: 'υ', phi: 'φ', varphi: 'φ',
+  chi: 'χ', psi: 'ψ', omega: 'ω', Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Xi: 'Ξ',
+  Pi: 'Π', Sigma: 'Σ', Upsilon: 'Υ', Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω',
+};
+
+const SYMBOLS: Record<string, string> = {
+  infty: '∞', times: '×', div: '÷', cdot: '·', pm: '±', mp: '∓', leq: '≤', le: '≤', geq: '≥', ge: '≥',
+  neq: '≠', ne: '≠', approx: '≈', equiv: '≡', propto: '∝', sim: '∼', simeq: '≃', cong: '≅', subset: '⊂',
+  supset: '⊃', subseteq: '⊆', supseteq: '⊇', in: '∈', notin: '∉', ni: '∋', cap: '∩', cup: '∪',
+  varnothing: '∅', emptyset: '∅', wedge: '∧', vee: '∨', neg: '¬', land: '∧', lor: '∨',
+  forall: '∀', exists: '∃', nexists: '∄', nabla: '∇', partial: '∂', ell: 'ℓ',
+  to: '→', rightarrow: '→', leftarrow: '←', leftrightarrow: '↔', Rightarrow: '⇒', Leftarrow: '⇐',
+  Leftrightarrow: '⇔', mapsto: '↦', implies: '⇒', gets: '←', uparrow: '↑', downarrow: '↓',
+  dot: '·', cdots: '…', ldots: '…', vdots: '⋮', ddots: '⋱', prime: '′', circ: '∘', degree: '°',
+  angle: '∠', triangle: '△', square: '□', checkmark: '✓', diamond: '◇', dagger: '†',
+};
+
+const FUNC_NAMES = new Set(['sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'sinh', 'cosh', 'tanh', 'coth',
+  'arcsin', 'arccos', 'arctan', 'log', 'ln', 'lg', 'exp', 'det', 'dim', 'max', 'min', 'lim', 'gcd',
+  'inf', 'sup', 'arg', 'deg', 'ker', 'Pr']);
+
 /**
- * Converts common TeX math syntax to clean, readable Unicode math symbols.
- * Used as a fallback for pure text headers, title previews, and notifications.
+ * Reads a balanced { ... } group starting right after an opening brace.
+ * Returns { text, end } where end = index just past the closing brace.
  */
-export function convertMathToUnicode(text: string): string {
-  if (!text) return '';
-  return text
-    // Replace \frac{a}{b} -> (a/b)
-    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)')
-    // Replace \sqrt{x} -> √(x)
-    .replace(/\\sqrt\{([^}]+)\}/g, '√($1)')
-    .replace(/\\sqrt\s*([a-zA-Z0-9]+)/g, '√$1')
-    // Replace \sum_{i=1}^{n} -> ∑(i=1..n) or ∑
-    .replace(/\\sum_\{([^}]+)\}\^\{([^}]+)\}/g, '∑($1..$2)')
-    .replace(/\\sum_\{([^}]+)\}/g, '∑($1)')
-    .replace(/\\sum/g, '∑')
-    .replace(/\\prod/g, '∏')
-    .replace(/\\int/g, '∫')
-    // Common TeX Greek letters & symbols
-    .replace(/\\alpha/g, 'α')
-    .replace(/\\beta/g, 'β')
-    .replace(/\\gamma/g, 'γ')
-    .replace(/\\delta/g, 'δ')
-    .replace(/\\pi/g, 'π')
-    .replace(/\\theta/g, 'θ')
-    .replace(/\\infty/g, '∞')
-    .replace(/\\times/g, '×')
-    .replace(/\\div/g, '÷')
-    .replace(/\\pm/g, '±')
-    .replace(/\\leq/g, '≤')
-    .replace(/\\geq/g, '≥')
-    .replace(/\\neq/g, '≠')
-    .replace(/\\approx/g, '≈')
-    .replace(/\\rightarrow/g, '→')
-    .replace(/\\leftarrow/g, '←')
-    // Superscripts ^2, ^3, ^n
-    .replace(/\^2\b|\^\{2\}/g, '²')
-    .replace(/\^3\b|\^\{3\}/g, '³')
-    .replace(/\^1\b|\^\{1\}/g, '¹')
-    .replace(/\^0\b|\^\{0\}/g, '⁰')
-    .replace(/\^n\b|\^\{n\}/g, 'ⁿ')
-    .replace(/\^x\b|\^\{x\}/g, 'ˣ')
-    // Subscripts _0, _1, _i, _n
-    .replace(/_0\b|_\{0\}/g, '₀')
-    .replace(/_1\b|_\{1\}/g, '₁')
-    .replace(/_2\b|_\{2\}/g, '₂')
-    .replace(/_i\b|_\{i\}/g, 'ᵢ')
-    .replace(/_n\b|_\{n\}/g, 'ₙ')
-    .replace(/_x\b|_\{x\}/g, 'ₓ')
-    // Clean raw delimiters
-    .replace(/\$\$/g, ' ')
-    .replace(/\$/g, '')
-    .replace(/\\\[/g, '')
-    .replace(/\\\]/g, '')
-    .replace(/\\\(/g, '')
-    .replace(/\\\)/g, '');
+function readBraced(s: string, i: number): { text: string; end: number } | null {
+  if (i >= s.length || s[i] !== '{') return null;
+  let depth = 0;
+  let j = i;
+  for (; j < s.length; j++) {
+    const c = s[j];
+    if (c === '\\') { j++; continue; }
+    if (c === '{') depth++;
+    else if (c === '}') {
+      depth--;
+      if (depth === 0) return { text: s.slice(i + 1, j), end: j + 1 };
+    }
+  }
+  return null;
+}
+
+/**
+ * Converts a raw LaTeX/KaTeX snippet to clean Unicode math symbols.
+ * This is the fallback used by native Text rendering (titles, dropdowns,
+ * notifications, and the math-safe fallback when WebView/KaTeX is unavailable).
+ */
+export function convertMathToUnicode(raw: string): string {
+  if (!raw) return '';
+  let s = String(raw);
+  const out: string[] = [];
+  let i = 0;
+  const n = s.length;
+
+  const pushUnicodeSub = (tok: string) => {
+    const mapped = tok.split('').map((c) => SUBSCRIPTS[c] || '').join('');
+    out.push(mapped || `_${tok}`);
+  };
+  const pushUnicodeSup = (tok: string) => {
+    const mapped = tok.split('').map((c) => SUPERSCRIPTS[c] || '').join('');
+    out.push(mapped || `^${tok}`);
+  };
+
+  while (i < n) {
+    const c = s[i];
+
+    if (c === '\\') {
+      i++;
+      if (i >= n) { out.push('\\'); break; }
+      const d = s[i];
+
+      // Escaped punctuation -> literal char
+      if ('{}_$%#&'.includes(d)) { out.push(d); i++; continue; }
+      if (d === ',') { out.push(' '); i++; continue; }
+      if (d === ' ') { i++; continue; }
+      if (d === '\\') { out.push('\n'); i++; continue; }
+      if (d === '(' || d === '[') { i++; continue; } // \( \[ openers
+      if (d === ')' || d === ']') { i++; continue; } // \) \] closers
+      if (d === '.') { i++; continue; } // \left. \right.
+
+      let cmd = '';
+      while (i < n && /[A-Za-z@]/.test(s[i])) { cmd += s[i]; i++; }
+
+      if (!cmd) { out.push('\\' + d); i++; continue; }
+
+      if (cmd === 'left' || cmd === 'right') {
+        // \left( \right) — keep the bracket char
+        const b = s[i];
+        i++;
+        if (b === '(') out.push('(');
+        else if (b === ')') out.push(')');
+        else if (b === '[') out.push('[');
+        else if (b === ']') out.push(']');
+        else if (b === '{') out.push('{');
+        else if (b === '}') out.push('}');
+        else if (b === '|') out.push('|');
+        continue;
+      }
+
+      if (cmd === 'quad' || cmd === 'qquad') { out.push(' '); continue; }
+      if (cmd === 'hspace' || cmd === 'vspace' || cmd === 'vphantom' || cmd === 'hphantom') { i++; continue; }
+
+      if (cmd === 'begin' || cmd === 'end') {
+        const grp = readBraced(s, i);
+        if (grp) i = grp.end;
+        continue;
+      }
+
+      if (cmd === 'text') {
+        const grp = readBraced(s, i);
+        if (grp) { out.push(convertMathToUnicode(grp.text)); i = grp.end; }
+        continue;
+      }
+      if (cmd === 'operatorname') {
+        const grp = readBraced(s, i);
+        if (grp) { out.push(grp.text); i = grp.end; }
+        continue;
+      }
+
+      if (cmd === 'frac' || cmd === 'dfrac' || cmd === 'tfrac') {
+        const a = readBraced(s, i);
+        if (a) {
+          const b = readBraced(s, a.end);
+          if (b) {
+            const num = convertMathToUnicode(a.text);
+            const den = convertMathToUnicode(b.text);
+            const wrapPart = (t: string) => (/[\s±+\-×÷·]/.test(t) ? `(${t})` : t);
+            out.push(`(${wrapPart(num)}/${wrapPart(den)})`);
+            i = b.end;
+            continue;
+          }
+          i = a.end;
+        }
+        out.push('/');
+        continue;
+      }
+
+      if (cmd === 'sqrt') {
+        let index = null;
+        if (s[i] === '[') {
+          const close = s.indexOf(']', i);
+          if (close > i) { index = s.slice(i + 1, close); i = close + 1; }
+        }
+        const grp = readBraced(s, i);
+        if (grp) {
+          out.push(index ? `${convertMathToUnicode(index)}√(${convertMathToUnicode(grp.text)})` : `√(${convertMathToUnicode(grp.text)})`);
+          i = grp.end;
+          continue;
+        }
+        // \sqrt x
+        if (i < n && /[A-Za-z0-9]/.test(s[i])) { out.push(`√${s[i]}`); i++; continue; }
+        out.push('√');
+        continue;
+      }
+
+      if (cmd === 'sum' || cmd === 'prod' || cmd === 'int' || cmd === 'oint' || cmd === 'bigcup' || cmd === 'bigcap') {
+        const symbol = cmd === 'sum' ? '∑' : cmd === 'prod' ? '∏' : cmd === 'int' ? '∫' : cmd === 'oint' ? '∮' : cmd === 'bigcup' ? '⋃' : '⋂';
+        let sub = null, sup = null;
+        if (s[i] === '_') {
+          i++;
+          const g = readBraced(s, i);
+          if (g) { sub = convertMathToUnicode(g.text); i = g.end; }
+        }
+        if (s[i] === '^') {
+          i++;
+          const g = readBraced(s, i);
+          if (g) { sup = convertMathToUnicode(g.text); i = g.end; }
+        }
+        if (sub || sup) out.push(`${symbol}[${sub || ''}..${sup || ''}]`);
+        else out.push(symbol);
+        continue;
+      }
+
+      if (cmd === 'vec') {
+        const g = readBraced(s, i);
+        if (g) { out.push(`${convertMathToUnicode(g.text)}→`); i = g.end; }
+        continue;
+      }
+      if (cmd === 'bar' || cmd === 'overline') {
+        const g = readBraced(s, i);
+        if (g) {
+          const t = convertMathToUnicode(g.text);
+          out.push(t.length === 1 ? `${t}̄` : `(${t})̄`);
+          i = g.end;
+        }
+        continue;
+      }
+      if (cmd === 'overrightarrow') {
+        const g = readBraced(s, i);
+        if (g) { out.push(`${convertMathToUnicode(g.text)}→`); i = g.end; }
+        continue;
+      }
+      if (cmd === 'underline') {
+        const g = readBraced(s, i);
+        if (g) { out.push(convertMathToUnicode(g.text)); i = g.end; }
+        continue;
+      }
+      if (cmd in GREEK) { out.push(GREEK[cmd]); continue; }
+      if (cmd in SYMBOLS) { out.push(SYMBOLS[cmd]); continue; }
+      if (FUNC_NAMES.has(cmd)) { out.push(cmd); continue; }
+      if (cmd === 'limits') continue;
+
+      // Unknown command: drop the backslash, keep name (e.g. \textbf{a} -> textbf)
+      out.push(cmd);
+      continue;
+    }
+
+    if (c === '^') {
+      i++;
+      const g = (i < n && s[i] === '{') ? readBraced(s, i) : null;
+      if (g) { pushUnicodeSup(g.text); i = g.end; }
+      else if (i < n) { pushUnicodeSup(s[i]); i++; }
+      continue;
+    }
+
+    if (c === '_') {
+      i++;
+      const g = (i < n && s[i] === '{') ? readBraced(s, i) : null;
+      if (g) { pushUnicodeSub(g.text); i = g.end; }
+      else if (i < n) { pushUnicodeSub(s[i]); i++; }
+      continue;
+    }
+
+    if (c === '&') { out.push(' '); i++; continue; }
+
+    out.push(c);
+    i++;
+  }
+
+  let result = out.join('');
+  // Drop the remaining math delimiters ($...$, $$...$$) — keep the content.
+  result = result.replace(/\$\$/g, '').replace(/\$/g, '');
+  // Drop leftover TeX grouping braces (cosmetic only).
+  result = result.replace(/[{}]/g, '');
+  return result;
 }
 
 /**
@@ -121,7 +328,9 @@ export function hasMathFormulas(html?: string | null): boolean {
     html.includes('\\(') ||
     html.includes('ql-formula') ||
     html.includes('katex') ||
-    /\\frac|\\sqrt|\\sum|\\prod|\\int|\\alpha|\\beta|\\gamma|\\pi|\\theta|\\infty|\\times|\\div|\\pm|\\leq|\\geq|\\neq|\$[^\$\n]+\$/.test(html)
+    html.includes('data-value') ||
+    /\$[^\$\n]*\$/.test(html) ||
+    /\\begin\{|\\frac|\\dfrac|\\tfrac|\\sqrt|\\sum|\\prod|\\int|\\oint|\\left|\\right|\\(alpha|beta|gamma|delta|epsilon|theta|pi|mu|lambda|sigma|phi|omega|Gamma|Delta|Theta|Lambda|Sigma|Phi|Omega|vec|bar|overline|times|div|cdot|pm|leq|geq|neq|approx|to|rightarrow|infty|notin|in\b)|\\operatorname|\\text\{/i.test(html)
   );
 }
 
@@ -140,6 +349,22 @@ function needsRichWebView(html: string): boolean {
   if (hasMathFormulas(html)) return true;
   return /<(pre|code|table|img|iframe)[\s>]/i.test(html)
     || /class="[^"]*ql-(code-block|syntax|formula)/i.test(html);
+}
+
+/** Safe embed of arbitrary HTML as a JS string literal (escapes </script> etc). */
+function jsLiteral(value: string): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003C')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+function estimateWebViewHeight(html: string, fontSize: number, lineHeight: number): number {
+  if (!html) return 30;
+  const textLen = stripHtmlTags(html).length || html.length;
+  const charsPerLine = Math.max(18, Math.floor(320 / Math.max(10, fontSize) * 1.85));
+  const lines = Math.max(1, Math.ceil(textLen / charsPerLine));
+  return Math.max(32, Math.min(420, Math.ceil(lines * lineHeight) + 12));
 }
 
 /**
@@ -270,10 +495,12 @@ function SimpleNativeHtml({
 export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendererProps) {
   const { colors } = useAppTheme();
   const [webViewHeight, setWebViewHeight] = useState<number>(30);
-
-  if (!html) return null;
-
-  const needsWebView = needsRichWebView(html);
+  const [receivedHeight, setReceivedHeight] = useState(false);
+  const needMath = hasMathFormulas(html);
+  const [mathResolved, setMathResolved] = useState(!needMath);
+  const [mathOk, setMathOk] = useState(!needMath);
+  const prevHtmlRef = useRef<string | null | undefined>(html);
+  const needsWebView = needsRichWebView(html ?? '');
 
   // Extract fontSize and color from passed style if available
   const flattenedStyle = StyleSheet.flatten(style) || {};
@@ -282,9 +509,37 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
   const fontWeight = (flattenedStyle.fontWeight as any) || '400';
   const textAlign = (flattenedStyle.textAlign as string) || 'left';
   const lineHeight = (flattenedStyle.lineHeight as number) || Math.round(fontSize * 1.45);
+  const bgColor = ((flattenedStyle.backgroundColor as string) || colors.cardBg || '#FFFFFF');
 
-  if (needsWebView) {
-    const richHtml = `
+  // Reset state saat konten (html) berubah — soal/opsi berbeda, supaya tidak basi
+  useEffect(() => {
+    if (prevHtmlRef.current === html) return;
+    prevHtmlRef.current = html;
+    const nm = hasMathFormulas(html);
+    setReceivedHeight(false);
+    setWebViewHeight(30);
+    setMathResolved(!nm);
+    setMathOk(!nm);
+  }, [html]);
+
+  // Batas waktu: bila WebView tak mengonfirmasi render matematika, pindah ke fallback native
+  useEffect(() => {
+    if (!needMath || mathResolved) return;
+    const t = setTimeout(() => {
+      if (!mathResolved) {
+        devLog('math timeout -> native fallback');
+        setMathResolved(true);
+        setMathOk(false);
+      }
+    }, 1400);
+    return () => clearTimeout(t);
+  }, [needMath, mathResolved]);
+
+  // Page + source are memoized: Android reloads the WebView on every new
+  // source object, so height/math state updates must not rebuild it.
+  const richHtml = useMemo(() => {
+    const contentLit = jsLiteral(html ?? '');
+    return `
       <!DOCTYPE html>
       <html>
       <head>
@@ -300,13 +555,13 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
             margin: 0; padding: 0;
             height: auto !important;
             min-height: 0 !important;
-            background-color: transparent;
+            background-color: ${bgColor};
           }
           body {
             margin: 0; padding: 0;
             height: auto !important;
             min-height: 0 !important;
-            background-color: transparent;
+            background-color: ${bgColor};
             color: ${textColor};
             font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             font-size: ${fontSize}px;
@@ -330,7 +585,7 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
           .rich-text s, .rich-text strike, .rich-text del { text-decoration: line-through; }
           .rich-text sub { vertical-align: sub; font-size: 0.75em; }
           .rich-text sup { vertical-align: super; font-size: 0.75em; }
-          .rich-text blockquote { border-left: 4px solid #6C5CE7; padding-left: 12px; margin: 0.4em 0; color: rgba(255,255,255,0.7); font-style: italic; }
+          .rich-text blockquote { border-left: 4px solid #6C5CE7; padding-left: 12px; margin: 0.4em 0; color: ${textColor}; font-style: italic; }
           .rich-text .ql-size-small { font-size: 0.75em; }
           .rich-text .ql-size-large { font-size: 1.35em; }
           .rich-text .ql-size-huge { font-size: 2.0em; }
@@ -365,79 +620,109 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
         </style>
       </head>
       <body>
-        <div class="rich-text" id="content">${html}</div>
+        <div class="rich-text" id="content"></div>
         <script>${KATEX_JS}</script>
         <script>${KATEX_AUTO_RENDER}</script>
         <script>
-          function sendHeight() {
-            var el = document.getElementById('content');
-            if (!el) return;
-            var h = Math.ceil(el.offsetHeight || el.scrollHeight || el.getBoundingClientRect().height);
-            if (window.ReactNativeWebView && h > 0) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'HEIGHT_CHANGE', height: h }));
-            }
-          }
-          document.addEventListener('click', function(e) {
-            var target = e.target;
-            while (target && target.tagName !== 'A') {
-              target = target.parentElement;
-            }
-            if (target && target.href) {
-              e.preventDefault();
+          (function () {
+            function post(type, data) {
               if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'OPEN_LINK', url: target.href }));
+                var payload = { type: type };
+                for (var k in data) payload[k] = data[k];
+                window.ReactNativeWebView.postMessage(JSON.stringify(payload));
               }
             }
-          });
-          try {
-            var formulas = document.querySelectorAll('.ql-formula');
-            for (var i = 0; i < formulas.length; i++) {
-              var el = formulas[i];
-              var tex = el.getAttribute('data-value');
-              if (tex && window.katex) {
-                try {
-                  el.innerHTML = window.katex.renderToString(tex, { throwOnError: false, displayMode: false });
-                } catch(e) {}
+            function sendHeight() {
+              var el = document.getElementById('content');
+              if (!el) return;
+              var h = Math.ceil(el.offsetHeight || el.scrollHeight || el.getBoundingClientRect().height);
+              if (window.ReactNativeWebView && h > 0) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'HEIGHT_CHANGE', height: h }));
               }
             }
-            if (window.renderMathInElement) {
-              window.renderMathInElement(document.body, {
-                delimiters: [
-                  {left: '$$', right: '$$', display: true},
-                  {left: '\\[', right: '\\]', display: true},
-                  {left: '\\(', right: '\\)', display: false},
-                  {left: '$', right: '$', display: false}
-                ],
-                ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
-                ignoredClasses: ['ql-code-block', 'ql-code-block-container', 'ql-syntax'],
-                throwOnError: false, strict: false
-              });
+            var content = document.getElementById('content');
+            if (content) {
+              content.innerHTML = ${contentLit};
             }
-          } catch(e) {}
-          sendHeight();
-          setTimeout(sendHeight, 80);
-          setTimeout(sendHeight, 300);
+            var katexOk = typeof window.katex !== 'undefined' && window.katex;
+            var autoOk = typeof window.renderMathInElement === 'function';
+            post('MATH_READY', { katex: !!katexOk, auto: autoOk });
+            try {
+              if (katexOk) {
+                var formulas = document.querySelectorAll('.ql-formula');
+                for (var i = 0; i < formulas.length; i++) {
+                  var el = formulas[i];
+                  var tex = el.getAttribute('data-value');
+                  if (tex) {
+                    try { el.innerHTML = window.katex.renderToString(tex, { throwOnError: false, displayMode: false }); } catch (e) {}
+                  }
+                }
+              }
+              if (autoOk) {
+                window.renderMathInElement(document.body, {
+                  delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '\\\\[', right: '\\\\]', display: true},
+                    {left: '\\\\(', right: '\\\\)', display: false},
+                    {left: '$', right: '$', display: false}
+                  ],
+                  ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+                  ignoredClasses: ['ql-code-block', 'ql-code-block-container', 'ql-syntax'],
+                  throwOnError: false, strict: false
+                });
+              }
+              var renderedCount = 0;
+              try { renderedCount = document.querySelectorAll('#content .katex').length; } catch (e2) {}
+              post('MATH_RENDERED', { ok: !!katexOk && autoOk, katex: !!katexOk, auto: autoOk, rendered: renderedCount });
+            } catch (e) {
+              post('MATH_RENDERED', { ok: false, katex: !!katexOk, auto: autoOk, error: String((e && e.message) || e) });
+            }
+            sendHeight();
+            setTimeout(sendHeight, 120);
+            setTimeout(sendHeight, 400);
+            setTimeout(sendHeight, 900);
+          })();
         </script>
       </body>
       </html>
     `;
+  }, [html, bgColor, textColor, fontSize, fontWeight, lineHeight, textAlign]);
+  const webViewSource = useMemo(() => ({ html: richHtml }), [richHtml]);
 
+  if (!html) return null;
+
+  // While pending we keep the WebView visible; only swap to native when it
+  // reports failure (or times out).
+  if (needsWebView && (mathOk || !mathResolved)) {
     return (
-      <View style={{ height: webViewHeight > 0 ? webViewHeight : 30, width: '100%', overflow: 'hidden' }}>
+      <View style={{ height: (receivedHeight ? webViewHeight : estimateWebViewHeight(html, fontSize, lineHeight)), width: '100%', overflow: 'hidden', backgroundColor: bgColor }}>
         <WebView
           originWhitelist={['*']}
-          source={{ html: richHtml }}
-          style={{ backgroundColor: 'transparent', flex: 1 }}
+          source={webViewSource}
+          style={{ backgroundColor: bgColor, flex: 1 }}
           scrollEnabled={false}
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
           onMessage={(event) => {
             try {
               const data = JSON.parse(event.nativeEvent.data);
-              if (data.type === 'HEIGHT_CHANGE' && data.height) {
+              if (data.type === 'HEIGHT_CHANGE' && data.height && data.height > 0) {
                 setWebViewHeight(data.height + 4);
+                setReceivedHeight(true);
               } else if (data.type === 'OPEN_LINK' && data.url) {
                 Linking.openURL(data.url).catch(() => {});
+              } else if (data.type === 'MATH_RENDERED') {
+                devLog('MATH_RENDERED ok=', !!data.ok, 'katex=', !!data.katex, 'rendered=', data.rendered);
+                if (needMath) {
+                  setMathResolved(true);
+                  setMathOk(!!data.ok);
+                }
+              } else if (data.type === 'MATH_READY' && !data.katex) {
+                devLog('MATH_READY katex missing -> native fallback');
+                if (needMath) {
+                  setMathResolved(true);
+                  setMathOk(false);
+                }
               }
             } catch (e) {}
           }}
@@ -447,6 +732,6 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
   }
 
   // Fast Native Text Rendering for inline HTML (bold, italic, underline, links, etc)
+  // atau fallback math-safe bila WebView/KaTeX tidak siap
   return <SimpleNativeHtml html={html} style={style} numberOfLines={numberOfLines} />;
 }
-
