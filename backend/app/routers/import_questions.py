@@ -4,6 +4,7 @@ import io
 import os
 import uuid
 from collections import Counter
+from html.parser import HTMLParser as _HTMLParser
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, status
 from fastapi import Form as ApiForm
@@ -846,10 +847,90 @@ _EXPORT_LETTERS = "ABCDEFGHIJ"
 
 def _export_strip_html(text: str | None) -> str:
     raw = str(text or "")
+    had_tags = bool(re.search(r"<[a-zA-Z][^>]*>", raw))
     cleaned = html.unescape(re.sub(r"<[^>]*>", "", raw))
-    if re.search(r"<[a-zA-Z][^>]*>", cleaned):
+    if not had_tags and re.search(r"<[a-zA-Z][^>]*>", cleaned):
         cleaned = html.unescape(re.sub(r"<[^>]*>", "", cleaned))
     return html.unescape(cleaned).strip()
+
+
+_CODE_BLOCK_RE = re.compile(
+    r'<pre\s+(?P<preattr>[^>]*class="[^"]*ql-(?:syntax|code-block)[^"]*"[^>]*)>(?P<inner2>.*?)</pre>'
+    r'|<div\s+class="ql-code-block"(?P<attr2>[^>]*)>(?P<inner3>.*?)</div>',
+    re.S | re.I,
+)
+
+_CONTAINER_OPEN_RE = re.compile(
+    r'<div\s+class="ql-code-block-container"[^>]*>\s*<div\s+class="ql-code-block"(?P<attr>[^>]*)>',
+    re.I,
+)
+_DIV_TAG_RE = re.compile(r"</?div\b[^>]*>", re.I)
+
+
+def _scan_containers(raw: str) -> list[tuple[int, int, str, str]]:
+    """Cari container Quill dengan depth-counting (tahan div bersarang per-baris).
+
+    Kembalikan list (start, end, lang, inner)."""
+    out: list[tuple[int, int, str, str]] = []
+    for m in _CONTAINER_OPEN_RE.finditer(raw or ""):
+        depth = 1
+        for t in _DIV_TAG_RE.finditer(raw, m.end()):
+            if t.group(0).startswith("</"):
+                depth -= 1
+            else:
+                depth += 1
+            if depth == 0:
+                end = t.end()
+                c = re.match(r"\s*</div>", raw[end:], re.I)
+                if c:
+                    end += c.end()
+                lm = re.search(r'data-language="([\w+#-]+)"', m.group("attr") or "")
+                out.append((m.start(), end, (lm.group(1) if lm else "plain"), _export_decode_code_inner(raw[m.end():t.start()])))
+                break
+    return out
+
+
+def _export_decode_code_inner(inner: str) -> str:
+    s = re.sub(r"<br\s*/?>", "\n", inner or "", flags=re.I)
+    s = re.sub(r"</div\s*>\s*<div[^>]*>", "\n", s, flags=re.I)
+    s = re.sub(r"<[^>]+>", "", s)
+    return html.unescape(s).strip("\n")
+
+
+def _export_split_lone(gap: str) -> list[tuple[str, str, str]]:
+    """Pecah celah tanpa container: `pre.ql-syntax` / lone `div.ql-code-block`."""
+    out: list[tuple[str, str, str]] = []
+    pos = 0
+    for m in _CODE_BLOCK_RE.finditer(gap or ""):
+        if m.start() > pos:
+            out.append(("rich", "", gap[pos:m.start()]))
+        attr = m.group("preattr") or m.group("attr2") or ""
+        lm = re.search(r'data-language="([\w+#-]+)"', attr)
+        inner = m.group("inner2") or m.group("inner3") or ""
+        out.append(("code", (lm.group(1) if lm else "plain"), _export_decode_code_inner(inner)))
+        pos = m.end()
+    if pos < len(gap or ""):
+        out.append(("rich", "", gap[pos:]))
+    return out
+
+
+def _export_split_blocks(raw: str) -> list[tuple[str, str, str]]:
+    """Pecah HTML jadi blok `("code", lang, kode)` / `("rich", "", html)`."""
+    raw = raw or ""
+    out: list[tuple[str, str, str]] = []
+    pos = 0
+    for start, end, lang, code in sorted(_scan_containers(raw), key=lambda s: s[0]):
+        if start < pos:
+            continue
+        if start > pos:
+            out.extend(_export_split_lone(raw[pos:start]))
+        out.append(("code", lang, code))
+        pos = end
+    if pos < len(raw):
+        out.extend(_export_split_lone(raw[pos:]))
+    if not out:
+        return [("rich", "", raw)]
+    return [b for b in out if b[0] != "rich" or b[2]]
 
 
 def _export_add_image(paragraph, blob: bytes, width_in=4.5):
@@ -900,38 +981,162 @@ def _export_add_omml(paragraph, src: str, is_latex: bool) -> bool:
         return False
 
 
+class _DocxRichParser(_HTMLParser):
+    """HTML inline Quill → runs docx berformat (bold/italic/underline/strike/code)."""
+
+    def __init__(self, paragraph):
+        super().__init__(convert_charrefs=False)
+        self.p = paragraph
+        self.stack: list[dict] = []
+        self.cur = {"bold": False, "italic": False, "underline": False, "strike": False, "code": False}
+        self._seen_block = False
+
+    def _block_break(self):
+        if not self._seen_block:
+            self._seen_block = True
+            return
+        if self.p.runs:
+            self.p.add_run().add_break()
+
+    def _push(self, key):
+        self.stack.append(dict(self.cur))
+        self.cur[key] = True
+
+    def handle_starttag(self, tag, attrs):
+        t = tag.lower()
+        if t in ("strong", "b"):
+            self._push("bold")
+        elif t in ("em", "i"):
+            self._push("italic")
+        elif t == "u":
+            self._push("underline")
+        elif t in ("s", "strike", "del"):
+            self._push("strike")
+        elif t == "code":
+            self._push("code")
+        elif t == "br":
+            self.p.add_run().add_break()
+        elif t == "li":
+            self._block_break()
+            self.p.add_run("• ")
+        elif t in ("p", "div", "h2", "h3", "h4", "blockquote", "ul", "ol", "tr"):
+            self._block_break()
+
+    def handle_endtag(self, tag):
+        if tag.lower() in ("strong", "b", "em", "i", "u", "s", "strike", "del", "code") and self.stack:
+            self.cur = self.stack.pop()
+
+    def handle_data(self, data):
+        if not data:
+            return
+        text = html.unescape(data).replace("\xa0", " ")
+        if not text.strip():
+            return
+        run = self.p.add_run(text)
+        self._seen_block = True
+        run.bold = self.cur["bold"] or None
+        run.italic = self.cur["italic"] or None
+        run.underline = self.cur["underline"] or None
+        if self.cur["strike"]:
+            run.font.strike = True
+        if self.cur["code"]:
+            run.font.name = "Consolas"
+
+
+def _export_add_formula_seg(paragraph, seg: str) -> bool:
+    """Satu segmen formula → OMML. Kembalikan True bila jadi OMML."""
+    if seg.startswith("\\(") or seg.startswith("\\["):
+        tex = seg[2:-2]
+        return bool(tex.strip()) and _export_add_omml(paragraph, tex, True)
+    if seg.startswith("$$"):
+        tex = seg[2:-2]
+        return bool(tex.strip()) and _export_add_omml(paragraph, tex, True)
+    if seg.startswith("$"):
+        tex = seg[1:-1]
+        return bool(tex.strip()) and _export_add_omml(paragraph, tex, True)
+    if seg.lower().startswith("<math"):
+        return _export_add_omml(paragraph, seg, False)
+    return False
+
+
+def _export_add_rich_runs(paragraph, html_chunk: str) -> bool:
+    """HTML rich (tanpa code-block) → runs berformat; formula jadi OMML."""
+    has_formula = False
+    for seg in _FORMULA_SPLIT_RE.split(html_chunk or ""):
+        seg = seg or ""
+        if not seg:
+            continue
+        if seg.startswith("\\(") or seg.startswith("\\[") or seg.startswith("$") or seg.lower().startswith("<math"):
+            if _export_add_formula_seg(paragraph, seg):
+                has_formula = True
+            else:
+                _DocxRichParser(paragraph).feed(seg)
+        else:
+            _DocxRichParser(paragraph).feed(seg)
+    return has_formula
+
+
+def _export_add_code_block(doc, lang: str, code: str) -> None:
+    """Kode → paragraf monospace + shading abu + label bahasa."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Pt
+    p = doc.add_paragraph()
+    if lang and lang != "plain":
+        lab = p.add_run(f"{lang}\n")
+        lab.font.size = Pt(8)
+        lab.bold = True
+    lines = (code or "").split("\n") or [""]
+    for i, line in enumerate(lines):
+        run = p.add_run(("\n" if i else "") + (line or " "))
+        run.font.name = "Consolas"
+        run.font.size = Pt(9)
+    pPr = p._p.get_or_add_pPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:fill"), "F2F2F2")
+    pPr.append(shd)
+
+
 def _export_add_runs(paragraph, raw: str, prefix: str = ""):
-    """Tambahkan run teks ke paragraf, formula `\\(...\\)`/`\\[...\\]`/HTML
-    `<math>` jadi OMML native; sisanya plain text (strip tag + HTML unescape)."""
+    """Tambahkan run teks ke paragraf: rich inline berformat, code-block jadi
+    run monospace inline, formula jadi OMML native."""
+    from docx.shared import Pt
     if prefix:
         paragraph.add_run(prefix)
     has_formula = False
-    for seg in _FORMULA_SPLIT_RE.split(raw or ""):
-        seg = seg or ""
-        if seg.startswith("\\(") or seg.startswith("\\["):
-            tex = seg[2:-2]
-            if tex.strip() and _export_add_omml(paragraph, tex, True):
-                has_formula = True
-        elif seg.startswith("$$"):
-            tex = seg[2:-2]
-            if tex.strip() and _export_add_omml(paragraph, tex, True):
-                has_formula = True
-        elif seg.startswith("$"):
-            tex = seg[1:-1]
-            if tex.strip() and _export_add_omml(paragraph, tex, True):
-                has_formula = True
-        elif seg.lower().startswith("<math"):
-            if _export_add_omml(paragraph, seg, False):
-                has_formula = True
-            else:
-                text = _export_strip_html(seg)
-                if text:
-                    paragraph.add_run(text)
+    for kind, lang, chunk in _export_split_blocks(raw or ""):
+        if kind == "code":
+            if not chunk.strip():
+                continue
+            for i, line in enumerate(chunk.split("\n")):
+                if i:
+                    paragraph.add_run().add_break()
+                run = paragraph.add_run(line or " ")
+                run.font.name = "Consolas"
+                run.font.size = Pt(9)
         else:
-            text = _export_strip_html(seg)
-            if text:
-                paragraph.add_run(text)
+            if _export_add_rich_runs(paragraph, chunk):
+                has_formula = True
     return has_formula
+
+
+def _export_write_blocks(doc, raw: str, prefix: str = ""):
+    """Tulis HTML ke doc: rich jalan di paragraf bernomor, tiap code-block
+    jadi paragraf monospace + shading sendiri (jelas terbaca sebagai kode)."""
+    current = doc.add_paragraph()
+    if prefix:
+        current.add_run(prefix)
+    for kind, lang, chunk in _export_split_blocks(raw or ""):
+        if kind == "code":
+            if chunk.strip():
+                _export_add_code_block(doc, lang, chunk)
+            current = None
+        else:
+            if current is None:
+                current = doc.add_paragraph()
+            _export_add_rich_runs(current, chunk)
+    return current or doc.paragraphs[-1]
 
 
 def _export_add_answer_key(paragraph, raw: str):
@@ -999,9 +1204,7 @@ def export_docx(form: Form = Depends(verify_form_owner), db: Session = Depends(g
             last_section = q.section_id
             if q.section_id in section_title:
                 doc.add_heading(section_title[q.section_id], level=2)
-        q_text = _export_strip_html(q.question_text) or f"Soal {n}"
-        par = doc.add_paragraph()
-        _export_add_runs(par, q.question_text, prefix=f"{n}. ")
+        _export_write_blocks(doc, q.question_text, prefix=f"{n}. ")
         if is_manual and q.is_scored and isinstance(q.points, int) and 1 <= q.points <= 100:
             doc.add_paragraph(f"Point: {q.points}")
         for img in sorted(q.images, key=lambda i: i.order_index or 0):
@@ -1017,8 +1220,7 @@ def export_docx(form: Form = Depends(verify_form_owner), db: Session = Depends(g
             letter = _EXPORT_LETTERS[i] if i < len(_EXPORT_LETTERS) else chr(ord("K") + i - 10)
             if opt.is_correct and i < len(_EXPORT_LETTERS):
                 correct_letters.append(letter)
-            opt_par = doc.add_paragraph()
-            _export_add_runs(opt_par, opt.option_text, prefix=f"{letter}. ")
+            _export_write_blocks(doc, opt.option_text, prefix=f"{letter}. ")
             for img in sorted(opt.images, key=lambda im: im.order_index or 0):
                 full = os.path.join(UPLOAD_DIR, (img.path or "").lstrip("/"))
                 if os.path.isfile(full):
