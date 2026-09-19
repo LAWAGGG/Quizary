@@ -20,6 +20,58 @@ from app.models.question_option import QuestionOption
 from app.services.points import distribute_quiz_points
 from app.utils import UPLOAD_DIR, MAX_DOCX_BYTES, now_wib, read_limited
 
+# Reuse AI rich-lite → HTML (fence/code/link) agar impor docx konsisten dengan AI:
+# - literal HTML "<a href>" di-escape jadi "&lt;a&gt;" (tampil sebagai kode, bukan WYSIWYG)
+# - Word hyperlink w:hyperlink → "[text](url)" → <a href> via _rich_lite_to_html
+# - unfenced code lines → ql-code-block. Fallback plain → HTML aman.
+try:
+    from app.services.ai_generate import (
+        _rich_lite_to_html as _ai_rich_to_html,
+        detect_code_intent as _ai_detect_intent,
+        _primary_code_lang as _ai_primary_lang,
+        _sniff_code_lang as _ai_sniff_lang,
+    )
+except Exception:  # pragma: no cover — saat test tanpa deps AI
+    _ai_rich_to_html = None
+    _ai_detect_intent = None
+    _ai_primary_lang = None
+    _ai_sniff_lang = None
+
+
+def _docx_text_to_html(raw: str | None) -> str:
+    """Docx plain-text (dengan \\n/\\t/markdown link) → HTML allowlist frontend.
+
+    Tanpa ini, "<div>" literal lolos HAS_TAG_RE → sanitize keep <div> → WYSIWYG,
+    atau "&lt;div&gt;" ter-strip jadi "html" saja. Dengan ini, literal di-escape
+    dan hyperlink Word "[text](url)" jadi <a>. Inline HTML tags yang masih
+    lolos sebagai "&lt;...&gt;" dibungkus <code> agar tampil sebagai kode.
+    """
+    if not raw or not raw.strip():
+        return raw or ""
+    html_out: str | None = None
+    code_lang = "plain"
+    strict = False
+    try:
+        if _ai_detect_intent and _ai_rich_to_html:
+            intent = _ai_detect_intent(raw)
+            sniffed = _ai_sniff_lang(raw, intent) if _ai_sniff_lang else None
+            code_lang = (sniffed or _ai_primary_lang(intent) if intent and _ai_primary_lang else sniffed) or "plain"
+            strict = bool(intent or sniffed or code_lang != "plain")
+            html_out = _ai_rich_to_html(raw, code_lang, strict)
+    except Exception:
+        html_out = None
+    if html_out is None:
+        html_out = html.escape(raw, quote=True)
+    # Literal HTML tags yang lolos sebagai "&lt;tag&gt;" (mis. "<a href>" ketik manual)
+    # harus tampil sebagai kode, bukan dirender WYSIWYG atau ter-strip jadi "html".
+    # _ai_rich_to_html sudah escape, tapi frontend resolveRichHtml akan decode
+    # "&lt;a&gt;" → "<a>" → jadi link. Bungkus sebagai <code> agar stay escaped.
+    if "&lt;" in html_out and "ql-code-block" not in html_out and "<code>" not in html_out:
+        # Wrap each escaped tag like &lt;div ...&gt; / &lt;/a&gt; as inline code
+        # Pattern harus handle &quot; di dalam atribut (mis. &lt;a href=&quot;...&quot;&gt;)
+        html_out = re.sub(r'&lt;/?[a-zA-Z].*?&gt;', lambda m: f"<code>{m.group(0)}</code>", html_out)
+    return html_out
+
 router = APIRouter(tags=["import"])
 
 WORD_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
@@ -194,6 +246,38 @@ def _para_text_with_math(p) -> str:
                     push("\t")
                 elif etag == "cr":
                     push("\n")
+        elif tag == "hyperlink":
+            # Word hyperlink (Insert Hyperlink) — preserve URL as markdown [text](url)
+            # so downstream _rich_lite_to_html can become <a href>.
+            try:
+                r_id = child.get(f"{R_NS}id") or child.get(f"{R_NS}embed")
+                url = ""
+                if r_id and hasattr(p, "part") and p.part.rels.get(r_id):
+                    rel = p.part.rels[r_id]
+                    if not rel.is_external:
+                        url = rel.target_ref
+                    else:
+                        url = rel.target_ref
+                # Extract visible text inside hyperlink (may contain w:r / w:t / w:br)
+                inner_parts: list[str] = []
+                for elem in child.iter():
+                    etag = elem.tag.split("}", 1)[1] if "}" in elem.tag else elem.tag
+                    if etag == "t":
+                        inner_parts.append(elem.text or "")
+                    elif etag == "br":
+                        inner_parts.append("\n")
+                    elif etag == "tab":
+                        inner_parts.append("\t")
+                inner = "".join(inner_parts)
+                if url and inner:
+                    push(f"[{inner}]({url})")
+                elif inner:
+                    push(inner)
+                else:
+                    # Fallback: extract any t
+                    push("".join(t.text or "" for t in child.findall(f".//{WORD_NS}t")))
+            except Exception:
+                push("".join(t.text or "" for t in child.findall(f".//{WORD_NS}t")))
         elif tag in ("oMath", "oMathPara"):
             latex = _omml_fix_pipes(_omml_to_latex(child)).strip()
             if latex.startswith(".") and parts and re.fullmatch(r"[A-Ja-j]\.?", parts[-1].strip()):
@@ -202,7 +286,7 @@ def _para_text_with_math(p) -> str:
             if latex:
                 push("\\(%s\\)" % latex, math=True)
         elif tag not in ("pPr", "bookmarkStart", "bookmarkEnd", "proofErr", "permStart", "permEnd", "sectPr"):
-            # Generic: hyperlink, smartTag etc — walk in document order, keep br/tab
+            # Generic: smartTag, etc — walk in document order, keep br/tab
             for elem in child.iter():
                 etag = elem.tag.split("}", 1)[1] if "}" in elem.tag else elem.tag
                 if etag == "t":
@@ -611,6 +695,9 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
     flush()
 
     # finalisasi is_correct + pastikan struktur konsisten
+    # Konversi plain-text docx (dengan \n, tab, markdown link, literal HTML)
+    # ke HTML allowlist via _docx_text_to_html agar konsisten dengan AI:
+    # literal "<div>" → "&lt;div&gt;" dalam <code>/code-block, hyperlink Word → <a>.
     result = []
     for q in questions:
         answer_letter = q.pop("answer_letter", None)
@@ -618,12 +705,12 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
         forced_type = q.pop("forced_type", None)
         points = q.pop("points", None)
         result.append({
-            "question_text": q["question_text"],
+            "question_text": _docx_text_to_html(q["question_text"]),
             "images": q["images"],
             "forced_type": forced_type,
             "options": [
                 {
-                    "text": o["text"],
+                    "text": _docx_text_to_html(o["text"]),
                     "is_correct": (o["letter"] in answer_letter) if isinstance(answer_letter, set) else (o["letter"] == answer_letter),
                     "images": o["images"],
                 }
