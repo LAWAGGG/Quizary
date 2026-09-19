@@ -188,6 +188,33 @@ def reorder_sections(
             )
         s.order_index = idx
 
+    # Sinkronkan nomor soal global dengan urutan section baru.
+    # Tanpa ini, soal di section 2 (order 4,5,6) yang dipindah jadi section 1
+    # tetap bernomor 4,5,6 padahal harus jadi 1,2,3 di tampilan & export.
+    all_qs = (
+        db.query(Question)
+        .filter(Question.form_id == form.id, Question.is_deleted.is_(False))
+        .order_by(Question.order_index, Question.id)
+        .all()
+    )
+    if all_qs:
+        # Kelompokkan per section_id preservasi urutan relatif lama
+        by_section: dict[int, list[Question]] = {}
+        for q in all_qs:
+            by_section.setdefault(q.section_id, []).append(q)
+        # Urutan section baru sesuai body.orders
+        new_order: list[Question] = []
+        for s_id in body.orders:
+            new_order.extend(by_section.get(s_id, []))
+        # Section yang tidak ada di body.orders (harusnya tidak ada, tapi jaga)
+        # tetap di akhir sesuai order lama
+        seen_ids = set(body.orders)
+        for q in all_qs:
+            if q.section_id not in seen_ids and q not in new_order:
+                new_order.append(q)
+        for idx, q in enumerate(new_order):
+            q.order_index = idx
+
     db.commit()
     return {"message": "Section order updated"}
 
