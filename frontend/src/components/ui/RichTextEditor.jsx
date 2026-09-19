@@ -119,6 +119,20 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
     String(ws).replace(/&nbsp;|&#160;|\t| /gi, (t) => { n += (t === '\t' ? 4 : 1); return '' })
     return '&nbsp;'.repeat(n)
   }
+  // Helper: cek apakah posisi kursor/seleksi berada di dalam code-block/inline-code.
+  // Jika ya, fitur formula ($...$) harus nonaktif agar $ pada PHP tidak bertabrakan.
+  const isInCode = (quill, range) => {
+    if (!quill) return false
+    try {
+      const fmt = range ? quill.getFormat(range) : quill.getFormat(quill.getSelection() || { index: 0, length: 0 })
+      if (fmt['code-block'] || fmt['code']) return true
+      if (range) {
+        const fmt2 = quill.getFormat(range.index, range.length || 0)
+        if (fmt2['code-block'] || fmt2['code']) return true
+      }
+    } catch {}
+    return false
+  }
   const normalizeFormulaBlots = (html) => stripMathToRaw(html)
   // Guard: DOM render rumus (katex/math/mjx) tak boleh tinggal di editor
   // dalam keadaan apapun — ganti jadi text node $...$ yang bebas diedit.
@@ -138,8 +152,32 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
   }
   const preserveIndent = (html) => {
     if (!html) return html
-    return String(html).split(/(<pre[\s\S]*?<\/pre>)/gi).map((chunk, i) => {
+    // Quill 2 blok kode = pre.ql-syntax / div.ql-code-block[-container] + inline code.
+    // Jangan ubah indent di dalam blok kode (biarkan pre-wrap asli).
+    // Placeholder DOM agar tidak rusak oleh split regex (container bersarang).
+    if (typeof document !== 'undefined') {
+      try {
+        const tmp = document.createElement('div')
+        tmp.innerHTML = String(html)
+        const codes = tmp.querySelectorAll('pre, code, .ql-code-block, .ql-code-block-container, .ql-syntax')
+        const stash = []
+        codes.forEach((el, idx) => {
+          const ph = document.createTextNode(`__CODEPH_${idx}__`)
+          stash.push({ ph: `__CODEPH_${idx}__`, html: el.outerHTML })
+          el.replaceWith(ph)
+        })
+        let out = tmp.innerHTML
+          .replace(/(<(?:p|li|h1|h2|h3|h4|div|blockquote)[^>]*>)((?:[ \t]|&nbsp;|&#160;)+)/gi,
+            (_m, tag, ws) => tag + toNbsp(ws))
+          .replace(/(<br\s*\/?>)((?:[ \t]|&nbsp;|&#160;)+)/gi,
+            (_m, br, ws) => br + toNbsp(ws))
+        stash.forEach(({ ph, html: codeHtml }) => { out = out.replace(ph, codeHtml) })
+        return out
+      } catch {}
+    }
+    return String(html).split(/(<pre[^>]*>[\s\S]*?<\/pre>|<code[^>]*>[\s\S]*?<\/code>)/gi).map((chunk, i) => {
       if (i % 2 === 1) return chunk
+      if (/ql-(code-block|syntax)/i.test(chunk)) return chunk
       return chunk
         .replace(/(<(?:p|li|h1|h2|h3|h4|div|blockquote)[^>]*>)((?:[ \t]|&nbsp;|&#160;)+)/gi,
           (_m, tag, ws) => tag + toNbsp(ws))
@@ -221,6 +259,16 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
       const text = event.clipboardData?.getData('text/plain') || ''
       const html = event.clipboardData?.getData('text/html') || ''
       if (!hasPastedMath(html, text)) return
+      // Jika paste di dalam blok kode / inline code, jangan konversi formula —
+      // biarkan $ PHP tetap sebagai teks literal.
+      const pasteRange = quill.getSelection()
+      if (pasteRange && isInCode(quill, pasteRange)) return
+      if (!pasteRange) {
+        try {
+          const fmtEnd = quill.getFormat(Math.max(0, quill.getLength() - 1), 0)
+          if (fmtEnd['code-block'] || fmtEnd['code']) return
+        } catch {}
+      }
 
       event.preventDefault()
       event.stopImmediatePropagation()
@@ -361,10 +409,18 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
   // isi draft dengannya supaya bisa diedit lalu diganti saat disimpan.
   // Default selalu inline ($..$) agar menyatu satu baris dengan soal/opsi.
   // Display ($$..$$) hanya bila user centang "blok tersendiri".
+  // ponytail: blok kode nonaktif untuk formula — $ di PHP tidak boleh jadi math.
   const openFormulaDialog = () => {
     const quill = quillRef.current
     if (!quill) return
     const sel = quill.getSelection()
+    if (sel && isInCode(quill, sel)) return
+    if (!sel) {
+      try {
+        const fmtEnd = quill.getFormat(Math.max(0, quill.getLength() - 1), 0)
+        if (fmtEnd['code-block'] || fmtEnd['code']) return
+      } catch {}
+    }
     let tex = ''
     let display = false
     const index = sel ? sel.index : Math.max(0, quill.getLength() - 1)
@@ -432,7 +488,20 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
 
   // Paste rumus selalu jadi teks mentah $...$ di editor agar bebas diedit;
   // render KaTeX hanya di blok "Preview Formula" bawah + halaman publik.
-  const hasMath = showPreview && typeof value === 'string' && (value.includes('$') || value.includes('\\(') || value.includes('\\['))
+  // ponytail: jangan hitung $ di dalam blok kode — cek di luar code saja.
+  const hasMath = (() => {
+    if (!showPreview || typeof value !== 'string' || !value) return false
+    const quick = value.includes('$') || value.includes('\\(') || value.includes('\\[')
+    if (!quick) return false
+    if (typeof document === 'undefined') return quick
+    try {
+      const tmp = document.createElement('div')
+      tmp.innerHTML = value
+      tmp.querySelectorAll('pre, code, .ql-code-block, .ql-code-block-container, .ql-syntax').forEach((el) => el.remove())
+      const cleaned = tmp.innerHTML + (tmp.textContent || '')
+      return cleaned.includes('$') || cleaned.includes('\\(') || cleaned.includes('\\[')
+    } catch { return quick }
+  })()
   const focusEditor = () => {
     const q = quillRef.current
     if (q && !q.hasFocus()) q.focus()

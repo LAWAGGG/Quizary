@@ -89,9 +89,23 @@ function katexToLatex(node, display) {
 function blockText(doc) {
   doc.body.querySelectorAll('br').forEach((node) => node.replaceWith(doc.createTextNode('\n')))
   doc.body.querySelectorAll('p, div, li, h1, h2, h3, h4, blockquote, tr').forEach((node) => {
+    // Jangan tambah newline pembatas bila node adalah container blok kode —
+    // biar isi kode tetap sebagai satu blok tanpa \n ekstra di tengah.
+    if (node.matches?.('.ql-code-block, .ql-code-block-container, .ql-syntax, pre, code')) return
     node.after(doc.createTextNode('\n'))
   })
   return (doc.body.textContent || '').replace(/\n{3,}/g, '\n\n')
+}
+
+// Cek apakah node berada di dalam blok kode Quill (pre / code / .ql-*)
+function isInCodeAncestor(node) {
+  for (let p = node?.parentElement; p; p = p.parentElement) {
+    const tag = p.tagName?.toLowerCase()
+    if (tag === 'pre' || tag === 'code') return true
+    const cls = p.getAttribute?.('class') || ''
+    if (/ql-(code-block|syntax)/i.test(cls) || /\bql-code-block-container\b/i.test(cls)) return true
+  }
+  return false
 }
 
 // Urutan penting: .katex DULU (pakai annotation mentah), baru <math> sisa.
@@ -101,6 +115,8 @@ function replaceMathNodes(doc) {
   let changed = false
   const replace = (node, latex) => {
     if (!node || node.parentNode == null || !latex) return
+    // ponytail: jangan sentuh rumus yang berada di dalam blok kode — $ PHP di sana harus literal
+    if (isInCodeAncestor(node)) return
     node.replaceWith(doc.createTextNode(latex))
     changed = true
   }
@@ -109,6 +125,7 @@ function replaceMathNodes(doc) {
   doc.querySelectorAll('math').forEach((node) => replace(node, mathmlToLatex(node) ?? plainFlatten(node)))
   doc.querySelectorAll('.mjx-container, .MathJax').forEach((node) => replace(node, katexToLatex(node, false) ?? plainFlatten(node)))
   doc.querySelectorAll('.ql-formula, .ql-formula-container').forEach((node) => {
+    if (isInCodeAncestor(node)) return
     const value = node.getAttribute('data-value') || plainFlatten(node)
     replace(node, value.trim() ? `$${value.trim()}$` : '')
   })

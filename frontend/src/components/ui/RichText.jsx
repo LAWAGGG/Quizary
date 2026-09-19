@@ -13,6 +13,9 @@ const KATEX_OPTIONS = {
     { left: '$', right: '$', display: false },
   ],
   ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+  // Quill 2 code-block = div.ql-code-block[-container]/pre.ql-syntax — bukan cuma pre/code tag.
+  // Tanpa ini $var PHP di dalam blok kode ke-render jadi math (tabrakan).
+  ignoredClasses: ['ql-code-block', 'ql-code-block-container', 'ql-syntax'],
   throwOnError: false,
   strict: false,
 }
