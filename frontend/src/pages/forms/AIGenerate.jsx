@@ -611,10 +611,8 @@ export default function AIGenerate() {
         <div className="flex w-full items-center gap-2 min-w-0">
           <span className="hidden sm:inline-flex items-center gap-1.5 shrink-0 text-xs font-medium text-primary-600 dark:text-primary-300" role="status">
             <TypingDots />
-            <span className="truncate max-w-[160px]">{busyStatus}</span>
           </span>
           <span className="sm:hidden inline-flex shrink-0" role="status" aria-label={busyStatus}><TypingDots /></span>
-          <div className="hidden sm:block h-5 w-px bg-gray-200 dark:bg-gray-700 shrink-0" aria-hidden />
           <input
             value={prompt.replace(/\s+/g, ' ')}
             readOnly

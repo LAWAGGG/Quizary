@@ -34,7 +34,7 @@ function FormTypeCluster({ form }) {
   return (
     <div className="absolute bottom-3 right-3 z-10 flex -space-x-2">
       <span
-        className="relative z-30 h-9 px-2.5 rounded-xl border-2 flex items-center gap-1 text-xs font-bold tabular-nums shadow-chip transition-all duration-200 ease-in-out group-hover:-translate-y-1 group-hover:-rotate-6"
+        className="relative h-9 px-2.5 rounded-xl border-2 flex items-center gap-1 text-xs font-bold tabular-nums shadow-chip transition-all duration-200 ease-in-out group-hover:-translate-y-1 group-hover:-rotate-6"
         style={{ backgroundColor: 'var(--ts)', color: 'var(--tb)', borderColor: 'var(--ts)' }}
         title={`${form.respondent_count ?? 0} respondent(s)`}
       >
