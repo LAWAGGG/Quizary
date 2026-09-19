@@ -1044,16 +1044,41 @@ class _DocxRichParser(_HTMLParser):
 
 
 def _export_add_formula_seg(paragraph, seg: str) -> bool:
-    """Satu segmen formula → OMML. Kembalikan True bila jadi OMML."""
-    if seg.startswith("\\(") or seg.startswith("\\["):
+    """Satu segmen formula → OMML. Kembalikan True bila jadi OMML.
+
+    Validasi delimiter ketat: seg harus berpasangan (`\\(...\\)`, `$$...$$`,
+    `$...$`, `<math>…</math>`). Lone `$slot` (tanpa penutup) → False agar
+    fallback ke teks biasa — ini bug `$slot` → `slo` yang dilaporkan.
+    """
+    if seg.startswith("\\("):
+        if not seg.endswith("\\)") or len(seg) < 4:
+            return False
+        tex = seg[2:-2]
+        return bool(tex.strip()) and _export_add_omml(paragraph, tex, True)
+    if seg.startswith("\\["):
+        if not seg.endswith("\\]") or len(seg) < 4:
+            return False
         tex = seg[2:-2]
         return bool(tex.strip()) and _export_add_omml(paragraph, tex, True)
     if seg.startswith("$$"):
+        if not seg.endswith("$$") or len(seg) < 4:
+            return False
         tex = seg[2:-2]
         return bool(tex.strip()) and _export_add_omml(paragraph, tex, True)
     if seg.startswith("$"):
+        # $$ sudah ditangani di atas
+        if not seg.endswith("$") or len(seg) < 2:
+            return False
         tex = seg[1:-1]
-        return bool(tex.strip()) and _export_add_omml(paragraph, tex, True)
+        if not tex.strip():
+            return False
+        # Heuristik: `$...$` rentan tabrakan dengan variabel kode `$slot`.
+        # `$slot dan $` (“slot dan ”) tanpa ciri math (\ ^ _ {} =+-*/<>|) → kalimat natural, tolak.
+        stripped = tex.strip()
+        if " " in stripped and not any(c in stripped for c in "\\^_{}=+-*/<>|"):
+            if re.fullmatch(r"[A-Za-z0-9_ ,.\t]+", stripped):
+                return False
+        return _export_add_omml(paragraph, tex, True)
     if seg.lower().startswith("<math"):
         return _export_add_omml(paragraph, seg, False)
     return False

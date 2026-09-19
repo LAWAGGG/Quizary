@@ -1536,7 +1536,9 @@ export default function QuestionBuilder() {
     try {
       const { data } = await api.get(`/questions/${question.id}/active-count`)
       if (data.active_count > 0) {
-        setDeleteWarning({ activeCount: data.active_count, questionIds: [question.id], isBulk: false, questionName: (question.question_text || '').replace(/<[^>]*>/g, '').slice(0, 50), questionObj: question })
+        const raw = (question.question_text || '').replace(/<[^>]*>/g, '').trim().slice(0, 50)
+        const label = raw || t('sectionManager.questionFallback', { n: (idToIndex.get(question.id) ?? questions.findIndex((x) => x.id === question.id)) + 1 })
+        setDeleteWarning({ activeCount: data.active_count, questionIds: [question.id], isBulk: false, questionName: label, questionObj: question })
       } else {
         setDeleteTarget(question)
       }
@@ -2447,12 +2449,16 @@ export default function QuestionBuilder() {
           <div>
             <p>{t('questionBuilder.confirmDeleteQuestionsMessage', { count: selectedIds.length })}</p>
             <ul className="mt-2 space-y-1 max-h-44 overflow-y-auto pr-1">
-              {questions.filter((q) => selectedIds.includes(q.id)).map((q) => (
-                <li key={q.id} className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400 leading-snug">
-                  <span className="w-1.5 h-1.5 rounded-full bg-incorrect shrink-0 mt-1" />
-                  <span className="line-clamp-2">{(q.question_text || '').replace(/<[^>]*>/g, '').trim()}</span>
-                </li>
-              ))}
+              {questions.filter((q) => selectedIds.includes(q.id)).map((q) => {
+                const raw = (q.question_text || '').replace(/<[^>]*>/g, '').trim()
+                const label = raw || t('sectionManager.questionFallback', { n: (idToIndex.get(q.id) ?? 0) + 1 })
+                return (
+                  <li key={q.id} className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400 leading-snug">
+                    <span className="w-1.5 h-1.5 rounded-full bg-incorrect shrink-0 mt-1" />
+                    <span className="line-clamp-2">{label}</span>
+                  </li>
+                )
+              })}
             </ul>
           </div>
         }
@@ -2492,7 +2498,15 @@ export default function QuestionBuilder() {
       <ConfirmModal
         show={!!deleteTarget}
         title={t('questionBuilder.confirmDeleteQuestionTitle')}
-        message={t('questionBuilder.confirmDeleteQuestionMessage', { title: (deleteTarget?.question_text || '').replace(/<[^>]*>/g, '').slice(0, 50) })}
+        message={t('questionBuilder.confirmDeleteQuestionMessage', {
+          title: (() => {
+            const raw = (deleteTarget?.question_text || '').replace(/<[^>]*>/g, '').trim().slice(0, 50)
+            if (raw) return raw
+            if (!deleteTarget) return ''
+            const n = (idToIndex.get(deleteTarget.id) ?? questions.findIndex((x) => x.id === deleteTarget.id)) + 1
+            return t('sectionManager.questionFallback', { n: n > 0 ? n : 1 })
+          })(),
+        })}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
         loading={confirmLoading}
