@@ -39,7 +39,7 @@ ANSWER_TEXT_RE = re.compile(r'^\s*(?:Kunci|Answer)\s*[:\-]\s*(.+?)\s*$', re.IGNO
 # ikut masuk ke teks soal. Untuk DOCX, tipe ditentukan dari ada/tidaknya opsi:
 # tanpa opsi = essay; dengan opsi = multiple_choice/checkbox.
 TYPE_RE = re.compile(r'^\s*(?:Tipe|Type)\s*[:\-]\s*(essay|short[\s_]?answer|isian[\s_]?singkat|esai|isian)\s*$', re.IGNORECASE)
-NUMBERED_RE = re.compile(r'\d+[\.\)]\s*(.+)')
+NUMBERED_RE = re.compile(r'^\s*\d+[\.\)]\s*(.*)$', re.DOTALL)
 OPTION_INLINE_RE = re.compile(r'(?:^|\s)([A-Ja-j])[\.\)]\s*(.*?)(?=\s+[A-Ja-j][\.\)]|$)')
 # Kolom point per soal — posisi bebas dalam blok soal (atas/tengah/akhir).
 # Varian: Point:/Poin:/Skor: + integer 1-100. Nilai di luar itu = tanpa point.
@@ -177,13 +177,23 @@ def _para_text_with_math(p) -> str:
     for child in p._p:
         tag = child.tag.split("}", 1)[1] if "}" in child.tag else child.tag
         if tag == "r":
-            text = "".join(t.text or "" for t in child.findall(f".//{WORD_NS}t"))
-            pos = 0
-            for m in _TEXT_LATEX_RE.finditer(text):
-                push(text[pos:m.start()])
-                push("\\(%s\\)" % m.group(0), math=True)
-                pos = m.end()
-            push(text[pos:])
+            # Preserve order of t / br / tab inside w:r — needed for indent & enter
+            for elem in child:
+                etag = elem.tag.split("}", 1)[1] if "}" in elem.tag else elem.tag
+                if etag == "t":
+                    txt = elem.text or ""
+                    pos = 0
+                    for m in _TEXT_LATEX_RE.finditer(txt):
+                        push(txt[pos:m.start()])
+                        push("\\(%s\\)" % m.group(0), math=True)
+                        pos = m.end()
+                    push(txt[pos:])
+                elif etag == "br":
+                    push("\n")
+                elif etag == "tab":
+                    push("\t")
+                elif etag == "cr":
+                    push("\n")
         elif tag in ("oMath", "oMathPara"):
             latex = _omml_fix_pipes(_omml_to_latex(child)).strip()
             if latex.startswith(".") and parts and re.fullmatch(r"[A-Ja-j]\.?", parts[-1].strip()):
@@ -191,8 +201,24 @@ def _para_text_with_math(p) -> str:
                 latex = latex[1:].strip()
             if latex:
                 push("\\(%s\\)" % latex, math=True)
-        elif tag not in ("pPr", "bookmarkStart", "bookmarkEnd", "proofErr"):
-            push("".join(t.text or "" for t in child.findall(f".//{WORD_NS}t")))
+        elif tag not in ("pPr", "bookmarkStart", "bookmarkEnd", "proofErr", "permStart", "permEnd", "sectPr"):
+            # Generic: hyperlink, smartTag etc — walk in document order, keep br/tab
+            for elem in child.iter():
+                etag = elem.tag.split("}", 1)[1] if "}" in elem.tag else elem.tag
+                if etag == "t":
+                    txt = elem.text or ""
+                    pos = 0
+                    for m in _TEXT_LATEX_RE.finditer(txt):
+                        push(txt[pos:m.start()])
+                        push("\\(%s\\)" % m.group(0), math=True)
+                        pos = m.end()
+                    push(txt[pos:])
+                elif etag == "br":
+                    push("\n")
+                elif etag == "tab":
+                    push("\t")
+                elif etag == "cr":
+                    push("\n")
     return "".join(parts)
 
 _LATEX_ESCAPE_RE = re.compile(r"([&%$#_{}])")
@@ -563,16 +589,20 @@ def _parse_docx_items(items: list[tuple[str, str | None, list]]) -> list[dict]:
 
         # 8) tidak ada numbering & tidak match pola apapun -> baris lanjutan
         #    (soal/opsi yang wrap ke baris baru, atau stem soal berupa gambar),
-        #    gabungkan ke item terakhir
+        #    gabungkan ke item terakhir dengan newline agar indentasi/spasi/enter
+        #    tidak ter-compact (roundtrip export->import akurat).
         if current is not None:
             if current["options"]:
                 last_opt = current["options"][-1]
                 if text:
-                    last_opt["text"] += " " + text
+                    last_opt["text"] += "\n" + text
                 attach_imgs(last_opt, imgs)
             else:
                 if text:
-                    current["question_text"] += " " + text
+                    if current["question_text"]:
+                        current["question_text"] += "\n" + text
+                    else:
+                        current["question_text"] = text
                 attach_imgs(current, imgs)
             continue
 

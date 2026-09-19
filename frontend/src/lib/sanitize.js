@@ -63,6 +63,27 @@ export function resolveRichHtml(html = '') {
   return HAS_TAG_RE.test(decoded) ? decoded : raw
 }
 
+/** Plain-text (hasil import docx: `\n`, tab, spasi awal baris) → HTML aman.
+ *  Browser collapse `\n` + spasi awal jadi 1 spasi bila tanpa tag — jadi:
+ *  escape HTML dulu, tab → 4×nbsp, spasi awal baris → nbsp, `\n` → `<br>`.
+ *  Output lolos CONFIG sanitize (p/br/span/div saja). HTML kaya dibiarkan utuh. */
+export function plainToHtml(text = '') {
+  const esc = String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+  return esc.split('\n').map((line) => {
+    let i = 0
+    let prefix = ''
+    while (i < line.length && (line[i] === ' ' || line[i] === '\t')) {
+      prefix += line[i] === '\t' ? '&nbsp;&nbsp;&nbsp;&nbsp;' : '&nbsp;'
+      i++
+    }
+    return prefix + line.slice(i)
+  }).join('<br>')
+}
+
 /** Buang tag HTML → teks polos (untuk URL param, nama file, teks 1 baris). */
 export function stripTags(html = '') {
   const raw = String(html || '')
