@@ -727,7 +727,7 @@ const QuestionCard = memo(function QuestionCard({ question, index, onDelete, onD
     file_upload: t('questionBuilder.typeFileUpload'),
   }
   return (
-    <Card className={`transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? '!border-primary ring-2 ring-primary/30 bg-primary-50/40 dark:bg-primary-900/15' : 'hover:border-gray-300 dark:hover:border-gray-700'} ${groupId ? 'border-l-4 !border-l-primary/50' : ''}`}>
+    <Card className={`transition-all ${isDragging ? 'shadow-lift border-primary/40 opacity-60' : selected ? '!border-primary ring-2 ring-primary/30 bg-primary-50/40 dark:bg-primary-900/15' : 'hover:border-gray-400 dark:hover:border-gray-700'} ${groupId ? 'border-l-4 !border-l-primary/50' : ''}`}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-3 min-w-0">
           {/* Mobile: checkbox tersembunyi → bubble nomor jadi indikator seleksi */}
@@ -1003,7 +1003,7 @@ const SortableGroupCard = memo(function SortableGroupCard({ groupId, questions: 
     <motion.div ref={setNodeRef} style={style} {...attributes} {...holdProps} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -12 }} transition={{ duration: 0.12 }} className={`relative ${expanded ? 'select-text' : 'select-none'}`} onClick={(e) => { if (isDragging) return; holdProps.onClick(e) }}>
       <span ref={setActivatorNodeRef} {...listeners} onPointerDown={(e) => { e.stopPropagation(); listeners?.onPointerDown?.(e) }} className="absolute left-0 top-4 w-6 h-8 hidden md:flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-500 dark:text-gray-400 rounded-md hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors"><GripVertical className="w-5 h-5" /></span>
       <div className="md:pl-7">
-        <div className={`rounded-2xl border bg-white dark:bg-ink-900 shadow-sm overflow-hidden ${isDragging ? 'opacity-60 border-primary/40 shadow-lift' : allSel ? '!border-primary ring-2 ring-primary/20 bg-primary-50/30 dark:bg-primary-900/10' : expanded ? 'border-primary/30' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'}`}>
+        <div className={`rounded-2xl border bg-white dark:bg-ink-900 shadow-sm overflow-hidden ${isDragging ? 'opacity-60 border-primary/40 shadow-lift' : allSel ? '!border-primary ring-2 ring-primary/20 bg-primary-50/30 dark:bg-primary-900/10' : expanded ? 'border-primary/30' : 'border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600'}`}>
           {/* header */}
           <div className="flex items-center gap-2 px-3 sm:px-4 py-3 bg-primary-50/60 dark:bg-primary-900/15">
             <button onClick={(e) => { e.stopPropagation(); onToggle() }} className="w-8 h-8 rounded-xl bg-white dark:bg-ink-800 border border-gray-200 dark:border-gray-700 text-dark hover:text-primary flex items-center justify-center shrink-0 transition-colors" title={expanded ? 'Collapse' : 'Expand'}>
