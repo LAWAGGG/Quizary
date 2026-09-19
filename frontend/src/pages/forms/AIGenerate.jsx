@@ -585,102 +585,116 @@ export default function AIGenerate() {
   const primaryDisabled = !draft ? !canGenerate : promptEmpty ? (busy || accepting || !stripTags(title)) : !canEdit
   const primaryLabel = !draft ? t('aiGenerate.generate') : promptEmpty ? t('aiGenerate.accept') : t('aiGenerate.sendEdit')
 
+  const isCompact = busy
   const composer = (
-    <div
+    <motion.div
       ref={composerRef}
+      layout
+      transition={{ layout: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } }}
       onDragEnter={onComposerDragEnter}
       onDragLeave={onComposerDragLeave}
       onDragOver={onComposerDragOver}
       onDrop={onComposerDrop}
       aria-busy={busy}
       data-testid="ai-composer"
-      className={`relative rounded-[1.75rem] border bg-white p-4 shadow-lift transition-colors focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 dark:bg-ink-900 dark:focus-within:border-primary dark:focus-within:ring-primary/20 ${dragActive ? 'border-primary ring-4 ring-primary/15' : 'border-primary-100 dark:border-gray-700'}`}
+      className={`relative rounded-[1.75rem] border bg-white shadow-lift will-change-transform dark:bg-ink-900 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 dark:focus-within:border-primary dark:focus-within:ring-primary/20 transition-[padding,border-color,box-shadow,background-color] duration-300 ease-out ${dragActive && !isCompact ? 'border-primary ring-4 ring-primary/15' : 'border-primary-100 dark:border-gray-700'} ${isCompact ? 'flex items-center gap-2 py-2 pl-3 pr-2' : 'p-4'}`}
     >
-      {dragActive && (
+      {dragActive && !isCompact && (
         <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[1.75rem] border-2 border-dashed border-primary bg-primary-50/90 backdrop-blur-sm dark:bg-primary-950/90" aria-hidden>
           <Paperclip className="h-6 w-6 text-primary-600 dark:text-primary-300" />
           <p className="text-sm font-semibold text-primary-700 dark:text-primary-200">{t('aiGenerate.dropFiles')}</p>
         </div>
       )}
-      {!draft && files.length > 0 && (
-        <div className="mb-3 mt-2 flex flex-wrap gap-2">
-          {files.map((f, i) => (
-            <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 rounded-full bg-primary-50 py-1.5 pl-3 pr-1.5 text-xs font-medium text-primary-700 dark:bg-primary-900/25 dark:text-primary-300">
-              <FileText className="h-3.5 w-3.5" />
-              <span className="max-w-[120px] truncate" title={f.name}>{f.name.split(/\s+/).slice(0, 3).join(' ')}</span>
-              <button
-                type="button"
-                onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                aria-label={t('aiGenerate.removeFile')}
-                className="flex h-6 w-6 items-center justify-center rounded-full text-primary-400 transition-colors hover:bg-primary-100 hover:text-primary-700 dark:hover:bg-primary-900/40"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="flex items-center gap-2 px-1 pb-2">
-        {busy && (
-          <span className="flex items-center gap-2 text-xs font-medium text-primary-600 dark:text-primary-300" role="status">
+
+      {/* Compact 1-line bar saat generating/editing: input + cancel sejajar, tanpa Paperclip, minim tinggi */}
+      {isCompact ? (
+        <div className="flex w-full items-center gap-2 min-w-0">
+          <span className="hidden sm:inline-flex items-center gap-1.5 shrink-0 text-xs font-medium text-primary-600 dark:text-primary-300" role="status">
             <TypingDots />
-            {busyStatus}
+            <span className="truncate max-w-[160px]">{busyStatus}</span>
           </span>
-        )}
-      </div>
-      <textarea
-        id="ai-prompt"
-        value={prompt}
-        onChange={(e) => { setPrompt(e.target.value); setError('') }}
-        onKeyDown={handleComposerKey}
-        placeholder={draft ? t('aiGenerate.editPlaceholder') : t('aiGenerate.promptComposerPlaceholder')}
-        rows={1}
-        readOnly={busy}
-        aria-busy={busy}
-        className="w-full resize-none bg-transparent px-1 pb-14 text-[15px] leading-6 text-ink placeholder:text-gray-400 focus:outline-none focus:ring-0 focus:border-transparent dark:text-gray-100 dark:placeholder:text-gray-500 [field-sizing:content] min-h-11 max-h-[200px]"
-      />
-      {promptOver && <p className="field-error mt-1">{t('aiGenerate.promptMax', { current: promptLen, max: PROMPT_MAX })}</p>}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-24 rounded-b-[1.75rem] bg-gradient-to-t from-white via-white/100 to-transparent dark:from-ink-900 dark:via-ink-900/100" aria-hidden="true" />
-      <div className="absolute bottom-4 left-4 right-4 z-20 flex items-center justify-between gap-2">
-        {!draft && (
-          <>
-            <input ref={fileRef} type="file" multiple accept={ACCEPT_EXT} onChange={pickFiles} className="hidden outline-hidden" />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={files.length >= MAX_FILES || busy}
-              aria-label={t('aiGenerate.filesLabel')}
-              title={t('aiGenerate.filesLabel')}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-primary-50 hover:text-primary-600 disabled:opacity-40 dark:text-gray-500 dark:hover:bg-primary-900/25 dark:hover:text-primary-300"
-            >
-              <Paperclip className="h-5 w-5" />
-            </button>
-            <span className="min-w-0 flex-1 truncate text-xs text-gray-400 dark:text-gray-500">{files.length}/{MAX_FILES} · {t('aiGenerate.filesHint')}</span>
-          </>
-        )}
-        {draft && <span className="flex-1" /> }
-        {busy ? (
+          <span className="sm:hidden inline-flex shrink-0" role="status" aria-label={busyStatus}><TypingDots /></span>
+          <div className="hidden sm:block h-5 w-px bg-gray-200 dark:bg-gray-700 shrink-0" aria-hidden />
+          <input
+            value={prompt.replace(/\s+/g, ' ')}
+            readOnly
+            placeholder={busyStatus}
+            aria-label={t('aiGenerate.promptLabel')}
+            tabIndex={-1}
+            className="min-w-0 flex-1 bg-transparent px-2 py-2 text-[14px] leading-5 text-ink placeholder:text-gray-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-500 truncate"
+          />
           <button
             type="button"
             onClick={cancelBusy}
-            className="inline-flex h-11 shrink-0 items-center justify-center rounded-full px-5 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-ink-800 hover:text-ink dark:hover:text-gray-100 transition-colors"
+            className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-gray-100 px-4 text-sm font-semibold text-gray-600 hover:bg-gray-200 hover:text-ink dark:bg-ink-800 dark:text-gray-300 dark:hover:bg-ink-700 transition-colors active:scale-95"
           >
             {t('aiGenerate.cancelGenerate')}
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handlePrimaryButton}
-            disabled={primaryDisabled}
-            aria-label={primaryLabel}
-            title={primaryLabel}
-            className={`flex shrink-0 items-center justify-center gap-1.5 rounded-full text-white shadow-chip transition-all hover:from-primary-600 hover:to-primary-800 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 bg-gradient-to-br from-primary-500 to-primary-700 ${!draft || !promptEmpty ? 'h-11 w-11' : 'h-11 px-5 text-sm font-semibold'}`}
-          >
-            {!draft || !promptEmpty ? <ArrowUp className="h-5 w-5" strokeWidth={2.5} /> : <><Check className="h-4 w-4" />{t('aiGenerate.accept')}</>}
-          </button>
-        )}
-      </div>
-    </div>
+        </div>
+      ) : (
+        <>
+          {!draft && files.length > 0 && (
+            <div className="mb-3 mt-2 flex flex-wrap gap-2">
+              {files.map((f, i) => (
+                <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 rounded-full bg-primary-50 py-1.5 pl-3 pr-1.5 text-xs font-medium text-primary-700 dark:bg-primary-900/25 dark:text-primary-300">
+                  <FileText className="h-3.5 w-3.5" />
+                  <span className="max-w-[120px] truncate" title={f.name}>{f.name.split(/\s+/).slice(0, 3).join(' ')}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                    aria-label={t('aiGenerate.removeFile')}
+                    className="flex h-6 w-6 items-center justify-center rounded-full text-primary-400 transition-colors hover:bg-primary-100 hover:text-primary-700 dark:hover:bg-primary-900/40"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <textarea
+            id="ai-prompt"
+            value={prompt}
+            onChange={(e) => { setPrompt(e.target.value); setError('') }}
+            onKeyDown={handleComposerKey}
+            placeholder={draft ? t('aiGenerate.editPlaceholder') : t('aiGenerate.promptComposerPlaceholder')}
+            rows={1}
+            aria-busy={busy}
+            className="w-full resize-none bg-transparent px-1 pb-14 text-[15px] leading-6 text-ink placeholder:text-gray-400 focus:outline-none focus:ring-0 focus:border-transparent dark:text-gray-100 dark:placeholder:text-gray-500 [field-sizing:content] min-h-11 max-h-[200px]"
+          />
+          {promptOver && <p className="field-error mt-1">{t('aiGenerate.promptMax', { current: promptLen, max: PROMPT_MAX })}</p>}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-24 rounded-b-[1.75rem] bg-gradient-to-t from-white via-white/100 to-transparent dark:from-ink-900 dark:via-ink-900/100" aria-hidden="true" />
+          <div className="absolute bottom-4 left-4 right-4 z-20 flex items-center justify-between gap-2">
+            {!draft && (
+              <>
+                <input ref={fileRef} type="file" multiple accept={ACCEPT_EXT} onChange={pickFiles} className="hidden outline-hidden" />
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={files.length >= MAX_FILES}
+                  aria-label={t('aiGenerate.filesLabel')}
+                  title={t('aiGenerate.filesLabel')}
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-primary-50 hover:text-primary-600 disabled:opacity-40 dark:text-gray-500 dark:hover:bg-primary-900/25 dark:hover:text-primary-300"
+                >
+                  <Paperclip className="h-5 w-5" />
+                </button>
+                <span className="min-w-0 flex-1 truncate text-xs text-gray-400 dark:text-gray-500">{files.length}/{MAX_FILES} · {t('aiGenerate.filesHint')}</span>
+              </>
+            )}
+            {draft && <span className="flex-1" />}
+            <button
+              type="button"
+              onClick={handlePrimaryButton}
+              disabled={primaryDisabled}
+              aria-label={primaryLabel}
+              title={primaryLabel}
+              className={`flex shrink-0 items-center justify-center gap-1.5 rounded-full text-white shadow-chip transition-all hover:from-primary-600 hover:to-primary-800 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 bg-gradient-to-br from-primary-500 to-primary-700 ${!draft || !promptEmpty ? 'h-11 w-11' : 'h-11 px-5 text-sm font-semibold'}`}
+            >
+              {!draft || !promptEmpty ? <ArrowUp className="h-5 w-5" strokeWidth={2.5} /> : <><Check className="h-4 w-4" />{t('aiGenerate.accept')}</>}
+            </button>
+          </div>
+        </>
+      )}
+    </motion.div>
   )
 
   const stepper = (
