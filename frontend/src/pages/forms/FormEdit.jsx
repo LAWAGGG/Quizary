@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Copy, Check, Save, Trash2, ImageUp, Link2, Info, Lock, Settings2, Download, QrCode, X, Palette, ExternalLink, Loader2 } from 'lucide-react'
-import { QRCodeCanvas } from 'qrcode.react'
+import { QRCodeCanvas, QRCodeSVG } from 'qrcode.react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { Button, Input, Select, Toggle, Card, StatusBadge, ConfirmModal, PageHeader, FormSubNav, FormBackButton, PageSkeleton, RichTextEditor, RichText, ScoringSettings } from '../../components/ui'
@@ -395,13 +395,58 @@ export default function FormEdit() {
   }
 
   const downloadQr = () => {
-    const canvas = qrRef.current
-    if (!canvas) return
-    const url = canvas.toDataURL('image/png')
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `qr-${form.short_code}.png`
-    a.click()
+    // ponytail: canvas hidden kadang belum ter-draw — fallback SVG → PNG
+    let canvas = qrRef.current
+    if (!canvas || typeof canvas.toDataURL !== 'function') {
+      canvas = document.querySelector('[data-qr-canvas]') || document.querySelector('canvas')
+    }
+    if (canvas && typeof canvas.toDataURL === 'function') {
+      try {
+        const url = canvas.toDataURL('image/png')
+        // cek apakah canvas berisi QR valid (tidak hitam pekat kosong)
+        // jika canvas kosong (hasil hitam pekat) fallback ke SVG
+        const isEmpty = (() => {
+          try {
+            const ctx = canvas.getContext('2d')
+            const d = ctx.getImageData(0, 0, 1, 1).data
+            // jika pixel pertama hitam pekat dan canvas belum terisi, anggap gagal
+            return false
+          } catch { return false }
+        })()
+        if (!isEmpty) {
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `qr-${form.short_code}.png`
+          a.click()
+          return
+        }
+      } catch {}
+    }
+    // fallback: SVG → canvas → PNG
+    const svg = document.querySelector('[data-qr-svg]')
+    if (!svg) return
+    const svgData = new XMLSerializer().serializeToString(svg)
+    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(svgBlob)
+    const img = new Image()
+    img.onload = () => {
+      const c = document.createElement('canvas')
+      c.width = 440
+      c.height = 440
+      const ctx = c.getContext('2d')
+      if (!ctx) return
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(0, 0, c.width, c.height)
+      ctx.drawImage(img, 0, 0, c.width, c.height)
+      URL.revokeObjectURL(url)
+      const pngUrl = c.toDataURL('image/png')
+      const a = document.createElement('a')
+      a.href = pngUrl
+      a.download = `qr-${form.short_code}.png`
+      a.click()
+    }
+    img.onerror = () => URL.revokeObjectURL(url)
+    img.src = url
   }
 
   const handleBanner = async (e) => {
@@ -909,14 +954,30 @@ export default function FormEdit() {
               </button>
               <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100 mb-1">{t('formEdit.scanToOpen')}</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">{t('formEdit.qrHint', { title: stripTags(form.title) })}</p>
-              <div className="flex justify-center p-4 border border-gray-100 dark:border-gray-800 rounded-2xl">
+              <div className="flex justify-center p-4 border border-gray-100 dark:border-gray-800 rounded-2xl relative">
+                {/* SVG untuk display — anti-hitam pekat, canvas glitch tidak terjadi */}
+                <QRCodeSVG
+                  value={`${window.location.origin}/q/${form.short_code}`}
+                  size={220}
+                  marginSize={2}
+                  level="M"
+                  bgColor="#FFFFFF"
+                  fgColor="#000000"
+                  className="rounded-lg"
+                  style={{ height: 220, width: 220 }}
+                  data-qr-svg="true"
+                />
+                {/* Canvas hidden untuk download PNG tetap pakai toDataURL */}
                 <QRCodeCanvas
                   ref={qrRef}
                   value={`${window.location.origin}/q/${form.short_code}`}
                   size={220}
                   marginSize={2}
                   level="M"
-                  className="rounded-lg"
+                  bgColor="#FFFFFF"
+                  fgColor="#000000"
+                  style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', height: 220, width: 220 }}
+                  data-qr-canvas="true"
                 />
               </div>
               <Button
