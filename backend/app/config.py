@@ -45,7 +45,10 @@ def get_smtp_config() -> dict[str, str | int]:
     from_addr = os.getenv("SMTP_FROM", user)
     return {"host": host, "port": port, "user": user, "password": pwd, "from": from_addr}
 
-GEMINI_API_KEY = _secret_or_env("GEMINI_API_KEY")
+GEMINI_API_KEY = _secret_or_env("GEMINI_API_KEY")  # deprecated: BYOK per-user, keep for warn only
+if GEMINI_API_KEY:
+    import logging as _lg
+    _lg.getLogger("quizary.ai").warning("GEMINI_API_KEY env masih terisi tapi tidak dipakai (BYOK aktif).")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
 GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
 

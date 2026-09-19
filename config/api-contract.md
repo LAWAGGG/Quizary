@@ -1069,7 +1069,34 @@ Content-Disposition: attachment; filename="hasil-QZM002B.xlsx"
 
 ---
 
-### `GET /api/ai/quota` — preview in code block below
+### `PUT /me/gemini-key` — simpan API key Gemini (BYOK)
+Auth: Bearer Token
+```json
+// Request
+{ "key": "AQ... / AIzaSy..." }
+// Response 200
+{ "message": "API key Gemini tersimpan", "connected": true }
+// Error 422: "API key must not be empty" | "Invalid API key (must be 10-200 characters)" | 401 tanpa token — no format/prefix check, generation will tell if key works
+```
+### `GET /me/gemini-key/status` — cek status key
+Auth: Bearer Token
+```json
+// Response 200 (belum isi)
+{ "connected": false, "masked": null }
+// Response 200 (sudah isi)
+{ "connected": true, "masked": "••••abcd" }
+```
+### `DELETE /me/gemini-key` — hapus key
+Auth: Bearer Token
+```json
+// Response 200
+{ "message": "API key Gemini dihapus", "connected": false }
+```
+### `GET /api/ai/quota` — **deprecated** → `410 Gone`
+```json
+{ "message": "Endpoint /ai/quota sudah tidak tersedia. Cek status key di GET /me/gemini-key/status." }
+```
+AI BYOK: semua `POST /ai/generate`, `POST /ai/generate/stream`, `POST /ai/edit` butuh key user (403 bila belum isi: `"Masukkan API key Gemini di Pengaturan agar bisa memakai AI."`, 403 bila korup: `"API key rusak. Simpan ulang di Pengaturan."`). `POST /ai/accept` tetap tanpa key (draf sudah ada). Tiap panggilan pakai `x-goog-api-key` milik user; kuota ikut kuota Google user, server tidak lagi enforce `5/hari`.
 
 ## 4b. AI Edit (tambah/mengubah soal dalam draf)
 

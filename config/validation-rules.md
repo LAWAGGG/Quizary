@@ -155,8 +155,19 @@ Semua opsional (partial update). Field tambahan:
 #### `POST /api/ai/accept`
 Meneruskan `answer_key` + `allow_other` dari draf ke `Question` (aturan sama seperti create: tipe salah → 422 bernomor bagian/soal, kunci di form biasa → 422, essay/short tanpa kunci → poin 0). LLM dilarang mengarang kunci (`answer_key` selalu null dari generate; creator isi saat review); `allow_other:true` hanya bila user eksplisit minta opsi lainnya.
 
+#### `PUT /me/gemini-key` (BYOK)
+| Field | Rule |
+|---|---|
+| `key` | `string(10-200)` strip, no format/prefix check (any 10–200 chars) |
+
+**Behavior:** Simpan key terenkripsi Fernet (turunan `SECRET_KEY`) per user. Tanpa test-call Google saat simpan (key salah ketahuan saat generate 502/403). Plaintext tak pernah balik ke frontend (GET hanya `masked: ••••abcd`).
+**Test:** 200 valid any 10–200 · 422 kosong/strip / panjang <10/>200 · 401 tanpa token · 200 simpan 2x tertimpa · GET `masked` bukan full key.
+
+#### `GET /me/gemini-key/status` & `DELETE /me/gemini-key`
+**Test:** GET belum isi → `connected:false` · sudah isi → `connected:true, masked` · hapus → `connected:false` · 401 tanpa token.
+
 #### `POST /api/ai/edit`
-Ubah/hapus/tambah soal dalam draf via instruksi prompt. Makan **1 kuota** (sama seperti generate), kuota harian 5.
+Ubah/hapus/tambah soal dalam draf via instruksi prompt. **BYOK: tanpa kuota server 5/hari**, kuota ikut Google user.
 | Field | Rule |
 |---|---|
 | `title` | `string(1-1000)`, wajib punya teks (strip tag HTML) |
@@ -165,9 +176,9 @@ Ubah/hapus/tambah soal dalam draf via instruksi prompt. Makan **1 kuota** (sama 
 | `draft` | `object` — draf terakhir (bentuk output generate), `sections` wajib list non-empty |
 | `previous_prompts` | `list(min=0, max=5)` — riwayat prompt (konteks anti-halusinasi), item ≤5000 char |
 
-**Business rule:** LLM hanya ubah/hapus/tambah soal dalam JSON draf (tanpa file ref). Hapus semua soal → `sections` dengan `questions: []` + warning (bukan error). Kuota catat hanya bila request sukses; client disconnect sebelum done → 499 tanpa kuota.
-Giggle/gibberish instruksi → 422 via heuristic `detect_gibberish` (hemat kuota; berlaku juga di `/ai/generate` & `/ai/generate/stream`).
-**Test:** 200 sukses · 422 instruksi <10 / draft kosong / prev prompts >5 · 401 tanpa token · 429 kuota habis · 502 AI gagal · 403/409 N/A. Bisnis: hapus 1 soal · hapus semua · ubah 1 · ubah semua · tambah N · cancel tak makan kuota.
+**Business rule:** LLM hanya ubah/hapus/tambah soal dalam JSON draf (tanpa file ref). Hapus semua soal → `sections` dengan `questions: []` + warning (bukan error). Tanpa key user → 403 `"Masukkan API key Gemini di Pengaturan..."`; key korup → 403 `"API key rusak..."`; `GET /ai/quota` → 410. Client disconnect sebelum done → 499 tanpa audit.
+Giggle/gibberish instruksi → 422 via heuristic `detect_gibberish` (berlaku juga di `/ai/generate` & `/ai/generate/stream`).
+**Test:** 200 sukses · 422 instruksi <10 / draft kosong / prev prompts >5 · 401 tanpa token · 403 tanpa key/rusak · 502 AI gagal (key ditolak) · 410 `GET /ai/quota` · 409 N/A. Bisnis: hapus 1 soal · hapus semua · ubah 1 · ubah semua · tambah N · cancel.
 
 **Source:** `schemas/ai.py:AiEditRequest`, `routers/ai.py:ai_edit`, `services/ai_generate.py:build_edit_text`
 

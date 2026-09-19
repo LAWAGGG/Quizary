@@ -10,6 +10,8 @@ from app.models.image import Image
 from app.models.question import Question
 from app.models.question_option import QuestionOption
 from app.models.user import User
+from app.crypto import decrypt_gemini_key, encrypt_gemini_key, mask_key
+from app.schemas.ai import GeminiKeyPutRequest, GeminiKeySaveResponse, GeminiKeyStatusResponse
 from app.schemas.auth import MessageResponse, UserResponse
 from app.utils import UPLOAD_DIR, MAX_IMAGE_BYTES, file_url, now_wib, write_limited, _delete_file
 
@@ -204,6 +206,39 @@ def delete_image(
     _delete_file(stored_path)
 
     return MessageResponse(message="Image deleted")
+
+
+# ── Gemini BYOK ────────────────────────────────────────────────────────────
+@router.put("/me/gemini-key", response_model=GeminiKeySaveResponse)
+def put_gemini_key(
+    body: GeminiKeyPutRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user.gemini_key_encrypted = encrypt_gemini_key(body.key.strip())
+    db.commit()
+    return GeminiKeySaveResponse(message="API key Gemini tersimpan", connected=True)
+
+
+@router.get("/me/gemini-key/status", response_model=GeminiKeyStatusResponse)
+def gemini_key_status(user: User = Depends(get_current_user)):
+    if not user.gemini_key_encrypted:
+        return GeminiKeyStatusResponse(connected=False, masked=None)
+    try:
+        plain = decrypt_gemini_key(user.gemini_key_encrypted)
+        return GeminiKeyStatusResponse(connected=True, masked=mask_key(plain))
+    except Exception:
+        return GeminiKeyStatusResponse(connected=False, masked=None)
+
+
+@router.delete("/me/gemini-key", response_model=GeminiKeySaveResponse)
+def delete_gemini_key(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user.gemini_key_encrypted = None
+    db.commit()
+    return GeminiKeySaveResponse(message="API key Gemini dihapus", connected=False)
 
 
 # ── DELETE /options/{option_id}/images/{image_id} ──────────────────────────────

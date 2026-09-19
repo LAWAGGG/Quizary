@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'framer-motion'
-import { ArrowLeft, ArrowUp, Paperclip, Sparkles, Check, X, FileText, Clock, Shuffle, Lock, ListChecks, Trophy, EyeOff, CalendarDays, Info, RefreshCw } from 'lucide-react'
+import { ArrowLeft, ArrowUp, Paperclip, Sparkles, Check, X, FileText, Clock, Shuffle, Lock, ListChecks, Trophy, EyeOff, CalendarDays, Info, RefreshCw, KeyRound } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { stripTags } from '../../lib/sanitize'
@@ -17,15 +17,20 @@ const PROMPT_MIN = 10
 const MAX_PREV_PROMPTS = 5
 const normPrompt = (s) => String(s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
 
-function QuotaPill({ quota }) {
+function KeyMissingBanner() {
   const { t } = useTranslation()
-  if (!quota) return null
-  const empty = quota.remaining <= 0
+  const navigate = useNavigate()
   return (
-    <span className={`inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-xs font-semibold border ${empty ? 'bg-incorrect-soft text-incorrect border-incorrect/20' : 'bg-primary-50 text-primary-700 border-primary/20 dark:bg-primary-900/20 dark:text-primary-300'}`}>
-      <Sparkles className="w-3.5 h-3.5" />
-      {t('aiGenerate.quotaLeft', { remaining: quota.remaining, limit: quota.limit })}
-    </span>
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 p-4 flex flex-col gap-3">
+      <div className="flex gap-3">
+        <KeyRound className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-ink dark:text-gray-100">{t('aiGenerate.keyMissing')}</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{t('aiGenerate.keyMissingDesc')}</p>
+        </div>
+      </div>
+      <Button size="sm" onClick={() => navigate('/settings')}>{t('aiGenerate.openSettings')}</Button>
+    </div>
   )
 }
 
@@ -146,7 +151,7 @@ export default function AIGenerate() {
   const [formType, setFormType] = useState('form')
   const [prompt, setPrompt] = useState('')
   const [files, setFiles] = useState([])
-  const [quota, setQuota] = useState(null)
+  const [keyStatus, setKeyStatus] = useState(null)
   const [draft, setDraft] = useState(null)
   const [ignored, setIgnored] = useState([])
   const [warnings, setWarnings] = useState([])
@@ -168,7 +173,7 @@ export default function AIGenerate() {
   const busy = generating || editing
 
   useEffect(() => {
-    api.get('/ai/quota').then((r) => setQuota(r.data)).catch(() => {})
+    api.get('/me/gemini-key/status').then((r) => setKeyStatus(r.data)).catch(() => setKeyStatus({ connected: false, masked: null }))
   }, [])
 
   // Skeleton tumbuh satu-per-satu saat generate pertama (belum ada draf).
@@ -322,7 +327,6 @@ export default function AIGenerate() {
     setIgnored(data.ignored || [])
     setWarnings(data.warnings || [])
     setModelUsed(data.model || '')
-    setQuota((q) => (q ? { ...q, remaining: data.remaining, used: q.limit - data.remaining } : q))
     setGenProgress({ percent: 100, key: '', done: 0, total: 0 })
     if (usedPrompt) setPrevPrompts((prev) => [...prev, usedPrompt].slice(-MAX_PREV_PROMPTS))
     setPrompt('')
@@ -330,23 +334,31 @@ export default function AIGenerate() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const failGenerate = (status, serverMsg, fallbackCode) => {
+  const getFirstError = (data) => {
+    if (Array.isArray(data?.errors) && data.errors.length) return Object.values(data.errors[0])[0] || ''
+    return ''
+  }
+  const failGenerate = (status, serverMsg, serverData, fallbackCode) => {
+    const errMsg = getFirstError(serverData) || serverMsg
     let msg
-    if (status === 429) msg = serverMsg || t('aiGenerate.quotaEmpty')
-    else if (status === 502 && serverMsg?.toLowerCase().includes('terpotong')) msg = serverMsg
+    if (status === 403) msg = errMsg || t('aiGenerate.keyMissing')
+    else if (status === 422) msg = errMsg || t('aiGenerate.generateFailed')
+    else if (status === 502 && errMsg?.toLowerCase().includes('terpotong')) msg = errMsg
     else if (fallbackCode === 'ECONNABORTED') msg = t('aiGenerate.timeout')
-    else msg = serverMsg || t('aiGenerate.generateFailed')
+    else msg = errMsg || t('aiGenerate.generateFailed')
     setError(typeof msg === 'string' ? msg : t('aiGenerate.generateFailed'))
-    toast.error(serverMsg || msg)
+    toast.error(errMsg || msg)
   }
 
-  const failEdit = (status, serverMsg, fallbackCode) => {
+  const failEdit = (status, serverMsg, serverData, fallbackCode) => {
+    const errMsg = getFirstError(serverData) || serverMsg
     let msg
-    if (status === 429) msg = serverMsg || t('aiGenerate.quotaEmpty')
+    if (status === 403) msg = errMsg || t('aiGenerate.keyMissing')
+    else if (status === 422) msg = errMsg || t('aiGenerate.editFailed')
     else if (fallbackCode === 'ECONNABORTED') msg = t('aiGenerate.timeout')
-    else msg = serverMsg || t('aiGenerate.editFailed')
+    else msg = errMsg || t('aiGenerate.editFailed')
     setError(typeof msg === 'string' ? msg : t('aiGenerate.editFailed'))
-    toast.error(serverMsg || msg)
+    toast.error(errMsg || msg)
   }
 
   // Generate via SSE stream (fetch + getReader; axios tak bisa stream).
@@ -390,7 +402,7 @@ export default function AIGenerate() {
         return true
       } else if (event === 'error') {
         stopTick()
-        failGenerate(data.status, data.message)
+        failGenerate(data.status, data.message, data, null)
         return true
       }
       return false
@@ -446,8 +458,9 @@ export default function AIGenerate() {
         toast.info(t('aiGenerate.generateCancelled'))
       } else {
         const status = err.response?.status
-        const serverMsg = err.response?.data?.message || err.response?.data?.detail
-        failGenerate(status, serverMsg, err.code)
+        const data = err.response?.data
+        const serverMsg = data?.message !== 'Invalid fields' ? data?.message : '' || data?.detail
+        failGenerate(status, serverMsg, data, err.code)
       }
     } finally {
       stopTick()
@@ -483,8 +496,9 @@ export default function AIGenerate() {
         toast.info(t('aiGenerate.editCancelled'))
       } else {
         const status = err.response?.status
-        const serverMsg = err.response?.data?.message || err.response?.data?.detail
-        failEdit(status, serverMsg, err.code)
+        const data = err.response?.data
+        const serverMsg = data?.message !== 'Invalid fields' ? data?.message : '' || data?.detail
+        failEdit(status, serverMsg, data, err.code)
       }
     } finally {
       setEditing(false)
@@ -525,8 +539,11 @@ export default function AIGenerate() {
       toast.success(t('aiGenerate.accepted'))
       navigate(`/forms/${res.data.id}`)
     } catch (err) {
-      setError(err.response?.data?.message || t('aiGenerate.acceptFailed'))
-      toast.error(err.response?.data?.message || t('aiGenerate.acceptFailed'))
+      const data = err.response?.data
+      const firstErr = Array.isArray(data?.errors) && data.errors.length ? Object.values(data.errors[0])[0] : ''
+      const msg = firstErr || (data?.message !== 'Invalid fields' ? data?.message : '') || data?.detail || t('aiGenerate.acceptFailed')
+      setError(msg)
+      toast.error(msg)
     } finally {
       setAccepting(false)
     }
@@ -546,12 +563,12 @@ export default function AIGenerate() {
     setTimeout(() => composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
   }
 
-  const quotaEmpty = quota && quota.remaining <= 0
+  const keyMissing = keyStatus && !keyStatus.connected
   const promptLen = normPrompt(prompt).length
   const promptOver = promptLen > PROMPT_MAX
-  const canGenerate = !busy && !quotaEmpty && promptLen >= PROMPT_MIN && !promptOver && !!stripTags(title)
+  const canGenerate = !busy && !keyMissing && promptLen >= PROMPT_MIN && !promptOver && !!stripTags(title)
   const promptEmpty = promptLen === 0
-  const canEdit = !!draft && !busy && !quotaEmpty && !promptEmpty && promptLen >= PROMPT_MIN && !promptOver
+  const canEdit = !!draft && !busy && !keyMissing && !promptEmpty && promptLen >= PROMPT_MIN && !promptOver
 
   const handleComposerKey = (e) => {
     if (e.key !== 'Enter') return
@@ -751,8 +768,13 @@ export default function AIGenerate() {
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
         <div className="flex items-center justify-between gap-3">
           <p className="eyebrow">{t('aiGenerate.eyebrow')}</p>
-          <QuotaPill quota={quota} />
+          {keyStatus?.connected && (
+            <span className="inline-flex items-center gap-1.5 px-3 h-7 rounded-full text-xs font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300">
+              <KeyRound className="w-3.5 h-3.5" /> {keyStatus.masked || '••••'}
+            </span>
+          )}
         </div>
+        {keyMissing && <KeyMissingBanner />}
 
         {stepper}
 
@@ -806,7 +828,7 @@ export default function AIGenerate() {
             {!busy && (
               <>
                 {error && <p className="field-error">{error}</p>}
-                {quotaEmpty && <p className="field-error">{t('aiGenerate.quotaEmpty')}</p>}
+                {keyMissing && <p className="field-error">{t('aiGenerate.keyMissing')}</p>}
                 <div className="flex gap-3">
                   <Button type="button" variant="secondary" className="flex-1" onClick={() => setStep(1)}>{t('aiGenerate.back')}</Button>
                 </div>

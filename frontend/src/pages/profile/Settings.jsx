@@ -1,12 +1,70 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Monitor, Sun, Moon, Type, Languages, Settings as SettingsIcon, LogOut, Check } from 'lucide-react'
+import { Monitor, Sun, Moon, Type, Languages, Settings as SettingsIcon, LogOut, Check, KeyRound, Eye, EyeOff, ExternalLink, Trash2, Info, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { Card, PageHeader, Button } from '../../components/ui'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Card, PageHeader, Button, Input } from '../../components/ui'
 import { usePrefs } from '../../context/PreferencesContext'
 import { useToast } from '../../hooks/useToast'
 import { useAuth } from '../../hooks/useAuth'
 import { persistLang } from '../../lib/i18n.js'
+import api from '../../api/client'
+
+function GeminiHelpModal({ show, onClose }) {
+  const { t } = useTranslation()
+  if (!show) return null
+  return (
+    <AnimatePresence>
+      {show && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4 backdrop-blur-sm"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ scale: 0.96, opacity: 0, y: 8 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.96, opacity: 0, y: 8 }}
+            className="bg-white dark:bg-ink-900 border dark:border-ink-800 rounded-2xl w-full max-w-lg shadow-lift max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-5 border-b dark:border-ink-800">
+              <h3 className="font-display font-semibold text-ink dark:text-gray-100 flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-primary" /> {t('settings.geminiKeyHelpTitle')}
+              </h3>
+              <button onClick={onClose} className="w-8 h-8 rounded-xl grid place-items-center hover:bg-gray-100 dark:hover:bg-ink-800 text-gray-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.geminiKeyHelpDesc')}</p>
+              <ol className="space-y-3">
+                {[1,2,3,4,5].map((n) => (
+                  <li key={n} className="flex gap-3">
+                    <span className="w-7 h-7 rounded-full bg-primary text-white grid place-items-center text-xs font-bold shrink-0 mt-0.5">{n}</span>
+                    <p className="text-sm text-ink dark:text-gray-200 pt-1">{t(`settings.geminiKeyHelpStep${n}`)}</p>
+                  </li>
+                ))}
+              </ol>
+              <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 flex gap-2">
+                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700 dark:text-amber-300">{t('settings.geminiKeyHelpWarning')}</p>
+              </div>
+            </div>
+            <div className="p-5 pt-0 flex gap-3 justify-end">
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-sm font-semibold bg-primary text-white hover:bg-primary-600">
+                {t('settings.geminiKeyHelpOpen')} <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+              <button onClick={onClose} className="h-10 px-4 rounded-xl text-sm font-medium bg-gray-100 dark:bg-ink-800 hover:bg-gray-200 dark:hover:bg-ink-700">{t('common.close')}</button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
 
 function ChoiceCard({ active, onClick, icon, label, sublabel, flag }) {
   return (
@@ -51,17 +109,28 @@ export default function Settings() {
   const { logout } = useAuth()
   const navigate = useNavigate()
 
-  // Debounce slider agar tidak langsung commit tiap pixel saat drag.
   const sizeMap = { sm: 0, md: 1, lg: 2 }
   const sizeArr = ['sm', 'md', 'lg']
   const [sliderVal, setSliderVal] = useState(() => sizeMap[fontSize] ?? 1)
   const debounceRef = useRef(null)
+
+  // Gemini BYOK
+  const [keyStatus, setKeyStatus] = useState(null)
+  const [keyInput, setKeyInput] = useState('')
+  const [showKey, setShowKey] = useState(false)
+  const [savingKey, setSavingKey] = useState(false)
+  const [keyError, setKeyError] = useState('')
+  const [showHelp, setShowHelp] = useState(false)
 
   useEffect(() => {
     setSliderVal(sizeMap[fontSize] ?? 1)
   }, [fontSize])
 
   useEffect(() => () => clearTimeout(debounceRef.current), [])
+
+  useEffect(() => {
+    api.get('/me/gemini-key/status').then((r) => setKeyStatus(r.data)).catch(() => setKeyStatus({ connected: false, masked: null }))
+  }, [])
 
   const handleSliderChange = (e) => {
     const v = Number(e.target.value)
@@ -84,6 +153,49 @@ export default function Settings() {
   const handleLogout = async () => {
     await logout()
     navigate('/login')
+  }
+
+  const parseErrors = (data) => {
+    if (Array.isArray(data?.errors) && data.errors.length) {
+      const first = data.errors[0]
+      return Object.values(first)[0] || ''
+    }
+    return ''
+  }
+  const handleSaveKey = async () => {
+    const v = keyInput.trim()
+    if (!v) { setKeyError(t('settings.geminiKeyEmpty')); return }
+    setSavingKey(true)
+    setKeyError('')
+    try {
+      await api.put('/me/gemini-key', { key: v })
+      setKeyInput('')
+      setShowKey(false)
+      const r = await api.get('/me/gemini-key/status')
+      setKeyStatus(r.data)
+      toast.success(t('settings.geminiKeySaved'))
+    } catch (e) {
+      const data = e?.response?.data
+      const msg = parseErrors(data) || (data?.message !== 'Invalid fields' ? data?.message : '') || data?.detail || t('settings.geminiKeyInvalid')
+      setKeyError(msg)
+      toast.error(msg)
+    } finally {
+      setSavingKey(false)
+    }
+  }
+
+  const handleDeleteKey = async () => {
+    if (!confirm(t('settings.geminiKeyDeleteConfirm'))) return
+    try {
+      await api.delete('/me/gemini-key')
+      setKeyStatus({ connected: false, masked: null })
+      setKeyInput('')
+      toast.success(t('settings.geminiKeyDeleted'))
+    } catch (e) {
+      const data = e?.response?.data
+      const msg = parseErrors(data) || (data?.message !== 'Invalid fields' ? data?.message : '') || data?.detail || t('settings.geminiKeyInvalid')
+      toast.error(msg)
+    }
   }
 
   return (
@@ -205,6 +317,67 @@ export default function Settings() {
         </Card>
       </div>
 
+      <div className="mt-4">
+        <Card className="p-5">
+          <div className="flex items-center gap-2">
+            <h2 className="font-display font-semibold text-ink dark:text-gray-100 flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-primary" />
+              {t('settings.geminiKeyTitle')}
+            </h2>
+            <button
+              type="button"
+              onClick={() => setShowHelp(true)}
+              aria-label={t('settings.geminiKeyHelpTitle')}
+              className="w-7 h-7 rounded-full bg-gray-100 dark:bg-ink-800 grid place-items-center text-gray-500 hover:text-primary hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('settings.geminiKeyDesc')}</p>
+          <p className="text-xs mt-2 flex items-center gap-1.5">
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+              {t('settings.geminiKeyHelpLink')} <ExternalLink className="w-3 h-3" />
+            </a>
+          </p>
+
+          {keyStatus && (
+            <div className="mt-3">
+              {keyStatus.connected ? (
+                <span className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-xs font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300">
+                  <Check className="w-3.5 h-3.5" /> {t('settings.geminiKeyConnected', { masked: keyStatus.masked || '••••' })}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-xs font-semibold border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300">
+                  <KeyRound className="w-3.5 h-3.5" /> {t('settings.geminiKeyNotConnected')}
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="mt-4 flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={keyInput}
+                onChange={(e) => { setKeyInput(e.target.value); setKeyError('') }}
+                placeholder={t('settings.geminiKeyPlaceholder')}
+                className="w-full h-10 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-800 px-3 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+              <button type="button" onClick={() => setShowKey((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-ink-700 text-gray-400">
+                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <Button onClick={handleSaveKey} disabled={savingKey || !keyInput.trim()}>{savingKey ? t('common.loading') : t('common.save')}</Button>
+          </div>
+          {keyError && <p className="field-error mt-2">{keyError}</p>}
+          {keyStatus?.connected && (
+            <button type="button" onClick={handleDeleteKey} className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-incorrect hover:underline">
+              <Trash2 className="w-3.5 h-3.5" /> {t('settings.geminiKeyDelete')}
+            </button>
+          )}
+        </Card>
+      </div>
+
       <div className="mt-6 lg:hidden">
         <Card className="p-5">
           <Button
@@ -217,6 +390,7 @@ export default function Settings() {
           </Button>
         </Card>
       </div>
+      <GeminiHelpModal show={showHelp} onClose={() => setShowHelp(false)} />
     </div>
   )
 }

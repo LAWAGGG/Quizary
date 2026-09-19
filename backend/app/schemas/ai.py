@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.schemas.form import FlexDatetime, _title_has_text
 from app.schemas.question import QuestionCreate
@@ -105,10 +105,34 @@ class AiDraftSettings(BaseModel):
 class AiGenerateResponse(BaseModel):
     draft: dict
     model: str = ""
-    remaining: int
-    limit: int
     ignored: list[str] = []
     warnings: list[str] = []
+
+
+class GeminiKeyPutRequest(BaseModel):
+    key: str = Field()
+
+    @field_validator("key")
+    @classmethod
+    def validate_key(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("API key must not be empty")
+        if len(s) < 10 or len(s) > 200:
+            raise ValueError("Invalid API key (must be 10-200 characters)")
+        # ponytail: no prefix/format check — AQ... / AIza... / future prefixes all valid
+        # generation will tell if key works; format validation just blocks valid future keys
+        return s
+
+
+class GeminiKeyStatusResponse(BaseModel):
+    connected: bool
+    masked: str | None = None
+
+
+class GeminiKeySaveResponse(BaseModel):
+    message: str
+    connected: bool
 
 
 class AiEditRequest(BaseModel):

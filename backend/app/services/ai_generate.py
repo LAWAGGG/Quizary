@@ -13,12 +13,10 @@ import time
 
 import httpx
 
-from app.config import GEMINI_API_KEY, GEMINI_FALLBACK_MODEL, GEMINI_MODEL
+from app.config import GEMINI_FALLBACK_MODEL, GEMINI_MODEL
 from app.schemas.question import QuestionCreate
 
 logger = logging.getLogger("quizary.ai")
-
-AI_DAILY_LIMIT = 5
 
 ALLOWED_REF_EXT = {".docx", ".pdf", ".ppt", ".pptx"}
 MAX_REF_FILES = 5
@@ -636,7 +634,7 @@ def _parse_gemini_text(data: dict) -> dict:
     return parsed
 
 
-def call_gemini(user_text: str, user_id: int | None = None) -> tuple[dict, str]:
+def call_gemini(user_text: str, api_key: str, user_id: int | None = None) -> tuple[dict, str]:
     """Panggil Gemini JSON mode. Balik (draf, model_terpakai).
 
     Key dikirim via header (tak muncul di URL/log). Tiap model dicoba 1x;
@@ -645,9 +643,10 @@ def call_gemini(user_text: str, user_id: int | None = None) -> tuple[dict, str]:
     muat di timeout proxy/frontend. 401/403 (key salah) dan 400 langsung
     gagal tanpa buang kuota coba — fallback pakai key yang sama.
     """
-    if not GEMINI_API_KEY:
-        raise AiNotConfigured("Fitur AI belum dikonfigurasi server.")
-    # ponytail: guard estimasi token sebelum panggil, hemat quota 5/hari
+    if not api_key or not api_key.strip():
+        raise AiNotConfigured("API key Gemini belum diatur. Masukkan di Pengaturan.")
+    api_key = api_key.strip()
+    # ponytail: guard estimasi token sebelum panggil
     est_tokens = len(user_text) // 4 + 8192
     if est_tokens > 100_000:
         raise AiFailed("Prompt + file referensi terlalu panjang untuk 20 soal. Coba 10 soal per batch atau kurangi teks passage.")
@@ -657,7 +656,7 @@ def call_gemini(user_text: str, user_id: int | None = None) -> tuple[dict, str]:
         "contents": [{"parts": [{"text": user_text}]}],
         "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7, "maxOutputTokens": budget},
     }
-    headers = {"x-goog-api-key": GEMINI_API_KEY}
+    headers = {"x-goog-api-key": api_key}
     last_err: Exception | None = None
     for attempt, model in enumerate(_gemini_models(), start=1):
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -700,8 +699,15 @@ def call_gemini(user_text: str, user_id: int | None = None) -> tuple[dict, str]:
                 "gemini attempt=%d model=%s user_id=%s: key ditolak (%s, %.0fms)",
                 attempt, model, user_id, resp.status_code, elapsed_ms,
             )
-            raise AiFailed("API key AI ditolak. Hubungi admin.")
+            raise AiFailed("API key AI ditolak. Periksa key di Pengaturan.")
         if resp.status_code == 400:
+            # ponytail: 400 bisa API key invalid (Google: "API key not valid") -> treat as key ditolak, bukan prompt error
+            if "api key" in resp.text.lower():
+                logger.error(
+                    "gemini attempt=%d model=%s user_id=%s: 400 key invalid %.120s (%.0fms)",
+                    attempt, model, user_id, resp.text, elapsed_ms,
+                )
+                raise AiFailed("API key AI ditolak. Periksa key di Pengaturan.")
             logger.warning(
                 "gemini attempt=%d model=%s user_id=%s: 400 %.120s (%.0fms)",
                 attempt, model, user_id, resp.text, elapsed_ms,
@@ -716,6 +722,13 @@ def call_gemini(user_text: str, user_id: int | None = None) -> tuple[dict, str]:
             last_err = AiFailed(f"Model AI {model} tidak tersedia. Hubungi admin.")
             continue
         # 429 / 5xx -> langsung model berikut (tanpa retry) agar worst-case ~2 mnt.
+        if resp.status_code == 429 and "quota" in resp.text.lower():
+            logger.warning(
+                "gemini attempt=%d model=%s user_id=%s: quota habis (%s, %.0fms)",
+                attempt, model, user_id, resp.status_code, elapsed_ms,
+            )
+            last_err = AiFailed("Kuota Gemini Anda habis. Coba lagi besok atau ganti key.")
+            continue
         logger.warning(
             "gemini attempt=%d model=%s user_id=%s: sibuk (%s, %.0fms)",
             attempt, model, user_id, resp.status_code, elapsed_ms,

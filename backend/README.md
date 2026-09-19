@@ -230,15 +230,20 @@ Status submission: `in_progress`, `submitted`, `auto_submitted` (timer habis), `
 
 Import langsung membuat soal sekaligus menyimpan gambar yang ditemukan di dokumen Word.
 
-### Bantuan AI
+### Bantuan AI (BYOK — Bring Your Own Key)
 
 | Method | Path | Auth | Deskripsi |
 |---|---|---|---|
-| POST | `/api/ai/generate` | Bearer | Buat draf section/soal + pengaturan dari prompt + file `docx/pdf/ppt/pptx` (hemat token via `group_id`) |
-| POST | `/api/ai/accept` | Bearer | Simpan draf yang sudah direview menjadi form baru |
-| GET | `/api/ai/quota` | Bearer | Cek sisa kuota harian (5/hari) |
+| PUT | `/api/me/gemini-key` | Bearer | Simpan API key Gemini per user (terenkripsi Fernet) |
+| GET | `/api/me/gemini-key/status` | Bearer | Cek status key (`connected`, `masked: ••••abcd`) |
+| DELETE | `/api/me/gemini-key` | Bearer | Hapus key user |
+| POST | `/api/ai/generate` | Bearer | Buat draf section/soal + pengaturan dari prompt + file `docx/pdf/ppt/pptx` (butuh key, 403 bila belum isi) |
+| POST | `/api/ai/generate/stream` | Bearer | Sama via SSE `progress/done/error` (butuh key) |
+| POST | `/api/ai/edit` | Bearer | Ubah draf via instruksi prompt (butuh key, JSON-only) |
+| POST | `/api/ai/accept` | Bearer | Simpan draf yang sudah direview menjadi form baru (tanpa key) |
+| GET | `/api/ai/quota` | — | **Deprecated → 410**, pakai `GET /me/gemini-key/status` |
 
-Alur: prompt deskriptif → AI menyusun draf untuk ditinjau → diterima menjadi form. File referensi dibatasi per file 5MB, total teks 30 ribu karakter.
+Alur: simpan key di Settings (https://aistudio.google.com/apikey) → prompt deskriptif → AI menyusun draf untuk ditinjau → diterima menjadi form. File referensi dibatasi per file 5MB, total teks 30 ribu karakter. Tanpa key = halaman AI terkunci total. Kuota ikut kuota Google user, server tidak enforce `5/hari`.
 
 ## Validasi Input
 

@@ -24,6 +24,7 @@ class User(Base):
     otp_expires_at = Column(DateTime(timezone=True), nullable=True)
     otp_attempts = Column(Integer, nullable=True)
     remember_token = Column(String(100), nullable=True)
+    gemini_key_encrypted = Column(String(2000), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=True)
 

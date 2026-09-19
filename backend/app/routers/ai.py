@@ -3,11 +3,12 @@ import json
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from fastapi import Form as ApiForm
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.crypto import decrypt_gemini_key
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.ai_generation import AiGeneration
@@ -17,10 +18,9 @@ from app.models.question_option import QuestionOption
 from app.models.user import User
 from app.routers.forms import _apply_setting_chain, _generate_short_code, _parse_enum
 from app.routers.questions import _NO_GRADE_TYPES
-from app.schemas.ai import AiAcceptRequest, AiAcceptResponse, AiEditRequest, AiGenerateResponse, AiQuotaResponse
+from app.schemas.ai import AiAcceptRequest, AiAcceptResponse, AiEditRequest, AiGenerateResponse
 from app.schemas.question import check_allow_other, check_answer_key
 from app.services.ai_generate import (
-    AI_DAILY_LIMIT,
     ALLOWED_REF_EXT,
     MAX_REF_FILES,
     MAX_REF_FILE_BYTES,
@@ -48,29 +48,18 @@ def _norm_prompt(s: str | None) -> str:
     return (s or "").replace("\r\n", "\n").replace("\r", "\n").strip()
 
 
-def _used_today(db: Session, user_id: int) -> int:
-    start = now_wib().replace(hour=0, minute=0, second=0, microsecond=0)
-    return (
-        db.query(AiGeneration)
-        .filter(AiGeneration.user_id == user_id, AiGeneration.created_at >= start)
-        .count()
-    )
+def _get_user_gemini_key(user: User) -> str:
+    if not getattr(user, "gemini_key_encrypted", None):
+        raise HTTPException(status_code=403, detail="Masukkan API key Gemini di Pengaturan agar bisa memakai AI.")
+    try:
+        return decrypt_gemini_key(user.gemini_key_encrypted)
+    except Exception:
+        raise HTTPException(status_code=403, detail="API key rusak. Simpan ulang di Pengaturan.")
 
 
-def _quota_or_429(db: Session, user_id: int) -> int:
-    used = _used_today(db, user_id)
-    if used >= AI_DAILY_LIMIT:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Batas generate AI hari ini habis ({AI_DAILY_LIMIT}/hari). Coba lagi besok.",
-        )
-    return used
-
-
-@router.get("/ai/quota", response_model=AiQuotaResponse)
-def ai_quota(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    used = _used_today(db, user.id)
-    return {"limit": AI_DAILY_LIMIT, "used": used, "remaining": max(0, AI_DAILY_LIMIT - used)}
+@router.get("/ai/quota")
+def ai_quota_legacy():
+    raise HTTPException(status_code=410, detail="Endpoint /ai/quota sudah tidak tersedia. Cek status key di GET /me/gemini-key/status.")
 
 
 def _sse(event: str, payload: dict) -> str:
@@ -88,15 +77,17 @@ async def ai_generate_stream(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """SSE progress untuk generate AI. Event: progress -> done | error.
-
-    Kuota harian dicatat hanya saat done; client batal (disconnect) =
-    tanpa kuota terpakai dan tanpa draft.
-    """
+    """SSE progress untuk generate AI. Event: progress -> done | error."""
 
     async def events():
         def err(msg: str, code: int = 502) -> str:
             return _sse("error", {"message": msg, "status": code})
+        # BYOK gate — before any other validation
+        try:
+            api_key = _get_user_gemini_key(user)
+        except HTTPException as e:
+            yield err(e.detail, e.status_code)
+            return
         if type not in ("form", "quiz"):
             yield err("type harus 'form' atau 'quiz'", 422)
             return
@@ -121,10 +112,6 @@ async def ai_generate_stream(
             return
         if len(files) > MAX_REF_FILES:
             yield err(f"Maksimal {MAX_REF_FILES} file referensi", 422)
-            return
-        used = _used_today(db, user.id)
-        if used >= AI_DAILY_LIMIT:
-            yield err(f"Batas generate AI hari ini habis ({AI_DAILY_LIMIT}/hari). Coba lagi besok.", 429)
             return
 
         yield _sse("progress", {"stage": "reading", "done": 0, "total": len(files)})
@@ -155,7 +142,7 @@ async def ai_generate_stream(
 
         yield _sse("progress", {"stage": "generating"})
         task = asyncio.create_task(
-            asyncio.to_thread(call_gemini, build_user_text(title, description, type, clean_prompt, refs), user.id)
+            asyncio.to_thread(call_gemini, build_user_text(title, description, type, clean_prompt, refs), api_key, user.id)
         )
         while not task.done():
             await asyncio.sleep(15)
@@ -165,8 +152,8 @@ async def ai_generate_stream(
             yield ": ping\n\n"
         try:
             raw, model_used = task.result()
-        except AiNotConfigured:
-            yield err("Fitur AI belum dikonfigurasi server. Hubungi admin.", 503)
+        except AiNotConfigured as e:
+            yield err(str(e), 403)
             return
         except AiFailed as e:
             yield err(str(e), 502)
@@ -185,12 +172,11 @@ async def ai_generate_stream(
             return
         db.add(AiGeneration(user_id=user.id, created_at=now_wib()))
         db.commit()
-        left = AI_DAILY_LIMIT - (used + 1)
         ignored = draft.pop("ignored", []) if isinstance(draft, dict) else []
         warnings = draft.pop("warnings", []) if isinstance(draft, dict) else []
         yield _sse(
             "done",
-            {"draft": draft, "model": model_used, "remaining": max(0, left), "limit": AI_DAILY_LIMIT, "ignored": ignored, "warnings": warnings},
+            {"draft": draft, "model": model_used, "ignored": ignored, "warnings": warnings},
         )
 
     return StreamingResponse(
@@ -210,6 +196,7 @@ def ai_generate(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    api_key = _get_user_gemini_key(user)
     if type not in ("form", "quiz"):
         raise HTTPException(status_code=422, detail="type harus 'form' atau 'quiz'")
     if not re.sub(r"<[^>]*>", "", title or "").strip():
@@ -227,8 +214,6 @@ def ai_generate(
         raise HTTPException(status_code=422, detail=GIBBERISH_MSG)
     if len(files) > MAX_REF_FILES:
         raise HTTPException(status_code=422, detail=f"Maksimal {MAX_REF_FILES} file referensi")
-
-    used = _quota_or_429(db, user.id)
 
     refs: list[tuple[str, str]] = []
     for f in files:
@@ -250,31 +235,32 @@ def ai_generate(
     try:
         raw, model_used = call_gemini(
             build_user_text(title, description, type, prompt, refs),
+            api_key,
             user_id=user.id,
         )
         draft = sanitize_draft(raw, type, prompt)
-    except AiNotConfigured:
-        raise HTTPException(status_code=503, detail="Fitur AI belum dikonfigurasi server. Hubungi admin.")
+    except AiNotConfigured as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except AiFailed as e:
         raise HTTPException(status_code=502, detail=str(e))
 
     db.add(AiGeneration(user_id=user.id, created_at=now_wib()))
     db.commit()
-    left = AI_DAILY_LIMIT - (used + 1)
     ignored = draft.pop("ignored", []) if isinstance(draft, dict) else []
     warnings = draft.pop("warnings", []) if isinstance(draft, dict) else []
-    return {"draft": draft, "model": model_used, "remaining": max(0, left), "limit": AI_DAILY_LIMIT, "ignored": ignored, "warnings": warnings}
+    return {"draft": draft, "model": model_used, "ignored": ignored, "warnings": warnings}
 
 
 @router.post("/ai/edit", response_model=AiGenerateResponse)
 async def ai_edit(request: Request, body: AiEditRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    api_key = _get_user_gemini_key(user)
     if detect_gibberish(body.instruction.strip()):
         raise HTTPException(status_code=422, detail=GIBBERISH_MSG)
-    used = _quota_or_429(db, user.id)
     try:
         raw, model_used = await asyncio.to_thread(
             call_gemini,
             build_edit_text(body.title, body.type, body.instruction.strip(), body.draft, body.previous_prompts or []),
+            api_key,
             user.id,
         )
         try:
@@ -284,19 +270,18 @@ async def ai_edit(request: Request, body: AiEditRequest, user: User = Depends(ge
                 draft = {"sections": [], "settings": (body.draft or {}).get("settings", {}), "ignored": [], "warnings": ["Semua soal dihapus sesuai instruksi."]}
             else:
                 raise
-    except AiNotConfigured:
-        raise HTTPException(status_code=503, detail="Fitur AI belum dikonfigurasi server. Hubungi admin.")
+    except AiNotConfigured as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except AiFailed as e:
         raise HTTPException(status_code=502, detail=str(e))
 
     if await request.is_disconnected():
-        raise HTTPException(status_code=499, detail="Client menutup koneksi. Kuota tidak berkurang.")
+        raise HTTPException(status_code=499, detail="Client menutup koneksi.")
     db.add(AiGeneration(user_id=user.id, created_at=now_wib()))
     db.commit()
-    left = AI_DAILY_LIMIT - (used + 1)
     ignored = draft.pop("ignored", []) if isinstance(draft, dict) else []
     warnings = draft.pop("warnings", []) if isinstance(draft, dict) else []
-    return {"draft": draft, "model": model_used, "remaining": max(0, left), "limit": AI_DAILY_LIMIT, "ignored": ignored, "warnings": warnings}
+    return {"draft": draft, "model": model_used, "ignored": ignored, "warnings": warnings}
 
 
 @router.post("/ai/accept", status_code=201, response_model=AiAcceptResponse)
@@ -342,8 +327,6 @@ def ai_accept(body: AiAcceptRequest, user: User = Depends(get_current_user), db:
         created_at=now,
         updated_at=now,
     )
-    # B-light: group/wacana nonaktif — tidak ada inject passage duplikat
-    # (semua soal standalone, --- dilarang di prompt & di-strip di _coerce_question)
     for sec in body.sections:
         for q in sec.questions:
             q.group_id = None
@@ -361,9 +344,6 @@ def ai_accept(body: AiAcceptRequest, user: User = Depends(get_current_user), db:
             db.add(section)
             db.flush()
             for q in sec.questions:
-                # Validasi tipe kunci/flag sudah lolos di parsing QuestionCreate;
-                # di sini tinggal gate quiz (skema tak tahu tipe form) + hitung
-                # keyed untuk poin. Pesan bernomor bagian/soal agar mudah dicari.
                 if q.answer_key is not None and not is_quiz:
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
