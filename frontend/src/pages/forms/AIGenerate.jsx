@@ -753,7 +753,7 @@ export default function AIGenerate() {
               </div>
             </div>
             <h1 aria-label="Quizary AI" className="relative z-0 select-none px-4 text-center font-display font-extrabold leading-[1.02] tracking-tight text-[clamp(3rem,14vw,9rem)]">
-              <SlideLetters text="Quizary " startIndex={0} baseDelay={draft ? 0.1 : 0.45} letterClassName="text-primary-500/65 dark:text-white/55" />
+              <SlideLetters text="Quizary " startIndex={0} baseDelay={draft ? 0.1 : 0.45} letterClassName="text-primary-500/65 dark:text-white/80" />
               <SlideLetters text="AI" startIndex={8} baseDelay={draft ? 0.1 : 0.45} letterClassName="bg-gradient-to-br from-primary-500 to-primary-800 bg-clip-text text-transparent dark:from-primary-200 dark:to-primary-400" />
             </h1>
             <div className="relative z-10 -mt-2 w-full max-w-4xl sm:-mt-6">
