@@ -142,38 +142,36 @@ export function QuizStyleAnsweringStep({
     // Reset scroll offset immediately to top
     mainScrollRef.current?.scrollTo({ y: 0, animated: false });
 
-    // Initial entrance values: soft opacity (0.35), subtle offset (dir * 40), subtle scale (0.98)
-    slideAnim.setValue(dir * 40);
+    // Initial entrance values: soft opacity (0.45), subtle offset (dir * 32), subtle scale (0.98)
+    slideAnim.setValue(dir * 32);
     scaleAnim.setValue(0.98);
-    fadeAnim.setValue(0.35);
+    fadeAnim.setValue(0.45);
 
     // Update index immediately to new question
     setCurrentIdx(newIdx);
 
-    // Animate smoothly to resting state on native thread (240ms)
-    requestAnimationFrame(() => {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 240,
-          easing: Easing.bezier(0.16, 1, 0.3, 1),
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 240,
-          easing: Easing.bezier(0.16, 1, 0.3, 1),
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 240,
-          easing: Easing.bezier(0.16, 1, 0.3, 1),
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        isTransitioningRef.current = false;
-      });
+    // Immediately start GPU native animation driver (0ms delay, no requestAnimationFrame freeze)
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 220,
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      isTransitioningRef.current = false;
     });
   };
 
