@@ -100,7 +100,7 @@ function QuizQuestionCardComponent({
       <View style={styles.qHeaderRow}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.qNum, { color: activeColor }]}>Soal {idx + 1}</Text>
-          <RichTextRenderer html={q.question_text || ''} style={{ fontSize: 16, fontWeight: '600', color: colors.text, lineHeight: 24 }} />
+          <RichTextRenderer html={q.question_text || ''} style={{ fontSize: 16, fontWeight: '400', color: colors.text, lineHeight: 24 }} />
         </View>
         {isReq && (
           <Text style={styles.reqAsterisk}>*</Text>

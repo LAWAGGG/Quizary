@@ -510,7 +510,7 @@ export function QuizStyleAnsweringStep({
                     <View style={{ flex: 1 }}>
                       <RichTextRenderer
                         html={currentQ.question_text || ''}
-                        style={{ color: isDark ? '#FFFFFF' : colors.text, fontSize: 22 * fontSizeScale, fontWeight: '800', textAlign: 'center', lineHeight: Math.round(22 * fontSizeScale * 1.45) }}
+                        style={{ color: isDark ? '#FFFFFF' : colors.text, fontSize: 22 * fontSizeScale, fontWeight: '400', textAlign: 'center', lineHeight: Math.round(22 * fontSizeScale * 1.45) }}
                       />
                     </View>
                     {currentQ.is_required !== false ? (
@@ -612,7 +612,7 @@ export function QuizStyleAnsweringStep({
                                     <View style={{ flex: 1 }}>
                                       <RichTextRenderer
                                         html={opt.option_text || opt.text || ''}
-                                        style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
+                                        style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '500' }}
                                       />
                                     </View>
                                   </View>
@@ -643,7 +643,7 @@ export function QuizStyleAnsweringStep({
                                 <View style={{ flex: 1 }}>
                                   <RichTextRenderer
                                     html={opt.option_text || opt.text || ''}
-                                    style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
+                                    style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '500' }}
                                   />
                                 </View>
 
