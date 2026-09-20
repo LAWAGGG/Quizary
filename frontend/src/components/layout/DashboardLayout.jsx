@@ -174,6 +174,9 @@ export default function DashboardLayout() {
   const mainRef = useRef(null)
   const [navHidden, setNavHidden] = useState(false)
 
+  const location = useLocation()
+  const isAiPage = location.pathname.startsWith('/forms/ai')
+
   const handleClickOutside = useCallback((e) => {
     if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
       setDropdownOpen(false)
@@ -231,8 +234,8 @@ export default function DashboardLayout() {
 
   return (
     <div className="flex h-dvh bg-paper dark:bg-ink-950">
-      {/* ═══ SIDEBAR: desktop only ═══ */}
-      <div className="hidden lg:block lg:h-full">
+      {/* ═══ SIDEBAR: desktop only, slide-out di /forms/ai ═══ */}
+      <div className={`hidden lg:block lg:h-full lg:shrink-0 overflow-hidden transition-all duration-300 ease-out ${isAiPage ? 'lg:w-0 lg:opacity-0' : 'lg:w-64 lg:opacity-100'}`}>
         <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={handleLogout} user={user} />
       </div>
 
@@ -244,11 +247,12 @@ export default function DashboardLayout() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* ── NAVBAR ── */}
         {/* Desktop: static, no collapse. Mobile: max-h collapse on scroll. */}
-        {/* ── NAVBAR ── */}
-        {/* Desktop: static, no collapse. Mobile: max-h collapse on scroll. */}
+        {/* /forms/ai: mobile hilang total, desktop slide-out smooth. */}
         <div
-          className={`shrink-0 transition-[max-height] duration-200 ease-in-out lg:max-h-none ${navHidden ? 'max-h-0' : 'max-h-16'
-            } ${dropdownOpen ? 'overflow-visible' : 'overflow-hidden'}`}
+          className={isAiPage
+            ? 'hidden lg:block shrink-0 overflow-hidden transition-all delay-[180ms] duration-300 ease-out lg:max-h-0 lg:opacity-0'
+            : `shrink-0 transition-[max-height] duration-200 ease-in-out lg:max-h-none ${navHidden ? 'max-h-0' : 'max-h-16'
+              } ${dropdownOpen ? 'overflow-visible' : 'overflow-hidden'}`}
         >          <div className="bg-white dark:bg-ink-900 border-b border-gray-200 dark:border-gray-600">
             <div className="h-14 px-4 flex items-center justify-between sm:h-16 sm:px-8">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -338,15 +342,15 @@ export default function DashboardLayout() {
           </div>
         </div>
 
-        <main ref={mainRef} data-nav-hidden={navHidden ? 'true' : 'false'} className="flex-1 overflow-y-auto pb-16 lg:pb-0">
-          <div className="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8">
+        <main ref={mainRef} data-nav-hidden={navHidden ? 'true' : 'false'} className={`flex-1 overflow-y-auto ${isAiPage ? 'pb-0' : 'pb-16 lg:pb-0'}`}>
+          <div className={`${isAiPage ? '' : 'max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8'}`}>
             <Outlet />
           </div>
         </main>
       </div>
 
-      {/* Bottom nav: mobile only, same hide/show as navbar */}
-      <BottomNav hidden={navHidden} />
+      {/* Bottom nav: mobile only, same hide/show as navbar; hilang total di /forms/ai */}
+      {!isAiPage && <BottomNav hidden={navHidden} />}
       <AiFab navHidden={navHidden} />
     </div>
   )

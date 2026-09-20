@@ -1,11 +1,11 @@
 import asyncio
 import json
-import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from fastapi import Form as ApiForm
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.crypto import decrypt_gemini_key
@@ -69,9 +69,9 @@ def _sse(event: str, payload: dict) -> str:
 @router.post("/ai/generate/stream")
 async def ai_generate_stream(
     request: Request,
-    title: str = ApiForm(...),
+    title: str = ApiForm(""),
     description: str | None = ApiForm(None),
-    type: str = ApiForm("form"),
+    type: str = ApiForm("auto"),
     prompt: str = ApiForm(...),
     files: list[UploadFile] = File([]),
     user: User = Depends(get_current_user),
@@ -88,13 +88,10 @@ async def ai_generate_stream(
         except HTTPException as e:
             yield err(e.detail, e.status_code)
             return
-        if type not in ("form", "quiz"):
-            yield err("type harus 'form' atau 'quiz'", 422)
+        if type not in ("form", "quiz", "auto"):
+            yield err("type harus 'form', 'quiz', atau 'auto'", 422)
             return
-        if not re.sub(r"<[^>]*>", "", title or "").strip():
-            yield err("Title tidak boleh kosong", 422)
-            return
-        if len(title) > 1000:
+        if title and len(title) > 1000:
             yield err("Title maksimal 1000 karakter", 422)
             return
         if description and len(description) > 5000:
@@ -142,7 +139,7 @@ async def ai_generate_stream(
 
         yield _sse("progress", {"stage": "generating"})
         task = asyncio.create_task(
-            asyncio.to_thread(call_gemini, build_user_text(title, description, type, clean_prompt, refs), api_key, user.id)
+            asyncio.to_thread(call_gemini, build_user_text(clean_prompt, refs, title, description, type), api_key, user.id)
         )
         while not task.done():
             await asyncio.sleep(15)
@@ -188,20 +185,18 @@ async def ai_generate_stream(
 
 @router.post("/ai/generate", response_model=AiGenerateResponse)
 def ai_generate(
-    title: str = ApiForm(...),
+    title: str = ApiForm(""),
     description: str | None = ApiForm(None),
-    type: str = ApiForm("form"),
+    type: str = ApiForm("auto"),
     prompt: str = ApiForm(...),
     files: list[UploadFile] = File([]),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     api_key = _get_user_gemini_key(user)
-    if type not in ("form", "quiz"):
-        raise HTTPException(status_code=422, detail="type harus 'form' atau 'quiz'")
-    if not re.sub(r"<[^>]*>", "", title or "").strip():
-        raise HTTPException(status_code=422, detail="Title tidak boleh kosong")
-    if len(title) > 1000:
+    if type not in ("form", "quiz", "auto"):
+        raise HTTPException(status_code=422, detail="type harus 'form', 'quiz', atau 'auto'")
+    if title and len(title) > 1000:
         raise HTTPException(status_code=422, detail="Title maksimal 1000 karakter")
     if description and len(description) > 5000:
         raise HTTPException(status_code=422, detail="Description maksimal 5000 karakter")
@@ -234,7 +229,7 @@ def ai_generate(
 
     try:
         raw, model_used = call_gemini(
-            build_user_text(title, description, type, prompt, refs),
+            build_user_text(prompt, refs, title, description, type),
             api_key,
             user_id=user.id,
         )
@@ -252,22 +247,90 @@ def ai_generate(
 
 
 @router.post("/ai/edit", response_model=AiGenerateResponse)
-async def ai_edit(request: Request, body: AiEditRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def ai_edit(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     api_key = _get_user_gemini_key(user)
-    if detect_gibberish(body.instruction.strip()):
+    ctype = request.headers.get("content-type", "")
+    uploads: list[UploadFile] = []
+    if "multipart/" in ctype or "x-www-form-urlencoded" in ctype:
+        form = await request.form()
+        title = str(form.get("title") or "")
+        ftype = str(form.get("type") or "auto")
+        instruction = _norm_prompt(str(form.get("instruction") or ""))
+        try:
+            draft_in = json.loads(str(form.get("draft") or ""))
+            prev = json.loads(str(form.get("previous_prompts") or "[]"))
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=422, detail="Draft tidak valid")
+        if not isinstance(prev, list):
+            raise HTTPException(status_code=422, detail="Riwayat prompt tidak valid")
+        prev = [str(p) for p in prev]
+        if title and len(title) > 1000:
+            raise HTTPException(status_code=422, detail="Title maksimal 1000 karakter")
+        if ftype not in ("form", "quiz", "auto"):
+            raise HTTPException(status_code=422, detail="type harus 'form', 'quiz', atau 'auto'")
+        if len(instruction) < 10:
+            raise HTTPException(status_code=422, detail="Instruksi minimal 10 karakter agar AI paham maumu")
+        if len(instruction) > 5000:
+            raise HTTPException(status_code=422, detail="Instruksi maksimal 5000 karakter")
+        if len(prev) > 5:
+            raise HTTPException(status_code=422, detail="Riwayat prompt maksimal 5 item")
+        for p in prev:
+            if len(p) > 5000:
+                raise HTTPException(status_code=422, detail="Riwayat prompt maksimal 5000 karakter per item")
+        sections = draft_in.get("sections") if isinstance(draft_in, dict) else None
+        if not isinstance(sections, list) or not sections:
+            raise HTTPException(status_code=422, detail="Draft harus berisi sections yang valid")
+        uploads = [f for f in form.getlist("files") if isinstance(f, UploadFile)]
+        body_title, body_type, body_draft, body_prev = title, ftype, draft_in, prev
+    else:
+        try:
+            data = await request.json()
+        except Exception:
+            raise HTTPException(status_code=422, detail="Body tidak valid")
+        try:
+            body = AiEditRequest(**data)
+        except ValidationError as e:
+            errs = e.errors()
+            msg = str(errs[0].get("msg", "")) if errs else ""
+            raise HTTPException(status_code=422, detail=msg.replace("Value error, ", "") or "Input tidak valid")
+        body_title, body_type, body_draft, body_prev = body.title, body.type, body.draft, body.previous_prompts or []
+        instruction = body.instruction.strip()
+    if detect_gibberish(instruction):
         raise HTTPException(status_code=422, detail=GIBBERISH_MSG)
+    if len(uploads) > MAX_REF_FILES:
+        raise HTTPException(status_code=422, detail=f"Maksimal {MAX_REF_FILES} file referensi")
+    refs: list[tuple[str, str]] = []
+    for f in uploads:
+        ext = Path(f.filename or "").suffix.lower()
+        if ext not in ALLOWED_REF_EXT:
+            raise HTTPException(status_code=422, detail=f"Tipe file tidak didukung ({f.filename or 'tanpa nama'}). Pakai docx, pdf, ppt, atau pptx.")
+        try:
+            text = extract_ref_text(f.filename or "referensi", read_limited(f.file, MAX_REF_FILE_BYTES))
+        except HTTPException:
+            raise HTTPException(status_code=413, detail=f"File {f.filename or ''} terlalu besar. Maksimal 5MB per file.")
+        except Exception:
+            raise HTTPException(status_code=422, detail=f"File {f.filename or ''} tidak bisa dibaca.")
+        text = (text or "").strip()
+        if not text:
+            raise HTTPException(status_code=422, detail=f"File {f.filename or ''} kosong atau tidak ada teksnya.")
+        refs.append((f.filename or "referensi", text))
+    refs = truncate_refs(refs)
+    full_instruction = instruction
+    if refs:
+        full_instruction = instruction + "\n\n" + "\n\n".join(f"--- Materi tambahan {n} ---\n{t}" for n, t in refs)
     try:
         raw, model_used = await asyncio.to_thread(
             call_gemini,
-            build_edit_text(body.title, body.type, body.instruction.strip(), body.draft, body.previous_prompts or []),
+            build_edit_text(body_title, body_type, full_instruction, body_draft, body_prev),
             api_key,
             user.id,
         )
         try:
-            draft = await asyncio.to_thread(sanitize_draft, raw, body.type, body.instruction.strip())
+            draft = await asyncio.to_thread(sanitize_draft, raw, body_type, full_instruction)
         except AiFailed as e:
             if "tidak menghasilkan soal yang valid" in str(e):
-                draft = {"sections": [], "settings": (body.draft or {}).get("settings", {}), "ignored": [], "warnings": ["Semua soal dihapus sesuai instruksi."]}
+                prev = body_draft or {}
+                draft = {"title": prev.get("title") or body_title or "", "description": prev.get("description"), "type": prev.get("type") if prev.get("type") in ("form", "quiz") else (body_type if body_type in ("form", "quiz") else "form"), "sections": [], "settings": prev.get("settings", {}), "ignored": [], "warnings": ["Semua soal dihapus sesuai instruksi."]}
             else:
                 raise
     except AiNotConfigured as e:
