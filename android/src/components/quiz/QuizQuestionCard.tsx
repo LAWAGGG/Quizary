@@ -100,7 +100,7 @@ function QuizQuestionCardComponent({
       <View style={styles.qHeaderRow}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.qNum, { color: activeColor }]}>Soal {idx + 1}</Text>
-          <RichTextRenderer html={q.question_text || ''} style={{ fontSize: 16, fontWeight: '600', color: colors.text, lineHeight: 24 }} />
+          <RichTextRenderer html={q.question_text || ''} style={{ fontSize: 16, fontWeight: '400', color: colors.text, lineHeight: 24 }} />
         </View>
         {isReq && (
           <Text style={styles.reqAsterisk}>*</Text>
@@ -127,7 +127,7 @@ function QuizQuestionCardComponent({
         >
           <Ionicons name="search-outline" size={14} color={colors.textSub} />
           <Text style={[styles.zoomQuestionPillText, { color: colors.textSub }]}>
-            Zoom in on question
+            {language === 'ID' ? 'Perbesar pertanyaan' : 'Zoom in on question'}
           </Text>
         </TouchableOpacity>
       )}
@@ -331,7 +331,7 @@ function QuizQuestionCardComponent({
       {q.type === 'date' && (
         <View style={styles.pickerFieldContainer}>
           <TextInput
-            style={[styles.textInput, { flex: 1, backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
+            style={[styles.pickerTextInput, { flex: 1, backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
             placeholder="Format: YYYY-MM-DD (contoh: 2026-08-25)"
             placeholderTextColor={colors.textMuted}
             value={typeof userAnswer === 'string' ? userAnswer : ''}
@@ -351,7 +351,7 @@ function QuizQuestionCardComponent({
       {q.type === 'time' && (
         <View style={styles.pickerFieldContainer}>
           <TextInput
-            style={[styles.textInput, { flex: 1, backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
+            style={[styles.pickerTextInput, { flex: 1, backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
             placeholder="Format: HH:MM (contoh: 14:30)"
             placeholderTextColor={colors.textMuted}
             value={typeof userAnswer === 'string' ? userAnswer : ''}
@@ -371,7 +371,7 @@ function QuizQuestionCardComponent({
       {q.type === 'datetime' && (
         <View style={styles.pickerFieldContainer}>
           <TextInput
-            style={[styles.textInput, { flex: 1, backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
+            style={[styles.pickerTextInput, { flex: 1, backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]}
             placeholder="Format: YYYY-MM-DDTHH:MM (contoh: 2026-08-25T14:30)"
             placeholderTextColor={colors.textMuted}
             value={typeof userAnswer === 'string' ? userAnswer : ''}
@@ -572,6 +572,9 @@ const styles = StyleSheet.create({
 
   pickerFieldContainer: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
   pickerTriggerBtn: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  // Tinggi fixed = tombol picker (48) supaya input & tombol selalu sejajar,
+  // tidak ngikutin padding/font seperti styles.textInput.
+  pickerTextInput: { height: 48, paddingHorizontal: 14, paddingVertical: 0, textAlignVertical: 'center', borderRadius: 12, borderWidth: 1, fontSize: 14 },
 
   fileBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 14, borderRadius: 12, borderWidth: 1, marginTop: 12 },
   fileBtnText: { fontWeight: 'bold', fontSize: 14 },
