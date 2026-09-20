@@ -139,41 +139,59 @@ export function QuizStyleAnsweringStep({
     isTransitioningRef.current = true;
     pendingDirRef.current = dir;
 
-    // Reset scroll offset immediately to top
+    // Web Framer Motion exit parity: exit={{ opacity: 0, x: -dir * 30 }} (180ms)
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: -dir * 30,
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (!finished) {
+        isTransitioningRef.current = false;
+        return;
+      }
+
+      // Web Framer Motion mode="wait" initial parity: initial={{ opacity: 0, x: dir * 30 }}
+      slideAnim.setValue(dir * 30);
+      fadeAnim.setValue(0);
+
+      // Mount new question while container is completely invisible
+      setCurrentIdx(newIdx);
+    });
+  };
+
+  // Phase 2: Web Framer Motion entrance parity: animate={{ opacity: 1, x: 0 }} (200ms)
+  useEffect(() => {
+    if (!isTransitioningRef.current) return;
+
+    // Reset scroll position to top cleanly while component is invisible
     mainScrollRef.current?.scrollTo({ y: 0, animated: false });
 
-    // Initial entrance values: soft opacity (0.45), subtle offset (dir * 32), subtle scale (0.98)
-    slideAnim.setValue(dir * 32);
-    scaleAnim.setValue(0.98);
-    fadeAnim.setValue(0.45);
-
-    // Update index immediately to new question
-    setCurrentIdx(newIdx);
-
-    // Immediately start GPU native animation driver (0ms delay, no requestAnimationFrame freeze)
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 220,
-        easing: Easing.bezier(0.16, 1, 0.3, 1),
+        duration: 200,
+        easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 220,
-        easing: Easing.bezier(0.16, 1, 0.3, 1),
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 220,
-        easing: Easing.bezier(0.16, 1, 0.3, 1),
+        duration: 200,
+        easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
     ]).start(() => {
       isTransitioningRef.current = false;
     });
-  };
+  }, [currentIdx]);
 
   const isAnswered = (q: any, val: any) => {
     if (q?.type === 'file_upload' || q?.question_type === 'file_upload') return !!val;
@@ -445,7 +463,7 @@ export function QuizStyleAnsweringStep({
             <Animated.View
               style={[
                 styles.questionCardWrapper,
-                { opacity: fadeAnim, transform: [{ translateX: slideAnim }, { scale: scaleAnim }] },
+                { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
               ]}
             >
               {currentQ && (
