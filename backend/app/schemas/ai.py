@@ -136,17 +136,18 @@ class GeminiKeySaveResponse(BaseModel):
 
 
 class AiEditRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=1000)
-    type: str = "form"
+    title: str = Field(default="", max_length=1000)
+    type: str = "auto"
     instruction: str = Field(min_length=10, max_length=5000)
     draft: dict
     previous_prompts: list[str] = Field(default_factory=list, max_length=5)
 
     @model_validator(mode="after")
     def validate_edit(self):
-        _title_has_text(self.title)
-        if self.type not in ("form", "quiz"):
-            raise ValueError("type harus 'form' atau 'quiz'")
+        if self.title:
+            _title_has_text(self.title)
+        if self.type not in ("form", "quiz", "auto"):
+            raise ValueError("type harus 'form', 'quiz', atau 'auto'")
         if len(self.instruction.strip()) < 10:
             raise ValueError("Instruksi minimal 10 karakter agar AI paham maumu")
         for p in self.previous_prompts:

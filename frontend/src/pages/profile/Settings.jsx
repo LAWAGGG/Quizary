@@ -344,7 +344,7 @@ export default function Settings() {
             <div className="mt-3">
               {keyStatus.connected ? (
                 <span className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-xs font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300">
-                  <Check className="w-3.5 h-3.5" /> {t('settings.geminiKeyConnected', { masked: keyStatus.masked || '••••' })}
+                  <Check className="w-3.5 h-3.5" /> {t('settings.geminiKeyConnected')}
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 px-3 h-8 rounded-full text-xs font-semibold border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300">

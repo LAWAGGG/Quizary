@@ -167,14 +167,15 @@ Meneruskan `answer_key` + `allow_other` dari draf ke `Question` (aturan sama sep
 **Test:** GET belum isi → `connected:false` · sudah isi → `connected:true, masked` · hapus → `connected:false` · 401 tanpa token.
 
 #### `POST /api/ai/edit`
-Ubah/hapus/tambah soal dalam draf via instruksi prompt. **BYOK: tanpa kuota server 5/hari**, kuota ikut Google user.
+Ubah/hapus/tambah soal dalam draf via instruksi prompt. **Multipart form** (JSON lama tetap diterima). **BYOK: tanpa kuota server 5/hari**, kuota ikut Google user.
 | Field | Rule |
 |---|---|
-| `title` | `string(1-1000)`, wajib punya teks (strip tag HTML) |
-| `type` | `"form"` / `"quiz"` |
+| `title` | `string(0-1000)` opsional |
+| `type` | `"form"` / `"quiz"` / `"auto"` |
 | `instruction` | `string(10-5000)` — instruksi ubah/tambah/hapus soal |
-| `draft` | `object` — draf terakhir (bentuk output generate), `sections` wajib list non-empty |
-| `previous_prompts` | `list(min=0, max=5)` — riwayat prompt (konteks anti-halusinasi), item ≤5000 char |
+| `draft` | `object` (multipart: string JSON) — draf terakhir (bentuk output generate), `sections` wajib list non-empty |
+| `previous_prompts` | `list(min=0, max=5)` (multipart: string JSON) — riwayat prompt (konteks anti-halusinasi), item ≤5000 char |
+| `files` | `file[]?` (multipart saja) — materi tambahan, maks 5 file docx/pdf/ppt/pptx × 5MB; teksnya ditempel ke instruksi sebagai "Materi tambahan" |
 
 **Business rule:** LLM hanya ubah/hapus/tambah soal dalam JSON draf (tanpa file ref). Hapus semua soal → `sections` dengan `questions: []` + warning (bukan error). Tanpa key user → 403 `"Masukkan API key Gemini di Pengaturan..."`; key korup → 403 `"API key rusak..."`; `GET /ai/quota` → 410. Client disconnect sebelum done → 499 tanpa audit.
 Giggle/gibberish instruksi → 422 via heuristic `detect_gibberish` (berlaku juga di `/ai/generate` & `/ai/generate/stream`).

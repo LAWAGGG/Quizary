@@ -1101,7 +1101,7 @@ AI BYOK: semua `POST /ai/generate`, `POST /ai/generate/stream`, `POST /ai/edit` 
 ## 4b. AI Edit (tambah/mengubah soal dalam draf)
 
 ### `POST /ai/edit`
-Auth: Bearer Token — JSON-only (tanpa file referensi; hemat token)
+Auth: Bearer Token — multipart form (JSON lama tetap diterima); `files` opsional = materi tambahan yang ditempel ke instruksi
 ```json
 // Request
 {

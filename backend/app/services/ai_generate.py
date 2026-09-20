@@ -165,6 +165,9 @@ def extract_ref_text(filename: str, raw: bytes) -> str:
     raise AiFailed(f"Tipe file tidak didukung ({filename}). Pakai docx, pdf, ppt, atau pptx.")
 
 _EXAMPLE_DRAFT = {
+    "title": "judul form/kuis",
+    "description": "deskripsi singkat (atau null)",
+    "type": "form atau quiz",
     "sections": [
         {
             "title": "nama section",
@@ -207,6 +210,11 @@ SYSTEM_INSTRUCTION = """Kamu penyusun form/kuis untuk berbagai bahasa. Jawab HAN
 
 Bentuk:
 %s
+
+Meta WAJIB di root JSON:
+- "title": judul form/kuis (teks polos, maks 150 karakter, dari inti permintaan).
+- "description": deskripsi 1-2 kalimat (atau null bila tak perlu).
+- "type": "quiz" bila permintaan menyebut kuis/ujian/ulangan/nilai/kunci jawaban/timer, selain itu "form".
 
 Aturan WAJIB (B-light: tanpa group/wacana):
 - SETIAP soal WAJIB standalone & mandiri — tidak bergantung soal lain. DILARANG pakai group_id (selalu null), DILARANG pakai delimiter "---" atau "--", DILARANG buat wacana/passage bersama untuk banyak soal. Jika prompt minta cerita, buat tiap soal lengkap sendiri tanpa mengulang cerita yang sama di soal lain.
@@ -370,13 +378,18 @@ def detect_code_intent(text: str | None) -> str | list[str] | None:
     return None
 
 
-def build_user_text(title: str, description: str | None, form_type: str, prompt: str, refs: list[tuple[str, str]]) -> str:
-    parts = [
-        f"Jenis: {'KUIS (ada nilai & kunci jawaban)' if form_type == 'quiz' else 'FORMULIR/pendataan (tanpa nilai)'}",
-        f"Judul: {title}",
-    ]
+def build_user_text(prompt: str, refs: list[tuple[str, str]], title: str = "", description: str | None = None, form_type: str = "auto") -> str:
+    parts = []
+    if form_type == "quiz":
+        parts.append("Jenis: KUIS (ada nilai & kunci jawaban)")
+    elif form_type == "form":
+        parts.append("Jenis: FORMULIR/pendataan (tanpa nilai)")
+    else:
+        parts.append("Jenis: TENTUKAN SENDIRI dari permintaan creator (quiz bila ada nilai/kunci/timer, selain itu form) lalu isi field type di JSON.")
+    if (title or "").strip():
+        parts.append(f"Judul awal: {title.strip()}")
     if description:
-        parts.append(f"Deskripsi: {description}")
+        parts.append(f"Deskripsi awal: {description}")
     parts.append(f"Permintaan creator:\n{prompt}")
     lang = detect_code_intent(f"{title} {description or ''} {prompt}")
     if lang is not None:
@@ -416,13 +429,20 @@ def build_edit_text(title: str, form_type: str, instruction: str, draft: dict, p
     Tanpa teks file referensi — draf sudah mengandung hasilnya. LLM hanya
     boleh tambah/ubah/hapus soal dalam JSON yang diberikan.
     """
+    if form_type == "quiz":
+        kind = "KUIS (ada nilai & kunci jawaban)"
+    elif form_type == "form":
+        kind = "FORMULIR/pendataan (tanpa nilai)"
+    else:
+        kind = str(((draft or {}).get("type") if isinstance(draft, dict) else "") or "auto")
+        kind = "KUIS (ada nilai & kunci jawaban)" if kind == "quiz" else ("FORMULIR/pendataan (tanpa nilai)" if kind == "form" else "SAMA seperti draf (jangan ubah type kecuali instruksi minta)")
     parts = [
-        f"Jenis: {'KUIS (ada nilai & kunci jawaban)' if form_type == 'quiz' else 'FORMULIR/pendataan (tanpa nilai)'}",
-        f"Judul: {title}",
+        f"Jenis: {kind}",
+        f"Judul: {(title or '').strip() or ((draft or {}).get('title') if isinstance(draft, dict) else '') or '-'}",
         "Konteks: ini EDIT draf yang sudah ada, BUKAN generate dari awal. "
         "Ubah JSON draf berikut SESUAI instruksi saja — bagian yang tak disebut "
         "instruksi JANGAN diubah. Kembalikan JSON penuh yang valid "
-        "(bentuk sama: sections + settings). "
+        "(bentuk sama: title + description + type + sections + settings). "
         "Operasi didukung: hapus 1 soal, hapus semua soal, ubah 1 soal, "
         "ubah semua soal, tambah N soal. Hapus semua = kembalikan sections "
         "dengan questions kosong. Jangan karang di luar instruksi.",
@@ -1117,9 +1137,16 @@ def _coerce_question(raw: dict, code_intent: str | list[str] | None = None) -> d
     return q.model_dump()
 
 
-def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
+def sanitize_draft(raw: dict, form_type: str = "auto", prompt_text: str = "") -> dict:
     """Bersihkan output AI -> draf valid. Raise AiFailed bila tak ada soal layak."""
     code_intent = detect_code_intent(prompt_text)
+    resolved_type = form_type if form_type in ("form", "quiz") else str(raw.get("type") or "").strip().lower()
+    if resolved_type not in ("form", "quiz"):
+        low = (prompt_text or "").lower()
+        if any(w in low for w in ("kuis", "quiz", "ujian", "ulangan", "nilai", "kunci jawaban", "timer", "menit")):
+            resolved_type = "quiz"
+        else:
+            resolved_type = "form"
     sections: list[dict] = []
     total = 0
     for s in (raw.get("sections") or [])[:MAX_SECTIONS]:
@@ -1145,7 +1172,11 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
     except (TypeError, ValueError):
         timer = None
     sub = settings.get("submission_limit")
-    is_quiz_type = form_type == "quiz"
+    is_quiz_type = resolved_type == "quiz"
+    ai_title = html.unescape(re.sub(r"<[^>]*>", "", str(raw.get("title") or ""))).strip()[:1000]
+    if not ai_title:
+        ai_title = " ".join((prompt_text or "").split())[:80] or "Form tanpa judul"
+    ai_desc = html.unescape(re.sub(r"<[^>]*>", "", str(raw.get("description") or ""))).strip()[:5000] or None
 
     def _dt(v):
         s = str(v or "").strip()
@@ -1172,6 +1203,9 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
         except Exception:
             starts = ends = None
     draft = {
+        "title": ai_title,
+        "description": ai_desc,
+        "type": resolved_type,
         "sections": sections,
         "settings": {
             "shuffle_questions": bool(settings.get("shuffle_questions", False)),
@@ -1190,7 +1224,7 @@ def sanitize_draft(raw: dict, form_type: str, prompt_text: str = "") -> dict:
             "ends_at": ends,
         },
     }
-    if form_type == "quiz" and timer is None:
+    if resolved_type == "quiz" and timer is None:
         if "timer" in (prompt_text or "").lower() or "menit" in (prompt_text or "").lower():
             timer = 30
             draft["settings"]["timer_minutes"] = 30

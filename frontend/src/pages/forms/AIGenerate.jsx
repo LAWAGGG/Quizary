@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { motion } from 'framer-motion'
-import { ArrowLeft, ArrowUp, Paperclip, Sparkles, Check, X, FileText, Clock, Shuffle, Lock, ListChecks, Trophy, EyeOff, CalendarDays, Info, RefreshCw, KeyRound } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ArrowLeft, ArrowUp, ArrowRight, Paperclip, Sparkles, Check, X, FileText, Clock, Shuffle, Lock, ListChecks, Trophy, EyeOff, CalendarDays, Info, RefreshCw, KeyRound, Sun, Moon } from 'lucide-react'
 import api from '../../api/client'
+import { useTheme } from '../../hooks/useTheme'
 import { useToast } from '../../hooks/useToast'
 import { stripTags } from '../../lib/sanitize'
 import { Button, Card, RichTextEditor, RichText, Badge, Toggle, Select, Input, AnswerKeyEditor } from '../../components/ui'
@@ -16,6 +17,9 @@ const PROMPT_MAX = 5000
 const PROMPT_MIN = 10
 const MAX_PREV_PROMPTS = 5
 const normPrompt = (s) => String(s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
+
+// Kaca penyatu hero + review: shell & kartu review memakai token yang sama.
+const glassCircleBtn = 'inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-white/50 backdrop-blur-xl transition-all hover:bg-white/80 active:scale-95 dark:border-white/15 dark:bg-white/10 dark:hover:bg-white/20'
 
 function KeyMissingBanner() {
   const { t } = useTranslation()
@@ -53,7 +57,7 @@ function SettingChips({ settings }) {
   return (
     <div className="flex flex-wrap gap-2">
       {chips.map((c, i) => (
-        <span key={i} className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-xs font-medium bg-gray-100 dark:bg-ink-800 text-gray-600 dark:text-gray-300">
+        <span key={i} className="inline-flex items-center gap-1.5 px-2.5 h-7 rounded-full text-xs font-medium border border-white/60 bg-white/50 text-gray-600 backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-gray-300">
           {c.icon}{c.label}
         </span>
       ))}
@@ -65,7 +69,7 @@ function IgnoredBox({ items }) {
   const { t } = useTranslation()
   if (!items?.length) return null
   return (
-    <div className="rounded-xl border border-warn/30 bg-warn-soft dark:bg-warn-soft px-4 py-3 flex gap-2.5" role="status">
+    <div className="rounded-xl border border-warn/30 bg-warn-soft/85 backdrop-blur-xl px-4 py-3 flex gap-2.5" role="status">
       <Info className="w-4 h-4 text-warn shrink-0 mt-0.5" />
       <div className="min-w-0">
         <p className="text-sm font-semibold text-ink dark:text-gray-100">{t('aiGenerate.ignoredTitle')}</p>
@@ -80,7 +84,7 @@ function CountWarnBox({ items }) {
   const { t } = useTranslation()
   if (!items?.length) return null
   return (
-    <div className="rounded-xl border border-warn/30 bg-warn-soft dark:bg-warn-soft px-4 py-3 flex gap-2.5" role="status">
+    <div className="rounded-xl border border-warn/30 bg-warn-soft/85 backdrop-blur-xl px-4 py-3 flex gap-2.5" role="status">
       <Info className="w-4 h-4 text-warn shrink-0 mt-0.5" />
       <div className="min-w-0">
         <p className="text-sm font-semibold text-ink">{t('aiGenerate.countWarnTitle')}</p>
@@ -105,6 +109,25 @@ function SettingRow({ title, desc, control }) {
   )
 }
 
+// Judul hero: tiap huruf slide-up berurutan (stagger + variasi sinus, total <1 dtk).
+// reduced-motion global (MotionConfig) otomatis menonaktifkannya.
+function SlideLetters({ text, startIndex = 0, baseDelay = 0.45, letterClassName = '' }) {
+  return (
+    <span aria-hidden="true">
+      {text.split('').map((ch, i) => {
+        const d = baseDelay + (startIndex + i) * 0.028 + Math.sin((startIndex + i) * 1.7) * 0.006;
+        return (
+          <span key={i} className="inline-block overflow-hidden pb-[0.12em] -mb-[0.12em] align-bottom">
+            <span className={`ai-letter ${letterClassName}`} style={{ animationDelay: `${d.toFixed(3)}s` }}>
+              {ch === ' ' ? ' ' : ch}
+            </span>
+          </span>
+        );
+      })}
+    </span>
+  )
+}
+
 // Titik-titik loading ala chat di dalam komposer saat generate/edit.
 function TypingDots() {
   return (
@@ -121,7 +144,7 @@ function SkeletonCards({ count }) {
   return (
     <div className="space-y-3" aria-hidden="true">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="rounded-2xl border border-gray-300 dark:border-gray-800 bg-white dark:bg-ink-900 p-4 space-y-3 animate-pulse">
+        <div key={i} className="rounded-2xl border border-gray-300 dark:border-ink-800 bg-white dark:bg-ink-900 p-4 space-y-3 animate-pulse">
           <div className="h-4 w-1/3 rounded bg-gray-200 dark:bg-gray-700" />
           <div className="h-3 w-full rounded bg-gray-100 dark:bg-gray-800" />
           <div className="h-3 w-5/6 rounded bg-gray-100 dark:bg-gray-800" />
@@ -140,6 +163,7 @@ const toInputDateTime = (v) => (v ? String(v).slice(0, 16) : '')
 
 export default function AIGenerate() {
   const { t } = useTranslation()
+  const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const toast = useToast()
   const fileRef = useRef(null)
@@ -148,7 +172,7 @@ export default function AIGenerate() {
   const [step, setStep] = useState(1)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [formType, setFormType] = useState('form')
+  const [formType, setFormType] = useState('auto')
   const [prompt, setPrompt] = useState('')
   const [files, setFiles] = useState([])
   const [keyStatus, setKeyStatus] = useState(null)
@@ -184,34 +208,6 @@ export default function AIGenerate() {
     return () => clearInterval(id)
   }, [generating])
 
-  const steps = [
-    { id: 1, label: t('aiGenerate.stepShape'), desc: t('aiGenerate.stepShapeDesc') },
-    { id: 2, label: t('aiGenerate.stepPrompt'), desc: t('aiGenerate.stepPromptDesc') },
-    { id: 3, label: t('aiGenerate.stepPolish'), desc: t('aiGenerate.stepPolishDesc') },
-  ]
-
-  const goToPrompt = () => {
-    if (!stripTags(title)) { setError(t('aiGenerate.titleRequired')); return }
-    setError('')
-    setStep(2)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  const canGoTo = (id) => {
-    if (busy) return false
-    if (id === step) return false
-    if (id === 1 || id === 2) return true
-    return !!draft
-  }
-
-  const goToStep = (id) => {
-    if (!canGoTo(id)) return
-    if (step === 1 && id === 2) { goToPrompt(); return }
-    setError('')
-    setStep(id)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
   const patchSettings = (patch) => setDraft((d) => (d ? { ...d, settings: { ...d.settings, ...patch } } : d))
 
   // Ubah 1 soal dalam draf (si/qi = indeks section/question).
@@ -238,7 +234,6 @@ export default function AIGenerate() {
   }
 
   const addFiles = (list) => {
-    if (draft) return
     const incoming = Array.from(list || [])
     if (!incoming.length) return
     const allowed = ACCEPT_EXT.split(',').map((s) => s.trim().toLowerCase())
@@ -323,14 +318,19 @@ export default function AIGenerate() {
   }
 
   const applyDone = (data, usedPrompt) => {
-    setDraft(data.draft)
+    const d = data.draft || {}
+    setDraft(d)
+    if (typeof d.title === 'string' && d.title) setTitle(d.title)
+    if (typeof d.description === 'string') setDescription(d.description)
+    if (d.type === 'form' || d.type === 'quiz') setFormType(d.type)
     setIgnored(data.ignored || [])
     setWarnings(data.warnings || [])
     setModelUsed(data.model || '')
     setGenProgress({ percent: 100, key: '', done: 0, total: 0 })
     if (usedPrompt) setPrevPrompts((prev) => [...prev, usedPrompt].slice(-MAX_PREV_PROMPTS))
     setPrompt('')
-    setStep(3)
+    setFiles([])
+    setStep(2)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -435,7 +435,6 @@ export default function AIGenerate() {
   const handleGenerate = async (e) => {
     e?.preventDefault()
     if (busy) return
-    if (!stripTags(title)) { setError(t('aiGenerate.titleRequired')); setStep(1); return }
     const clean = normPrompt(prompt)
     if (clean.length < PROMPT_MIN) { setError(t('aiGenerate.promptMin', { current: clean.length, max: PROMPT_MAX })); return }
     if (clean.length > PROMPT_MAX) { setError(t('aiGenerate.promptMax', { current: clean.length, max: PROMPT_MAX })); return }
@@ -447,9 +446,9 @@ export default function AIGenerate() {
     setGenProgress({ percent: 5, key: 'reading', done: 0, total: 0 })
     try {
       const fd = new FormData()
-      fd.append('title', title)
-      fd.append('description', description || '')
-      fd.append('type', formType)
+      fd.append('title', '')
+      fd.append('description', '')
+      fd.append('type', 'auto')
       fd.append('prompt', prompt)
       files.forEach((f) => fd.append('files', f))
       await streamGenerate(fd, abortRef.current.signal, clean)
@@ -482,13 +481,14 @@ export default function AIGenerate() {
     setEditing(true)
     setError('')
     try {
-      const res = await api.post('/ai/edit', {
-        title,
-        type: formType,
-        instruction,
-        draft,
-        previous_prompts: prevPrompts,
-      }, { signal: abortRef.current.signal, timeout: 180000 })
+      const fd = new FormData()
+      fd.append('title', title || '')
+      fd.append('type', formType)
+      fd.append('instruction', instruction)
+      fd.append('draft', JSON.stringify(draft))
+      fd.append('previous_prompts', JSON.stringify(prevPrompts))
+      files.forEach((f) => fd.append('files', f))
+      const res = await api.post('/ai/edit', fd, { signal: abortRef.current.signal, timeout: 180000 })
       applyDone(res.data, instruction)
       toast.success(t('aiGenerate.editSuccess'))
     } catch (err) {
@@ -522,10 +522,11 @@ export default function AIGenerate() {
     setError('')
     try {
       const s = draft.settings
+      const acceptType = formType === 'quiz' ? 'quiz' : 'form'
       const res = await api.post('/ai/accept', {
         title,
         description: description || null,
-        type: formType,
+        type: acceptType,
         settings: { ...s },
         // Kunci kosong (cuma spasi) dinull-kan agar lolos min_length backend.
         sections: draft.sections.map((sec) => ({
@@ -559,14 +560,14 @@ export default function AIGenerate() {
     setModelUsed('')
     setError('')
     setPrompt(prevPrompts[0] || '')
-    setStep(2)
+    setStep(1)
     setTimeout(() => composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
   }
 
   const keyMissing = keyStatus && !keyStatus.connected
   const promptLen = normPrompt(prompt).length
   const promptOver = promptLen > PROMPT_MAX
-  const canGenerate = !busy && !keyMissing && promptLen >= PROMPT_MIN && !promptOver && !!stripTags(title)
+  const canGenerate = !busy && !keyMissing && promptLen >= PROMPT_MIN && !promptOver
   const promptEmpty = promptLen === 0
   const canEdit = !!draft && !busy && !keyMissing && !promptEmpty && promptLen >= PROMPT_MIN && !promptOver
 
@@ -602,192 +603,244 @@ export default function AIGenerate() {
   const primaryDisabled = !draft ? !canGenerate : promptEmpty ? (busy || accepting || !stripTags(title)) : !canEdit
   const primaryLabel = !draft ? t('aiGenerate.generate') : promptEmpty ? t('aiGenerate.accept') : t('aiGenerate.sendEdit')
 
-  const isCompact = busy
-  const composer = (
-    <motion.div
-      ref={composerRef}
-      layout
-      transition={{ layout: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } }}
-      onDragEnter={onComposerDragEnter}
-      onDragLeave={onComposerDragLeave}
-      onDragOver={onComposerDragOver}
-      onDrop={onComposerDrop}
-      aria-busy={busy}
-      data-testid="ai-composer"
-      className={`relative rounded-[1.75rem] border bg-white shadow-lift will-change-transform dark:bg-ink-900 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 dark:focus-within:border-primary dark:focus-within:ring-primary/20 transition-[padding,border-color,box-shadow,background-color] duration-300 ease-out ${dragActive && !isCompact ? 'border-primary ring-4 ring-primary/15' : 'border-primary-100 dark:border-gray-700'} ${isCompact ? 'flex items-center gap-2 py-2 pl-3 pr-2' : 'p-4'}`}
-    >
-      {dragActive && !isCompact && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[1.75rem] border-2 border-dashed border-primary bg-primary-50/90 backdrop-blur-sm dark:bg-primary-950/90" aria-hidden>
-          <Paperclip className="h-6 w-6 text-primary-600 dark:text-primary-300" />
-          <p className="text-sm font-semibold text-primary-700 dark:text-primary-200">{t('aiGenerate.dropFiles')}</p>
-        </div>
-      )}
-
-      {/* Compact 1-line bar saat generating/editing: input + cancel sejajar, tanpa Paperclip, minim tinggi */}
-      {isCompact ? (
-        <div className="flex w-full items-center gap-2 min-w-0">
-          <span className="hidden sm:inline-flex items-center gap-1.5 shrink-0 text-xs font-medium text-primary-600 dark:text-primary-300" role="status">
-            <TypingDots />
-          </span>
-          <span className="sm:hidden inline-flex shrink-0" role="status" aria-label={busyStatus}><TypingDots /></span>
-          <input
-            value={prompt.replace(/\s+/g, ' ')}
-            readOnly
-            placeholder={busyStatus}
-            aria-label={t('aiGenerate.promptLabel')}
-            tabIndex={-1}
-            className="min-w-0 flex-1 bg-transparent px-2 py-2 text-[14px] leading-5 text-ink placeholder:text-gray-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-500 truncate"
-          />
-          <button
-            type="button"
-            onClick={cancelBusy}
-            className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-gray-100 px-4 text-sm font-semibold text-gray-600 hover:bg-gray-200 hover:text-ink dark:bg-ink-800 dark:text-gray-300 dark:hover:bg-ink-700 transition-colors active:scale-95"
-          >
-            {t('aiGenerate.cancelGenerate')}
-          </button>
-        </div>
-      ) : (
-        <>
-          {!draft && files.length > 0 && (
-            <div className="mb-3 mt-2 flex flex-wrap gap-2">
-              {files.map((f, i) => (
-                <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 rounded-full bg-primary-50 py-1.5 pl-3 pr-1.5 text-xs font-medium text-primary-700 dark:bg-primary-900/25 dark:text-primary-300">
-                  <FileText className="h-3.5 w-3.5" />
-                  <span className="max-w-[120px] truncate" title={f.name}>{f.name.split(/\s+/).slice(0, 3).join(' ')}</span>
-                  <button
-                    type="button"
-                    onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                    aria-label={t('aiGenerate.removeFile')}
-                    className="flex h-6 w-6 items-center justify-center rounded-full text-primary-400 transition-colors hover:bg-primary-100 hover:text-primary-700 dark:hover:bg-primary-900/40"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </span>
-              ))}
+  const heroComposer = (
+    <div ref={composerRef} data-testid="ai-composer" aria-busy={busy}>
+      <motion.div
+        layout
+        transition={{ layout: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } }}
+        onDragEnter={onComposerDragEnter}
+        onDragLeave={onComposerDragLeave}
+        onDragOver={onComposerDragOver}
+        onDrop={onComposerDrop}
+        className={`relative min-w-0 rounded-3xl border border-white/70 bg-white/20 p-2 shadow-[0_24px_70px_-20px_rgba(108,92,231,0.45),inset_0_1px_1px_rgba(255,255,255,0.8),inset_0_-1px_1px_rgba(255,255,255,0.25)] ring-1 ring-white/50 backdrop-blur-2xl backdrop-saturate-150 transition-[border-color,box-shadow] duration-300 ease-out dark:border-white/20 dark:bg-white/10 dark:shadow-[0_24px_70px_-20px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.2)] ${dragActive ? 'border-primary ring-4 ring-primary/20' : ''}`}
+      >
+        {dragActive && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-full border-2 border-dashed border-primary bg-primary-50/90 backdrop-blur-sm dark:bg-primary-950/90" aria-hidden>
+            <Paperclip className="h-6 w-6 text-primary-600 dark:text-primary-300" />
+            <p className="text-sm font-semibold text-primary-700 dark:text-primary-200">{t('aiGenerate.dropFiles')}</p>
+          </div>
+        )}
+        <input ref={fileRef} type="file" multiple accept={ACCEPT_EXT} onChange={pickFiles} className="hidden outline-hidden" />
+        <div className="flex min-w-0 items-center gap-2">
+        {busy ? (
+          <div className="flex w-full min-w-0 items-center gap-2 rounded-full bg-white/90 py-2 pl-4 pr-2 shadow-[inset_0_2px_8px_rgba(15,23,42,0.06),0_1px_2px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-ink-900/85">
+            <span className="shrink-0" role="status"><TypingDots /></span>
+            <input
+              value={prompt.replace(/\s+/g, ' ')}
+              readOnly
+              placeholder={busyStatus}
+              aria-label={t('aiGenerate.promptLabel')}
+              tabIndex={-1}
+              className="min-w-0 flex-1 truncate bg-transparent px-1 py-2 text-[14px] leading-5 text-ink placeholder:text-gray-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-500"
+            />
+            <button
+              type="button"
+              onClick={cancelBusy}
+              className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-gray-100 px-5 text-sm font-semibold text-gray-600 hover:bg-gray-200 hover:text-ink dark:bg-ink-800 dark:text-gray-300 dark:hover:bg-ink-700 transition-colors active:scale-95"
+            >
+              {t('aiGenerate.cancelGenerate')}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex min-w-0 flex-1 items-end gap-1 overflow-hidden rounded-full bg-white/90 py-2 pl-2 pr-3 shadow-[inset_0_2px_8px_rgba(15,23,42,0.06),0_1px_2px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-ink-900/85">
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={files.length >= MAX_FILES}
+                aria-label={t('aiGenerate.filesLabel')}
+                title={t('aiGenerate.filesLabel')}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-40 dark:text-gray-500 dark:hover:bg-ink-800 dark:hover:text-gray-200"
+              >
+                <Paperclip className="h-[18px] w-[18px]" />
+              </button>
+              <textarea
+                id="ai-prompt"
+                value={prompt}
+                onChange={(e) => { setPrompt(e.target.value); setError('') }}
+                onKeyDown={handleComposerKey}
+                placeholder={draft ? t('aiGenerate.editPlaceholder') : t('aiGenerate.promptComposerPlaceholder')}
+                rows={1}
+                aria-busy={busy}
+                className="max-h-[200px] min-h-9 w-full min-w-0 flex-1 break-all resize-none self-center bg-transparent text-[15px] leading-6 text-ink placeholder:text-gray-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-500 [field-sizing:content]"
+              />
             </div>
-          )}
-          <textarea
-            id="ai-prompt"
-            value={prompt}
-            onChange={(e) => { setPrompt(e.target.value); setError('') }}
-            onKeyDown={handleComposerKey}
-            placeholder={draft ? t('aiGenerate.editPlaceholder') : t('aiGenerate.promptComposerPlaceholder')}
-            rows={1}
-            aria-busy={busy}
-            className="w-full resize-none bg-transparent px-1 pb-14 text-[15px] leading-6 text-ink placeholder:text-gray-400 focus:outline-none focus:ring-0 focus:border-transparent dark:text-gray-100 dark:placeholder:text-gray-500 [field-sizing:content] min-h-11 max-h-[200px]"
-          />
-          {promptOver && <p className="field-error mt-1">{t('aiGenerate.promptMax', { current: promptLen, max: PROMPT_MAX })}</p>}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-24 rounded-b-[1.75rem] bg-gradient-to-t from-white via-white/100 to-transparent dark:from-ink-900 dark:via-ink-900/100" aria-hidden="true" />
-          <div className="absolute bottom-4 left-4 right-4 z-20 flex items-center justify-between gap-2">
-            {!draft && (
-              <>
-                <input ref={fileRef} type="file" multiple accept={ACCEPT_EXT} onChange={pickFiles} className="hidden outline-hidden" />
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={files.length >= MAX_FILES}
-                  aria-label={t('aiGenerate.filesLabel')}
-                  title={t('aiGenerate.filesLabel')}
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-primary-50 hover:text-primary-600 disabled:opacity-40 dark:text-gray-500 dark:hover:bg-primary-900/25 dark:hover:text-primary-300"
-                >
-                  <Paperclip className="h-5 w-5" />
-                </button>
-                <span className="min-w-0 flex-1 truncate text-xs text-gray-400 dark:text-gray-500">{files.length}/{MAX_FILES} · {t('aiGenerate.filesHint')}</span>
-              </>
-            )}
-            {draft && <span className="flex-1" />}
             <button
               type="button"
               onClick={handlePrimaryButton}
               disabled={primaryDisabled}
               aria-label={primaryLabel}
               title={primaryLabel}
-              className={`flex shrink-0 items-center justify-center gap-1.5 rounded-full text-white shadow-chip transition-all hover:from-primary-600 hover:to-primary-800 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 bg-gradient-to-br from-primary-500 to-primary-700 ${!draft || !promptEmpty ? 'h-11 w-11' : 'h-11 px-5 text-sm font-semibold'}`}
+              className={`flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-ink-900 text-white shadow-[0_8px_20px_-6px_rgba(15,23,42,0.5)] transition-all hover:bg-ink-800 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-ink-900 dark:hover:bg-gray-200 ${!draft || !promptEmpty ? 'h-11 w-11' : 'h-11 px-5 text-sm font-semibold'}`}
             >
               {!draft || !promptEmpty ? <ArrowUp className="h-5 w-5" strokeWidth={2.5} /> : <><Check className="h-4 w-4" />{t('aiGenerate.accept')}</>}
             </button>
+          </>
+        )}
+        </div>
+        {draft && (
+          <div className="flex items-center justify-between px-5 pb-1 pt-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+            <span>{files.length}/{MAX_FILES} · {t('aiGenerate.filesHint')}</span>
+            {promptLen > 0 && <span className={promptOver ? 'font-semibold text-incorrect' : ''}>{promptLen}/{PROMPT_MAX}</span>}
           </div>
-        </>
+        )}
+      </motion.div>
+      {files.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-6 pt-3">
+          {files.map((f, i) => (
+            <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 py-1.5 pl-3 pr-1.5 text-xs font-medium text-primary-700 shadow-chip backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-primary-300">
+              <FileText className="h-3.5 w-3.5" />
+              <span className="max-w-[140px] truncate" title={f.name}>{f.name}</span>
+              <button
+                type="button"
+                onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                aria-label={t('aiGenerate.removeFile')}
+                className="flex h-6 w-6 items-center justify-center rounded-full text-primary-400 transition-colors hover:bg-primary-100 hover:text-primary-700 dark:hover:bg-primary-900/40"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          ))}
+        </div>
       )}
-    </motion.div>
-  )
-
-  const stepper = (
-    <div className={busy ? 'opacity-50 pointer-events-none' : ''}>
-      <div className="relative flex items-center justify-between px-5" aria-hidden>
-        <div className="absolute left-10 right-10 top-1/2 h-px -translate-y-1/2 bg-gray-200 dark:bg-gray-700" />
-        <div
-          className="absolute left-10 top-1/2 h-0.5 -translate-y-1/2 bg-primary transition-all duration-300"
-          style={{ width: `calc(${((step - 1) / (steps.length - 1)) * 100}% - ${((step - 1) / (steps.length - 1)) * 2.5}rem)` }}
-        />
-        {steps.map((item) => (
-          <span
-            key={item.id}
-            className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-bold tabular-nums transition-colors ${
-              step > item.id
-                ? 'border-primary bg-primary text-white'
-                : step === item.id
-                  ? 'border-primary bg-white dark:bg-ink-900 text-primary'
-                  : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 text-gray-400'
-            }`}
-          >
-            {step > item.id ? <Check className="h-4 w-4" strokeWidth={3} /> : String(item.id).padStart(2, '0')}
-          </span>
-        ))}
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-3">
-        {steps.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            disabled={!canGoTo(item.id)}
-            onClick={() => goToStep(item.id)}
-            className={`rounded-2xl border p-3 text-left transition-colors ${
-              step === item.id
-                ? 'border-primary bg-primary-50/60 dark:bg-primary-900/20'
-                : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-ink-900 opacity-70'
-            } ${canGoTo(item.id) ? 'cursor-pointer hover:border-primary/50' : 'cursor-default'}`}
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-400">Step {item.id}</p>
-            <p className="mt-1 text-sm font-semibold text-ink dark:text-gray-100">{item.label}</p>
-          </button>
-        ))}
-      </div>
+      {promptOver && <p className="field-error px-6 pt-1">{t('aiGenerate.promptMax', { current: promptLen, max: PROMPT_MAX })}</p>}
     </div>
   )
 
+  const heroVisible = step === 1
+
   return (
-    <div className="max-w-3xl mx-auto">
-      <button
-        onClick={() => navigate('/forms')}
-        className="inline-flex items-center gap-1.5 text-sm text-gray-400 dark:text-gray-500 hover:text-ink dark:hover:text-gray-100 transition-colors mb-4"
-      >
-        <ArrowLeft className="w-4 h-4" /> {t('aiGenerate.back')}
-      </button>
-
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-        <div className="flex items-center justify-between gap-3">
-          <p className="eyebrow">{t('aiGenerate.eyebrow')}</p>
-          {keyStatus?.connected && (
-            <span className="inline-flex items-center gap-1.5 px-3 h-7 rounded-full text-xs font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300">
-              <KeyRound className="w-3.5 h-3.5" /> {keyStatus.masked || '••••'}
-            </span>
-          )}
+    <div className="relative mx-auto w-full max-w-5xl">
+      {(
+        <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary-300 via-[#DCCFFA] to-[#ECE7F2] dark:from-[#2B1D63] dark:via-[#201647] dark:to-[#12102B]" />
+          <div className="absolute inset-0 flex items-center justify-center" aria-hidden>
+            <div className="ai-spin-slow h-[45vmin] w-[130vmin] rounded-[100%] bg-gradient-to-r from-transparent via-white/50 to-transparent blur-3xl dark:via-primary-500/20" />
+          </div>
+          <div className="ai-blob absolute left-1/2 top-[-12%] h-[55vmin] w-[95vmin] -translate-x-1/2 rounded-full bg-white/60 blur-3xl dark:bg-primary-600/25" />
+          <div className="ai-blob ai-blob-slow absolute bottom-[-25%] left-[-10%] h-[55vmin] w-[65vmin] rounded-full bg-primary-200/80 blur-3xl dark:bg-primary-800/30" />
+          <div className="ai-blob ai-blob-delay absolute right-[-15%] top-[30%] h-[45vmin] w-[55vmin] rounded-full bg-[#F3D9F2]/80 blur-3xl dark:bg-primary-700/20" />
         </div>
-        {keyMissing && <KeyMissingBanner />}
+      )}
 
-        {stepper}
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: heroVisible ? 0.45 : 0, duration: 0.4 }} className="relative space-y-6 pt-5">
+        <AnimatePresence mode="wait" initial={false}>
+        {heroVisible ? (
+          <motion.div key="hero" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.32, ease: 'easeOut' }} className="relative flex min-h-[78vh] flex-col items-center justify-center px-4 py-10">
+            <div className="absolute inset-x-4 top-2 z-20 flex items-center justify-between sm:inset-x-8 sm:top-4">
+              <button
+                onClick={() => navigate('/forms')}
+                aria-label={t('aiGenerate.back')}
+                title={t('aiGenerate.back')}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-white/50 text-ink backdrop-blur-xl transition-all hover:bg-white/80 active:scale-95 dark:border-white/15 dark:bg-white/10 dark:text-gray-100 dark:hover:bg-white/20"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleTheme}
+                  aria-label={t('nav.toggleTheme')}
+                  title={t('nav.toggleTheme')}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-white/50 text-ink backdrop-blur-xl transition-all hover:bg-white/80 active:scale-95 dark:border-white/15 dark:bg-white/10 dark:text-gray-100 dark:hover:bg-white/20"
+                >
+                  {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </button>
+                {keyStatus?.connected && (
+                  <span className="inline-flex items-center gap-1.5 px-3 h-9 rounded-full text-xs font-semibold border border-white/60 bg-white/50 text-emerald-700 backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-emerald-300">
+                    <KeyRound className="w-3.5 h-3.5" /> {t('aiGenerate.keyConnected')}
+                  </span>
+                )}
+              </div>
+            </div>
+            <h1 aria-label="Quizary AI" className="relative z-0 select-none px-4 text-center font-display font-extrabold leading-[1.02] tracking-tight text-[clamp(3rem,14vw,9rem)]">
+              <SlideLetters text="Quizary " startIndex={0} baseDelay={draft ? 0.1 : 0.45} letterClassName="text-primary-500/65 dark:text-white/55" />
+              <SlideLetters text="AI" startIndex={8} baseDelay={draft ? 0.1 : 0.45} letterClassName="bg-gradient-to-br from-primary-500 to-primary-800 bg-clip-text text-transparent dark:from-primary-200 dark:to-primary-400" />
+            </h1>
+            <div className="relative z-10 -mt-2 w-full max-w-4xl sm:-mt-6">
+              {keyMissing && <div className="mb-4"><KeyMissingBanner /></div>}
+              {heroComposer}
+              {draft && !busy && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => { setStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                    className="inline-flex h-11 items-center gap-2 rounded-full border border-white/60 bg-white/50 px-6 text-sm font-semibold text-ink backdrop-blur-xl transition-all hover:bg-white/80 active:scale-95 dark:border-white/15 dark:bg-white/10 dark:text-gray-100 dark:hover:bg-white/20"
+                  >
+                    {t('aiGenerate.backToReview')} <ArrowRight className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+              {busy && (
+                <div aria-busy="true" className="mt-6 text-left">
+                  <SkeletonCards count={skeletonCount} />
+                </div>
+              )}
+              {error && <p className="field-error mt-3 text-center">{error}</p>}
+              {keyMissing && <p className="field-error mt-2 text-center">{t('aiGenerate.keyMissing')}</p>}
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div key="review" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.32, ease: 'easeOut' }} className="mx-auto w-full max-w-3xl space-y-5 px-4 pb-6 sm:px-6">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                onClick={() => { setStep(1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                aria-label={t('aiGenerate.back')}
+                title={t('aiGenerate.back')}
+                className={`${glassCircleBtn} text-ink dark:text-gray-100`}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleTheme}
+                  aria-label={t('nav.toggleTheme')}
+                  title={t('nav.toggleTheme')}
+                  className={`${glassCircleBtn} text-ink dark:text-gray-100`}
+                >
+                  {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </button>
+                {keyStatus?.connected && (
+                  <span className="inline-flex items-center gap-1.5 px-3 h-9 rounded-full text-xs font-semibold border border-white/60 bg-white/50 text-emerald-700 backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-emerald-300">
+                    <KeyRound className="w-3.5 h-3.5" /> {t('aiGenerate.keyConnected')}
+                  </span>
+                )}
+              </div>
+            </div>
+            {keyMissing && <KeyMissingBanner />}
 
-        {step === 1 && (
-          <form onSubmit={(e) => { e.preventDefault(); goToPrompt() }} className="space-y-5">
-            <Card className="space-y-5">
+            {step === 2 && (
+              <div className="space-y-5">
+            <Card className="space-y-4">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h2 className="font-display font-semibold text-ink dark:text-gray-100">
+                  {t('aiGenerate.stepPolish')}
+                </h2>
+                <div className="flex items-center gap-2">
+                  {modelUsed && (
+                    <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[11px] font-medium border border-white/60 bg-white/50 text-gray-500 backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-gray-400">
+                      <Sparkles className="w-3 h-3" />{modelUsed}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleFreshRegen}
+                    title={t('aiGenerate.freshRegenHint')}
+                    className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full text-[11px] font-medium border border-white/60 bg-white/50 text-gray-500 backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-gray-400 hover:text-primary-600 transition-colors"
+                  >
+                    <RefreshCw className="w-3 h-3" />{t('aiGenerate.freshRegen')}
+                  </button>
+                </div>
+              </div>
+              <SettingChips settings={draft.settings} />
+              <IgnoredBox items={ignored} />
+              <CountWarnBox items={warnings} />
               <div>
                 <span className="field-label">{t('aiGenerate.titleLabel')}</span>
-                <RichTextEditor value={title} onChange={(html) => { setTitle(html); setError('') }} placeholder={t('aiGenerate.titlePlaceholder')} minHeight={60} />
+                <RichTextEditor value={title} onChange={setTitle} minHeight={60} />
               </div>
               <div>
                 <span className="field-label">{t('aiGenerate.descLabel')}</span>
-                <RichTextEditor value={description} onChange={setDescription} placeholder={t('aiGenerate.descPlaceholder')} minHeight={100} />
+                <RichTextEditor value={description} onChange={setDescription} minHeight={80} />
               </div>
               <div>
                 <span className="field-label">{t('aiGenerate.typeLabel')}</span>
@@ -808,68 +861,6 @@ export default function AIGenerate() {
                     </button>
                   ))}
                 </div>
-              </div>
-            </Card>
-            {error && <p className="field-error">{error}</p>}
-            <Button type="submit" className="w-full" size="lg">
-              {t('aiGenerate.nextPrompt')}
-            </Button>
-          </form>
-        )}
-
-        {step === 2 && (
-          <div className="space-y-4">
-            {busy && (
-              <div aria-busy="true">
-                <SkeletonCards count={skeletonCount} />
-              </div>
-            )}
-            <div className={busy ? 'sticky bottom-[var(--mobile-nav-offset,4.5rem)] md:bottom-4 z-40 mt-2 pb-2' : ''}>{composer}</div>
-            {!busy && (
-              <>
-                {error && <p className="field-error">{error}</p>}
-                {keyMissing && <p className="field-error">{t('aiGenerate.keyMissing')}</p>}
-                <div className="flex gap-3">
-                  <Button type="button" variant="secondary" className="flex-1" onClick={() => setStep(1)}>{t('aiGenerate.back')}</Button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {step === 3 && (
-          <div className="space-y-5">
-            <Card className="space-y-4">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <h2 className="font-display font-semibold text-ink dark:text-gray-100">
-                  {t('aiGenerate.stepPolish')}
-                </h2>
-                <div className="flex items-center gap-2">
-                  {modelUsed && (
-                    <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[11px] font-medium bg-gray-100 dark:bg-ink-800 text-gray-500 dark:text-gray-400">
-                      <Sparkles className="w-3 h-3" />{modelUsed}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleFreshRegen}
-                    title={t('aiGenerate.freshRegenHint')}
-                    className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full text-[11px] font-medium bg-gray-100 dark:bg-ink-800 text-gray-500 dark:text-gray-400 hover:text-primary-600 transition-colors"
-                  >
-                    <RefreshCw className="w-3 h-3" />{t('aiGenerate.freshRegen')}
-                  </button>
-                </div>
-              </div>
-              <SettingChips settings={draft.settings} />
-              <IgnoredBox items={ignored} />
-              <CountWarnBox items={warnings} />
-              <div>
-                <span className="field-label">{t('aiGenerate.titleLabel')}</span>
-                <RichTextEditor value={title} onChange={setTitle} minHeight={60} />
-              </div>
-              <div>
-                <span className="field-label">{t('aiGenerate.descLabel')}</span>
-                <RichTextEditor value={description} onChange={setDescription} minHeight={80} />
               </div>
             </Card>
 
@@ -968,9 +959,12 @@ export default function AIGenerate() {
 
             {error && <p className="field-error">{error}</p>}
 
-            <div className="sticky bottom-[var(--mobile-nav-offset,4.5rem)] md:bottom-4 z-40 mt-2 pb-2">{composer}</div>
-          </div>
+            <div className="sticky bottom-[var(--mobile-nav-offset,4.5rem)] md:bottom-4 z-40 mt-2 pb-2">{heroComposer}</div>
+              </div>
+            )}
+          </motion.div>
         )}
+        </AnimatePresence>
       </motion.div>
     </div>
   )

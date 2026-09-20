@@ -738,3 +738,36 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
 .rich-text li.ql-indent-1 { padding-left: 4.5em; }
 .rich-text li.ql-indent-2 { padding-left: 7.5em; }
 .rich-text li.ql-indent-3 { padding-left: 10.5em; }
+
+/* ── AI hero ambient gradient — slow flawless drift + rotating beam ──────── */
+@keyframes ai-blob-drift {
+  0% { transform: translate3d(-10%, -7%, 0) scale(1); }
+  50% { transform: translate3d(9%, 8%, 0) scale(1.18); }
+  100% { transform: translate3d(-7%, 6%, 0) scale(1.08); }
+}
+.ai-blob {
+  animation: ai-blob-drift 16s ease-in-out infinite alternate;
+  will-change: transform;
+}
+.ai-blob-slow { animation-duration: 26s; }
+.ai-blob-delay { animation-delay: -9s; }
+@keyframes ai-letter-up {
+  to { transform: translateY(0); }
+}
+.ai-letter {
+  display: inline-block;
+  transform: translateY(110%);
+  animation: ai-letter-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform;
+}
+@keyframes ai-spin-slow {
+  to { transform: rotate(360deg); }
+}
+.ai-spin-slow {
+  animation: ai-spin-slow 60s linear infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-blob, .ai-spin-slow { animation: none; }
+  .ai-letter { animation: none; transform: none; }
+}
