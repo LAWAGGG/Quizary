@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, ArrowUp, ArrowRight, Paperclip, Sparkles, Check, X, FileText, Clock, Shuffle, Lock, ListChecks, Trophy, EyeOff, CalendarDays, Info, RefreshCw, KeyRound, Sun, Moon } from 'lucide-react'
+import { ArrowLeft, ArrowUp, ArrowRight, Paperclip, Sparkles, Check, X, FileText, Clock, Shuffle, Lock, ListChecks, Trophy, EyeOff, CalendarDays, Info, KeyRound, Sun, Moon } from 'lucide-react'
 import api from '../../api/client'
 import { useTheme } from '../../hooks/useTheme'
 import { useToast } from '../../hooks/useToast'
@@ -550,20 +550,6 @@ export default function AIGenerate() {
     }
   }
 
-  // Generate ulang dari awal: buang draf, kembalikan prompt asli ke komposer.
-  // User kirim ulang = panggil /ai/generate (1 kuota baru).
-  const handleFreshRegen = () => {
-    if (busy) return
-    setDraft(null)
-    setIgnored([])
-    setWarnings([])
-    setModelUsed('')
-    setError('')
-    setPrompt(prevPrompts[0] || '')
-    setStep(1)
-    setTimeout(() => composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
-  }
-
   const keyMissing = keyStatus && !keyStatus.connected
   const promptLen = normPrompt(prompt).length
   const promptOver = promptLen > PROMPT_MAX
@@ -612,7 +598,7 @@ export default function AIGenerate() {
         onDragLeave={onComposerDragLeave}
         onDragOver={onComposerDragOver}
         onDrop={onComposerDrop}
-        className={`relative min-w-0 rounded-3xl border border-white/70 bg-white/20 p-2 shadow-[0_24px_70px_-20px_rgba(108,92,231,0.45),inset_0_1px_1px_rgba(255,255,255,0.8),inset_0_-1px_1px_rgba(255,255,255,0.25)] ring-1 ring-white/50 backdrop-blur-2xl backdrop-saturate-150 transition-[border-color,box-shadow] duration-300 ease-out dark:border-white/20 dark:bg-white/10 dark:shadow-[0_24px_70px_-20px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.2)] ${dragActive ? 'border-primary ring-4 ring-primary/20' : ''}`}
+        className={`relative min-w-0 rounded-3xl border bg-white/20 p-2 backdrop-blur-2xl backdrop-saturate-150 transition-[border-color,box-shadow] duration-300 ease-out dark:border-white/20 dark:bg-white/10 dark:shadow-[0_24px_70px_-20px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.2)] ${draft ? 'border-primary/25 shadow-[0_24px_70px_-18px_rgba(108,92,231,0.55),0_4px_16px_rgba(15,23,42,0.10),inset_0_1px_1px_rgba(255,255,255,0.9)] ring-1 ring-primary/15' : 'border-white/70 shadow-[0_24px_70px_-20px_rgba(108,92,231,0.45),inset_0_1px_1px_rgba(255,255,255,0.8),inset_0_-1px_1px_rgba(255,255,255,0.25)] ring-1 ring-white/50'} ${dragActive ? 'border-primary ring-4 ring-primary/20' : ''}`}
       >
         {dragActive && (
           <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-full border-2 border-dashed border-primary bg-primary-50/90 backdrop-blur-sm dark:bg-primary-950/90" aria-hidden>
@@ -621,6 +607,24 @@ export default function AIGenerate() {
           </div>
         )}
         <input ref={fileRef} type="file" multiple accept={ACCEPT_EXT} onChange={pickFiles} className="hidden outline-hidden" />
+        {draft && files.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-4 pb-2 pt-1">
+            {files.map((f, i) => (
+              <span key={`${f.name}-${i}`} className="inline-flex items-center gap-1.5 rounded-full border border-white/60 bg-white/70 py-1 pl-2.5 pr-1 text-[11px] font-medium text-primary-700 shadow-chip backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-primary-300">
+                <FileText className="h-3 w-3" />
+                <span className="max-w-[90px] truncate" title={f.name}>{f.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                  aria-label={t('aiGenerate.removeFile')}
+                  className="flex h-5 w-5 items-center justify-center rounded-full text-primary-400 transition-colors hover:bg-primary-100 hover:text-primary-700 dark:hover:bg-primary-900/40"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="flex min-w-0 items-center gap-2">
         {busy ? (
           <div className="flex w-full min-w-0 items-center gap-2 rounded-full bg-white/90 py-2 pl-4 pr-2 shadow-[inset_0_2px_8px_rgba(15,23,42,0.06),0_1px_2px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-ink-900/85">
@@ -685,7 +689,7 @@ export default function AIGenerate() {
           </div>
         )}
       </motion.div>
-      {files.length > 0 && (
+      {!draft && files.length > 0 && (
         <div className="flex flex-wrap gap-2 px-6 pt-3">
           {files.map((f, i) => (
             <span key={`${f.name}-${i}`} className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 py-1.5 pl-3 pr-1.5 text-xs font-medium text-primary-700 shadow-chip backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-primary-300">
@@ -771,7 +775,7 @@ export default function AIGenerate() {
                 </div>
               )}
               {busy && (
-                <div aria-busy="true" className="mt-6 text-left">
+                <div className="mt-6 text-left" aria-busy="true" >
                   <SkeletonCards count={skeletonCount} />
                 </div>
               )}
@@ -821,14 +825,6 @@ export default function AIGenerate() {
                       <Sparkles className="w-3 h-3" />{modelUsed}
                     </span>
                   )}
-                  <button
-                    type="button"
-                    onClick={handleFreshRegen}
-                    title={t('aiGenerate.freshRegenHint')}
-                    className="inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full text-[11px] font-medium border border-white/60 bg-white/50 text-gray-500 backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-gray-400 hover:text-primary-600 transition-colors"
-                  >
-                    <RefreshCw className="w-3 h-3" />{t('aiGenerate.freshRegen')}
-                  </button>
                 </div>
               </div>
               <SettingChips settings={draft.settings} />
