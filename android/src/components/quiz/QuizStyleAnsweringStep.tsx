@@ -42,6 +42,7 @@ interface QuizStyleAnsweringStepProps {
   onSubmit: () => void;
   onOpenZoom: (question: any) => void;
   onCloseQuiz: () => void;
+  onRefresh?: () => void;
   submissionId?: string | number | null;
   respondentName?: string | null;
   respondentEmail?: string | null;
@@ -63,6 +64,7 @@ export function QuizStyleAnsweringStep({
   onSubmit,
   onOpenZoom,
   onCloseQuiz,
+  onRefresh,
   submissionId,
   respondentName,
   respondentEmail,
@@ -139,22 +141,37 @@ export function QuizStyleAnsweringStep({
     isTransitioningRef.current = true;
     pendingDirRef.current = dir;
 
+    // Safety fallback timer: guarantee opacity is never left at 0 if native driver gets stuck
+    const safetyTimer = setTimeout(() => {
+      if (isTransitioningRef.current) {
+        slideAnim.setValue(0);
+        scaleAnim.setValue(1);
+        fadeAnim.setValue(1);
+        isTransitioningRef.current = false;
+      }
+    }, 450);
+
     // Stage 1: Web Framer Motion exit stage (exit={{ opacity: 0, x: -dir * 30 }})
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: -dir * 30,
-        duration: 150,
+        duration: 140,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 150,
+        duration: 140,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
     ]).start(({ finished }) => {
+      clearTimeout(safetyTimer);
       if (!finished) {
+        // Recovery guard: never leave screen at 0 opacity if animation was interrupted by native window/modal
+        slideAnim.setValue(0);
+        scaleAnim.setValue(1);
+        fadeAnim.setValue(1);
         isTransitioningRef.current = false;
         return;
       }
@@ -179,17 +196,22 @@ export function QuizStyleAnsweringStep({
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 180,
+        duration: 170,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 180,
+        duration: 170,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
-    ]).start(() => {
+    ]).start(({ finished }) => {
+      if (!finished) {
+        slideAnim.setValue(0);
+        scaleAnim.setValue(1);
+        fadeAnim.setValue(1);
+      }
       isTransitioningRef.current = false;
     });
   }, [currentIdx]);
@@ -198,6 +220,28 @@ export function QuizStyleAnsweringStep({
     if (q?.type === 'file_upload' || q?.question_type === 'file_upload') return !!val;
     if (Array.isArray(val)) return val.length > 0;
     return !!val && String(val).trim().length > 0;
+  };
+
+  // Huruf opsi yang dipilih untuk Peta Soal — mis. "A" (multiple choice),
+  // "A,B" (checkbox). null kalau bukan tipe opsi / belum dijawab.
+  const answerLetters = (q: any): string | null => {
+    const opts = q?.options || q?.choices || [];
+    if (!opts.length) return null;
+    const raw = answers[q.id];
+    const ids: number[] = Array.isArray(raw)
+      ? raw
+      : typeof raw === 'number'
+        ? [raw]
+        : Array.isArray(raw?.ids)
+          ? raw.ids
+          : [];
+    if (!ids.length) return null;
+    const letters = ids
+      .map((id: number) => opts.findIndex((o: any) => o.id === id))
+      .filter((i: number) => i >= 0)
+      .sort((a: number, b: number) => a - b)
+      .map((i: number) => LETTERS[i % LETTERS.length]);
+    return letters.length ? letters.join(',') : null;
   };
 
   const toggleReview = (qId: number) => {
@@ -417,6 +461,17 @@ export function QuizStyleAnsweringStep({
             {!publicForm?.is_restricted && (
               <TouchableOpacity style={styles.closeHeaderBtn} onPress={onCloseQuiz} activeOpacity={0.7}>
                 <Ionicons name="close-outline" size={20} color="#FFF" />
+              </TouchableOpacity>
+            )}
+
+            {publicForm?.is_restricted && onRefresh && (
+              <TouchableOpacity
+                style={[styles.refreshHeaderBtn, { backgroundColor: 'rgba(0,0,0,0.16)', borderColor: 'rgba(255,255,255,0.18)' }]}
+                onPress={onRefresh}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="refresh" size={18} color="#FFF" />
               </TouchableOpacity>
             )}
           </View>
@@ -1004,15 +1059,16 @@ export function QuizStyleAnsweringStep({
                 const answered = isAnswered(q, answers[q.id]);
                 const isCurrent = idx === currentIdx;
                 const isMarked = reviewed[q.id];
+                const letters = answered ? answerLetters(q) : null;
 
                 let bg = isDark ? '#334155' : '#F1F5F9';
                 let textCol = colors.text;
 
-                if (answered) {
-                  bg = '#22C55E';
-                  textCol = '#FFFFFF';
-                } else if (isMarked) {
+                if (isMarked) {
                   bg = '#F59E0B';
+                  textCol = '#FFFFFF';
+                } else if (answered) {
+                  bg = '#22C55E';
                   textCol = '#FFFFFF';
                 } else if (isCurrent) {
                   bg = themeColor;
@@ -1044,10 +1100,19 @@ export function QuizStyleAnsweringStep({
                         }
                       }
                       setShowMapModal(false);
-                      animateToQuestion(idx, idx > currentIdx ? 1 : -1);
+                      setTimeout(() => {
+                        animateToQuestion(idx, idx > currentIdx ? 1 : -1);
+                      }, 60);
                     }}
                   >
-                    <Text style={[styles.mapGridText, { color: textCol }]}>{idx + 1}</Text>
+                    <Text
+                      style={[styles.mapGridText, { color: textCol }, letters && { fontSize: 11, maxWidth: 40 }]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.6}
+                    >
+                      {letters ? `${idx + 1}.${letters}` : idx + 1}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
@@ -1143,6 +1208,13 @@ const styles = StyleSheet.create({
   timerBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255, 255, 255, 0.2)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14 },
   timerBadgeText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 13, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
   closeHeaderBtn: { padding: 4 },
+  refreshHeaderBtn: {
+    padding: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   headerRowBottom: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   progressTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'rgba(255, 255, 255, 0.25)', overflow: 'hidden' },
