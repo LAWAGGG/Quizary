@@ -355,15 +355,18 @@ export default function QuizScreen() {
     }
   }, [language, unpin]);
 
-  // Sinkron ulang jam ke server bila terdeteksi lompatan jam HP (>2 mnt)
-  // atau anchor basi (>2 mnt tanpa respons API, mis. habis tidur/background).
-  // Respons getSubmissionDetail otomatis me-refresh anchor via api_service.
+  // Sinkron ulang jam ke server bila terdeteksi lompatan jam HP (>4 dtk —
+  // user yang memundurkan jam beberapa detik harus terkoreksi dalam hitungan
+  // detik, bukan diabaikan) atau anchor basi (>2 mnt tanpa respons API, mis.
+  // habis tidur/background). Respons getSubmissionDetail otomatis me-refresh
+  // anchor via api_service. monoNow() yang di-clamp menjamin countdown tidak
+  // pernah mundur; re-sync ini memastikan tampilannya tetap waktu server.
   const resyncClockIfNeeded = useCallback(async () => {
     const sid = submissionIdRef.current;
     if (!sid || !answeringRef.current) return;
     const jump = Math.abs(wallClockJumpMs());
     const staleFor = monoNow() - lastSyncMonoMs();
-    if (jump < 120000 && staleFor < 120000) return;
+    if (jump < 4000 && staleFor < 120000) return;
     try {
       const detail: any = await getSubmissionDetail(sid);
       if (detail?.expired_at) {
@@ -1295,6 +1298,8 @@ export default function QuizScreen() {
             router.replace('/(tabs)/home' as any);
           }}
           submissionId={submissionIdRef.current}
+          respondentName={submission?.respondent_name || respondentName || ''}
+          respondentEmail={submission?.respondent_email || respondentEmail || ''}
         />
       ) : (
         <KeyboardAvoidingView

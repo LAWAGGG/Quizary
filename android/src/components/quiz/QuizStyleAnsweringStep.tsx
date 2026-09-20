@@ -43,6 +43,8 @@ interface QuizStyleAnsweringStepProps {
   onOpenZoom: (question: any) => void;
   onCloseQuiz: () => void;
   submissionId?: string | number | null;
+  respondentName?: string | null;
+  respondentEmail?: string | null;
 }
 
 const OPT_COLORS = ['#3B82F6', '#EF4444', '#F59E0B', '#10B981'];
@@ -62,6 +64,8 @@ export function QuizStyleAnsweringStep({
   onOpenZoom,
   onCloseQuiz,
   submissionId,
+  respondentName,
+  respondentEmail,
 }: QuizStyleAnsweringStepProps) {
   const insets = useSafeAreaInsets();
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
@@ -97,65 +101,96 @@ export function QuizStyleAnsweringStep({
     publicForm?.settings?.theme_color ||
     colors.primary;
 
-  // Animation values for 1-by-1 question sliding
+  // Animation values for ultra-smooth hardware-accelerated 1-by-1 question transitions
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
   const isTransitioningRef = useRef(false);
   const pendingDirRef = useRef<number>(1);
 
   const totalQ = questions.length;
   const currentQ = questions[currentIdx] || questions[0];
 
+  // Exam info modal — paritas web ExamInfoDrawer (AnswerQuiz.jsx):
+  // waktu dari timer_seconds (fallback time_limit), submission once/unlimited.
+  const infoTotalMinutes = publicForm?.timer_seconds
+    ? Math.ceil(publicForm.timer_seconds / 60)
+    : (publicForm?.time_limit || publicForm?.duration || publicForm?.settings?.time_limit);
+  const infoTimeStr = infoTotalMinutes
+    ? (language === 'ID' ? `${infoTotalMinutes} menit` : `${infoTotalMinutes} minutes`)
+    : (language === 'ID' ? 'Tanpa batas' : 'No limit');
+  const infoSubmissionStr = publicForm?.submission_limit === 'once'
+    ? (language === 'ID' ? 'Sekali saja' : 'Once only')
+    : (language === 'ID' ? 'Tidak terbatas' : 'Unlimited');
+
+  const infoRow = (label: string, value?: string | number | null) => (
+    <View style={styles.infoRow} key={label}>
+      <Text style={[styles.infoRowLabel, { color: colors.textSub }]}>{label}</Text>
+      <Text style={[styles.infoRowValue, { color: colors.text }]} numberOfLines={2}>
+        {value || '—'}
+      </Text>
+    </View>
+  );
+
   const animateToQuestion = (newIdx: number, dir: number) => {
-    if (isTransitioningRef.current) return;
+    if (isTransitioningRef.current || newIdx === currentIdx) return;
+    if (newIdx < 0 || newIdx >= questions.length) return;
+
     isTransitioningRef.current = true;
     pendingDirRef.current = dir;
 
-    // Stage 1: Slide & Fade OUT old question (Native Driver 60fps)
+    // Stage 1: Web Framer Motion exit stage (exit={{ opacity: 0, x: -dir * 30 }})
     Animated.parallel([
       Animated.timing(slideAnim, {
-        toValue: -dir * 50,
-        duration: 90,
+        toValue: -dir * 30,
+        duration: 150,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 90,
+        duration: 150,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      // Update state while hidden (opacity = 0)
+    ]).start(({ finished }) => {
+      if (!finished) {
+        isTransitioningRef.current = false;
+        return;
+      }
+
+      // Stage 2 setup (mode="wait" parity): initial={{ opacity: 0, x: dir * 30 }}
+      slideAnim.setValue(dir * 30);
+      fadeAnim.setValue(0);
+
+      // Mount new question while container is completely invisible
       setCurrentIdx(newIdx);
     });
   };
 
-  // Stage 2: Trigger Stage 2 ONLY AFTER React has updated state & re-rendered new question!
+  // Stage 2 execution: Web Framer Motion entrance stage (animate={{ opacity: 1, x: 0 }})
   useEffect(() => {
     if (!isTransitioningRef.current) return;
 
-    const dir = pendingDirRef.current;
-    slideAnim.setValue(dir * 50);
-    fadeAnim.setValue(0);
+    // Reset scroll position to top cleanly while component is invisible
+    mainScrollRef.current?.scrollTo({ y: 0, animated: false });
 
-    requestAnimationFrame(() => {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 140,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 140,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        isTransitioningRef.current = false;
-      });
+    // Animate new question card into place
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      isTransitioningRef.current = false;
     });
   }, [currentIdx]);
 
@@ -429,11 +464,11 @@ export function QuizStyleAnsweringStep({
             <Animated.View
               style={[
                 styles.questionCardWrapper,
-                { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
+                { opacity: fadeAnim, transform: [{ translateX: slideAnim }, { scale: scaleAnim }] },
               ]}
             >
               {currentQ && (
-                <View style={styles.questionInnerContainer}>
+                <View key={currentQ.id || currentIdx} style={styles.questionInnerContainer}>
                   {/* Top Metadata Row: Optional Badge & Mark for Review */}
                   <View style={styles.qMetaHeaderRow}>
                     <View style={{ flex: 1 }}>
@@ -465,7 +500,7 @@ export function QuizStyleAnsweringStep({
                           { color: reviewed[currentQ.id] ? '#FFF' : (isDark ? '#94A3B8' : colors.textSub) },
                         ]}
                       >
-                        {reviewed[currentQ.id] ? 'Marked' : 'Mark for review'}
+                        {reviewed[currentQ.id] ? (language === 'ID' ? 'Ditandai' : 'Marked') : (language === 'ID' ? 'Tandai untuk ditinjau' : 'Mark for review')}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -475,7 +510,7 @@ export function QuizStyleAnsweringStep({
                     <View style={{ flex: 1 }}>
                       <RichTextRenderer
                         html={currentQ.question_text || ''}
-                        style={{ color: isDark ? '#FFFFFF' : colors.text, fontSize: 22 * fontSizeScale, fontWeight: '800', textAlign: 'center', lineHeight: Math.round(22 * fontSizeScale * 1.45) }}
+                        style={{ color: isDark ? '#FFFFFF' : colors.text, fontSize: 22 * fontSizeScale, fontWeight: '400', textAlign: 'center', lineHeight: Math.round(22 * fontSizeScale * 1.45) }}
                       />
                     </View>
                     {currentQ.is_required !== false ? (
@@ -525,7 +560,7 @@ export function QuizStyleAnsweringStep({
                     >
                       <Ionicons name="search-outline" size={14} color={colors.textSub} />
                       <Text style={[styles.zoomPillText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
-                        Zoom in on question
+                        {language === 'ID' ? 'Perbesar pertanyaan' : 'Zoom in on question'}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -533,7 +568,7 @@ export function QuizStyleAnsweringStep({
                   {/* Helper Text (Pick one answer / Pick all that apply) */}
                   {isOptionType && (
                     <Text style={[styles.helperText, { color: colors.textSub, fontSize: 12 * fontSizeScale }]}>
-                      {rawType === 'checkbox' ? 'Pick all that apply' : 'Pick one answer'}
+                      {rawType === 'checkbox' ? (language === 'ID' ? 'Pilih semua yang sesuai' : 'Pick all that apply') : (language === 'ID' ? 'Pilih satu jawaban' : 'Pick one answer')}
                     </Text>
                   )}
 
@@ -577,7 +612,7 @@ export function QuizStyleAnsweringStep({
                                     <View style={{ flex: 1 }}>
                                       <RichTextRenderer
                                         html={opt.option_text || opt.text || ''}
-                                        style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
+                                        style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '500' }}
                                       />
                                     </View>
                                   </View>
@@ -608,7 +643,7 @@ export function QuizStyleAnsweringStep({
                                 <View style={{ flex: 1 }}>
                                   <RichTextRenderer
                                     html={opt.option_text || opt.text || ''}
-                                    style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '600' }}
+                                    style={{ color: '#FFFFFF', fontSize: 16 * fontSizeScale, fontWeight: '500' }}
                                   />
                                 </View>
 
@@ -751,7 +786,7 @@ export function QuizStyleAnsweringStep({
                       <Text style={[styles.inputHelperLabel, { color: colors.textSub }]}>Format: YYYY-MM-DD (contoh: 2026-08-25)</Text>
                       <View style={styles.pickerFieldRow}>
                         <TextInput
-                          style={[styles.shortAnswerInput, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
+                          style={[styles.pickerShortInput, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                           placeholder="YYYY-MM-DD"
                           placeholderTextColor={colors.textMuted}
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
@@ -774,7 +809,7 @@ export function QuizStyleAnsweringStep({
                       <Text style={[styles.inputHelperLabel, { color: colors.textSub }]}>Format: HH:MM (contoh: 14:30)</Text>
                       <View style={styles.pickerFieldRow}>
                         <TextInput
-                          style={[styles.shortAnswerInput, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
+                          style={[styles.pickerShortInput, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                           placeholder="HH:MM"
                           placeholderTextColor={colors.textMuted}
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
@@ -797,7 +832,7 @@ export function QuizStyleAnsweringStep({
                       <Text style={[styles.inputHelperLabel, { color: colors.textSub }]}>Format: YYYY-MM-DDTHH:MM (contoh: 2026-08-25T14:30)</Text>
                       <View style={styles.pickerFieldRow}>
                         <TextInput
-                          style={[styles.shortAnswerInput, { flex: 1, color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
+                          style={[styles.pickerShortInput, { color: colors.text, backgroundColor: colors.inputBg, borderColor: colors.inputBorder, fontSize: 16 * fontSizeScale }]}
                           placeholder="YYYY-MM-DDTHH:MM"
                           placeholderTextColor={colors.textMuted}
                           value={typeof answers[currentQ.id] === 'string' ? answers[currentQ.id] : ''}
@@ -1036,29 +1071,53 @@ export function QuizStyleAnsweringStep({
         </TouchableOpacity>
       </Modal>
 
-      {/* EXAM INFO MODAL */}
+      {/* EXAM INFO MODAL — paritas web ExamInfoDrawer */}
       <Modal visible={showInfoModal} transparent animationType="fade" onRequestClose={() => setShowInfoModal(false)}>
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowInfoModal(false)}>
           <View style={[styles.infoModalBox, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
-            <Text style={[styles.infoModalTitle, { color: colors.text }]}>
-              {stripHtmlTags(publicForm?.title) || 'Quizary'}
-            </Text>
-            {publicForm?.description ? (
-              <Text style={[styles.infoModalDesc, { color: colors.textSub }]}>
-                {stripHtmlTags(publicForm.description)}
+            <View style={styles.infoModalHeaderRow}>
+              <Text style={[styles.infoModalHeaderTitle, { color: colors.text }]}>
+                {language === 'ID' ? 'Info Ujian' : 'Exam Information'}
               </Text>
-            ) : null}
+              <TouchableOpacity onPress={() => setShowInfoModal(false)} style={styles.infoModalXBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close" size={20} color={colors.textSub} />
+              </TouchableOpacity>
+            </View>
 
-            <View style={styles.infoModalMeta}>
-              <Text style={[styles.infoModalMetaText, { color: colors.text }]}>
-                {language === 'ID' ? `Total Soal: ${totalQ}` : `Total Questions: ${totalQ}`}
+            <ScrollView style={styles.infoModalScroll} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.infoModalTitle, { color: colors.text }]}>
+                {stripHtmlTags(publicForm?.title) || 'Quizary'}
               </Text>
-              {formattedTimerStr ? (
-                <Text style={[styles.infoModalMetaText, { color: colors.text }]}>
-                  {language === 'ID' ? `Sisa Waktu: ${formattedTimerStr}` : `Time Left: ${formattedTimerStr}`}
+              {publicForm?.description ? (
+                <Text style={[styles.infoModalDesc, { color: colors.textSub }]}>
+                  {stripHtmlTags(publicForm.description)}
                 </Text>
               ) : null}
-            </View>
+
+              <Text style={[styles.infoSectionHeader, { color: colors.textSub }]}>
+                {language === 'ID' ? 'Info Responden' : 'Respondent Info'}
+              </Text>
+              {infoRow(language === 'ID' ? 'Nama' : 'Name', respondentName)}
+              {infoRow('Email', respondentEmail)}
+
+              <Text style={[styles.infoSectionHeader, { color: colors.textSub }]}>
+                {language === 'ID' ? 'Detail' : 'Details'}
+              </Text>
+              {infoRow(language === 'ID' ? 'Jumlah soal' : 'Number of questions', String(publicForm?.question_count ?? totalQ))}
+              {infoRow(language === 'ID' ? 'Waktu' : 'Time', infoTimeStr)}
+              {infoRow(language === 'ID' ? 'Pengiriman' : 'Submission', infoSubmissionStr)}
+              {formattedTimerStr ? infoRow(language === 'ID' ? 'Sisa waktu' : 'Time left', formattedTimerStr) : null}
+
+              {publicForm?.is_restricted ? (
+                <View style={[styles.infoRestrictedBox, { backgroundColor: isDark ? 'rgba(148,163,184,0.12)' : '#F1F5F9' }]}>
+                  <Text style={[styles.infoRestrictedText, { color: colors.textSub }]}>
+                    {language === 'ID'
+                      ? 'Tetap di tab ini selama ujian. Timer berjalan otomatis dan jawaban terkirim saat waktu habis.'
+                      : 'Stay on this tab during the exam. Timer runs automatically and answers are submitted when time runs out.'}
+                  </Text>
+                </View>
+              ) : null}
+            </ScrollView>
 
             <TouchableOpacity style={[styles.infoCloseBtn, { backgroundColor: themeColor }]} onPress={() => setShowInfoModal(false)}>
               <Text style={styles.infoCloseBtnText}>{language === 'ID' ? 'Mengerti' : 'Got it'}</Text>
@@ -1237,6 +1296,9 @@ const styles = StyleSheet.create({
   /* INPUT FIELDS */
   textInputBox: { width: '100%', marginTop: 10 },
   shortAnswerInput: { width: '100%', minHeight: 56, borderRadius: 18, backgroundColor: '#1E293B', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', paddingHorizontal: 18, paddingVertical: 14 },
+  // Input sejajar tombol picker (54): tinggi fixed, bukan minHeight + paddingVertical
+  // seperti shortAnswerInput — kalau tidak, input lebih tinggi dari tombol.
+  pickerShortInput: { flex: 1, height: 54, borderRadius: 18, borderWidth: 1, paddingHorizontal: 18, paddingVertical: 0, textAlignVertical: 'center' },
   passwordContainer: {
     width: '100%',
     minHeight: 56,
@@ -1335,11 +1397,19 @@ const styles = StyleSheet.create({
   legendDot: { width: 10, height: 10, borderRadius: 5 },
   legendText: { fontSize: 12, fontWeight: '600' },
 
-  infoModalBox: { width: '100%', maxWidth: 360, borderRadius: 24, padding: 24, alignItems: 'center' },
+  infoModalBox: { width: '100%', maxWidth: 360, maxHeight: '85%', borderRadius: 24, padding: 24, alignItems: 'center' },
+  infoModalHeaderRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  infoModalHeaderTitle: { fontSize: 17, fontWeight: 'bold' },
+  infoModalXBtn: { padding: 4 },
+  infoModalScroll: { width: '100%', flexGrow: 0 },
   infoModalTitle: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginBottom: 8 },
-  infoModalDesc: { fontSize: 14, textAlign: 'center', marginBottom: 16, lineHeight: 20 },
-  infoModalMeta: { width: '100%', backgroundColor: 'rgba(148, 163, 184, 0.1)', padding: 14, borderRadius: 16, gap: 6, marginBottom: 20 },
-  infoModalMetaText: { fontSize: 13, fontWeight: '600', textAlign: 'center' },
-  infoCloseBtn: { width: '100%', paddingVertical: 14, borderRadius: 16, alignItems: 'center' },
+  infoModalDesc: { fontSize: 14, textAlign: 'center', marginBottom: 4, lineHeight: 20 },
+  infoSectionHeader: { fontSize: 10, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', marginTop: 14, marginBottom: 2 },
+  infoRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(148,163,184,0.25)' },
+  infoRowLabel: { fontSize: 12, flexShrink: 0 },
+  infoRowValue: { fontSize: 14, fontWeight: '600', textAlign: 'right', flex: 1 },
+  infoRestrictedBox: { width: '100%', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginTop: 14 },
+  infoRestrictedText: { fontSize: 12, lineHeight: 18 },
+  infoCloseBtn: { width: '100%', paddingVertical: 14, borderRadius: 16, alignItems: 'center', marginTop: 20 },
   infoCloseBtnText: { color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 },
 });

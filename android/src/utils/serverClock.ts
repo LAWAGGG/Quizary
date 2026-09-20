@@ -10,8 +10,10 @@
  * { serverMs, monoMs, wallMs } lalu:
  *   serverNowMs() = serverMs + (monoNow() - monoMs)
  * `monoNow()` memakai `performance.now()` (Hermes) yang monotonik — tidak
- * terpengaruh perubahan jam sistem. Ubah jam HP mid-ujian tidak menggeser
- * countdown sama sekali.
+ * terpengaruh perubahan jam sistem. Bila `performance.now()` tidak tersedia
+ * di runtime ini (fallback ke `Date.now()`), nilai yang dipublikasikan
+ * di-CLAMP supaya tidak pernah turun — memundurkan jam HP tetap tidak bisa
+ * menggeser countdown ke belakang sama sekali.
  *
  * Kenapa bukan library NTP (TrueTime/Kronos)?
  * - Butuh native module + rebuild + koneksi ke pool.ntp.org (sering diblokir
@@ -28,16 +30,42 @@ let anchorMonoMs = 0;
 let anchorWallMs = 0;
 let synced = false;
 
-/** Jam monotonik device (ms). Tidak ikut jam sistem bila tersedia. */
+/**
+ * Nilai monotonik terakhir yang dipublikasikan + sumbernya.
+ * Clamp ini yang menutup bug timer: kalaupun `performance.now()` tidak ada
+ * dan kita fallback ke `Date.now()`, jam yang dipakai countdown TIDAK PERNAH
+ * mundur mengikuti jam device.
+ */
+let lastMono = 0;
+let monoSource: 'perf' | 'wall' | null = null;
+
+/** Jam monotonik device (ms). Tidak pernah turun antar panggilan. */
 export function monoNow(): number {
+  let v: number | undefined;
+  let src: 'perf' | 'wall' = 'wall';
   try {
     const p = (globalThis as any).performance;
     if (p && typeof p.now === 'function') {
-      const v = p.now();
-      if (typeof v === 'number' && isFinite(v)) return v;
+      const x = p.now();
+      if (typeof x === 'number' && isFinite(x)) {
+        v = x;
+        src = 'perf';
+      }
     }
   } catch {}
-  return Date.now();
+  if (v === undefined) {
+    v = Date.now();
+    src = 'wall';
+  }
+  // Reset clamp saat domain sumber berganti (praktisnya statis per runtime;
+  // preventif supaya tidak freeze selamanya bila domain berganti).
+  if (monoSource !== null && src !== monoSource) {
+    lastMono = v;
+  } else if (v > lastMono) {
+    lastMono = v;
+  }
+  monoSource = src;
+  return lastMono;
 }
 
 /**
