@@ -319,26 +319,42 @@ def _build_questions_response(sub_id: int, request: Request, db: Session, includ
         .all()
     )
 
-    # Soal baru yang ditambahkan creator setelah sesi dimulai ikut tampil di
-    # preview responden. Di bawah, list final disortir per section (stable) —
-    # urutan snapshot dalam section tetap utuh, tapi soal baru/terpindah
-    # selalu mendarat di blok section-nya, bukan nempel di ekor array.
+    # Snapshot beku vs soal baru: in-progress tampilkan soal aktif baru
+    # (preview responden); completed hanya snapshot + soal baru-terhapus yang
+    # sempat dijawab. Soal terhapus tak-dikerjakan tak pernah tampil.
+    # Di bawah, list final disortir per section (stable) — urutan snapshot
+    # dalam section tetap utuh, soal baru selalu mendarat di blok section-nya.
     sub = db.get(Submission, sub_id)
     seen_ids = {q.id for q in ordered_qs}
-    if seen_ids:
-        new_filter = [Question.form_id == sub.form_id, ~Question.id.in_(seen_ids)]
-    else:
-        new_filter = [Question.form_id == sub.form_id]
     if not include_deleted:
+        if seen_ids:
+            new_filter = [Question.form_id == sub.form_id, ~Question.id.in_(seen_ids)]
+        else:
+            new_filter = [Question.form_id == sub.form_id]
         new_filter.append(Question.is_deleted.is_(False))
-    new_qs = (
-        db.query(Question)
-        .options(selectinload(Question.options).selectinload(QuestionOption.images), selectinload(Question.images))
-        .filter(*new_filter)
-        .order_by(Question.order_index)
-        .all()
-    )
-    ordered_qs = ordered_qs + new_qs
+        new_qs = (
+            db.query(Question)
+            .options(selectinload(Question.options).selectinload(QuestionOption.images), selectinload(Question.images))
+            .filter(*new_filter)
+            .order_by(Question.order_index)
+            .all()
+        )
+        ordered_qs = ordered_qs + new_qs
+    else:
+        new_ids = set(seen_ids)
+        answered_new_ids = [
+            row[0] for row in db.query(Answer.question_id).filter(Answer.submission_id == sub_id).all()
+            if row[0] not in new_ids
+        ]
+        if answered_new_ids:
+            answered_deleted = (
+                db.query(Question)
+                .options(selectinload(Question.options).selectinload(QuestionOption.images), selectinload(Question.images))
+                .filter(Question.id.in_(answered_new_ids), Question.form_id == sub.form_id)
+                .order_by(Question.order_index)
+                .all()
+            )
+            ordered_qs = ordered_qs + answered_deleted
 
     section_rank = {
         s.id: idx for idx, s in enumerate(

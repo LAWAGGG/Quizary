@@ -1014,24 +1014,54 @@ def bulk_move_section(
     if not any(s.id == target_id for s in sections):
         raise HTTPException(status_code=422, detail="Section tidak ditemukan pada form ini")
 
-    movers = (
+    id_set = set(ids)
+    all_qs = (
         db.query(Question)
         .filter(
-            Question.id.in_(ids),
             Question.form_id == form_id,
             Question.is_deleted.is_(False),
-            Question.section_id != target_id,
         )
         .order_by(Question.order_index, Question.id)
         .all()
     )
+    by_id = {q.id: q for q in all_qs}
+    movers = sorted(
+        [by_id[i] for i in id_set if i in by_id and by_id[i].section_id != target_id],
+        key=lambda q: (q.order_index or 0, q.id),
+    )
     if not movers:
         return {"moved": 0}
 
+    # Snapshot urutan lama SEBELUM mutasi — loop per-soal sebelumnya pakai
+    # bulk UPDATE (synchronize_session=False) sehingga objek `movers` yang
+    # sudah di-load jadi stale (`old` salah) dan order_index bertabrakan.
+    # Batch: tempel semua movers di akhir section target, lalu renumber
+    # global mengikuti urutan section agar nomor tampil berurutan.
+    old_pos = {q.id: (q.order_index or 0) for q in all_qs}
+    mover_ids = {q.id for q in movers}
     for q in movers:
         q.section_id = target_id
-        db.flush()
-        _relocate_to_section_end(db, q, sections)
+
+    ordered_sids = [s.id for s in sorted(sections, key=lambda s: (s.order_index or 0, s.id))]
+    stayers_by_section: dict[int, list[Question]] = {sid: [] for sid in ordered_sids}
+    orphans: list[Question] = []
+    for q in sorted(all_qs, key=lambda q: (old_pos[q.id], q.id)):
+        if q.id in mover_ids:
+            continue
+        if q.section_id in stayers_by_section:
+            stayers_by_section[q.section_id].append(q)
+        else:
+            orphans.append(q)
+
+    new_order: list[Question] = []
+    for sid in ordered_sids:
+        new_order.extend(stayers_by_section[sid])
+        if sid == target_id:
+            new_order.extend(movers)
+    new_order.extend(orphans)
+    for idx, q in enumerate(new_order):
+        q.order_index = idx
+    db.flush()
     distribute_quiz_points(form_id, db)
     db.commit()
     return {"moved": len(movers)}
