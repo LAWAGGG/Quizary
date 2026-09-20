@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, PanResponder, Animated, StyleSheet, ScrollView, LayoutChangeEvent, useWindowDimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
 
 interface PinchZoomContainerProps {
@@ -9,7 +9,7 @@ interface PinchZoomContainerProps {
 
 export function PinchZoomContainer({ children }: PinchZoomContainerProps) {
   const { width: windowWidth } = useWindowDimensions();
-  const { colors, isDark } = useAppTheme();
+  const { colors } = useAppTheme();
 
   const scale = useRef(new Animated.Value(1)).current;
   const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
@@ -96,38 +96,6 @@ export function PinchZoomContainer({ children }: PinchZoomContainerProps) {
 
   return (
     <View style={styles.wrapper}>
-      {/* Zoom Control Buttons Bar */}
-      <View style={[styles.controlBar, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.cardBorder }]}>
-        <TouchableOpacity
-          style={[styles.btn, { backgroundColor: isDark ? '#334155' : '#E2E8F0' }]}
-          onPress={handleZoomOut}
-          disabled={scaleNum <= 1}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="remove" size={18} color={scaleNum <= 1 ? colors.textMuted : colors.text} />
-        </TouchableOpacity>
-
-        <View style={styles.badge}>
-          <Text style={[styles.badgeText, { color: colors.text }]}>{Math.round(scaleNum * 100)}%</Text>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.btn, { backgroundColor: isDark ? '#334155' : '#E2E8F0' }]}
-          onPress={handleZoomIn}
-          disabled={scaleNum >= 2.5}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="add" size={18} color={scaleNum >= 2.5 ? colors.textMuted : colors.text} />
-        </TouchableOpacity>
-
-        {scaleNum > 1 && (
-          <TouchableOpacity style={[styles.resetBtn, { backgroundColor: colors.primary }]} onPress={handleResetZoom} activeOpacity={0.7}>
-            <Ionicons name="refresh" size={14} color="#FFF" />
-            <Text style={styles.resetBtnText}>Reset</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
       {/* Draggable & Scalable Content Container */}
       <ScrollView
         style={{ flex: 1 }}
@@ -135,7 +103,7 @@ export function PinchZoomContainer({ children }: PinchZoomContainerProps) {
           paddingHorizontal: 16,
           paddingVertical: 12,
           alignItems: 'center',
-          paddingBottom: 60 + extraBottomPadding,
+          paddingBottom: 96 + extraBottomPadding,
         }}
         showsVerticalScrollIndicator={true}
         scrollEnabled={scaleNum <= 1.05}
@@ -156,6 +124,48 @@ export function PinchZoomContainer({ children }: PinchZoomContainerProps) {
           {children}
         </Animated.View>
       </ScrollView>
+
+      {/* Kontrol zoom floating kanan-bawah — paritas web ZoomModal (AnswerQuiz.jsx):
+          ikon zoom-out, badge %, ikon zoom-in. Tap badge % = reset ke 100%. */}
+      <View
+        style={[
+          styles.floatingPill,
+          {
+            backgroundColor: colors.cardBg,
+            borderColor: colors.cardBorder,
+            shadowColor: '#000',
+          },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.pillBtn}
+          onPress={handleZoomOut}
+          disabled={scaleNum <= 1}
+          activeOpacity={0.7}
+          accessibilityLabel="Zoom out question"
+        >
+          <FontAwesome name="search-minus" size={20} color={scaleNum <= 1 ? colors.textMuted : colors.textSub} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={handleResetZoom}
+          disabled={scaleNum <= 1}
+          activeOpacity={0.7}
+          accessibilityLabel="Reset zoom to 100 percent"
+        >
+          <Text style={[styles.badgeText, { color: colors.textSub }]}>{Math.round(scaleNum * 100)}%</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.pillBtn}
+          onPress={handleZoomIn}
+          disabled={scaleNum >= 2.5}
+          activeOpacity={0.7}
+          accessibilityLabel="Zoom in question"
+        >
+          <FontAwesome name="search-plus" size={20} color={scaleNum >= 2.5 ? colors.textMuted : colors.textSub} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -165,44 +175,34 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
   },
-  controlBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    marginHorizontal: 16,
-    marginVertical: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  btn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badge: {
-    minWidth: 46,
-    alignItems: 'center',
-  },
-  badgeText: {
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  resetBtn: {
+  floatingPill: {
+    position: 'absolute',
+    right: 16,
+    bottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
+    padding: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 8,
+    zIndex: 10,
   },
-  resetBtnText: {
-    color: '#FFF',
-    fontSize: 11,
+  pillBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    minWidth: 52,
+    textAlign: 'center',
+    fontSize: 13,
     fontWeight: 'bold',
+    fontVariant: ['tabular-nums'],
   },
 });
