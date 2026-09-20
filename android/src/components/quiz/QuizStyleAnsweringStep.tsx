@@ -142,21 +142,36 @@ export function QuizStyleAnsweringStep({
     // Reset scroll offset immediately to top
     mainScrollRef.current?.scrollTo({ y: 0, animated: false });
 
-    // Pre-position slide offset for instant entry without ANY opacity blink (opacity stays 1)
-    slideAnim.setValue(dir * 45);
-    fadeAnim.setValue(1);
+    // Initial entrance values: soft opacity (0.35), subtle offset (dir * 40), subtle scale (0.98)
+    slideAnim.setValue(dir * 40);
+    scaleAnim.setValue(0.98);
+    fadeAnim.setValue(0.35);
 
-    // Update index immediately (0ms response delay)
+    // Update index immediately to new question
     setCurrentIdx(newIdx);
 
-    // Animate slide smoothly to resting position (0px) on native thread (220ms)
+    // Animate smoothly to resting state on native thread (240ms)
     requestAnimationFrame(() => {
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 220,
-        easing: Easing.bezier(0.16, 1, 0.3, 1),
-        useNativeDriver: true,
-      }).start(() => {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 240,
+          easing: Easing.bezier(0.16, 1, 0.3, 1),
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 240,
+          easing: Easing.bezier(0.16, 1, 0.3, 1),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 240,
+          easing: Easing.bezier(0.16, 1, 0.3, 1),
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
         isTransitioningRef.current = false;
       });
     });
