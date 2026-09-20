@@ -139,17 +139,17 @@ export function QuizStyleAnsweringStep({
     isTransitioningRef.current = true;
     pendingDirRef.current = dir;
 
-    // Web Framer Motion exit parity: exit={{ opacity: 0, x: -dir * 30 }} (180ms)
+    // Stage 1: Web Framer Motion exit stage (exit={{ opacity: 0, x: -dir * 30 }})
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: -dir * 30,
-        duration: 180,
+        duration: 150,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 180,
+        duration: 150,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
@@ -159,7 +159,7 @@ export function QuizStyleAnsweringStep({
         return;
       }
 
-      // Web Framer Motion mode="wait" initial parity: initial={{ opacity: 0, x: dir * 30 }}
+      // Stage 2 setup (mode="wait" parity): initial={{ opacity: 0, x: dir * 30 }}
       slideAnim.setValue(dir * 30);
       fadeAnim.setValue(0);
 
@@ -168,23 +168,24 @@ export function QuizStyleAnsweringStep({
     });
   };
 
-  // Phase 2: Web Framer Motion entrance parity: animate={{ opacity: 1, x: 0 }} (200ms)
+  // Stage 2 execution: Web Framer Motion entrance stage (animate={{ opacity: 1, x: 0 }})
   useEffect(() => {
     if (!isTransitioningRef.current) return;
 
     // Reset scroll position to top cleanly while component is invisible
     mainScrollRef.current?.scrollTo({ y: 0, animated: false });
 
+    // Animate new question card into place
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 200,
+        duration: 180,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 200,
+        duration: 180,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
@@ -463,7 +464,7 @@ export function QuizStyleAnsweringStep({
             <Animated.View
               style={[
                 styles.questionCardWrapper,
-                { opacity: fadeAnim, transform: [{ translateX: slideAnim }] },
+                { opacity: fadeAnim, transform: [{ translateX: slideAnim }, { scale: scaleAnim }] },
               ]}
             >
               {currentQ && (
