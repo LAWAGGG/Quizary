@@ -494,14 +494,6 @@ function SimpleNativeHtml({
 
 export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendererProps) {
   const { colors } = useAppTheme();
-  const [webViewHeight, setWebViewHeight] = useState<number>(30);
-  const [receivedHeight, setReceivedHeight] = useState(false);
-  const needMath = hasMathFormulas(html);
-  const [mathResolved, setMathResolved] = useState(!needMath);
-  const [mathOk, setMathOk] = useState(!needMath);
-  const prevHtmlRef = useRef<string | null | undefined>(html);
-  const needsWebView = needsRichWebView(html ?? '');
-
   // Extract fontSize and color from passed style if available
   const flattenedStyle = StyleSheet.flatten(style) || {};
   const textColor = (flattenedStyle.color as string) || colors.text;
@@ -509,18 +501,25 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
   const fontWeight = (flattenedStyle.fontWeight as any) || '400';
   const textAlign = (flattenedStyle.textAlign as string) || 'left';
   const lineHeight = (flattenedStyle.lineHeight as number) || Math.round(fontSize * 1.45);
-  const bgColor = ((flattenedStyle.backgroundColor as string) || colors.cardBg || '#FFFFFF');
+  const bgColor = ((flattenedStyle.backgroundColor as string) || 'transparent');
 
-  // Reset state saat konten (html) berubah — soal/opsi berbeda, supaya tidak basi
-  useEffect(() => {
-    if (prevHtmlRef.current === html) return;
+  const prevHtmlRef = useRef<string | null | undefined>(html);
+  const needMath = hasMathFormulas(html);
+  const needsWebView = needsRichWebView(html ?? '');
+
+  const [webViewHeight, setWebViewHeight] = useState<number>(() => estimateWebViewHeight(html ?? '', fontSize, lineHeight));
+  const [receivedHeight, setReceivedHeight] = useState(false);
+  const [mathResolved, setMathResolved] = useState(!needMath);
+  const [mathOk, setMathOk] = useState(!needMath);
+
+  // Synchronous state adjustment during render when html prop changes (prevents 1-frame stale state bleed)
+  if (prevHtmlRef.current !== html) {
     prevHtmlRef.current = html;
-    const nm = hasMathFormulas(html);
     setReceivedHeight(false);
-    setWebViewHeight(30);
-    setMathResolved(!nm);
-    setMathOk(!nm);
-  }, [html]);
+    setWebViewHeight(estimateWebViewHeight(html ?? '', fontSize, lineHeight));
+    setMathResolved(!needMath);
+    setMathOk(!needMath);
+  }
 
   // Batas waktu: bila WebView tak mengonfirmasi render matematika, pindah ke fallback native
   useEffect(() => {
