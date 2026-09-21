@@ -161,7 +161,7 @@ function FormCardItem({ form, index, selected, selectedCount, selectionMode, onT
                 <motion.div
                   initial={{ opacity: 0, y: 6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.98 }}
                   transition={{ duration: 0.16 }}
-                  className="absolute top-[56px] right-3 z-20 w-56 overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-ink-800 shadow-[0_8px_32px_rgba(0,0,0,0.12)]"
+                  className="absolute top-[56px] right-3 z-20 w-56 overflow-hidden rounded-2xl border border-gray-100 dark:border-ink-600 bg-white dark:bg-ink-800 shadow-[0_8px_32px_rgba(0,0,0,0.12)]"
                   onClick={(e)=>e.stopPropagation()}
                 >
                   <div className="p-1.5">

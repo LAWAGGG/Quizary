@@ -7,7 +7,7 @@ import api from '../../api/client'
 import { useTheme } from '../../hooks/useTheme'
 import { useToast } from '../../hooks/useToast'
 import { stripTags } from '../../lib/sanitize'
-import { Button, Card, RichTextEditor, RichText, Badge, Toggle, Select, Input, AnswerKeyEditor } from '../../components/ui'
+import { Card, RichTextEditor, RichText, Badge, Toggle, Select, Input, AnswerKeyEditor } from '../../components/ui'
 
 const humanizeType = (t) => (t || '').replace(/_/g, ' ')
 
@@ -21,20 +21,89 @@ const normPrompt = (s) => String(s || '').replace(/\r\n/g, '\n').replace(/\r/g, 
 // Kaca penyatu hero + review: shell & kartu review memakai token yang sama.
 const glassCircleBtn = 'inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-white/50 backdrop-blur-xl transition-all hover:bg-white/80 active:scale-95 dark:border-white/15 dark:bg-white/10 dark:hover:bg-white/20'
 
-function KeyMissingBanner() {
+function KeyMissingModal({ open, onClose }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = prevOverflow; window.removeEventListener('keydown', onKey) }
+  }, [open, onClose])
+
   return (
-    <div className="rounded-2xl border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 p-4 flex flex-col gap-3">
-      <div className="flex gap-3">
-        <KeyRound className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-ink dark:text-gray-100">{t('aiGenerate.keyMissing')}</p>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{t('aiGenerate.keyMissingDesc')}</p>
-        </div>
-      </div>
-      <Button size="sm" onClick={() => navigate('/settings')}>{t('aiGenerate.openSettings')}</Button>
-    </div>
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/60 p-4 backdrop-blur-md"
+          onClick={onClose}
+          role="presentation"
+        >
+          <motion.div
+            initial={{ scale: 0.92, y: 14, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.92, y: 14, opacity: 0 }}
+            transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+            className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-white/70 bg-white shadow-[0_40px_90px_-30px_rgba(15,23,42,0.5),inset_0_1px_1px_rgba(255,255,255,0.9)] dark:border-ink-700 dark:bg-ink-900 dark:shadow-[0_40px_90px_-30px_rgba(0,0,0,0.8),inset_0_1px_1px_rgba(255,255,255,0.08)]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ai-key-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="pointer-events-none absolute -top-16 left-1/2 h-40 w-40 -translate-x-1/2 rounded-full bg-primary/15 blur-3xl" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('common.close') || 'Close'}
+              className="absolute right-3.5 top-3.5 z-10 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink dark:text-gray-500 dark:hover:bg-ink-800 dark:hover:text-gray-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <div className="relative px-6 pb-6 pt-8">
+              <h3 id="ai-key-modal-title" className="mt-4 text-center font-display text-lg font-bold leading-tight text-ink dark:text-gray-100">
+                {t('aiGenerate.keyModalTitle')}
+              </h3>
+              <p className="mt-2 text-center text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+                {t('aiGenerate.keyMissingDesc')}
+              </p>
+              <ol className="mt-5 space-y-2.5">
+                {[t('aiGenerate.keyStep1'), t('aiGenerate.keyStep2'), t('aiGenerate.keyStep3')].map((step, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-50 text-[11px] font-bold text-primary-600 dark:bg-primary-900/40 dark:text-primary-300">
+                      {i + 1}
+                    </span>
+                    <span className="text-[13px] leading-snug text-ink dark:text-gray-200">{step}</span>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-6 grid grid-cols-[1fr_auto] gap-2.5">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="inline-flex h-11 items-center justify-center rounded-full border border-gray-200 bg-transparent px-5 text-sm font-semibold text-gray-500 transition-colors hover:bg-gray-50 hover:text-ink dark:border-ink-700 dark:text-gray-400 dark:hover:bg-ink-800 dark:hover:text-gray-200"
+                >
+                  {t('aiGenerate.later')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { onClose(); navigate('/settings') }}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 px-6 text-sm font-semibold text-white shadow-[0_10px_24px_-8px_rgba(108,92,231,0.55)] transition-all hover:brightness-110 active:scale-95"
+                >
+                  <KeyRound className="h-4 w-4" />
+                  {t('aiGenerate.openSettings')}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 
@@ -187,6 +256,7 @@ export default function AIGenerate() {
   const [accepting, setAccepting] = useState(false)
   const [error, setError] = useState('')
   const [genProgress, setGenProgress] = useState({ percent: 0, key: '', done: 0, total: 0 })
+  const [keyModalOpen, setKeyModalOpen] = useState(false)
   const [skeletonCount, setSkeletonCount] = useState(0)
   // Riwayat prompt tersembunyi (tak dirender) — konteks anti-halusinasi untuk /ai/edit.
   const [prevPrompts, setPrevPrompts] = useState([])
@@ -443,6 +513,7 @@ export default function AIGenerate() {
   const handleGenerate = async (e) => {
     e?.preventDefault()
     if (busy) return
+    if (keyStatus && !keyStatus.connected) { setKeyModalOpen(true); return }
     const clean = normPrompt(prompt)
     if (clean.length < PROMPT_MIN) { setError(t('aiGenerate.promptMin', { current: clean.length, max: PROMPT_MAX })); return }
     if (clean.length > PROMPT_MAX) { setError(t('aiGenerate.promptMax', { current: clean.length, max: PROMPT_MAX })); return }
@@ -480,6 +551,7 @@ export default function AIGenerate() {
   const handleEdit = async (e) => {
     e?.preventDefault()
     if (busy || !draft) return
+    if (keyStatus && !keyStatus.connected) { setKeyModalOpen(true); return }
     const instruction = normPrompt(prompt)
     if (instruction.length < PROMPT_MIN) { setError(t('aiGenerate.promptMin', { current: instruction.length, max: PROMPT_MAX })); return }
     if (instruction.length > PROMPT_MAX) { setError(t('aiGenerate.promptMax', { current: instruction.length, max: PROMPT_MAX })); return }
@@ -558,12 +630,11 @@ export default function AIGenerate() {
     }
   }
 
-  const keyMissing = keyStatus && !keyStatus.connected
   const promptLen = normPrompt(prompt).length
   const promptOver = promptLen > PROMPT_MAX
-  const canGenerate = !busy && !keyMissing && promptLen >= PROMPT_MIN && !promptOver
+  const canGenerate = !busy && promptLen >= PROMPT_MIN && !promptOver
   const promptEmpty = promptLen === 0
-  const canEdit = !!draft && !busy && !keyMissing && !promptEmpty && promptLen >= PROMPT_MIN && !promptOver
+  const canEdit = !!draft && !busy && !promptEmpty && promptLen >= PROMPT_MIN && !promptOver
 
   const handleComposerKey = (e) => {
     if (e.key !== 'Enter') return
@@ -765,12 +836,11 @@ export default function AIGenerate() {
                 )}
               </div>
             </div>
-            <h1 aria-label="Quizary AI" className="relative z-0 select-none px-4 text-center font-display font-extrabold leading-[1.02] tracking-tight text-[clamp(3rem,14vw,9rem)]">
-              <SlideLetters text="Quizary " startIndex={0} baseDelay={draft ? 0.1 : 0.45} letterClassName="text-primary-500/65 dark:text-white/80" />
+            <h1 aria-label="Quazaly AI" className="relative z-0 select-none px-4 text-center font-display font-extrabold leading-[1.30] tracking-tight text-[clamp(3rem,14vw,9rem)]">
+              <SlideLetters text="Quazaly " startIndex={0} baseDelay={draft ? 0.1 : 0.45} letterClassName="text-primary-500/65 dark:text-white/80" />
               <SlideLetters text="AI" startIndex={8} baseDelay={draft ? 0.1 : 0.45} letterClassName="bg-gradient-to-br from-primary-500 to-primary-800 bg-clip-text text-transparent dark:from-primary-200 dark:to-primary-400" />
             </h1>
             <div className="relative z-10 -mt-2 w-full max-w-4xl sm:-mt-6">
-              {keyMissing && <div className="mb-4"><KeyMissingBanner /></div>}
               {heroComposer}
               {draft && !busy && (
                 <div className="mt-4 flex justify-center">
@@ -789,7 +859,6 @@ export default function AIGenerate() {
                 </div>
               )}
               {error && <p className="field-error mt-3 text-center">{error}</p>}
-              {keyMissing && <p className="field-error mt-2 text-center">{t('aiGenerate.keyMissing')}</p>}
             </div>
           </motion.div>
         ) : (
@@ -819,7 +888,6 @@ export default function AIGenerate() {
                 )}
               </div>
             </div>
-            {keyMissing && <KeyMissingBanner />}
 
             {step === 2 && (
               <div className="space-y-5">
@@ -968,8 +1036,10 @@ export default function AIGenerate() {
               </div>
             )}
           </motion.div>
-        )}
+)}
         </AnimatePresence>
+
+      <KeyMissingModal open={keyModalOpen} onClose={() => setKeyModalOpen(false)} />
       </motion.div>
     </div>
   )
