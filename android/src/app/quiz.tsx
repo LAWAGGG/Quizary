@@ -393,6 +393,40 @@ export default function QuizScreen() {
     } catch {}
   }, [unpin, unlockVolume, stopCheat]);
 
+  // Refresh manual (tombol refresh di header quiz restricted): ambil status
+  // terbaru dari server TANPA guard — perbarui expired_at + jam server, dan
+  // tangani bila status berubah jadi locked/cheating/selesai.
+  const forceRefreshStatus = useCallback(async () => {
+    const sid = submissionIdRef.current;
+    if (!sid || !answeringRef.current) return;
+    try {
+      setRefreshingLock(true);
+      const detail: any = await getSubmissionDetail(sid);
+      if (detail?.expired_at) {
+        setSubmission((prev: any) => (prev ? { ...prev, expired_at: detail.expired_at } : prev));
+      }
+      if (detail && detail.status && detail.status !== 'in_progress') {
+        const st = detail.status;
+        if (st === 'locked') {
+          setCheatReason(detail.cheat_reason || 'window-blur');
+          const serverLockedAt = parseServerTime(detail.locked_at);
+          if (serverLockedAt) setLockedAt(serverLockedAt);
+          setLockedVisible(true);
+          lockedVisibleRef.current = true;
+        } else if (st === 'cheating' || st === 'submitted' || st === 'auto_submitted') {
+          await unpin().catch(() => {});
+          await unlockVolume().catch(() => {});
+          await stopCheat().catch(() => {});
+          setLockedVisible(false);
+          setWarningVisible(false);
+          router.replace({ pathname: '/(tabs)/home' } as any);
+        }
+      }
+    } catch {} finally {
+      setRefreshingLock(false);
+    }
+  }, [unpin, unlockVolume, stopCheat]);
+
   // Timer countdown for exam (expired_at) — pakai JAM SERVER, kebal ubahan jam HP
   useEffect(() => {
     if (!submission?.expired_at) return;
@@ -1297,6 +1331,7 @@ export default function QuizScreen() {
             await stopCheat().catch(() => {});
             router.replace('/(tabs)/home' as any);
           }}
+          onRefresh={forceRefreshStatus}
           submissionId={submissionIdRef.current}
           respondentName={submission?.respondent_name || respondentName || ''}
           respondentEmail={submission?.respondent_email || respondentEmail || ''}
@@ -1329,12 +1364,25 @@ export default function QuizScreen() {
                 </Text>
               </View>
 
-              {formattedTimer ? (
-                <View style={[styles.timerPill, { backgroundColor: timeLeft !== null && timeLeft < 60000 ? '#EF4444' : colors.inputBg, zIndex: 10 }]}>
-                  <Ionicons name="timer-outline" size={14} color={timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text} />
-                  <Text style={[styles.timerText, { color: timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text }]}>{formattedTimer}</Text>
-                </View>
-              ) : <View style={{ width: 34 }} />}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, zIndex: 10 }}>
+                {formattedTimer ? (
+                  <View style={[styles.timerPill, { backgroundColor: timeLeft !== null && timeLeft < 60000 ? '#EF4444' : colors.inputBg }]}>
+                    <Ionicons name="timer-outline" size={14} color={timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text} />
+                    <Text style={[styles.timerText, { color: timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text }]}>{formattedTimer}</Text>
+                  </View>
+                ) : null}
+
+                {publicForm?.is_restricted && (
+                  <TouchableOpacity
+                    onPress={forceRefreshStatus}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={{ padding: 6 }}
+                  >
+                    <Ionicons name="refresh" size={20} color={colors.text} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
           <ScrollView

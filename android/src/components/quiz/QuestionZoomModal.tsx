@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, StatusBar as RNStatusBar } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { StatusBar } from 'expo-status-bar';
@@ -33,8 +33,6 @@ export function QuestionZoomModal({
   onPickFile,
 }: QuestionZoomModalProps) {
   const { colors, isDark } = useAppTheme();
-  const insets = useSafeAreaInsets();
-  const topPadding = Math.max(insets.top, Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 0);
 
   if (!question) return null;
 
@@ -48,8 +46,9 @@ export function QuestionZoomModal({
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
             <View style={{ flex: 1 }}>
-              {/* Header bar inside Zoom Modal */}
-              <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomColor: colors.inputBorder, paddingTop: topPadding + 6 }]}>
+              {/* Header bar inside Zoom Modal — SafeAreaView sudah menangani inset
+                  atas, jadi header hanya top bar ramping tanpa padding ekstra */}
+              <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomColor: colors.inputBorder }]}>
                 <TouchableOpacity
                   onPress={onClose}
                   style={styles.closeBtn}
