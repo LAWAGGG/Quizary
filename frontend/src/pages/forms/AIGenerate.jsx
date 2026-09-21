@@ -168,6 +168,8 @@ export default function AIGenerate() {
   const toast = useToast()
   const fileRef = useRef(null)
   const composerRef = useRef(null)
+  const promptRef = useRef(null)
+  const [promptExpanded, setPromptExpanded] = useState(false)
 
   const [step, setStep] = useState(1)
   const [title, setTitle] = useState('')
@@ -207,6 +209,12 @@ export default function AIGenerate() {
     const id = setInterval(() => setSkeletonCount((c) => (c >= 8 ? c : c + 1)), 600)
     return () => clearInterval(id)
   }, [generating])
+
+  useEffect(() => {
+    const el = promptRef.current
+    if (!el) return
+    setPromptExpanded(el.scrollHeight > 24 * 3 + 4)
+  }, [prompt, busy])
 
   const patchSettings = (patch) => setDraft((d) => (d ? { ...d, settings: { ...d.settings, ...patch } } : d))
 
@@ -407,7 +415,7 @@ export default function AIGenerate() {
       }
       return false
     }
-    for (;;) {
+    for (; ;) {
       const { done, value } = await reader.read()
       if (done) break
       buf += decoder.decode(value, { stream: true })
@@ -428,7 +436,7 @@ export default function AIGenerate() {
         try { data = JSON.parse(dataLines.join('\n')) } catch { continue }
         if (onEvent(event, data)) { finished = true; break }
       }
-      if (finished) { reader.cancel().catch(() => {}); break }
+      if (finished) { reader.cancel().catch(() => { }); break }
     }
   }
 
@@ -510,9 +518,9 @@ export default function AIGenerate() {
 
   const genStageText =
     genProgress.key === 'reading' ? t('aiGenerate.overlayReading')
-    : genProgress.key === 'generating' ? t('aiGenerate.overlayGenerating')
-    : genProgress.key === 'sanitizing' ? t('aiGenerate.overlaySanitizing')
-    : ''
+      : genProgress.key === 'generating' ? t('aiGenerate.overlayGenerating')
+        : genProgress.key === 'sanitizing' ? t('aiGenerate.overlaySanitizing')
+          : ''
   const busyStatus = generating ? genStageText : t('aiGenerate.editing')
 
   const handleAccept = async () => {
@@ -598,10 +606,10 @@ export default function AIGenerate() {
         onDragLeave={onComposerDragLeave}
         onDragOver={onComposerDragOver}
         onDrop={onComposerDrop}
-        className={`relative min-w-0 rounded-3xl border bg-white/20 p-2 backdrop-blur-2xl backdrop-saturate-150 transition-[border-color,box-shadow] duration-300 ease-out dark:border-white/20 dark:bg-white/10 dark:shadow-[0_24px_70px_-20px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.2)] ${draft ? 'border-primary/25 shadow-[0_24px_70px_-18px_rgba(108,92,231,0.55),0_4px_16px_rgba(15,23,42,0.10),inset_0_1px_1px_rgba(255,255,255,0.9)] ring-1 ring-primary/15' : 'border-white/70 shadow-[0_24px_70px_-20px_rgba(108,92,231,0.45),inset_0_1px_1px_rgba(255,255,255,0.8),inset_0_-1px_1px_rgba(255,255,255,0.25)] ring-1 ring-white/50'} ${dragActive ? 'border-primary ring-4 ring-primary/20' : ''}`}
+        className={`relative min-w-0 rounded-3xl bg-white/20 p-2 backdrop-blur-lg backdrop-saturate-150 transition-[border-color,box-shadow] duration-300 ease-out dark:bg-white/10 dark:shadow-[0_24px_70px_-20px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.2)] ${draft ? 'border-primary/25 shadow-[0_24px_70px_-18px_rgba(108,92,231,0.55),0_4px_16px_rgba(15,23,42,0.10),inset_0_1px_1px_rgba(255,255,255,0.9)]  ring-primary/15' : 'border-white/70 shadow-[0_24px_70px_-20px_rgba(108,92,231,0.45),inset_0_1px_1px_rgba(255,255,255,0.8),inset_0_-1px_1px_rgba(255,255,255,0.25)] ring-white/50'} ${dragActive ? 'border-primary ring-4 ring-primary/20' : ''}`}
       >
         {dragActive && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-full border-2 border-dashed border-primary bg-primary-50/90 backdrop-blur-sm dark:bg-primary-950/90" aria-hidden>
+          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-primary bg-primary-50/90 backdrop-blur-sm dark:bg-primary-950/90" aria-hidden>
             <Paperclip className="h-6 w-6 text-primary-600 dark:text-primary-300" />
             <p className="text-sm font-semibold text-primary-700 dark:text-primary-200">{t('aiGenerate.dropFiles')}</p>
           </div>
@@ -626,61 +634,62 @@ export default function AIGenerate() {
           </div>
         )}
         <div className="flex min-w-0 items-center gap-2">
-        {busy ? (
-          <div className="flex w-full min-w-0 items-center gap-2 rounded-full bg-white/90 py-2 pl-4 pr-2 shadow-[inset_0_2px_8px_rgba(15,23,42,0.06),0_1px_2px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-ink-900/85">
-            <span className="shrink-0" role="status"><TypingDots /></span>
-            <input
-              value={prompt.replace(/\s+/g, ' ')}
-              readOnly
-              placeholder={busyStatus}
-              aria-label={t('aiGenerate.promptLabel')}
-              tabIndex={-1}
-              className="min-w-0 flex-1 truncate bg-transparent px-1 py-2 text-[14px] leading-5 text-ink placeholder:text-gray-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-500"
-            />
-            <button
-              type="button"
-              onClick={cancelBusy}
-              className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-gray-100 px-5 text-sm font-semibold text-gray-600 hover:bg-gray-200 hover:text-ink dark:bg-ink-800 dark:text-gray-300 dark:hover:bg-ink-700 transition-colors active:scale-95"
-            >
-              {t('aiGenerate.cancelGenerate')}
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="flex min-w-0 flex-1 items-end gap-1 overflow-hidden rounded-full bg-white/90 py-2 pl-2 pr-3 shadow-[inset_0_2px_8px_rgba(15,23,42,0.06),0_1px_2px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-ink-900/85">
+          {busy ? (
+            <div className="flex w-full min-w-0 items-center gap-2 rounded-full bg-white/90 py-2 pl-4 pr-2 shadow-[inset_0_2px_8px_rgba(15,23,42,0.06),0_1px_2px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-ink-900/85">
+              <span className="shrink-0" role="status"><TypingDots /></span>
+              <input
+                value={prompt.replace(/\s+/g, ' ')}
+                readOnly
+                placeholder={busyStatus}
+                aria-label={t('aiGenerate.promptLabel')}
+                tabIndex={-1}
+                className="min-w-0 flex-1 truncate bg-transparent px-1 py-2 text-[14px] leading-5 text-ink placeholder:text-gray-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-500"
+              />
               <button
                 type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={files.length >= MAX_FILES}
-                aria-label={t('aiGenerate.filesLabel')}
-                title={t('aiGenerate.filesLabel')}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-40 dark:text-gray-500 dark:hover:bg-ink-800 dark:hover:text-gray-200"
+                onClick={cancelBusy}
+                className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-gray-100 px-5 text-sm font-semibold text-gray-600 hover:bg-gray-200 hover:text-ink dark:bg-ink-800 dark:text-gray-300 dark:hover:bg-ink-700 transition-colors active:scale-95"
               >
-                <Paperclip className="h-[18px] w-[18px]" />
+                {t('aiGenerate.cancelGenerate')}
               </button>
-              <textarea
-                id="ai-prompt"
-                value={prompt}
-                onChange={(e) => { setPrompt(e.target.value); setError('') }}
-                onKeyDown={handleComposerKey}
-                placeholder={draft ? t('aiGenerate.editPlaceholder') : t('aiGenerate.promptComposerPlaceholder')}
-                rows={1}
-                aria-busy={busy}
-                className="max-h-[200px] min-h-9 w-full min-w-0 flex-1 break-all resize-none self-center bg-transparent text-[15px] leading-6 text-ink placeholder:text-gray-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-500 [field-sizing:content]"
-              />
             </div>
-            <button
-              type="button"
-              onClick={handlePrimaryButton}
-              disabled={primaryDisabled}
-              aria-label={primaryLabel}
-              title={primaryLabel}
-              className={`flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-ink-900 text-white shadow-[0_8px_20px_-6px_rgba(15,23,42,0.5)] transition-all hover:bg-ink-800 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-ink-900 dark:hover:bg-gray-200 ${!draft || !promptEmpty ? 'h-11 w-11' : 'h-11 px-5 text-sm font-semibold'}`}
-            >
-              {!draft || !promptEmpty ? <ArrowUp className="h-5 w-5" strokeWidth={2.5} /> : <><Check className="h-4 w-4" />{t('aiGenerate.accept')}</>}
-            </button>
-          </>
-        )}
+          ) : (
+            <>
+              <div className={`flex min-w-0 flex-1 items-center gap-1 overflow-hidden bg-white/90 py-2 pl-2 pr-3 shadow-[inset_0_2px_8px_rgba(15,23,42,0.06),0_1px_2px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-[border-radius] duration-200 dark:bg-ink-900/85 ${promptExpanded ? 'rounded-3xl' : 'rounded-full'}`}>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={files.length >= MAX_FILES}
+                  aria-label={t('aiGenerate.filesLabel')}
+                  title={t('aiGenerate.filesLabel')}
+                  className="flex h-9 w-9 shrink-0 self-center items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-40 dark:text-gray-500 dark:hover:bg-ink-800 dark:hover:text-gray-200"
+                >
+                  <Paperclip className="h-[18px] w-[18px]" />
+                </button>
+                <textarea
+                  id="ai-prompt"
+                  ref={promptRef}
+                  value={prompt}
+                  onChange={(e) => { setPrompt(e.target.value); setError('') }}
+                  onKeyDown={handleComposerKey}
+                  placeholder={draft ? t('aiGenerate.editPlaceholder') : t('aiGenerate.promptComposerPlaceholder')}
+                  rows={1}
+                  aria-busy={busy}
+                  className="max-h-[200px] min-h-9 w-full min-w-0 flex-1 break-all resize-none self-center bg-transparent py-1.5 text-[15px] leading-6 text-ink placeholder:text-gray-400 focus:!outline-none focus:!ring-0  dark:text-gray-100 dark:placeholder:text-gray-500 [field-sizing:content]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handlePrimaryButton}
+                disabled={primaryDisabled}
+                aria-label={primaryLabel}
+                title={primaryLabel}
+                className={`flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-ink-900 text-white shadow-[0_8px_20px_-6px_rgba(15,23,42,0.5)] transition-all hover:bg-ink-800 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-ink-900 dark:hover:bg-gray-200 ${!draft || !promptEmpty ? 'h-11 w-11' : 'h-11 px-5 text-sm font-semibold'}`}
+              >
+                {!draft || !promptEmpty ? <ArrowUp className="h-5 w-5" strokeWidth={2.5} /> : <><Check className="h-4 w-4" />{t('aiGenerate.accept')}</>}
+              </button>
+            </>
+          )}
         </div>
         {draft && (
           <div className="flex items-center justify-between px-5 pb-1 pt-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
@@ -729,237 +738,237 @@ export default function AIGenerate() {
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: heroVisible ? 0.45 : 0, duration: 0.4 }} className="relative space-y-6 pt-5">
         <AnimatePresence mode="wait" initial={false}>
-        {heroVisible ? (
-          <motion.div key="hero" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.32, ease: 'easeOut' }} className="relative flex min-h-[78vh] flex-col items-center justify-center px-4 py-10">
-            <div className="absolute inset-x-4 top-2 z-20 flex items-center justify-between sm:inset-x-8 sm:top-4">
-              <button
-                onClick={() => navigate('/forms')}
-                aria-label={t('aiGenerate.back')}
-                title={t('aiGenerate.back')}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-white/50 text-ink backdrop-blur-xl transition-all hover:bg-white/80 active:scale-95 dark:border-white/15 dark:bg-white/10 dark:text-gray-100 dark:hover:bg-white/20"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-              <div className="flex items-center gap-2">
+          {heroVisible ? (
+            <motion.div key="hero" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.32, ease: 'easeOut' }} className="relative flex min-h-[78vh] flex-col items-center justify-center px-4 py-10">
+              <div className="absolute inset-x-4 top-2 z-20 flex items-center justify-between sm:inset-x-8 sm:top-4">
                 <button
-                  onClick={toggleTheme}
-                  aria-label={t('nav.toggleTheme')}
-                  title={t('nav.toggleTheme')}
+                  onClick={() => navigate('/forms')}
+                  aria-label={t('aiGenerate.back')}
+                  title={t('aiGenerate.back')}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-white/50 text-ink backdrop-blur-xl transition-all hover:bg-white/80 active:scale-95 dark:border-white/15 dark:bg-white/10 dark:text-gray-100 dark:hover:bg-white/20"
                 >
-                  {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  <ArrowLeft className="h-4 w-4" />
                 </button>
-                {keyStatus?.connected && (
-                  <span className="inline-flex items-center gap-1.5 px-3 h-9 rounded-full text-xs font-semibold border border-white/60 bg-white/50 text-emerald-700 backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-emerald-300">
-                    <KeyRound className="w-3.5 h-3.5" /> {t('aiGenerate.keyConnected')}
-                  </span>
-                )}
-              </div>
-            </div>
-            <h1 aria-label="Quizary AI" className="relative z-0 select-none px-4 text-center font-display font-extrabold leading-[1.02] tracking-tight text-[clamp(3rem,14vw,9rem)]">
-              <SlideLetters text="Quizary " startIndex={0} baseDelay={draft ? 0.1 : 0.45} letterClassName="text-primary-500/65 dark:text-white/80" />
-              <SlideLetters text="AI" startIndex={8} baseDelay={draft ? 0.1 : 0.45} letterClassName="bg-gradient-to-br from-primary-500 to-primary-800 bg-clip-text text-transparent dark:from-primary-200 dark:to-primary-400" />
-            </h1>
-            <div className="relative z-10 -mt-2 w-full max-w-4xl sm:-mt-6">
-              {keyMissing && <div className="mb-4"><KeyMissingBanner /></div>}
-              {heroComposer}
-              {draft && !busy && (
-                <div className="mt-4 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => { setStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-                    className="inline-flex h-11 items-center gap-2 rounded-full border border-white/60 bg-white/50 px-6 text-sm font-semibold text-ink backdrop-blur-xl transition-all hover:bg-white/80 active:scale-95 dark:border-white/15 dark:bg-white/10 dark:text-gray-100 dark:hover:bg-white/20"
-                  >
-                    {t('aiGenerate.backToReview')} <ArrowRight className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-              {busy && (
-                <div className="mt-6 text-left" aria-busy="true" >
-                  <SkeletonCards count={skeletonCount} />
-                </div>
-              )}
-              {error && <p className="field-error mt-3 text-center">{error}</p>}
-              {keyMissing && <p className="field-error mt-2 text-center">{t('aiGenerate.keyMissing')}</p>}
-            </div>
-          </motion.div>
-        ) : (
-          <motion.div key="review" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.32, ease: 'easeOut' }} className="mx-auto w-full max-w-3xl space-y-5 px-4 pb-6 sm:px-6">
-            <div className="flex items-center justify-between gap-3">
-              <button
-                onClick={() => { setStep(1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-                aria-label={t('aiGenerate.back')}
-                title={t('aiGenerate.back')}
-                className={`${glassCircleBtn} text-ink dark:text-gray-100`}
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={toggleTheme}
-                  aria-label={t('nav.toggleTheme')}
-                  title={t('nav.toggleTheme')}
-                  className={`${glassCircleBtn} text-ink dark:text-gray-100`}
-                >
-                  {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                </button>
-                {keyStatus?.connected && (
-                  <span className="inline-flex items-center gap-1.5 px-3 h-9 rounded-full text-xs font-semibold border border-white/60 bg-white/50 text-emerald-700 backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-emerald-300">
-                    <KeyRound className="w-3.5 h-3.5" /> {t('aiGenerate.keyConnected')}
-                  </span>
-                )}
-              </div>
-            </div>
-            {keyMissing && <KeyMissingBanner />}
-
-            {step === 2 && (
-              <div className="space-y-5">
-            <Card className="space-y-4">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <h2 className="font-display font-semibold text-ink dark:text-gray-100">
-                  {t('aiGenerate.stepPolish')}
-                </h2>
                 <div className="flex items-center gap-2">
-                  {modelUsed && (
-                    <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[11px] font-medium border border-white/60 bg-white/50 text-gray-500 backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-gray-400">
-                      <Sparkles className="w-3 h-3" />{modelUsed}
+                  <button
+                    onClick={toggleTheme}
+                    aria-label={t('nav.toggleTheme')}
+                    title={t('nav.toggleTheme')}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-white/50 text-ink backdrop-blur-xl transition-all hover:bg-white/80 active:scale-95 dark:border-white/15 dark:bg-white/10 dark:text-gray-100 dark:hover:bg-white/20"
+                  >
+                    {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  </button>
+                  {keyStatus?.connected && (
+                    <span className="inline-flex items-center gap-1.5 px-3 h-9 rounded-full text-xs font-semibold border border-white/60 bg-white/50 text-emerald-700 backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-emerald-300">
+                      <KeyRound className="w-3.5 h-3.5" /> {t('aiGenerate.keyConnected')}
                     </span>
                   )}
                 </div>
               </div>
-              <SettingChips settings={draft.settings} />
-              <IgnoredBox items={ignored} />
-              <CountWarnBox items={warnings} />
-              <div>
-                <span className="field-label">{t('aiGenerate.titleLabel')}</span>
-                <RichTextEditor value={title} onChange={setTitle} minHeight={60} />
-              </div>
-              <div>
-                <span className="field-label">{t('aiGenerate.descLabel')}</span>
-                <RichTextEditor value={description} onChange={setDescription} minHeight={80} />
-              </div>
-              <div>
-                <span className="field-label">{t('aiGenerate.typeLabel')}</span>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { value: 'form', label: t('aiGenerate.typeForm'), desc: t('aiGenerate.typeFormDesc') },
-                    { value: 'quiz', label: t('aiGenerate.typeQuiz'), desc: t('aiGenerate.typeQuizDesc') },
-                  ].map((o) => (
+              <h1 aria-label="Quizary AI" className="relative z-0 select-none px-4 text-center font-display font-extrabold leading-[1.02] tracking-tight text-[clamp(3rem,14vw,9rem)]">
+                <SlideLetters text="Quizary " startIndex={0} baseDelay={draft ? 0.1 : 0.45} letterClassName="text-primary-500/65 dark:text-white/80" />
+                <SlideLetters text="AI" startIndex={8} baseDelay={draft ? 0.1 : 0.45} letterClassName="bg-gradient-to-br from-primary-500 to-primary-800 bg-clip-text text-transparent dark:from-primary-200 dark:to-primary-400" />
+              </h1>
+              <div className="relative z-10 -mt-2 w-full max-w-4xl sm:-mt-6">
+                {keyMissing && <div className="mb-4"><KeyMissingBanner /></div>}
+                {heroComposer}
+                {draft && !busy && (
+                  <div className="mt-4 flex justify-center">
                     <button
-                      key={o.value}
                       type="button"
-                      onClick={() => setFormType(o.value)}
-                      aria-pressed={formType === o.value}
-                      className={`text-left px-4 py-3.5 rounded-xl border-2 transition-all ${formType === o.value ? 'border-primary bg-primary-50 shadow-chip' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 hover:border-gray-300 dark:hover:border-gray-600'}`}
+                      onClick={() => { setStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                      className="inline-flex h-11 items-center gap-2 rounded-full border border-white/60 bg-white/50 px-6 text-sm font-semibold text-ink backdrop-blur-xl transition-all hover:bg-white/80 active:scale-95 dark:border-white/15 dark:bg-white/10 dark:text-gray-100 dark:hover:bg-white/20"
                     >
-                      <span className={`block text-sm font-semibold ${formType === o.value ? 'text-primary-700' : 'text-ink dark:text-gray-100'}`}>{o.label}</span>
-                      <span className="block text-xs text-gray-400 dark:text-gray-500 mt-0.5">{o.desc}</span>
+                      {t('aiGenerate.backToReview')} <ArrowRight className="h-4 w-4" />
                     </button>
-                  ))}
+                  </div>
+                )}
+                {busy && (
+                  <div className="mt-6 text-left" aria-busy="true" >
+                    <SkeletonCards count={skeletonCount} />
+                  </div>
+                )}
+                {error && <p className="field-error mt-3 text-center">{error}</p>}
+                {keyMissing && <p className="field-error mt-2 text-center">{t('aiGenerate.keyMissing')}</p>}
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div key="review" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.32, ease: 'easeOut' }} className="mx-auto w-full max-w-3xl space-y-5 px-4 pb-6 sm:px-6">
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  onClick={() => { setStep(1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  aria-label={t('aiGenerate.back')}
+                  title={t('aiGenerate.back')}
+                  className={`${glassCircleBtn} text-ink dark:text-gray-100`}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={toggleTheme}
+                    aria-label={t('nav.toggleTheme')}
+                    title={t('nav.toggleTheme')}
+                    className={`${glassCircleBtn} text-ink dark:text-gray-100`}
+                  >
+                    {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  </button>
+                  {keyStatus?.connected && (
+                    <span className="inline-flex items-center gap-1.5 px-3 h-9 rounded-full text-xs font-semibold border border-white/60 bg-white/50 text-emerald-700 backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-emerald-300">
+                      <KeyRound className="w-3.5 h-3.5" /> {t('aiGenerate.keyConnected')}
+                    </span>
+                  )}
                 </div>
               </div>
-            </Card>
+              {keyMissing && <KeyMissingBanner />}
 
-            <Card className="space-y-1 divide-y divide-gray-100 dark:divide-gray-800">
-              <div className="pb-2">
-                <h3 className="font-display font-semibold text-ink dark:text-gray-100">{t('aiGenerate.settingsTitle')}</h3>
-                <p className="field-hint mt-0.5">{t('aiGenerate.settingsHint')}</p>
-              </div>
-              <SettingRow title={t('aiGenerate.shuffleQ')} control={<Toggle label={t('aiGenerate.shuffleQ')} checked={!!draft.settings.shuffle_questions} onChange={(v) => toggleDraft('shuffle_questions', v)} />} />
-              <SettingRow title={t('aiGenerate.shuffleO')} control={<Toggle label={t('aiGenerate.shuffleO')} checked={!!draft.settings.shuffle_options} onChange={(v) => toggleDraft('shuffle_options', v)} />} />
-              <SettingRow title={t('aiGenerate.requireLogin')} control={<Toggle label={t('aiGenerate.requireLogin')} checked={!!draft.settings.require_login} onChange={(v) => toggleDraft('require_login', v)} />} />
-              <SettingRow
-                title={t('aiGenerate.limitOnce')}
-                control={
-                  <Toggle
-                    label={t('aiGenerate.limitOnce')}
-                    checked={draft.settings.submission_limit === 'once'}
-                    onChange={(v) => toggleDraft('submission_limit', v ? 'once' : 'unlimited')}
-                  />
-                }
-              />
-              {formType === 'quiz' && (
-                <>
-                  <SettingRow title={t('aiGenerate.leaderboard')} control={<Toggle label={t('aiGenerate.leaderboard')} checked={!!draft.settings.show_leaderboard} onChange={(v) => toggleDraft('show_leaderboard', v)} />} />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
-                    <Input label={t('aiGenerate.timerLabel')} type="number" min="1" max="1440" value={draft.settings.timer_minutes || ''} onChange={(e) => toggleDraft('timer_minutes', e.target.value ? Number(e.target.value) : null)} />
-                    <Select label={t('aiGenerate.scoringMode')} value={draft.settings.scoring_mode || 'auto'} onChange={(e) => toggleDraft('scoring_mode', e.target.value)}>
-                      <option value="auto">{t('aiGenerate.scoringAuto')}</option>
-                      <option value="manual">{t('aiGenerate.scoringManual')}</option>
-                    </Select>
-                  </div>
-                </>
-              )}
-              <SettingRow title={t('aiGenerate.restricted')} control={<Toggle label={t('aiGenerate.restricted')} checked={!!draft.settings.is_restricted} onChange={(v) => toggleDraft('is_restricted', v)} />} />
-              <SettingRow title={t('aiGenerate.history')} control={<Toggle label={t('aiGenerate.history')} checked={draft.settings.show_in_history !== false} onChange={(v) => toggleDraft('show_in_history', v)} />} />
-              {formType === 'quiz' && (
-                <>
-                  <SettingRow title={t('aiGenerate.revealScore')} control={<Toggle label={t('aiGenerate.revealScore')} checked={draft.settings.reveal_score !== false} onChange={(v) => toggleDraft('reveal_score', v)} />} />
-                  <SettingRow title={t('aiGenerate.revealAnswers')} control={<Toggle label={t('aiGenerate.revealAnswers')} checked={draft.settings.reveal_answers !== false} onChange={(v) => toggleDraft('reveal_answers', v)} />} />
-                </>
-              )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
-                <Input label={t('aiGenerate.startsAt')} type="datetime-local" value={toInputDateTime(draft.settings.starts_at)} onChange={(e) => toggleDraft('starts_at', e.target.value || null)} />
-                <Input label={t('aiGenerate.endsAt')} type="datetime-local" value={toInputDateTime(draft.settings.ends_at)} onChange={(e) => toggleDraft('ends_at', e.target.value || null)} helper={t('aiGenerate.scheduleHint')} />
-              </div>
-            </Card>
-
-            <div className={editing ? 'opacity-60 pointer-events-none select-none' : ''} aria-busy={editing}>
-              {draft.sections.map((sec, si) => (
-                <Card key={si} className="space-y-3">
-                  <h3 className="font-display font-semibold text-ink dark:text-gray-100">{si + 1}. {sec.title}</h3>
-                  {sec.questions.map((q, qi) => (
-                    <div key={qi} data-qi={`${si}-${qi}`} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3.5 space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge scheme="blue">{humanizeType(q.type)}</Badge>
-                        {q.is_required && <span className="text-incorrect font-bold">*</span>}
-                        {q.points > 0 && <span className="text-xs text-gray-400">{t('aiGenerate.points', { points: q.points })}</span>}
-                      </div>
-                      <div className="text-sm text-ink dark:text-gray-100"><RichText html={q.question_text} className="rich-text block" /></div>
-                      {q.options?.length > 0 && (
-                        <ul className="space-y-1">
-                          {q.options.map((o, oi) => (
-                            <li key={oi} className={`flex items-start gap-2 text-sm px-2.5 py-1.5 rounded-lg ${o.is_correct ? 'bg-correct-soft text-correct font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
-                              {o.is_correct ? <Check className="w-4 h-4 shrink-0 mt-0.5" /> : <span className="w-4 h-4 shrink-0 mt-0.5 text-center leading-4 text-gray-300">·</span>}
-                              <span className="flex-1 min-w-0 [&>p]:mb-0"><RichText html={o.option_text} className="rich-text" /></span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {(q.type === 'multiple_choice' || q.type === 'checkbox') && (
-                        <label className="flex items-center gap-2.5 pt-1 cursor-pointer">
-                          <Toggle
-                            label={t('aiGenerate.allowOther')}
-                            checked={!!q.allow_other}
-                            onChange={(v) => patchQuestion(si, qi, { allow_other: v })}
-                          />
-                          <span className="min-w-0">
-                            <span className="block text-sm text-gray-600 dark:text-gray-400">{t('aiGenerate.allowOther')}</span>
-                            <span className="block text-xs text-gray-400 dark:text-gray-500">{t('aiGenerate.allowOtherHint')}</span>
+              {step === 2 && (
+                <div className="space-y-5">
+                  <Card className="space-y-4">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <h2 className="font-display font-semibold text-ink dark:text-gray-100">
+                        {t('aiGenerate.stepPolish')}
+                      </h2>
+                      <div className="flex items-center gap-2">
+                        {modelUsed && (
+                          <span className="inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[11px] font-medium border border-white/60 bg-white/50 text-gray-500 backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-gray-400">
+                            <Sparkles className="w-3 h-3" />{modelUsed}
                           </span>
-                        </label>
-                      )}
-                        {formType === 'quiz' && (q.type === 'essay' || q.type === 'short_answer') && (
-                         <div className="pt-1">
-                           <AnswerKeyEditor
-                             value={q.answer_key || ''}
-                             onChange={(value) => patchQuestion(si, qi, { answer_key: value })}
-                           />
-                         </div>
-                       )}
+                        )}
+                      </div>
                     </div>
-                  ))}
-                </Card>
-              ))}
-            </div>
+                    <SettingChips settings={draft.settings} />
+                    <IgnoredBox items={ignored} />
+                    <CountWarnBox items={warnings} />
+                    <div>
+                      <span className="field-label">{t('aiGenerate.titleLabel')}</span>
+                      <RichTextEditor value={title} onChange={setTitle} minHeight={60} />
+                    </div>
+                    <div>
+                      <span className="field-label">{t('aiGenerate.descLabel')}</span>
+                      <RichTextEditor value={description} onChange={setDescription} minHeight={80} />
+                    </div>
+                    <div>
+                      <span className="field-label">{t('aiGenerate.typeLabel')}</span>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { value: 'form', label: t('aiGenerate.typeForm'), desc: t('aiGenerate.typeFormDesc') },
+                          { value: 'quiz', label: t('aiGenerate.typeQuiz'), desc: t('aiGenerate.typeQuizDesc') },
+                        ].map((o) => (
+                          <button
+                            key={o.value}
+                            type="button"
+                            onClick={() => setFormType(o.value)}
+                            aria-pressed={formType === o.value}
+                            className={`text-left px-4 py-3.5 rounded-xl border-2 transition-all ${formType === o.value ? 'border-primary bg-primary-50 shadow-chip' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-ink-900 hover:border-gray-300 dark:hover:border-gray-600'}`}
+                          >
+                            <span className={`block text-sm font-semibold ${formType === o.value ? 'text-primary-700' : 'text-ink dark:text-gray-100'}`}>{o.label}</span>
+                            <span className="block text-xs text-gray-400 dark:text-gray-500 mt-0.5">{o.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </Card>
 
-            {error && <p className="field-error">{error}</p>}
+                  <Card className="space-y-1 divide-y divide-gray-100 dark:divide-gray-800">
+                    <div className="pb-2">
+                      <h3 className="font-display font-semibold text-ink dark:text-gray-100">{t('aiGenerate.settingsTitle')}</h3>
+                      <p className="field-hint mt-0.5">{t('aiGenerate.settingsHint')}</p>
+                    </div>
+                    <SettingRow title={t('aiGenerate.shuffleQ')} control={<Toggle label={t('aiGenerate.shuffleQ')} checked={!!draft.settings.shuffle_questions} onChange={(v) => toggleDraft('shuffle_questions', v)} />} />
+                    <SettingRow title={t('aiGenerate.shuffleO')} control={<Toggle label={t('aiGenerate.shuffleO')} checked={!!draft.settings.shuffle_options} onChange={(v) => toggleDraft('shuffle_options', v)} />} />
+                    <SettingRow title={t('aiGenerate.requireLogin')} control={<Toggle label={t('aiGenerate.requireLogin')} checked={!!draft.settings.require_login} onChange={(v) => toggleDraft('require_login', v)} />} />
+                    <SettingRow
+                      title={t('aiGenerate.limitOnce')}
+                      control={
+                        <Toggle
+                          label={t('aiGenerate.limitOnce')}
+                          checked={draft.settings.submission_limit === 'once'}
+                          onChange={(v) => toggleDraft('submission_limit', v ? 'once' : 'unlimited')}
+                        />
+                      }
+                    />
+                    {formType === 'quiz' && (
+                      <>
+                        <SettingRow title={t('aiGenerate.leaderboard')} control={<Toggle label={t('aiGenerate.leaderboard')} checked={!!draft.settings.show_leaderboard} onChange={(v) => toggleDraft('show_leaderboard', v)} />} />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
+                          <Input label={t('aiGenerate.timerLabel')} type="number" min="1" max="1440" value={draft.settings.timer_minutes || ''} onChange={(e) => toggleDraft('timer_minutes', e.target.value ? Number(e.target.value) : null)} />
+                          <Select label={t('aiGenerate.scoringMode')} value={draft.settings.scoring_mode || 'auto'} onChange={(e) => toggleDraft('scoring_mode', e.target.value)}>
+                            <option value="auto">{t('aiGenerate.scoringAuto')}</option>
+                            <option value="manual">{t('aiGenerate.scoringManual')}</option>
+                          </Select>
+                        </div>
+                      </>
+                    )}
+                    <SettingRow title={t('aiGenerate.restricted')} control={<Toggle label={t('aiGenerate.restricted')} checked={!!draft.settings.is_restricted} onChange={(v) => toggleDraft('is_restricted', v)} />} />
+                    <SettingRow title={t('aiGenerate.history')} control={<Toggle label={t('aiGenerate.history')} checked={draft.settings.show_in_history !== false} onChange={(v) => toggleDraft('show_in_history', v)} />} />
+                    {formType === 'quiz' && (
+                      <>
+                        <SettingRow title={t('aiGenerate.revealScore')} control={<Toggle label={t('aiGenerate.revealScore')} checked={draft.settings.reveal_score !== false} onChange={(v) => toggleDraft('reveal_score', v)} />} />
+                        <SettingRow title={t('aiGenerate.revealAnswers')} control={<Toggle label={t('aiGenerate.revealAnswers')} checked={draft.settings.reveal_answers !== false} onChange={(v) => toggleDraft('reveal_answers', v)} />} />
+                      </>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
+                      <Input label={t('aiGenerate.startsAt')} type="datetime-local" value={toInputDateTime(draft.settings.starts_at)} onChange={(e) => toggleDraft('starts_at', e.target.value || null)} />
+                      <Input label={t('aiGenerate.endsAt')} type="datetime-local" value={toInputDateTime(draft.settings.ends_at)} onChange={(e) => toggleDraft('ends_at', e.target.value || null)} helper={t('aiGenerate.scheduleHint')} />
+                    </div>
+                  </Card>
 
-            <div className="sticky bottom-[var(--mobile-nav-offset,4.5rem)] md:bottom-4 z-40 mt-2 pb-2">{heroComposer}</div>
-              </div>
-            )}
-          </motion.div>
-        )}
+                  <div className={editing ? 'opacity-60 pointer-events-none select-none' : ''} aria-busy={editing}>
+                    {draft.sections.map((sec, si) => (
+                      <Card key={si} className="space-y-3">
+                        <h3 className="font-display font-semibold text-ink dark:text-gray-100">{si + 1}. {sec.title}</h3>
+                        {sec.questions.map((q, qi) => (
+                          <div key={qi} data-qi={`${si}-${qi}`} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3.5 space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge scheme="blue">{humanizeType(q.type)}</Badge>
+                              {q.is_required && <span className="text-incorrect font-bold">*</span>}
+                              {q.points > 0 && <span className="text-xs text-gray-400">{t('aiGenerate.points', { points: q.points })}</span>}
+                            </div>
+                            <div className="text-sm text-ink dark:text-gray-100"><RichText html={q.question_text} className="rich-text block" /></div>
+                            {q.options?.length > 0 && (
+                              <ul className="space-y-1">
+                                {q.options.map((o, oi) => (
+                                  <li key={oi} className={`flex items-start gap-2 text-sm px-2.5 py-1.5 rounded-lg ${o.is_correct ? 'bg-correct-soft text-correct font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
+                                    {o.is_correct ? <Check className="w-4 h-4 shrink-0 mt-0.5" /> : <span className="w-4 h-4 shrink-0 mt-0.5 text-center leading-4 text-gray-300">·</span>}
+                                    <span className="flex-1 min-w-0 [&>p]:mb-0"><RichText html={o.option_text} className="rich-text" /></span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            {(q.type === 'multiple_choice' || q.type === 'checkbox') && (
+                              <label className="flex items-center gap-2.5 pt-1 cursor-pointer">
+                                <Toggle
+                                  label={t('aiGenerate.allowOther')}
+                                  checked={!!q.allow_other}
+                                  onChange={(v) => patchQuestion(si, qi, { allow_other: v })}
+                                />
+                                <span className="min-w-0">
+                                  <span className="block text-sm text-gray-600 dark:text-gray-400">{t('aiGenerate.allowOther')}</span>
+                                  <span className="block text-xs text-gray-400 dark:text-gray-500">{t('aiGenerate.allowOtherHint')}</span>
+                                </span>
+                              </label>
+                            )}
+                            {formType === 'quiz' && (q.type === 'essay' || q.type === 'short_answer') && (
+                              <div className="pt-1">
+                                <AnswerKeyEditor
+                                  value={q.answer_key || ''}
+                                  onChange={(value) => patchQuestion(si, qi, { answer_key: value })}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </Card>
+                    ))}
+                  </div>
+
+                  {error && <p className="field-error">{error}</p>}
+
+                  <div className="sticky bottom-[var(--mobile-nav-offset,4.5rem)] md:bottom-4 z-40 mt-2 pb-2">{heroComposer}</div>
+                </div>
+              )}
+            </motion.div>
+          )}
         </AnimatePresence>
       </motion.div>
     </div>
