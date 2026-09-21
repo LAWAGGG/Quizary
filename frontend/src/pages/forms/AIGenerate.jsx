@@ -210,6 +210,12 @@ export default function AIGenerate() {
     return () => clearInterval(id)
   }, [generating])
 
+  useEffect(() => {
+    const el = promptRef.current
+    if (!el) return
+    setPromptExpanded(el.scrollHeight > 24 * 3 + 4)
+  }, [prompt, busy])
+
   const patchSettings = (patch) => setDraft((d) => (d ? { ...d, settings: { ...d.settings, ...patch } } : d))
 
   // Ubah 1 soal dalam draf (si/qi = indeks section/question).
@@ -603,7 +609,7 @@ export default function AIGenerate() {
         className={`relative min-w-0 rounded-3xl border bg-white/20 p-2 backdrop-blur-2xl backdrop-saturate-150 transition-[border-color,box-shadow] duration-300 ease-out dark:border-white/20 dark:bg-white/10 dark:shadow-[0_24px_70px_-20px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.2)] ${draft ? 'border-primary/25 shadow-[0_24px_70px_-18px_rgba(108,92,231,0.55),0_4px_16px_rgba(15,23,42,0.10),inset_0_1px_1px_rgba(255,255,255,0.9)] ring-1 ring-primary/15' : 'border-white/70 shadow-[0_24px_70px_-20px_rgba(108,92,231,0.45),inset_0_1px_1px_rgba(255,255,255,0.8),inset_0_-1px_1px_rgba(255,255,255,0.25)] ring-1 ring-white/50'} ${dragActive ? 'border-primary ring-4 ring-primary/20' : ''}`}
       >
         {dragActive && (
-          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-full border-2 border-dashed border-primary bg-primary-50/90 backdrop-blur-sm dark:bg-primary-950/90" aria-hidden>
+          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-primary bg-primary-50/90 backdrop-blur-sm dark:bg-primary-950/90" aria-hidden>
             <Paperclip className="h-6 w-6 text-primary-600 dark:text-primary-300" />
             <p className="text-sm font-semibold text-primary-700 dark:text-primary-200">{t('aiGenerate.dropFiles')}</p>
           </div>
@@ -649,26 +655,27 @@ export default function AIGenerate() {
           </div>
         ) : (
           <>
-            <div className="flex min-w-0 flex-1 items-end gap-1 overflow-hidden rounded-full bg-white/90 py-2 pl-2 pr-3 shadow-[inset_0_2px_8px_rgba(15,23,42,0.06),0_1px_2px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-ink-900/85">
+            <div className={`flex min-w-0 flex-1 items-center gap-1 overflow-hidden bg-white/90 py-2 pl-2 pr-3 shadow-[inset_0_2px_8px_rgba(15,23,42,0.06),0_1px_2px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-[border-radius] duration-200 dark:bg-ink-900/85 ${promptExpanded ? 'rounded-3xl' : 'rounded-full'}`}>
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={files.length >= MAX_FILES}
                 aria-label={t('aiGenerate.filesLabel')}
                 title={t('aiGenerate.filesLabel')}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-40 dark:text-gray-500 dark:hover:bg-ink-800 dark:hover:text-gray-200"
+                className="flex h-9 w-9 shrink-0 self-center items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-40 dark:text-gray-500 dark:hover:bg-ink-800 dark:hover:text-gray-200"
               >
                 <Paperclip className="h-[18px] w-[18px]" />
               </button>
               <textarea
                 id="ai-prompt"
+                ref={promptRef}
                 value={prompt}
                 onChange={(e) => { setPrompt(e.target.value); setError('') }}
                 onKeyDown={handleComposerKey}
                 placeholder={draft ? t('aiGenerate.editPlaceholder') : t('aiGenerate.promptComposerPlaceholder')}
                 rows={1}
                 aria-busy={busy}
-                className="max-h-[200px] min-h-9 w-full min-w-0 flex-1 break-all resize-none self-center bg-transparent text-[15px] leading-6 text-ink placeholder:text-gray-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-500 [field-sizing:content]"
+                className="max-h-[200px] min-h-9 w-full min-w-0 flex-1 break-all resize-none self-center bg-transparent py-1.5 text-[15px] leading-6 text-ink placeholder:text-gray-400 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-500 [field-sizing:content]"
               />
             </div>
             <button
