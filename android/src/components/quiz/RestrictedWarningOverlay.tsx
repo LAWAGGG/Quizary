@@ -16,8 +16,7 @@ export function RestrictedWarningOverlay({ visible, countdown, themeColor, onRee
   const base = themeColor || '#6C5CE7';
 
   return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0B0F19' }]} pointerEvents="box-none">
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: base, opacity: 0.14 }]} />
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0F172A', zIndex: 99999 }]} pointerEvents="auto">
       <View style={styles.center}>
         {/* Locked icon badge */}
         <View style={styles.iconCircle}>

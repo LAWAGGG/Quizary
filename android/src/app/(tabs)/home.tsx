@@ -61,7 +61,7 @@ export default function HomeScreen() {
           .map((it: any) => {
             if (it.status === 'in_progress' && isSubmissionExpired(it)) {
               finalizeSubmission(it.id).catch(() => {});
-              return { ...it, status: 'auto_submitted' };
+              return { ...it, status: 'auto_submitted', submitted_at: it.expired_at || it.submitted_at };
             }
             return it;
           });
@@ -164,8 +164,8 @@ export default function HomeScreen() {
   const openSubDetail = async (subItem: any) => {
     const isExpired = isSubmissionExpired(subItem);
 
-    // Khusus in_progress yang belum expired: langsung lanjut mengerjakan
-    if (subItem.status === 'in_progress' && !isExpired) {
+    // Khusus in_progress atau locked yang belum expired: langsung lanjut mengerjakan / buka lock screen
+    if ((subItem.status === 'in_progress' || subItem.status === 'locked') && !isExpired) {
       const shortCode = subItem.short_code;
       if (shortCode) {
         router.push({ pathname: '/quiz', params: { shortCode: shortCode, resumeSubmissionId: String(subItem.id) } } as any);

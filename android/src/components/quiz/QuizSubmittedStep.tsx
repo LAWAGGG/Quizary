@@ -130,7 +130,10 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
   const formTitle = publicForm?.title || resultData?.form_title || '';
   const cleanTitle = stripHtmlTags(formTitle);
   const isCheating = subDetail?.status === 'cheating' || resultData?.status === 'cheating';
-  const submittedAt = subDetail?.submitted_at || resultData?.submitted_at;
+  const isAutoSubmitted = subDetail?.status === 'auto_submitted' || resultData?.status === 'auto_submitted';
+  const submittedAt = isAutoSubmitted
+    ? (subDetail?.expired_at || resultData?.expired_at || subDetail?.submitted_at || resultData?.submitted_at)
+    : (subDetail?.submitted_at || resultData?.submitted_at);
   const totalQuestions = answersList.length || publicForm?.questions?.length || resultData?.questions?.length || 0;
 
   const themeColor =
@@ -384,8 +387,8 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
                 <View style={styles.reviewList}>
                   {answersList.map((a: any, i: number) => {
                     const isCorrect = a.is_correct;
-                    const cleanQText = stripHtmlTags(a.question_text || '');
-                    const mediaUri = extractMediaUrl(a, a.question_text || '');
+                    const rawQText = a.question_text || '';
+                    const mediaUri = extractMediaUrl(a, rawQText);
                     const isAudio = isAudioUrl(mediaUri);
 
                     return (
@@ -412,7 +415,10 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
                             <Text style={[styles.qIndexText, { color: colors.textSub }]}>
                               {language === 'ID' ? `Pertanyaan ${i + 1}` : `Question ${i + 1}`}
                             </Text>
-                            <Text style={[styles.qText, { color: colors.text }]}>{cleanQText}</Text>
+                            <RichTextRenderer
+                              html={rawQText}
+                              style={{ color: colors.text, fontSize: 15 * (publicForm?.settings?.font_scale || 1), lineHeight: 21, fontWeight: '600' }}
+                            />
                             
                             {mediaUri && (
                               isAudio ? (

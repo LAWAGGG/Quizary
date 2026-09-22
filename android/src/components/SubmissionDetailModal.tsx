@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Modal, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
-import { stripHtmlTags } from './RichTextRenderer';
+import { RichTextRenderer, stripHtmlTags } from './RichTextRenderer';
 
 interface SubmissionDetailModalProps {
   visible: boolean;
@@ -138,7 +138,6 @@ export function SubmissionDetailModal({
 
                   const defaultQTitle = language === 'ID' ? `Soal ${i + 1}` : `Question ${i + 1}`;
                   const rawQText = qOrAns.question_text || qOrAns.title || ans?.question_text || defaultQTitle;
-                  const cleanQText = stripHtmlTags(rawQText);
 
                   let userAnsText = '';
                   if (ans) {
@@ -182,10 +181,16 @@ export function SubmissionDetailModal({
                   const points = ans?.points_earned;
 
                   return (
-                    <View key={qId || i} style={[styles.reviewItem, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.inputBorder }]}>
-                      <Text style={[styles.reviewQText, { color: colors.text, fontSize: 14 * fontSizeScale }]}>
-                        {i + 1}. {cleanQText}
-                      </Text>
+                    <View key={`sub-detail-${qId}-${i}`} style={[styles.reviewItem, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.inputBorder }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
+                        <Text style={[styles.reviewQIndex, { color: colors.text, fontSize: 14 * fontSizeScale }]}>{i + 1}.</Text>
+                        <View style={{ flex: 1 }}>
+                          <RichTextRenderer
+                            html={rawQText}
+                            style={{ color: colors.text, fontSize: 14 * fontSizeScale, lineHeight: 20 }}
+                          />
+                        </View>
+                      </View>
 
                       {userAnsText ? (
                         <View style={{ marginTop: 8 }}>
@@ -235,6 +240,7 @@ const styles = StyleSheet.create({
 
   reviewHeading: { fontWeight: 'bold', marginBottom: 10 },
   reviewItem: { borderRadius: 12, padding: 14, borderWidth: 1, marginBottom: 10 },
+  reviewQIndex: { fontWeight: '700', lineHeight: 20 },
   reviewQText: { fontWeight: '600', lineHeight: 20 },
   ansLabel: { marginTop: 2 },
   ansVal: { fontWeight: 'bold', marginTop: 2 },

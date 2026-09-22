@@ -3,10 +3,35 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
 import { isSubmissionExpired } from '../utils/api';
+import { parseServerTime } from '../utils/serverClock';
 
 interface SubmissionHistoryCardProps {
   item: any;
   onPress: () => void;
+}
+
+function formatWibDate(ms: number) {
+  const d = new Date(ms);
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const year = d.getUTCFullYear();
+  const hours = String((d.getUTCHours() + 7) % 24).padStart(2, '0');
+  const mins = String(d.getUTCMinutes()).padStart(2, '0');
+  const secs = String(d.getUTCSeconds()).padStart(2, '0');
+  return `${day}-${month}-${year} ${hours}:${mins}:${secs}`;
+}
+
+function getTimerExpiredAt(sub: any) {
+  if (sub?.expired_at) return sub.expired_at;
+  const started = sub?.started_at || sub?.created_at;
+  const durationSec = sub?.timer_seconds || (sub?.time_limit ? sub.time_limit * 60 : null) || sub?.form?.timer_seconds || (sub?.form?.time_limit ? sub.form.time_limit * 60 : null);
+  if (started && durationSec) {
+    const startTime = parseServerTime(started);
+    if (startTime != null) {
+      return formatWibDate(startTime + durationSec * 1000);
+    }
+  }
+  return null;
 }
 
 export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardProps) {
@@ -18,6 +43,7 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
   const isAutoSubmitted = item.status === 'auto_submitted' || (item.status === 'in_progress' && isExpired);
   const isCheating = item.status === 'cheating';
   const isLocked = item.status === 'locked';
+  const computedExpiredAt = getTimerExpiredAt(item);
 
   const getStatusLabel = () => {
     if (isCheating) {
@@ -72,7 +98,9 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
   let dateStr = '';
   const rawDate = isInProgress
     ? (item.started_at || item.created_at || item.updated_at)
-    : (item.submitted_at || item.updated_at || item.created_at);
+    : (isAutoSubmitted || isExpired)
+      ? (computedExpiredAt || item.submitted_at || item.updated_at || item.created_at)
+      : (item.submitted_at || item.updated_at || item.created_at);
 
   if (typeof rawDate === 'string') {
     dateStr = rawDate;
