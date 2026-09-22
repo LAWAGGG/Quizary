@@ -14,6 +14,7 @@ import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useTranslation } from 'react-i18next'
 import { Button, Badge, ConfirmModal } from '../../components/ui'
+import { stripTags } from '../../lib/sanitize'
 
 const QUESTION_TYPE_KEYS = {
   multiple_choice: 'questionBuilder.typeMultipleChoice',
@@ -28,15 +29,7 @@ const QUESTION_TYPE_KEYS = {
   file_upload: 'questionBuilder.typeFileUpload',
 }
 
-const textOf = (html) => {
-  if (!html) return ''
-  try {
-    const text = new DOMParser().parseFromString(String(html), 'text/html').body.textContent || ''
-    return text.replace(/\s+/g, ' ').trim()
-  } catch {
-    return String(html).replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
-  }
-}
+const textOf = (html) => stripTags(html || '')
 
 function SortableSectionCard({ section, questions, canDelete, onDelete, editing, editDraft, setEditDraft, onEditStart, onEditSave, onEditCancel, collapsed, onToggleCollapse, onMove, isFirst, isLast, selectedIds, onToggleQuestion, onToggleSection, numberById }) {
   const { t } = useTranslation()

@@ -4,6 +4,7 @@ Alur: prompt + file referensi (teks) -> Gemini (JSON mode) -> draf yang
 sudah disanitasi. Draf TIDAK langsung jadi form — creator mereview lalu
 POST /api/ai/accept yang memvalidasi ulang memakai skema existing.
 """
+import copy
 import html
 import io
 import json
@@ -341,14 +342,132 @@ def _parse_requested_count(text: str | None) -> int | None:
     return max(1, min(MAX_QUESTIONS, max(nums)))
 
 
-def _output_budget(user_text: str | None) -> int:
+def _output_budget(user_text: str | None, base_total: int | None = None) -> int:
     """Budget maxOutputTokens dinamis: hemat untuk request kecil, cukup untuk
-    soal kode multiline. Per soal kode ~450 token, non-kode ~300."""
+    soal kode multiline. Per soal kode ~450 token, non-kode ~300.
+
+    base_total = jumlah soal akhir yang diharapkan (mis. edit-tambah:
+    soal lama + N baru) — budget dihitung dari total itu agar output muat
+    dan tak terpotong di tengah. Tetap cap 16384."""
     n = _parse_requested_count(user_text) or 10
+    if base_total:
+        n = max(n, base_total)
     per_q = 450 if detect_code_intent(user_text) is not None else 300
     raw = 800 + n * per_q
     stepped = ((raw + 1023) // 1024) * 1024
     return max(4096, min(16384, stepped))
+
+
+_APPEND_RE = re.compile(r"(tambah(?:kan|lah)?|nambah|append|\badd\b)", re.IGNORECASE)
+_APPEND_COUNT_RE = re.compile(
+    r"(?:tambah(?:kan|lah)?|nambah|append|\badd\b)\s*(\d{1,3})",
+    re.IGNORECASE,
+)
+
+
+def is_append_instruction(text: str | None) -> bool:
+    """True bila instruksi minta MENAMBAH soal (ID/EN)."""
+    return bool(_APPEND_RE.search(text or ""))
+
+
+def parse_requested_add(text: str | None) -> int | None:
+    """Ambil N dari instruksi tambah ('tambah 20 soal', 'add 5 questions').
+
+    Clamp 1-50 (sinkron MAX_QUESTIONS). None bila tak disebut eksplisit.
+    Beda dari _parse_requested_count: hanya hitung angka setelah kata tambah.
+    """
+    if not text:
+        return None
+    nums = [int(m.group(1)) for m in _APPEND_COUNT_RE.finditer(text)]
+    if not nums:
+        return None
+    return max(1, min(MAX_QUESTIONS, max(nums)))
+
+
+def count_draft_questions(draft: dict | None) -> int:
+    """Hitung total soal dalam draf (sections -> questions)."""
+    if not isinstance(draft, dict):
+        return 0
+    total = 0
+    for s in (draft.get("sections") or []):
+        if isinstance(s, dict):
+            qs = s.get("questions") or []
+            total += sum(1 for q in qs if isinstance(q, dict))
+    return total
+
+
+def _question_key(q: dict) -> str:
+    """Kunci dedup soal: teks tanpa tag, rapatkan spasi, lowercase."""
+    t = str((q or {}).get("question_text") or "") if isinstance(q, dict) else ""
+    t = re.sub(r"<[^>]*>", " ", t)
+    t = html.unescape(t)
+    return re.sub(r"\s+", " ", t).strip().lower()
+
+
+def merge_append_draft(old_draft: dict, new_draft: dict, instruction: str | None) -> dict:
+    """Gabung hasil edit-tambah: soal lama utuh + soal benar-benar baru.
+
+    Bila instruksi bukan tambah -> kembalikan new_draft apa adanya.
+    Bila hasil tak lebih banyak dari draf awal (susut/terpotong) -> raise
+    AiFailed agar router 502 dan draf lama di client tidak tertimpa.
+    Soal lama dipakai verbatim dari old_draft (bukan teks returned LLM)
+    agar rephrase/duplikat tak merusak data yang sudah benar.
+    """
+    if not is_append_instruction(instruction):
+        return new_draft
+    old_n = count_draft_questions(old_draft)
+    new_n = count_draft_questions(new_draft)
+    if new_n <= old_n:
+        raise AiFailed(
+            f"AI mengembalikan {new_n} soal dari {old_n} soal awal "
+            "(output terpotong, draf lama tidak diubah). "
+            "Minta tambah batch kecil (5-10 soal) lalu generate ulang."
+        )
+    old_keys = set()
+    for s in ((old_draft or {}).get("sections") or []):
+        if isinstance(s, dict):
+            for q in (s.get("questions") or []):
+                if isinstance(q, dict):
+                    old_keys.add(_question_key(q))
+    fresh: list[dict] = []
+    for s in ((new_draft or {}).get("sections") or []):
+        if isinstance(s, dict):
+            for q in (s.get("questions") or []):
+                if isinstance(q, dict) and _question_key(q) not in old_keys:
+                    fresh.append(copy.deepcopy(q))
+    if not fresh:
+        raise AiFailed(
+            f"AI tidak menambah soal baru (tetap {old_n} soal, draf lama "
+            "tidak diubah). Coba instruksi lebih spesifik lalu generate ulang."
+        )
+    room = MAX_QUESTIONS - old_n
+    if room <= 0:
+        raise AiFailed(
+            f"Draf sudah {old_n} soal (maksimal {MAX_QUESTIONS}). "
+            "Hapus sebagian soal dulu sebelum menambah."
+        )
+    fresh = fresh[:room]
+    merged = copy.deepcopy(old_draft)
+    merged_secs = merged.get("sections") or []
+    last = merged_secs[-1]
+    last.setdefault("questions", []).extend(fresh)
+    merged["sections"] = merged_secs
+    # Meta (title/settings) ikut hasil baru; sections = hasil merge.
+    if isinstance(new_draft, dict):
+        for k in ("title", "description", "type", "settings"):
+            if k in new_draft:
+                merged[k] = copy.deepcopy(new_draft[k])
+    added = len(fresh)
+    requested = parse_requested_add(instruction)
+    warns = list((new_draft.get("warnings") or []) if isinstance(new_draft, dict) else [])
+    if requested and added < requested:
+        warns.append(
+            f"Minta tambah {requested} soal, AI menambah {added}. "
+            "Generate sisa soal terpisah bila kurang."
+        )
+    merged["ignored"] = list((new_draft.get("ignored") or []) if isinstance(new_draft, dict) else [])
+    merged["warnings"] = warns
+    return merged
 
 
 def detect_code_intent(text: str | None) -> str | list[str] | None:
@@ -446,6 +565,12 @@ def build_edit_text(title: str, form_type: str, instruction: str, draft: dict, p
         "Operasi didukung: hapus 1 soal, hapus semua soal, ubah 1 soal, "
         "ubah semua soal, tambah N soal. Hapus semua = kembalikan sections "
         "dengan questions kosong. Jangan karang di luar instruksi.",
+        "ATURAN TAMBAH (bila instruksi minta TAMBAH/menambah soal): "
+        "PERTAHANKAN semua soal yang sudah ada PERSIS APA ADANYA "
+        "(jangan ubah, jangan hapus, jangan rephrase, jangan susutkan jumlahnya), "
+        "lalu TAMBAHKAN soal baru di akhir section terkait. Jumlah soal akhir "
+        "WAJIB lebih banyak dari draf awal — JANGAN PERNAH kembalikan lebih "
+        "sedikit soal dari draf awal saat instruksi adalah menambah.",
         f"Instruksi creator:\n{instruction}",
     ]
     hist = [p.strip() for p in (previous_prompts or []) if p and p.strip()][:5]
@@ -654,7 +779,7 @@ def _parse_gemini_text(data: dict) -> dict:
     return parsed
 
 
-def call_gemini(user_text: str, api_key: str, user_id: int | None = None) -> tuple[dict, str]:
+def call_gemini(user_text: str, api_key: str, user_id: int | None = None, expected_total: int | None = None) -> tuple[dict, str]:
     """Panggil Gemini JSON mode. Balik (draf, model_terpakai).
 
     Key dikirim via header (tak muncul di URL/log). Tiap model dicoba 1x;
@@ -662,15 +787,19 @@ def call_gemini(user_text: str, api_key: str, user_id: int | None = None) -> tup
     lanjut ke fallback — worst-case ~2 mnt (2 model x 1 coba x 60 dtk) agar
     muat di timeout proxy/frontend. 401/403 (key salah) dan 400 langsung
     gagal tanpa buang kuota coba — fallback pakai key yang sama.
+    expected_total = jumlah soal akhir yang diharapkan (edit-tambah:
+    soal lama + N baru) agar budget output muat dan tak terpotong.
     """
     if not api_key or not api_key.strip():
         raise AiNotConfigured("API key Gemini belum diatur. Masukkan di Pengaturan.")
     api_key = api_key.strip()
     # ponytail: guard estimasi token sebelum panggil
     est_tokens = len(user_text) // 4 + 8192
+    if expected_total:
+        est_tokens += expected_total * 300 // 4
     if est_tokens > 100_000:
         raise AiFailed("Prompt + file referensi terlalu panjang untuk 20 soal. Coba 10 soal per batch atau kurangi teks passage.")
-    budget = _output_budget(user_text)
+    budget = _output_budget(user_text, expected_total)
     payload = {
         "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION}]},
         "contents": [{"parts": [{"text": user_text}]}],
@@ -1005,6 +1134,25 @@ def _merge_adjacent_fences(text: str) -> str:
     return "".join(out)
 
 
+def _normalize_ai_entities(s: str) -> str:
+    """Decode entitas HTML dari output AI sebelum escape.
+
+    Gemini kadang mengembalikan teks yang sudah ter-escape
+    (mis. "&#039;", "&quot;", "&amp;") — tanpa ini html.escape di bawah
+    meng-escape ulang "&" jadi "&amp;#039;" (double-escape) sehingga tampil
+    mentah di preview. Loop hingga stabil untuk data escape-ganda.
+    Idempotent: teks polos tanpa entitas tidak berubah; "&lt;tag&gt;" balik
+    jadi "<tag>" lalu di-escape lagi jadi "&lt;tag&gt;" (tetap literal).
+    """
+    prev = s or ""
+    for _ in range(3):
+        cur = html.unescape(prev)
+        if cur == prev:
+            break
+        prev = cur
+    return prev
+
+
 def _rich_lite_to_html(text: str, code_lang: str = "plain", strict_code: bool = False) -> str:
     """Ubah konvensi rich-lite AI -> HTML allowlist frontend.
 
@@ -1016,6 +1164,7 @@ def _rich_lite_to_html(text: str, code_lang: str = "plain", strict_code: bool = 
     Baris kode sebaris (AI lupa fence) otomatis dibungkus fence; strict_code
     (soal coding) pakai ambang rendah agar kode 1-baris ikut tertangkap.
     """
+    text = _normalize_ai_entities(text)
     text = _wrap_unfenced_code_lines(text, code_lang, strict_code)
     # AI bandel: banyak fence 1-baris berurutan -> gabung jadi satu blok agar
     # tidak tumpang-tindih. Hanya teks polos di antaranya yang digabung juga;
@@ -1173,10 +1322,10 @@ def sanitize_draft(raw: dict, form_type: str = "auto", prompt_text: str = "") ->
         timer = None
     sub = settings.get("submission_limit")
     is_quiz_type = resolved_type == "quiz"
-    ai_title = html.unescape(re.sub(r"<[^>]*>", "", str(raw.get("title") or ""))).strip()[:1000]
+    ai_title = re.sub(r"<[^>]*>", "", _normalize_ai_entities(str(raw.get("title") or ""))).strip()[:1000]
     if not ai_title:
         ai_title = " ".join((prompt_text or "").split())[:80] or "Form tanpa judul"
-    ai_desc = html.unescape(re.sub(r"<[^>]*>", "", str(raw.get("description") or ""))).strip()[:5000] or None
+    ai_desc = re.sub(r"<[^>]*>", "", _normalize_ai_entities(str(raw.get("description") or ""))).strip()[:5000] or None
 
     def _dt(v):
         s = str(v or "").strip()

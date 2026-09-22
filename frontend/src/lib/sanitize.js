@@ -44,8 +44,26 @@ export function decodeEntities(s = '') {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
+}
+
+/** Collapse satu level escape-ganda pada referensi entitas
+ *  (`&amp;#039;` → `&#039;`, `&amp;quot;` → `&quot;`, `&amp;amp;` → `&amp;`).
+ *  Aman: `&amp;lt;` → `&lt;` (tetap literal, tidak jadi tag).
+ *  Untuk data lama yang tersimpan double-escape sebelum fix backend —
+ *  data baru sudah single-escape sehingga fungsi ini no-op. */
+const DOUBLE_ESCAPED_ENTITY_RE = /&amp;(#\d+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]+);/g
+export function normalizeEntities(s = '') {
+  let prev = String(s || '')
+  for (let i = 0; i < 3; i++) {
+    const cur = prev.replace(DOUBLE_ESCAPED_ENTITY_RE, '&$1;')
+    if (cur === prev) break
+    prev = cur
+  }
+  return prev
 }
 
 const HAS_TAG_RE = /<[a-zA-Z][^>]*>/
@@ -86,7 +104,7 @@ export function plainToHtml(text = '') {
 
 /** Buang tag HTML → teks polos (untuk URL param, nama file, teks 1 baris). */
 export function stripTags(html = '') {
-  const raw = String(html || '')
+  const raw = normalizeEntities(String(html || ''))
   const hadTags = HAS_TAG_RE.test(raw)
   let text = decodeEntities(raw.replace(/<[^>]*>/g, ' '))
   if (!hadTags && HAS_TAG_RE.test(text)) {

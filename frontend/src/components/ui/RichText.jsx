@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'react'
 import renderMathInElement from 'katex/contrib/auto-render'
 import 'katex/dist/katex.min.css'
-import { sanitizeHtml, plainToHtml } from '../../lib/sanitize'
+import { sanitizeHtml, plainToHtml, normalizeEntities } from '../../lib/sanitize'
 
 const HAS_TAG_RE = /<[a-zA-Z][^>]*>/
 
@@ -29,7 +29,7 @@ export function RichText({ html, className }) {
   useLayoutEffect(() => {
     if (!ref.current || prevHtmlRef.current === html) return
     prevHtmlRef.current = html
-    const raw = String(html || '')
+    const raw = normalizeEntities(String(html || ''))
     // Plain-text (import docx) tanpa tag: \n/tab/spasi-awal collapse di browser
     // → konversi dulu ke <br>/&nbsp; agar indentasi tampil. HTML kaya utuh.
     ref.current.innerHTML = HAS_TAG_RE.test(raw) ? sanitizeHtml(raw) : sanitizeHtml(plainToHtml(raw))

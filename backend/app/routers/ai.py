@@ -30,8 +30,12 @@ from app.services.ai_generate import (
     build_edit_text,
     build_user_text,
     call_gemini,
+    count_draft_questions,
     detect_gibberish,
     extract_ref_text,
+    is_append_instruction,
+    merge_append_draft,
+    parse_requested_add,
     sanitize_draft,
     truncate_refs,
 )
@@ -318,12 +322,22 @@ async def ai_edit(request: Request, user: User = Depends(get_current_user), db: 
     full_instruction = instruction
     if refs:
         full_instruction = instruction + "\n\n" + "\n\n".join(f"--- Materi tambahan {n} ---\n{t}" for n, t in refs)
+    # Edit-tambah: budget output sadar total akhir (soal lama + N baru) agar
+    # tak terpotong di tengah; LLM juga diperintah pertahankan semua soal lama.
+    append_mode = is_append_instruction(full_instruction)
+    expected_total = None
+    if append_mode:
+        old_count = count_draft_questions(body_draft)
+        add_n = parse_requested_add(full_instruction)
+        if add_n:
+            expected_total = min(50, old_count + add_n)
     try:
         raw, model_used = await asyncio.to_thread(
             call_gemini,
             build_edit_text(body_title, body_type, full_instruction, body_draft, body_prev),
             api_key,
             user.id,
+            expected_total,
         )
         try:
             draft = await asyncio.to_thread(sanitize_draft, raw, body_type, full_instruction)
@@ -333,6 +347,10 @@ async def ai_edit(request: Request, user: User = Depends(get_current_user), db: 
                 draft = {"title": prev.get("title") or body_title or "", "description": prev.get("description"), "type": prev.get("type") if prev.get("type") in ("form", "quiz") else (body_type if body_type in ("form", "quiz") else "form"), "sections": [], "settings": prev.get("settings", {}), "ignored": [], "warnings": ["Semua soal dihapus sesuai instruksi."]}
             else:
                 raise
+        # Guard susut + merge: hasil tambah-tambah digabung dengan draf lama
+        # (lama verbatim + soal benar-benar baru). Susut/terpotong -> 502,
+        # draf lama di client tidak tertimpa.
+        draft = merge_append_draft(body_draft, draft, full_instruction)
     except AiNotConfigured as e:
         raise HTTPException(status_code=403, detail=str(e))
     except AiFailed as e:

@@ -16,6 +16,7 @@ import { useToast } from '../../hooks/useToast'
 import { useTranslation } from 'react-i18next'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { isAudioUrl, resolveMediaUrl } from '../../lib/media'
+import { stripTags } from '../../lib/sanitize'
 import { Button, Input, Select, Toggle, Card, Badge, ConfirmModal, PageHeader, FormSubNav, FormBackButton, EmptyState, CardSkeleton, RichTextEditor, RichText, AnswerKeyEditor } from '../../components/ui'
 import SectionManager from '../../components/ui/SectionManager'
 
@@ -322,7 +323,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     })
   }
 
-  const textOnly = (html) => (html || '').replace(/<[^>]*>/g, '').trim()
+  const textOnly = (html) => stripTags(html || '')
   const isPassword = form.type === 'password'
   const canSave = !!textOnly(form.question_text) && (!isPassword || !!form.password_keyword?.trim())
   const needsOptions = OPTION_TYPES.includes(form.type)
@@ -1078,7 +1079,7 @@ const SortableGroupCard = memo(function SortableGroupCard({ groupId, questions: 
                             return (
                               <label key={q.id} className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${checked ? 'border-primary bg-primary-50 dark:bg-primary-900/20' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300'}`}>
                                 <input type="checkbox" checked={checked} onChange={(e) => setPickIds((prev) => e.target.checked ? [...prev, q.id] : prev.filter((x) => x !== q.id))} className="mt-0.5 w-4 h-4 rounded accent-primary" />
-                                <span className="flex-1 min-w-0 text-xs text-gray-700 dark:text-gray-300 line-clamp-2">{(q.question_text || '').replace(/<[^>]*>/g, '').trim() || '(no text)'}</span>
+                                <span className="flex-1 min-w-0 text-xs text-gray-700 dark:text-gray-300 line-clamp-2">{stripTags(q.question_text) || '(no text)'}</span>
                                 <Badge scheme="gray" className="text-[10px] shrink-0">{q.type.replace('_',' ')}</Badge>
                               </label>
                             )
@@ -1415,7 +1416,7 @@ export default function QuestionBuilder() {
     // by the media endpoint.
     const optionEntries = OPTION_TYPES.includes(data.type)
       ? data.options.filter((o) => {
-          const hasText = (o.option_text || '').replace(/<[^>]*>/g, '').trim()
+          const hasText = stripTags(o.option_text || '')
           const hasImage = !!(o.image?.path || o._pendingFile)
           return hasText || hasImage
         })
@@ -1437,7 +1438,7 @@ export default function QuestionBuilder() {
       options: OPTION_TYPES.includes(data.type)
         ? optionEntries.map((o) => ({
             ...(o.id ? { id: o.id } : {}),
-            option_text: (o.option_text || '').replace(/<[^>]*>/g, '').trim() ? o.option_text : (o.image?.path || o._pendingFile ? '<p><br></p>' : o.option_text),
+            option_text: stripTags(o.option_text || '') ? o.option_text : (o.image?.path || o._pendingFile ? '<p><br></p>' : o.option_text),
             is_correct: data.type === 'dropdown' ? false : !!o.is_correct,
           }))
         : [],
@@ -1536,7 +1537,7 @@ export default function QuestionBuilder() {
     try {
       const { data } = await api.get(`/questions/${question.id}/active-count`)
       if (data.active_count > 0) {
-        const raw = (question.question_text || '').replace(/<[^>]*>/g, '').trim().slice(0, 50)
+        const raw = stripTags(question.question_text || '').slice(0, 50)
         const label = raw || t('sectionManager.questionFallback', { n: (idToIndex.get(question.id) ?? questions.findIndex((x) => x.id === question.id)) + 1 })
         setDeleteWarning({ activeCount: data.active_count, questionIds: [question.id], isBulk: false, questionName: label, questionObj: question })
       } else {
@@ -1906,7 +1907,7 @@ export default function QuestionBuilder() {
       const res = await api.get(`/forms/${formId}/export/docx`, { responseType: 'blob' })
       const cd = res.headers?.['content-disposition'] || ''
       const m = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(cd)
-      const fallback = (form?.title || '').replace(/<[^>]*>/g, '').trim().replace(/[^\w\-. ]+/g, '_').slice(0, 100) || 'soal'
+      const fallback = stripTags(form?.title || '').replace(/[^\w\-. ]+/g, '_').slice(0, 100) || 'soal'
       const filename = (m?.[1] || `${fallback}.docx`).replace(/['"]/g, '').trim()
       const url = URL.createObjectURL(new Blob([res.data]))
       const a = document.createElement('a')
@@ -2407,7 +2408,7 @@ export default function QuestionBuilder() {
                       <span className="w-8 h-8 rounded-xl bg-white border border-gray-200 flex items-center justify-center shrink-0"><ChevronDown className="w-4 h-4 text-gray-500" /></span>
                       <span className="font-display font-bold text-sm shrink-0">Group {groupIndexMap[blk.groupId] || 0}</span>
                       <Badge scheme="primary" className="shrink-0">{blk.questions.length} questions</Badge>
-                      <span className="text-sm text-gray-600 dark:text-gray-400 truncate flex-1">{(blk.questions[0]?.question_text || '').replace(/<[^>]*>/g, '').trim().slice(0, 60)}</span>
+                      <span className="text-sm text-gray-600 dark:text-gray-400 truncate flex-1">{stripTags(blk.questions[0]?.question_text || '').slice(0, 60)}</span>
                     </div>
                   </Card>
                 )
@@ -2420,7 +2421,7 @@ export default function QuestionBuilder() {
                       <GripVertical className="w-5 h-5 text-primary shrink-0" />
                       <Badge scheme="gray" className="shrink-0">{typeLabels[q.type]}</Badge>
                       <span className="text-sm text-gray-600 dark:text-gray-400 truncate flex-1">
-                        {(q.question_text || '').replace(/<[^>]*>/g, '').trim().slice(0, 80)}
+                        {stripTags(q.question_text || '').slice(0, 80)}
                       </span>
                     </div>
                   </Card>
@@ -2450,7 +2451,7 @@ export default function QuestionBuilder() {
             <p>{t('questionBuilder.confirmDeleteQuestionsMessage', { count: selectedIds.length })}</p>
             <ul className="mt-2 space-y-1 max-h-44 overflow-y-auto pr-1">
               {questions.filter((q) => selectedIds.includes(q.id)).map((q) => {
-                const raw = (q.question_text || '').replace(/<[^>]*>/g, '').trim()
+                const raw = stripTags(q.question_text || '')
                 const label = raw || t('sectionManager.questionFallback', { n: (idToIndex.get(q.id) ?? 0) + 1 })
                 return (
                   <li key={q.id} className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400 leading-snug">
@@ -2500,7 +2501,7 @@ export default function QuestionBuilder() {
         title={t('questionBuilder.confirmDeleteQuestionTitle')}
         message={t('questionBuilder.confirmDeleteQuestionMessage', {
           title: (() => {
-            const raw = (deleteTarget?.question_text || '').replace(/<[^>]*>/g, '').trim().slice(0, 50)
+            const raw = stripTags(deleteTarget?.question_text || '').slice(0, 50)
             if (raw) return raw
             if (!deleteTarget) return ''
             const n = (idToIndex.get(deleteTarget.id) ?? questions.findIndex((x) => x.id === deleteTarget.id)) + 1

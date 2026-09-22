@@ -27,12 +27,14 @@ from app.utils import UPLOAD_DIR, MAX_DOCX_BYTES, now_wib, read_limited
 try:
     from app.services.ai_generate import (
         _rich_lite_to_html as _ai_rich_to_html,
+        _normalize_ai_entities as _ai_normalize_entities,
         detect_code_intent as _ai_detect_intent,
         _primary_code_lang as _ai_primary_lang,
         _sniff_code_lang as _ai_sniff_lang,
     )
 except Exception:  # pragma: no cover — saat test tanpa deps AI
     _ai_rich_to_html = None
+    _ai_normalize_entities = None
     _ai_detect_intent = None
     _ai_primary_lang = None
     _ai_sniff_lang = None
@@ -61,7 +63,11 @@ def _docx_text_to_html(raw: str | None) -> str:
     except Exception:
         html_out = None
     if html_out is None:
-        html_out = html.escape(raw, quote=True)
+        try:
+            norm = _ai_normalize_entities(raw) if _ai_normalize_entities else raw
+        except Exception:
+            norm = raw
+        html_out = html.escape(norm, quote=True)
     # Literal HTML tags yang lolos sebagai "&lt;tag&gt;" (mis. "<a href>" ketik manual)
     # harus tampil sebagai kode, bukan dirender WYSIWYG atau ter-strip jadi "html".
     # _ai_rich_to_html sudah escape, tapi frontend resolveRichHtml akan decode
