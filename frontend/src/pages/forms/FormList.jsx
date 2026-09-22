@@ -181,7 +181,7 @@ function FormCardItem({ form, index, selected, selectedCount, selectionMode, onT
             )}
           </AnimatePresence>
 
-          <h3 className="relative text-[17px] font-display font-semibold text-ink dark:text-gray-100 leading-tight line-clamp-2"><RichText html={form.title} /></h3>
+          <h3 className="relative text-[17px] font-display font-semibold text-ink dark:text-gray-100 leading-tight line-clamp-2"><RichText html={form.title} className="rich-text" /></h3>
           <div className="relative h-7 mt-3" />
           <FormTypeCluster form={form} />
         </Card>

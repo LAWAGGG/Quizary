@@ -515,7 +515,7 @@ export default function FormEdit() {
 
       <PageHeader
         eyebrow={t('formEdit.workspace')}
-        title={form.title ? <RichText html={form.title} /> : t('formEdit.formSettings')}
+        title={form.title ? <RichText html={form.title} className="rich-text" /> : t('formEdit.formSettings')}
         description={
           <span className="inline-flex items-center gap-2">
             <StatusBadge status={form.status} />
