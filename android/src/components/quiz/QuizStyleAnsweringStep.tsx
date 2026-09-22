@@ -21,7 +21,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAppAlert } from '../../context/AlertContext';
-import { RichTextRenderer, stripHtmlTags } from '../RichTextRenderer';
+import { RichTextRenderer, stripHtmlTags, hasMathFormulas, wrapBareMathForRender } from '../RichTextRenderer';
 import { extractImgUrl } from './QuizQuestionCard';
 import { AudioPlayer } from '../AudioPlayer';
 import { isAudioUrl, getQuestionImageUrl, getQuestionAudioUrl } from '../../utils/media';
@@ -43,6 +43,7 @@ interface QuizStyleAnsweringStepProps {
   onOpenZoom: (question: any) => void;
   onCloseQuiz: () => void;
   onRefresh?: () => void;
+  isRefreshing?: boolean;
   submissionId?: string | number | null;
   respondentName?: string | null;
   respondentEmail?: string | null;
@@ -65,6 +66,7 @@ export function QuizStyleAnsweringStep({
   onOpenZoom,
   onCloseQuiz,
   onRefresh,
+  isRefreshing,
   submissionId,
   respondentName,
   respondentEmail,
@@ -141,8 +143,6 @@ export function QuizStyleAnsweringStep({
     isTransitioningRef.current = true;
     pendingDirRef.current = dir;
 
-<<<<<<< HEAD
-=======
     // Safety fallback timer: guarantee opacity is never left at 0 if native driver gets stuck
     const safetyTimer = setTimeout(() => {
       if (isTransitioningRef.current) {
@@ -153,40 +153,27 @@ export function QuizStyleAnsweringStep({
       }
     }, 450);
 
->>>>>>> 0d4108e5a96e4bd2d5e02212ecb9f02b1399ca1b
     // Stage 1: Web Framer Motion exit stage (exit={{ opacity: 0, x: -dir * 30 }})
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: -dir * 30,
-<<<<<<< HEAD
-        duration: 150,
-=======
         duration: 140,
->>>>>>> 0d4108e5a96e4bd2d5e02212ecb9f02b1399ca1b
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(fadeAnim, {
         toValue: 0,
-<<<<<<< HEAD
-        duration: 150,
-=======
         duration: 140,
->>>>>>> 0d4108e5a96e4bd2d5e02212ecb9f02b1399ca1b
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
     ]).start(({ finished }) => {
-<<<<<<< HEAD
-      if (!finished) {
-=======
       clearTimeout(safetyTimer);
       if (!finished) {
         // Recovery guard: never leave screen at 0 opacity if animation was interrupted by native window/modal
         slideAnim.setValue(0);
         scaleAnim.setValue(1);
         fadeAnim.setValue(1);
->>>>>>> 0d4108e5a96e4bd2d5e02212ecb9f02b1399ca1b
         isTransitioningRef.current = false;
         return;
       }
@@ -211,23 +198,12 @@ export function QuizStyleAnsweringStep({
     Animated.parallel([
       Animated.timing(slideAnim, {
         toValue: 0,
-<<<<<<< HEAD
-        duration: 180,
-=======
         duration: 170,
->>>>>>> 0d4108e5a96e4bd2d5e02212ecb9f02b1399ca1b
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(fadeAnim, {
         toValue: 1,
-<<<<<<< HEAD
-        duration: 180,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-=======
         duration: 170,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
@@ -238,7 +214,6 @@ export function QuizStyleAnsweringStep({
         scaleAnim.setValue(1);
         fadeAnim.setValue(1);
       }
->>>>>>> 0d4108e5a96e4bd2d5e02212ecb9f02b1399ca1b
       isTransitioningRef.current = false;
     });
   }, [currentIdx]);
@@ -462,22 +437,53 @@ export function QuizStyleAnsweringStep({
       {/* TOP HEADER BAR — editorial solid, bukan gradient mengkilap AI */}
       <View style={[styles.headerBar, { backgroundColor: themeColor, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.14)' }]}>
         {/* Row 1: Info (i), Quiz Title, and Timer Pill */}
-        <View style={[styles.headerRowTop, { position: 'relative', minHeight: 32, justifyContent: 'space-between', alignItems: 'center' }]}>
+        <View style={[styles.headerRowTop, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 32 }]}>
           <TouchableOpacity
-            style={[styles.infoIconBtn, { zIndex: 10 }]}
+            style={styles.infoIconBtn}
             onPress={() => setShowInfoModal(true)}
             activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons name="information-circle-outline" size={22} color="#FFF" />
           </TouchableOpacity>
 
-          <View style={{ position: 'absolute', left: 80, right: 80, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={[styles.headerQuizTitle, { fontSize: 15 * fontSizeScale, textAlign: 'center', marginHorizontal: 0 }]} numberOfLines={1}>
-              {stripHtmlTags(publicForm?.title) || 'Kuis'}
-            </Text>
+          <View style={{ flex: 1, paddingHorizontal: 8, justifyContent: 'center', alignItems: 'center' }}>
+            {(() => {
+              const rawHeaderTitle = publicForm?.title || '';
+              if (hasMathFormulas(rawHeaderTitle)) {
+                return (
+                  <RichTextRenderer
+                    html={wrapBareMathForRender(rawHeaderTitle)}
+                    style={{
+                      color: '#FFFFFF',
+                      fontSize: 13 * fontSizeScale,
+                      fontWeight: '800',
+                      textAlign: (formattedTimerStr || publicForm?.is_restricted) ? 'left' : 'center',
+                      lineHeight: 18,
+                    }}
+                  />
+                );
+              }
+              return (
+                <Text
+                  style={[
+                    styles.headerQuizTitle,
+                    {
+                      fontSize: 13 * fontSizeScale,
+                      textAlign: (formattedTimerStr || publicForm?.is_restricted) ? 'left' : 'center',
+                      marginHorizontal: 0,
+                      lineHeight: 18,
+                    },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {stripHtmlTags(rawHeaderTitle) || 'Kuis'}
+                </Text>
+              );
+            })()}
           </View>
 
-          <View style={[styles.headerRightGroup, { zIndex: 10 }]}>
+          <View style={styles.headerRightGroup}>
             {formattedTimerStr ? (
               <View style={styles.timerBadge}>
                 <Ionicons name="timer-outline" size={14} color="#FFF" />
@@ -486,7 +492,7 @@ export function QuizStyleAnsweringStep({
             ) : null}
 
             {!publicForm?.is_restricted && (
-              <TouchableOpacity style={styles.closeHeaderBtn} onPress={onCloseQuiz} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.closeHeaderBtn} onPress={onCloseQuiz} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Ionicons name="close-outline" size={20} color="#FFF" />
               </TouchableOpacity>
             )}
@@ -495,10 +501,15 @@ export function QuizStyleAnsweringStep({
               <TouchableOpacity
                 style={[styles.refreshHeaderBtn, { backgroundColor: 'rgba(0,0,0,0.16)', borderColor: 'rgba(255,255,255,0.18)' }]}
                 onPress={onRefresh}
+                disabled={!!isRefreshing}
                 activeOpacity={0.7}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Ionicons name="refresh" size={18} color="#FFF" />
+                {isRefreshing ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Ionicons name="refresh" size={18} color="#FFF" />
+                )}
               </TouchableOpacity>
             )}
           </View>
@@ -549,7 +560,45 @@ export function QuizStyleAnsweringStep({
                 { opacity: fadeAnim, transform: [{ translateX: slideAnim }, { scale: scaleAnim }] },
               ]}
             >
-              {currentQ && (
+              {!currentQ ? (
+                <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 48, paddingHorizontal: 24 }}>
+                  <Ionicons name="document-text-outline" size={48} color={isDark ? '#64748B' : '#94A3B8'} />
+                  <Text style={{ marginTop: 16, fontSize: 16, fontWeight: '600', color: isDark ? '#F1F5F9' : '#1E293B', textAlign: 'center' }}>
+                    {language === 'ID' ? 'Soal belum dimuat' : 'Questions not loaded'}
+                  </Text>
+                  <Text style={{ marginTop: 8, fontSize: 13, color: isDark ? '#94A3B8' : '#64748B', textAlign: 'center', lineHeight: 20 }}>
+                    {language === 'ID'
+                      ? 'Data soal kuis ini belum berhasil dimuat dari server. Ketuk tombol refresh untuk memuat ulang.'
+                      : 'Quiz question data has not been loaded from server. Tap the refresh button to reload.'}
+                  </Text>
+                  {onRefresh && (
+                    <TouchableOpacity
+                      style={{
+                        marginTop: 20,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 8,
+                        backgroundColor: themeColor,
+                        paddingHorizontal: 20,
+                        paddingVertical: 10,
+                        borderRadius: 20,
+                      }}
+                      onPress={onRefresh}
+                      disabled={!!isRefreshing}
+                      activeOpacity={0.8}
+                    >
+                      {isRefreshing ? (
+                        <ActivityIndicator size="small" color="#FFF" />
+                      ) : (
+                        <Ionicons name="refresh" size={18} color="#FFF" />
+                      )}
+                      <Text style={{ color: '#FFF', fontWeight: '600', fontSize: 14 }}>
+                        {language === 'ID' ? 'Muat Ulang Soal' : 'Reload Questions'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
                 <View key={currentQ.id || currentIdx} style={styles.questionInnerContainer}>
                   {/* Top Metadata Row: Optional Badge & Mark for Review */}
                   <View style={styles.qMetaHeaderRow}>
@@ -1177,9 +1226,30 @@ export function QuizStyleAnsweringStep({
             </View>
 
             <ScrollView style={styles.infoModalScroll} showsVerticalScrollIndicator={false}>
-              <Text style={[styles.infoModalTitle, { color: colors.text }]}>
-                {stripHtmlTags(publicForm?.title) || 'Quizary'}
-              </Text>
+              {(() => {
+                const rawTitle = publicForm?.title || '';
+                if (hasMathFormulas(rawTitle)) {
+                  return (
+                    <View style={{ marginBottom: 8, alignItems: 'center' }}>
+                      <RichTextRenderer
+                        html={wrapBareMathForRender(rawTitle)}
+                        style={{
+                          color: colors.text,
+                          fontSize: 20,
+                          fontWeight: 'bold',
+                          textAlign: 'center',
+                          lineHeight: 26,
+                        }}
+                      />
+                    </View>
+                  );
+                }
+                return (
+                  <Text style={[styles.infoModalTitle, { color: colors.text }]}>
+                    {stripHtmlTags(rawTitle) || 'Quizary'}
+                  </Text>
+                );
+              })()}
               {publicForm?.description ? (
                 <Text style={[styles.infoModalDesc, { color: colors.textSub }]}>
                   {stripHtmlTags(publicForm.description)}

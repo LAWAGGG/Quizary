@@ -51,7 +51,7 @@ import { useAppPinning } from '../hooks/useAppPinning';
 import { useCheatSound } from '../hooks/useCheatSound';
 import { useLockedVolume } from '../hooks/useLockedVolume';
 import { useFloatingBlock } from '../hooks/useFloatingBlock';
-import { stripHtmlTags } from '../components/RichTextRenderer';
+import { stripHtmlTags, RichTextRenderer, hasMathFormulas, wrapBareMathForRender } from '../components/RichTextRenderer';
 import { isSubmissionExpired } from '../utils/api';
 import { serverNowMs, parseServerTime, monoNow, lastSyncMonoMs, wallClockJumpMs } from '../utils/serverClock';
 
@@ -70,6 +70,15 @@ function formatTimer(ms: number | null) {
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function getIsRestricted(form: any, submission?: any): boolean {
+  if (!form && !submission) return false;
+  const isRestrictedVal = form?.is_restricted ?? form?.isRestricted ?? submission?.is_restricted ?? submission?.isRestricted;
+  const isRestrictedBool = isRestrictedVal === true || isRestrictedVal === 1 || isRestrictedVal === '1' || isRestrictedVal === 'true';
+  const securityMode = form?.security_mode || submission?.security_mode;
+  if (securityMode === 'restricted') return true;
+  return isRestrictedBool;
 }
 
 export default function QuizScreen() {
@@ -121,7 +130,13 @@ export default function QuizScreen() {
   const { pin, unpin, canPin, isExpoGo, nativeMissing } = useAppPinning();
   const { play: playCheat, stop: stopCheat } = useCheatSound();
   const { lock: lockVolume, unlock: unlockVolume } = useLockedVolume();
-  const { hasFloating, setSecure } = useFloatingBlock();
+
+  const handleOverlayDetected = useCallback((reason: string) => {
+    if (!isRestrictedRef.current || !answeringRef.current || lockedVisibleRef.current || pinInProgressRef.current) return;
+    triggerWarningFlow(reason);
+  }, []);
+
+  const { hasFloating, setSecure } = useFloatingBlock(handleOverlayDetected);
 
   const themeColor =
     publicForm?.theme_color ||
@@ -144,8 +159,8 @@ export default function QuizScreen() {
     submissionIdRef.current = submission?.submission_id || submission?.id || null;
   }, [submission]);
   useEffect(() => {
-    isRestrictedRef.current = !!(publicForm?.type === 'quiz' && publicForm?.is_restricted);
-  }, [publicForm]);
+    isRestrictedRef.current = getIsRestricted(publicForm, submission);
+  }, [publicForm, submission]);
   useEffect(() => {
     warningVisibleRef.current = warningVisible;
   }, [warningVisible]);
@@ -165,14 +180,14 @@ export default function QuizScreen() {
     }
   }, [shortCode]);
 
-  // Resume via submissionId (khusus in_progress dari submission list)
+  // Resume via submissionId (khusus in_progress & locked dari submission list)
   useEffect(() => {
     if (!resumeId) return;
     (async () => {
       setLoading(true);
       try {
         const detail: any = await getSubmissionDetail(resumeId);
-        if (detail.status !== 'in_progress' || isSubmissionExpired(detail)) {
+        if ((detail.status !== 'in_progress' && detail.status !== 'locked') || (detail.status === 'in_progress' && isSubmissionExpired(detail))) {
           if (detail.status === 'in_progress' && isSubmissionExpired(detail)) {
             await finalizeSubmission(detail.id).catch(() => {});
           }
@@ -184,21 +199,28 @@ export default function QuizScreen() {
           });
           return;
         }
-        // Public form untuk tema/header — fallback minimal jika getPublicForm gagal (mis. form draft/privat)
+        const isRestr = detail.is_restricted ?? detail.isRestricted ?? detail.form?.is_restricted ?? detail.form?.isRestricted;
+        const secMode = detail.security_mode ?? detail.form?.security_mode;
+        let fetchedForm: any = null;
         if (detail.short_code) {
           try {
-            const form = await getPublicForm(detail.short_code);
-            setPublicForm(form);
+            fetchedForm = await getPublicForm(detail.short_code);
+            setPublicForm(fetchedForm);
           } catch {
-            setPublicForm({ id: detail.form_id, title: detail.form_title || 'Form', short_code: detail.short_code, type: detail.type || 'form', display_style: 'card', theme_color: null } as any);
+            fetchedForm = { id: detail.form_id, title: detail.form_title || 'Form', short_code: detail.short_code, type: detail.type || 'quiz', is_restricted: isRestr, security_mode: secMode, display_style: 'card', theme_color: null };
+            setPublicForm(fetchedForm);
           }
         } else if (detail.form_id) {
-          setPublicForm({ id: detail.form_id, title: detail.form_title || 'Form', short_code: detail.short_code, type: detail.type || 'form', display_style: 'card', theme_color: null } as any);
+          fetchedForm = { id: detail.form_id, title: detail.form_title || 'Form', short_code: detail.short_code, type: detail.type || 'quiz', is_restricted: isRestr, security_mode: secMode, display_style: 'card', theme_color: null };
+          setPublicForm(fetchedForm);
         } else {
-          setPublicForm({ id: 0, title: detail.form_title || 'Form', type: 'form', display_style: 'card' } as any);
+          fetchedForm = { id: 0, title: detail.form_title || 'Form', type: detail.type || 'quiz', is_restricted: isRestr, security_mode: secMode, display_style: 'card' };
+          setPublicForm(fetchedForm);
         }
         // Set submission langsung tanpa landing
-        setSubmission({ submission_id: detail.id, id: detail.id, ...detail, access_token: detail.access_token });
+        const isRestrictedQuiz = getIsRestricted(fetchedForm, detail);
+        isRestrictedRef.current = isRestrictedQuiz;
+        setSubmission({ submission_id: detail.id, id: detail.id, is_restricted: isRestrictedQuiz, security_mode: secMode, ...detail, access_token: detail.access_token });
         if (detail.access_token) setSubmissionToken(detail.access_token);
         setQuestions(detail.questions || []);
         setSections(detail.sections || []);
@@ -215,14 +237,34 @@ export default function QuizScreen() {
         }
         answeringRef.current = true;
         submissionIdRef.current = Number(resumeId);
-        // Jika restricted, pin/volume akan aktif via AppState/polling; trigger pin sekarang jika bisa
-        // Delay sedikit biar publicForm ter-set dulu
-        setTimeout(async () => {
-          if (isRestrictedRef.current && canPin) {
-            lockVolume().catch(() => {});
+
+        // Jika status === 'locked', tampilkan ViolatingLockOverlay langsung
+        if (detail.status === 'locked') {
+          const serverLockedAt = parseServerTime(detail.locked_at) || serverNowMs();
+          setCheatReason(detail.cheat_reason || 'window-blur');
+          setLockedAt(serverLockedAt);
+          setLockedVisible(true);
+          lockedVisibleRef.current = true;
+        }
+
+        // Jika restricted, aktifkan pin/volume/secure & cek floating app secara instan
+        if (isRestrictedQuiz) {
+          lockVolume().catch(() => {});
+          setSecure(true).catch(() => {});
+          try {
+            if (await hasFloating()) {
+              const sid = detail.id || Number(resumeId);
+              setLockedAt(serverNowMs());
+              setLockedVisible(true);
+              lockedVisibleRef.current = true;
+              lockSubmission(sid, 'floating-overlay').catch(() => {});
+              return;
+            }
+          } catch {}
+          if (canPin && detail.status !== 'locked') {
             await pin().catch(() => {});
           }
-        }, 500);
+        }
       } catch (e: any) {
         showAlert({ type: 'error', title: 'Gagal memuat', message: e.message });
       } finally {
@@ -299,20 +341,41 @@ export default function QuizScreen() {
     return () => sub.remove();
   }, [canPin, language]);
 
-  const triggerFloatingLock = useCallback(async (reason: string) => {
-    if (lockedVisibleRef.current) return;
+  const triggerWarningFlow = useCallback((reason: string) => {
+    if (lockedVisibleRef.current || warningVisibleRef.current || pinInProgressRef.current) return;
     const sid = submissionIdRef.current;
     if (!sid) return;
-    // lockedAt dalam WAKTU SERVER (anti manipulasi jam HP)
-    setLockedAt(serverNowMs());
+
     setCheatReason(reason);
-    setLockedVisible(true);
-    lockedVisibleRef.current = true;
-    setWarningVisible(false);
-    warningVisibleRef.current = false;
-    stopCheat().catch(() => {});
-    lockSubmission(sid, reason).catch(() => {});
-  }, [stopCheat]);
+
+
+
+    warningStartRef.current = serverNowMs();
+    countdownRef.current = 5;
+    setWarningCountdown(5);
+    setWarningVisible(true);
+    warningVisibleRef.current = true;
+    playCheat().catch(() => {});
+
+    if (warningTimerRef.current) clearInterval(warningTimerRef.current);
+    warningTimerRef.current = setInterval(() => {
+      const elapsed = Math.floor((serverNowMs() - warningStartRef.current) / 1000);
+      const remain = Math.max(0, 5 - elapsed);
+      countdownRef.current = remain;
+      setWarningCountdown(remain);
+      if (remain <= 0) {
+        if (warningTimerRef.current) clearInterval(warningTimerRef.current);
+        warningTimerRef.current = null;
+        setWarningVisible(false);
+        warningVisibleRef.current = false;
+        stopCheat().catch(() => {});
+        setLockedAt(serverNowMs());
+        setLockedVisible(true);
+        lockedVisibleRef.current = true;
+        lockSubmission(sid, reason).catch(() => {});
+      }
+    }, 250);
+  }, [playCheat, stopCheat]);
 
   const handleCheckLockedStatus = useCallback(async () => {
     const sid = submissionIdRef.current;
@@ -394,38 +457,102 @@ export default function QuizScreen() {
   }, [unpin, unlockVolume, stopCheat]);
 
   // Refresh manual (tombol refresh di header quiz restricted): ambil status
-  // terbaru dari server TANPA guard — perbarui expired_at + jam server, dan
+  // terbaru dari server — perbarui questions, sections, expired_at + jam server, dan
   // tangani bila status berubah jadi locked/cheating/selesai.
   const forceRefreshStatus = useCallback(async () => {
     const sid = submissionIdRef.current;
-    if (!sid || !answeringRef.current) return;
+
+    setRefreshingLock(true);
     try {
-      setRefreshingLock(true);
-      const detail: any = await getSubmissionDetail(sid);
-      if (detail?.expired_at) {
-        setSubmission((prev: any) => (prev ? { ...prev, expired_at: detail.expired_at } : prev));
-      }
-      if (detail && detail.status && detail.status !== 'in_progress') {
-        const st = detail.status;
-        if (st === 'locked') {
-          setCheatReason(detail.cheat_reason || 'window-blur');
-          const serverLockedAt = parseServerTime(detail.locked_at);
-          if (serverLockedAt) setLockedAt(serverLockedAt);
-          setLockedVisible(true);
-          lockedVisibleRef.current = true;
-        } else if (st === 'cheating' || st === 'submitted' || st === 'auto_submitted') {
-          await unpin().catch(() => {});
-          await unlockVolume().catch(() => {});
-          await stopCheat().catch(() => {});
-          setLockedVisible(false);
-          setWarningVisible(false);
-          router.replace({ pathname: '/(tabs)/home' } as any);
+      if (sid) {
+        const detail: any = await getSubmissionDetail(sid);
+        if (detail) {
+          // Update submission state
+          setSubmission((prev: any) => (prev ? { ...prev, ...detail } : detail));
+
+          // Update questions & sections if returned from server
+          if (detail.questions && Array.isArray(detail.questions) && detail.questions.length > 0) {
+            setQuestions(detail.questions);
+          }
+          if (detail.sections && Array.isArray(detail.sections)) {
+            setSections(detail.sections);
+          }
+
+          // Sync answers if available without erasing current local answers
+          if (detail.answers && Array.isArray(detail.answers)) {
+            setAnswers((prevAnswers) => {
+              const updated = { ...prevAnswers };
+              detail.answers.forEach((a: any) => {
+                if (updated[a.question_id] === undefined || updated[a.question_id] === null) {
+                  const qtype = String(a.question_type || a.type || '').toLowerCase();
+                  if (['short_answer', 'essay', 'date', 'time', 'datetime', 'password'].includes(qtype)) {
+                    updated[a.question_id] = a.answer_text || '';
+                  } else if (qtype === 'file_upload') {
+                    if (a.answer_file) updated[a.question_id] = a.answer_file;
+                  } else {
+                    updated[a.question_id] = a.selected_option_ids || [];
+                  }
+                }
+              });
+              return updated;
+            });
+          }
+
+          // Re-fetch public form metadata if short_code exists
+          const codeToFetch = detail.short_code || shortCode;
+          if (codeToFetch) {
+            try {
+              const form = await getPublicForm(codeToFetch);
+              if (form) setPublicForm(form);
+            } catch {}
+          }
+
+          // Handle status changes
+          if (detail.status && detail.status !== 'in_progress') {
+            const st = detail.status;
+            if (st === 'locked') {
+              setCheatReason(detail.cheat_reason || 'window-blur');
+              const serverLockedAt = parseServerTime(detail.locked_at);
+              if (serverLockedAt) setLockedAt(serverLockedAt);
+              setLockedVisible(true);
+              lockedVisibleRef.current = true;
+            } else if (st === 'cheating' || st === 'submitted' || st === 'auto_submitted') {
+              await unpin().catch(() => {});
+              await unlockVolume().catch(() => {});
+              await stopCheat().catch(() => {});
+              setLockedVisible(false);
+              setWarningVisible(false);
+              router.replace({ pathname: '/(tabs)/home' } as any);
+              return;
+            }
+          }
+
+          showAlert({
+            type: 'success',
+            title: language === 'ID' ? 'Berhasil' : 'Success',
+            message: language === 'ID' ? 'Soal & status kuis berhasil diperbarui.' : 'Quiz questions and status refreshed successfully.',
+          });
         }
+      } else if (shortCode) {
+        const form = await getPublicForm(shortCode);
+        setPublicForm(form);
+        await refreshCanStart();
+        showAlert({
+          type: 'success',
+          title: language === 'ID' ? 'Berhasil' : 'Success',
+          message: language === 'ID' ? 'Data kuis berhasil diperbarui.' : 'Quiz data refreshed successfully.',
+        });
       }
-    } catch {} finally {
+    } catch (e: any) {
+      showAlert({
+        type: 'error',
+        title: language === 'ID' ? 'Gagal Refresh' : 'Refresh Failed',
+        message: e.message || (language === 'ID' ? 'Gagal memperbarui kuis.' : 'Failed to refresh quiz.'),
+      });
+    } finally {
       setRefreshingLock(false);
     }
-  }, [unpin, unlockVolume, stopCheat]);
+  }, [shortCode, language, unpin, unlockVolume, stopCheat, refreshCanStart, showAlert]);
 
   // Timer countdown for exam (expired_at) — pakai JAM SERVER, kebal ubahan jam HP
   useEffect(() => {
@@ -447,7 +574,7 @@ export default function QuizScreen() {
     return () => clearInterval(id);
   }, [submission?.expired_at]);
 
-  // Floating overlay auto-check (all floating: PiP, multi-window, overlay)
+  // Floating overlay auto-check (all floating: PiP, multi-window, overlay, focus loss)
   useEffect(() => {
     if (!submission) return;
     if (!isRestrictedRef.current) return;
@@ -456,12 +583,12 @@ export default function QuizScreen() {
       try {
         const floating = await hasFloating();
         if (floating) {
-          await triggerFloatingLock('floating-overlay');
+          triggerWarningFlow('floating-overlay');
         }
       } catch {}
-    }, 800);
+    }, 250);
     return () => clearInterval(id);
-  }, [submission, hasFloating, triggerFloatingLock]);
+  }, [submission, hasFloating, triggerWarningFlow]);
 
   // AppState restricted handler -> 5 sec warning
   useEffect(() => {
@@ -474,43 +601,10 @@ export default function QuizScreen() {
       if (pinInProgressRef.current) return;
 
       if (next === 'background' || next === 'inactive') {
-        // Start warning if not already — loop cheat sound during warning
-        if (warningVisibleRef.current) return;
-        // anchor dalam WAKTU SERVER supaya mundur-memundurkan jam HP tak menghentikan grace 5 detik
-        warningStartRef.current = serverNowMs();
-        countdownRef.current = 5;
-        setWarningCountdown(5);
-        setWarningVisible(true);
-        warningVisibleRef.current = true;
-        playCheat().catch(() => {});
-        if (warningTimerRef.current) clearInterval(warningTimerRef.current);
-        warningTimerRef.current = setInterval(() => {
-          const elapsed = Math.floor((serverNowMs() - warningStartRef.current) / 1000);
-          const remain = Math.max(0, 5 - elapsed);
-          countdownRef.current = remain;
-          setWarningCountdown(remain);
-          if (remain <= 0) {
-            if (warningTimerRef.current) clearInterval(warningTimerRef.current);
-            warningTimerRef.current = null;
-            setWarningVisible(false);
-            warningVisibleRef.current = false;
-            stopCheat().catch(() => {});
-            // Trigger lock — silent at lock
-            setLockedAt(serverNowMs());
-            setCheatReason('window-blur');
-            setLockedVisible(true);
-            lockedVisibleRef.current = true;
-            // Server lock
-            lockSubmission(sid, 'window-blur').catch(() => {});
-          }
-        }, 250);
+        triggerWarningFlow('window-blur');
       } else if (next === 'active') {
-        // Pulang dari background: sinkron ulang jam server (jam HP mungkin
-        // diubah atau anchor basi selama tidur) sebelum cek warning.
+        // Pulang dari background: sinkron ulang jam server
         resyncClockIfNeeded();
-        // Jika kembali sebelum habis, biarkan user tekan tombol.
-        // Jika sudah lewat 5 detik saat di background (timer throttled),
-        // cek langsung saat active dan lock jika perlu
         if (warningVisibleRef.current) {
           const elapsed = Math.floor((serverNowMs() - warningStartRef.current) / 1000);
           if (elapsed >= 5) {
@@ -520,7 +614,6 @@ export default function QuizScreen() {
             warningVisibleRef.current = false;
             stopCheat().catch(() => {});
             setLockedAt(serverNowMs());
-            setCheatReason('window-blur');
             setLockedVisible(true);
             lockedVisibleRef.current = true;
             const sid2 = submissionIdRef.current;
@@ -534,14 +627,21 @@ export default function QuizScreen() {
     return () => {
       sub.remove();
     };
-  }, [playCheat, stopCheat, hasFloating, resyncClockIfNeeded]);
+  }, [triggerWarningFlow, resyncClockIfNeeded, stopCheat]);
 
   const handleReenter = useCallback(async () => {
     // Check floating first
     if (isRestrictedRef.current) {
       try {
         if (await hasFloating()) {
-          await triggerFloatingLock('floating-overlay');
+          showAlert({
+            type: 'warning',
+            title: language === 'ID' ? 'Floating App Terdeteksi' : 'Floating App Detected',
+            message: language === 'ID'
+              ? 'Aplikasi melayang masih aktif! Harap tutup aplikasi melayang (floating browser, kalkulator, bubble) terlebih dahulu.'
+              : 'Floating app is still active! Please close all floating apps first.',
+          });
+          triggerWarningFlow('floating-overlay');
           return;
         }
       } catch {}
@@ -618,7 +718,7 @@ export default function QuizScreen() {
       countdownRef.current = 5;
       await stopCheat().catch(() => {});
     }
-  }, [canPin, pin, stopCheat, playCheat, hasFloating, triggerFloatingLock, language]);
+  }, [canPin, pin, stopCheat, playCheat, hasFloating, triggerWarningFlow, language]);
 
   const handleStart = async () => {
     if (!publicForm) return;
@@ -698,23 +798,25 @@ export default function QuizScreen() {
         setAnswers(initAnswers);
       }
       answeringRef.current = true;
-      if (publicForm.type === 'quiz' && publicForm.is_restricted) {
+      if (isRestrictedRef.current || getIsRestricted(publicForm, submission)) {
+        isRestrictedRef.current = true;
         // Auto-check floating before pin
         try {
           if (await hasFloating()) {
-            await triggerFloatingLock('floating-overlay');
+            answeringRef.current = false;
+            setStarting(false);
             showAlert({
               type: 'warning',
-              title: language === 'ID' ? 'Floating terdeteksi' : 'Floating detected',
+              title: language === 'ID' ? 'Aplikasi Floating Terdeteksi' : 'Floating App Detected',
               message: language === 'ID'
-                ? 'Floating app terdeteksi. Tutup semua floating/bubble/PiP sebelum mulai.'
-                : 'Floating app detected. Close all floating/bubble/PiP before starting.',
+                ? 'Terdapat aplikasi melayang (floating browser, kalkulator, bubble, dll) yang sedang aktif. Harap tutup semua aplikasi melayang terlebih dahulu untuk memulai ujian restricted!'
+                : 'A floating app/overlay is active. Please close all floating apps before starting the restricted exam!',
             });
             return;
           }
         } catch {}
         lockVolume().catch(() => {});
-        // setSecure(true) disabled for debugging
+        setSecure(true).catch(() => {});
         if (canPin) {
           const pinned = await pin().catch(() => false);
           if (!pinned) {
@@ -1332,6 +1434,7 @@ export default function QuizScreen() {
             router.replace('/(tabs)/home' as any);
           }}
           onRefresh={forceRefreshStatus}
+          isRefreshing={refreshingLock}
           submissionId={submissionIdRef.current}
           respondentName={submission?.respondent_name || respondentName || ''}
           respondentEmail={submission?.respondent_email || respondentEmail || ''}
@@ -1343,7 +1446,7 @@ export default function QuizScreen() {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
           <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-            <View style={[styles.formHeader, { borderBottomColor: colors.inputBorder, backgroundColor: colors.cardBg, position: 'relative', minHeight: 48, justifyContent: 'space-between', alignItems: 'center' }]}>
+            <View style={[styles.formHeader, { borderBottomColor: colors.inputBorder, backgroundColor: colors.cardBg, flexDirection: 'row', minHeight: 48, justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12 }]}>
               {!publicForm?.is_restricted ? (
                 <TouchableOpacity
                   onPress={async () => {
@@ -1352,19 +1455,50 @@ export default function QuizScreen() {
                     await stopCheat().catch(() => {});
                     router.replace('/(tabs)/home' as any);
                   }}
-                  style={{ padding: 6, zIndex: 10 }}
+                  style={{ padding: 6, minWidth: 34, alignItems: 'flex-start' }}
                 >
                   <Ionicons name="close" size={22} color={colors.text} />
                 </TouchableOpacity>
               ) : <View style={{ width: 34 }} />}
 
-              <View style={{ position: 'absolute', left: 80, right: 80, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={[styles.formHeaderTitle, { color: colors.text, textAlign: 'center', marginHorizontal: 0 }]} numberOfLines={1}>
-                  {publicForm.title?.replace(/<[^>]*>/g, '') || 'Form'}
-                </Text>
+              <View style={{ flex: 1, paddingHorizontal: 8, justifyContent: 'center', alignItems: 'center' }}>
+                {(() => {
+                  const rawHeaderTitle = publicForm?.title || '';
+                  if (hasMathFormulas(rawHeaderTitle)) {
+                    return (
+                      <RichTextRenderer
+                        html={wrapBareMathForRender(rawHeaderTitle)}
+                        style={{
+                          color: colors.text,
+                          fontWeight: '700',
+                          textAlign: (formattedTimer || publicForm?.is_restricted) ? 'left' : 'center',
+                          fontSize: 13,
+                          lineHeight: 18,
+                        }}
+                      />
+                    );
+                  }
+                  return (
+                    <Text
+                      style={[
+                        styles.formHeaderTitle,
+                        {
+                          color: colors.text,
+                          textAlign: (formattedTimer || publicForm?.is_restricted) ? 'left' : 'center',
+                          marginHorizontal: 0,
+                          fontSize: 13,
+                          lineHeight: 18,
+                        },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {stripHtmlTags(rawHeaderTitle) || 'Form'}
+                    </Text>
+                  );
+                })()}
               </View>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, zIndex: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 34, justifyContent: 'flex-end' }}>
                 {formattedTimer ? (
                   <View style={[styles.timerPill, { backgroundColor: timeLeft !== null && timeLeft < 60000 ? '#EF4444' : colors.inputBg }]}>
                     <Ionicons name="timer-outline" size={14} color={timeLeft !== null && timeLeft < 60000 ? '#FFF' : colors.text} />
@@ -1376,10 +1510,15 @@ export default function QuizScreen() {
                   <TouchableOpacity
                     onPress={forceRefreshStatus}
                     activeOpacity={0.7}
+                    disabled={refreshingLock}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     style={{ padding: 6 }}
                   >
-                    <Ionicons name="refresh" size={20} color={colors.text} />
+                    {refreshingLock ? (
+                      <ActivityIndicator size="small" color={colors.text} />
+                    ) : (
+                      <Ionicons name="refresh" size={20} color={colors.text} />
+                    )}
                   </TouchableOpacity>
                 )}
               </View>

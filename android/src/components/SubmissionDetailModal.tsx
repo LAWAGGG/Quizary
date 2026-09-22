@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, Modal, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
-import { stripHtmlTags } from './RichTextRenderer';
+import { RichTextRenderer, stripHtmlTags, wrapBareMathForRender } from './RichTextRenderer';
+import { useRichFormTitle } from '../hooks/useRichFormTitle';
 
 interface SubmissionDetailModalProps {
   visible: boolean;
@@ -24,6 +25,11 @@ export function SubmissionDetailModal({
   onContinue,
 }: SubmissionDetailModalProps) {
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
+
+  const rawFormTitle = selectedSubItem?.form_title || subDetail?.form_title || '';
+  const bareWrapped = wrapBareMathForRender(rawFormTitle);
+  const richTitle = useRichFormTitle(selectedSubItem?.short_code || subDetail?.short_code || null);
+  const finalTitle = richTitle ? wrapBareMathForRender(richTitle) : bareWrapped;
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -49,18 +55,35 @@ export function SubmissionDetailModal({
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={true}>
               {/* Result summary */}
               <View style={[styles.detailSummaryBox, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.inputBorder }]}>
-                <Text style={[styles.detailFormTitle, { color: colors.text, fontSize: 16 * fontSizeScale }]}>
-                  {stripHtmlTags(selectedSubItem?.form_title || subDetail?.form_title) || (language === 'ID' ? 'Hasil Form' : 'Form Result')}
-                </Text>
+{(() => {
+                  if (finalTitle.trim()) {
+                    return (
+                      <RichTextRenderer
+                        html={finalTitle}
+                        style={{
+                          color: colors.text,
+                          fontSize: 16 * fontSizeScale,
+                          fontWeight: '700',
+                          lineHeight: Math.max(22, Math.round(16 * fontSizeScale * 1.4)),
+                        }}
+                      />
+                    );
+                  }
+                  return (
+                    <Text style={[styles.detailFormTitle, { color: colors.text, fontSize: 16 * fontSizeScale }]}>
+                      {language === 'ID' ? 'Hasil Form' : 'Form Result'}
+                    </Text>
+                  );
+                })()}
                 <Text style={[styles.detailMetaText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
                   {language === 'ID' ? 'Nama Responden: ' : 'Respondent Name: '}
                   {subDetail?.respondent_name || user?.name || (language === 'ID' ? 'Responden' : 'Respondent')}
                 </Text>
                 <Text style={[styles.detailMetaText, { color: colors.textSub, fontSize: 13 * fontSizeScale }]}>
                   Status: {
-                    (selectedSubItem?.status === 'cheating' || subDetail?.status === 'cheating')
+                    (subDetail?.status === 'cheating' || selectedSubItem?.status === 'cheating')
                       ? 'Cheating'
-                      : (selectedSubItem?.status === 'locked' || subDetail?.status === 'locked')
+                      : (subDetail?.status === 'locked' || selectedSubItem?.status === 'locked')
                       ? (language === 'ID' ? 'Terkunci (Pelanggaran)' : 'Locked (Violation)')
                       : (selectedSubItem?.status === 'submitted' || subDetail?.status === 'submitted')
                       ? (language === 'ID' ? 'Selesai' : 'Completed')
@@ -69,12 +92,12 @@ export function SubmissionDetailModal({
                       : (language === 'ID' ? 'Dalam Proses' : 'In Progress')
                   }
                 </Text>
-                {((subDetail?.cheat_reason || selectedSubItem?.cheat_reason || subDetail?.status === 'cheating' || selectedSubItem?.status === 'cheating') && (
+                {((subDetail?.status === 'cheating' || selectedSubItem?.status === 'cheating') && (
                   <View style={{ backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2', borderColor: '#EF4444', borderWidth: 1, borderRadius: 8, padding: 10, marginTop: 4 }}>
                     <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 12 * fontSizeScale }}>
                       ⚠️ Status: Cheating
                     </Text>
-                    {(subDetail?.cheat_reason || selectedSubItem?.cheat_reason) ? (
+                    {false ? (
                       <Text style={{ color: colors.text, fontSize: 11 * fontSizeScale, marginTop: 2 }}>
                         {language === 'ID' ? 'Catatan: ' : 'Note: '}{subDetail?.cheat_reason || selectedSubItem?.cheat_reason}
                       </Text>
@@ -138,7 +161,6 @@ export function SubmissionDetailModal({
 
                   const defaultQTitle = language === 'ID' ? `Soal ${i + 1}` : `Question ${i + 1}`;
                   const rawQText = qOrAns.question_text || qOrAns.title || ans?.question_text || defaultQTitle;
-                  const cleanQText = stripHtmlTags(rawQText);
 
                   let userAnsText = '';
                   if (ans) {
@@ -182,10 +204,16 @@ export function SubmissionDetailModal({
                   const points = ans?.points_earned;
 
                   return (
-                    <View key={qId || i} style={[styles.reviewItem, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.inputBorder }]}>
-                      <Text style={[styles.reviewQText, { color: colors.text, fontSize: 14 * fontSizeScale }]}>
-                        {i + 1}. {cleanQText}
-                      </Text>
+                    <View key={`sub-detail-${qId}-${i}`} style={[styles.reviewItem, { backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.inputBorder }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
+                        <Text style={[styles.reviewQIndex, { color: colors.text, fontSize: 14 * fontSizeScale }]}>{i + 1}.</Text>
+                        <View style={{ flex: 1 }}>
+                          <RichTextRenderer
+                            html={rawQText}
+                            style={{ color: colors.text, fontSize: 14 * fontSizeScale, lineHeight: 20 }}
+                          />
+                        </View>
+                      </View>
 
                       {userAnsText ? (
                         <View style={{ marginTop: 8 }}>
@@ -235,6 +263,7 @@ const styles = StyleSheet.create({
 
   reviewHeading: { fontWeight: 'bold', marginBottom: 10 },
   reviewItem: { borderRadius: 12, padding: 14, borderWidth: 1, marginBottom: 10 },
+  reviewQIndex: { fontWeight: '700', lineHeight: 20 },
   reviewQText: { fontWeight: '600', lineHeight: 20 },
   ansLabel: { marginTop: 2 },
   ansVal: { fontWeight: 'bold', marginTop: 2 },

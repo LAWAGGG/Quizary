@@ -3,14 +3,67 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
 import { isSubmissionExpired } from '../utils/api';
+import { parseServerTime } from '../utils/serverClock';
+import { RichTextRenderer, wrapBareMathForRender } from './RichTextRenderer';
+import { useRichFormTitle } from '../hooks/useRichFormTitle';
 
 interface SubmissionHistoryCardProps {
   item: any;
   onPress: () => void;
 }
 
+function formatWibDate(ms: number) {
+  const d = new Date(ms);
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const year = d.getUTCFullYear();
+  const hours = String((d.getUTCHours() + 7) % 24).padStart(2, '0');
+  const mins = String(d.getUTCMinutes()).padStart(2, '0');
+  const secs = String(d.getUTCSeconds()).padStart(2, '0');
+  return `${day}-${month}-${year} ${hours}:${mins}:${secs}`;
+}
+
+function getTimerExpiredAt(sub: any) {
+  if (sub?.expired_at) return sub.expired_at;
+  const started = sub?.started_at || sub?.created_at;
+  const durationSec = sub?.timer_seconds || (sub?.time_limit ? sub.time_limit * 60 : null) || sub?.form?.timer_seconds || (sub?.form?.time_limit ? sub.form.time_limit * 60 : null);
+  if (started && durationSec) {
+    const startTime = parseServerTime(started);
+    if (startTime != null) {
+      return formatWibDate(startTime + durationSec * 1000);
+    }
+  }
+  return null;
+}
+
 export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardProps) {
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
+
+  // Bulletproof sanitization for formTitle (before hooks so item can be guarded below)
+  let formTitle = language === 'ID' ? 'Form Tanpa Judul' : 'Untitled Form';
+  if (item && typeof item === 'object') {
+    if (typeof item.form_title === 'string' && item.form_title.trim()) {
+      formTitle = item.form_title;
+    } else if (typeof item.title === 'string' && item.title.trim()) {
+      formTitle = item.title;
+    } else if (item.form && typeof item.form === 'object' && typeof item.form.title === 'string' && item.form.title.trim()) {
+      formTitle = item.form.title;
+    }
+  }
+
+  // Backend `/me/submissions` strips all HTML tags from form_title, so formula
+  // markup is destroyed. Fetch the rich title from /q/{shortCode} (cached) and
+  // render it the same way the answering screen does.
+  const bareWrapped = wrapBareMathForRender(formTitle);
+  const richTitle = useRichFormTitle(item?.short_code || null);
+  const finalTitle = richTitle ? wrapBareMathForRender(richTitle) : bareWrapped;
+
+  try {
+    if ((globalThis as any).__DEV__) {
+      console.log('[HistoryCard]', `code=${item?.short_code}`, 'stripped=', String(formTitle).slice(0, 80), 'rich=', richTitle ? String(richTitle).slice(0, 80) : richTitle, 'final=', String(finalTitle).slice(0, 80));
+    }
+  } catch {}
+
   if (!item || typeof item !== 'object') return null;
 
   const isExpired = isSubmissionExpired(item);
@@ -18,6 +71,7 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
   const isAutoSubmitted = item.status === 'auto_submitted' || (item.status === 'in_progress' && isExpired);
   const isCheating = item.status === 'cheating';
   const isLocked = item.status === 'locked';
+  const computedExpiredAt = getTimerExpiredAt(item);
 
   const getStatusLabel = () => {
     if (isCheating) {
@@ -59,20 +113,12 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
 
   const isInProgress = item.status === 'in_progress' && !isExpired;
 
-  // Bulletproof sanitization for formTitle, dateStr, and scoreVal
-  let formTitle = language === 'ID' ? 'Form Tanpa Judul' : 'Untitled Form';
-  if (typeof item.form_title === 'string' && item.form_title.trim()) {
-    formTitle = item.form_title;
-  } else if (typeof item.title === 'string' && item.title.trim()) {
-    formTitle = item.title;
-  } else if (item.form && typeof item.form === 'object' && typeof item.form.title === 'string' && item.form.title.trim()) {
-    formTitle = item.form.title;
-  }
-
   let dateStr = '';
   const rawDate = isInProgress
     ? (item.started_at || item.created_at || item.updated_at)
-    : (item.submitted_at || item.updated_at || item.created_at);
+    : (isAutoSubmitted || isExpired)
+      ? (computedExpiredAt || item.submitted_at || item.updated_at || item.created_at)
+      : (item.submitted_at || item.updated_at || item.created_at);
 
   if (typeof rawDate === 'string') {
     dateStr = rawDate;
@@ -107,12 +153,18 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
       <View style={[styles.accentBar, { backgroundColor: accent }]} />
       <View style={styles.topRow}>
         <View style={styles.titleContainer}>
-          <Text
-            style={[styles.title, { color: colors.text, fontSize: 14.5 * fontSizeScale }]}
-            numberOfLines={1}
-          >
-            {formTitle}
-          </Text>
+          <View style={{ flex: 1 }}>
+            <RichTextRenderer
+              html={finalTitle}
+              numberOfLines={1}
+              style={{
+                color: colors.text,
+                fontSize: 14.5 * fontSizeScale,
+                fontWeight: '700',
+                lineHeight: Math.max(20, Math.round(14.5 * fontSizeScale * 1.4)),
+              }}
+            />
+          </View>
           <Ionicons name="open-outline" size={12 * fontSizeScale} color={colors.textMuted} style={styles.linkIcon} />
         </View>
 

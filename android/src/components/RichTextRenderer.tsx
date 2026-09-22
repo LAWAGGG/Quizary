@@ -334,21 +334,44 @@ export function hasMathFormulas(html?: string | null): boolean {
   );
 }
 
+/**
+ * Wraps bare LaTeX (no math delimiters) in \(...\) so KaTeX in the WebView
+ * can render it — needed for titles that arrive HTML-stripped (e.g. form_title
+ * from GET /me/submissions) but still contain raw TeX commands.
+ */
+export function wrapBareMathForRender(html?: string | null): string {
+  if (!html || typeof html !== 'string') return '';
+  if (!hasMathFormulas(html)) return html;
+  if (
+    html.includes('$$') ||
+    html.includes('\\[') ||
+    html.includes('\\(') ||
+    html.includes('ql-formula') ||
+    html.includes('data-value') ||
+    /\$[^\$\n]*\$/.test(html)
+  ) {
+    return html;
+  }
+  const trimmed = html.trim();
+  if (!trimmed) return html;
+  return `\\(${trimmed}\\)`;
+}
+
 interface RichTextRendererProps {
   html?: string | null;
   style?: StyleProp<TextStyle>;
   numberOfLines?: number;
+  useNativeOnly?: boolean;
 }
 
 /**
  * Determines if an HTML string strictly requires a WebView browser context
- * (e.g. math formulas, code blocks, tables, embedded images/iframes).
+ * (e.g. math formulas, HTML formatting, lists, code blocks, tables, embedded images/iframes).
  */
 function needsRichWebView(html: string): boolean {
   if (!html || typeof html !== 'string') return false;
   if (hasMathFormulas(html)) return true;
-  return /<(pre|code|table|img|iframe)[\s>]/i.test(html)
-    || /class="[^"]*ql-(code-block|syntax|formula)/i.test(html);
+  return /<[a-z][\s\S]*>/i.test(html) || /ql-/i.test(html) || html.includes('&');
 }
 
 /** Safe embed of arbitrary HTML as a JS string literal (escapes </script> etc). */
@@ -360,15 +383,17 @@ function jsLiteral(value: string): string {
 }
 
 function estimateWebViewHeight(html: string, fontSize: number, lineHeight: number): number {
-  if (!html) return 30;
-  const textLen = stripHtmlTags(html).length || html.length;
-  const charsPerLine = Math.max(18, Math.floor(320 / Math.max(10, fontSize) * 1.85));
+  if (!html) return 24;
+  const clean = stripHtmlTags(html).trim();
+  if (!clean && !/<img|<iframe|<table|<code/i.test(html)) return 24;
+  const textLen = clean.length || html.length;
+  const charsPerLine = Math.max(20, Math.floor(340 / Math.max(10, fontSize) * 1.85));
   const lines = Math.max(1, Math.ceil(textLen / charsPerLine));
-  return Math.max(32, Math.min(420, Math.ceil(lines * lineHeight) + 12));
+  return Math.max(24, Math.min(360, Math.ceil(lines * lineHeight) + 6));
 }
 
 /**
- * Parses basic inline HTML tags (p, br, strong, b, em, i, u, s, strike, del, a, span)
+ * Parses basic inline & block HTML tags (p, br, strong, b, em, i, u, s, strike, del, a, span, sub, sup, ul, ol, li, blockquote, h1-h6)
  * into native React Native <Text> nodes without webview height gaps.
  */
 function SimpleNativeHtml({
@@ -380,7 +405,7 @@ function SimpleNativeHtml({
   style?: StyleProp<TextStyle>;
   numberOfLines?: number;
 }) {
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
   const flattenedStyle = StyleSheet.flatten(style) || {};
 
   const decodeEntities = (str: string) =>
@@ -392,12 +417,24 @@ function SimpleNativeHtml({
       .replace(/&quot;/gi, '"')
       .replace(/&#039;/gi, "'")
       .replace(/&#39;/gi, "'")
-      .replace(/&apos;/gi, "'");
+      .replace(/&apos;/gi, "'")
+      .replace(/&deg;/gi, '°')
+      .replace(/&plusmn;/gi, '±')
+      .replace(/&times;/gi, '×')
+      .replace(/&divide;/gi, '÷')
+      .replace(/&infin;/gi, '∞')
+      .replace(/&alpha;/gi, 'α')
+      .replace(/&beta;/gi, 'β')
+      .replace(/&gamma;/gi, 'γ')
+      .replace(/&delta;/gi, 'δ')
+      .replace(/&pi;/gi, 'π')
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 
-  const parseNodes = (raw: string): React.ReactNode[] => {
+  const parseNodes = (raw: string, isOrdered = false, listIndex = { val: 1 }): React.ReactNode[] => {
     if (!raw) return [];
 
-    const tagRegex = /<(p|br|strong|b|em|i|u|s|strike|del|a|span|code|h[1-6])([^>]*)>([\s\S]*?)<\/\1>|<br\s*\/?>/gi;
+    const tagRegex = /<(p|br|strong|b|em|i|u|s|strike|del|a|span|code|h[1-6]|ul|ol|li|blockquote|div|sub|sup)([^>]*)>([\s\S]*?)<\/\1>|<br\s*\/?>/gi;
     const nodes: React.ReactNode[] = [];
     let lastIdx = 0;
     let match: RegExpExecArray | null;
@@ -415,12 +452,61 @@ function SimpleNativeHtml({
 
       if (fullTag.toLowerCase().startsWith('<br')) {
         nodes.push('\n');
+      } else if (tag === 'p' || tag === 'div') {
+        const children = parseNodes(content);
+        nodes.push(
+          <Text key={`block-${match.index}`}>
+            {children}
+            {'\n'}
+          </Text>
+        );
+      } else if (tag === 'ul') {
+        const children = parseNodes(content, false);
+        nodes.push(
+          <Text key={`ul-${match.index}`}>
+            {'\n'}{children}
+          </Text>
+        );
+      } else if (tag === 'ol') {
+        const children = parseNodes(content, true, { val: 1 });
+        nodes.push(
+          <Text key={`ol-${match.index}`}>
+            {'\n'}{children}
+          </Text>
+        );
+      } else if (tag === 'li') {
+        const bulletPrefix = isOrdered ? `${listIndex.val++}. ` : '• ';
+        const children = parseNodes(content);
+        nodes.push(
+          <Text key={`li-${match.index}`}>
+            {bulletPrefix}{children}{'\n'}
+          </Text>
+        );
+      } else if (tag === 'blockquote') {
+        const children = parseNodes(content);
+        nodes.push(
+          <Text key={`bq-${match.index}`} style={{ fontStyle: 'italic', color: colors.textSub }}>
+            "{children}"{'\n'}
+          </Text>
+        );
+      } else if (tag === 'sub' || tag === 'sup') {
+        const plainText = stripHtmlTags(content);
+        const converted = tag === 'sub'
+          ? plainText.split('').map(c => SUBSCRIPTS[c] || c).join('')
+          : plainText.split('').map(c => SUPERSCRIPTS[c] || c).join('');
+        nodes.push(converted);
       } else {
         const children = parseNodes(content);
         const nodeStyle: TextStyle = {};
 
+        const colorMatch = attribs.match(/style=["'][^"']*color:\s*([^;]+)/i);
+        if (colorMatch && colorMatch[1]) {
+          nodeStyle.color = colorMatch[1].trim();
+        }
+
         if (tag === 'code' || attribs.includes('ql-font-monospace')) {
           nodeStyle.fontFamily = 'monospace';
+          nodeStyle.backgroundColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)';
         } else if (tag === 'strong' || tag === 'b') {
           nodeStyle.fontFamily = 'Poppins_700Bold';
           nodeStyle.fontWeight = '700';
@@ -492,7 +578,11 @@ function SimpleNativeHtml({
   );
 }
 
-export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendererProps) {
+export function RichTextRenderer({ html, style, numberOfLines, useNativeOnly }: RichTextRendererProps) {
+  if (!html) return null;
+  if (useNativeOnly) {
+    return <SimpleNativeHtml html={html} style={style} numberOfLines={numberOfLines} />;
+  }
   const { colors } = useAppTheme();
   // Extract fontSize and color from passed style if available
   const flattenedStyle = StyleSheet.flatten(style) || {};
@@ -634,7 +724,8 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
             function sendHeight() {
               var el = document.getElementById('content');
               if (!el) return;
-              var h = Math.ceil(el.offsetHeight || el.scrollHeight || el.getBoundingClientRect().height);
+              var rect = el.getBoundingClientRect();
+              var h = Math.max(el.offsetHeight || 0, el.scrollHeight || 0, Math.ceil(rect.height || 0));
               if (window.ReactNativeWebView && h > 0) {
                 window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'HEIGHT_CHANGE', height: h }));
               }
@@ -642,6 +733,14 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
             var content = document.getElementById('content');
             if (content) {
               content.innerHTML = ${contentLit};
+            }
+            if (typeof ResizeObserver !== 'undefined' && content) {
+              var ro = new ResizeObserver(function() { sendHeight(); });
+              ro.observe(content);
+            }
+            if (typeof MutationObserver !== 'undefined' && content) {
+              var mo = new MutationObserver(function() { sendHeight(); });
+              mo.observe(content, { childList: true, subtree: true, attributes: true, characterData: true });
             }
             var katexOk = typeof window.katex !== 'undefined' && window.katex;
             var autoOk = typeof window.renderMathInElement === 'function';
@@ -677,9 +776,17 @@ export function RichTextRenderer({ html, style, numberOfLines }: RichTextRendere
               post('MATH_RENDERED', { ok: false, katex: !!katexOk, auto: autoOk, error: String((e && e.message) || e) });
             }
             sendHeight();
-            setTimeout(sendHeight, 120);
-            setTimeout(sendHeight, 400);
-            setTimeout(sendHeight, 900);
+            var imgs = document.querySelectorAll('img');
+            for (var im = 0; im < imgs.length; im++) {
+              imgs[im].addEventListener('load', sendHeight);
+              imgs[im].addEventListener('error', sendHeight);
+            }
+            if (document.fonts && document.fonts.ready) {
+              document.fonts.ready.then(sendHeight);
+            }
+            setTimeout(sendHeight, 60);
+            setTimeout(sendHeight, 200);
+            setTimeout(sendHeight, 600);
           })();
         </script>
       </body>

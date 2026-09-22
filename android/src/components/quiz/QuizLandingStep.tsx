@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
-import { RichTextRenderer, stripHtmlTags } from '../RichTextRenderer';
+import { RichTextRenderer, stripHtmlTags, hasMathFormulas, wrapBareMathForRender } from '../RichTextRenderer';
 import { QuizBackground } from './QuizBackground';
 
 interface QuizLandingStepProps {
@@ -75,9 +75,30 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
               ) : null}
 
               {/* Form Title */}
-              <Text style={[styles.quizTitleQuizStyle, { fontSize: 32 * fontSizeScale }]}>
-                {stripHtmlTags(publicForm?.title) || (language === 'ID' ? 'Kuis' : 'Quiz')}
-              </Text>
+              {(() => {
+                const rawTitle = publicForm?.title || '';
+                if (hasMathFormulas(rawTitle)) {
+                  return (
+                    <View style={{ marginBottom: 8, width: '100%', alignItems: 'center' }}>
+                      <RichTextRenderer
+                        html={wrapBareMathForRender(rawTitle)}
+                        style={{
+                          color: '#FFFFFF',
+                          fontSize: 32 * fontSizeScale,
+                          fontWeight: '900',
+                          textAlign: 'center',
+                          lineHeight: Math.round(32 * fontSizeScale * 1.25),
+                        }}
+                      />
+                    </View>
+                  );
+                }
+                return (
+                  <Text style={[styles.quizTitleQuizStyle, { fontSize: 32 * fontSizeScale }]}>
+                    {stripHtmlTags(rawTitle) || (language === 'ID' ? 'Kuis' : 'Quiz')}
+                  </Text>
+                );
+              })()}
 
               {/* Form Description */}
               {publicForm?.description ? (
@@ -156,9 +177,29 @@ export function QuizLandingStep({ publicForm, starting, onStart }: QuizLandingSt
             ) : null}
 
             <View style={[styles.titleCardForm, { backgroundColor: colors.cardBg, borderColor: colors.cardBorder }]}>
-              <Text style={[styles.quizTitleForm, { color: colors.text, fontSize: 24 * fontSizeScale }]}>
-                {stripHtmlTags(publicForm?.title) || (language === 'ID' ? 'Kuis' : 'Quiz')}
-              </Text>
+              {(() => {
+                const rawTitle = publicForm?.title || '';
+                if (hasMathFormulas(rawTitle)) {
+                  return (
+                    <View style={{ marginBottom: 10 }}>
+                      <RichTextRenderer
+                        html={wrapBareMathForRender(rawTitle)}
+                        style={{
+                          color: colors.text,
+                          fontSize: 24 * fontSizeScale,
+                          fontWeight: '800',
+                          lineHeight: Math.round(24 * fontSizeScale * 1.3),
+                        }}
+                      />
+                    </View>
+                  );
+                }
+                return (
+                  <Text style={[styles.quizTitleForm, { color: colors.text, fontSize: 24 * fontSizeScale }]}>
+                    {stripHtmlTags(rawTitle) || (language === 'ID' ? 'Kuis' : 'Quiz')}
+                  </Text>
+                );
+              })()}
 
               {publicForm?.description ? (
                 <View style={{ marginBottom: 20 }}>

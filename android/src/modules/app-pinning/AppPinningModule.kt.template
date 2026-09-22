@@ -3,7 +3,11 @@ package com.qynatech.Quizary
 import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
+import android.view.MotionEvent
+import android.view.ViewTreeObserver
 import android.view.WindowManager
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -11,10 +15,51 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.module.annotations.ReactModule
 import com.facebook.react.bridge.UiThreadUtil
+import com.facebook.react.modules.core.DeviceEventManagerModule
 
 @ReactModule(name = "AppPinning")
 class AppPinningModule(private val reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
     override fun getName(): String = "AppPinning"
+
+    private var isObscuredByTouch = false
+    private var isSecureEnabled = false
+    private var focusChangeListener: ViewTreeObserver.OnWindowFocusChangeListener? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private val checkRunnable = object : Runnable {
+        override fun run() {
+            if (!isSecureEnabled) return
+            val activity = reactContext.currentActivity
+            if (activity != null) {
+                var floating = false
+                var reason = ""
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    if (activity.isInPictureInPictureMode) { floating = true; reason = "pip" }
+                    if (!floating && activity.isInMultiWindowMode) { floating = true; reason = "multi-window" }
+                }
+                if (!floating && !activity.hasWindowFocus()) {
+                    floating = true
+                    reason = "window-focus-lost"
+                }
+                if (!floating && isObscuredByTouch) {
+                    floating = true
+                    reason = "touch-obscured"
+                }
+                if (floating) {
+                    sendEvent("onOverlayDetected", reason)
+                }
+            }
+            mainHandler.postDelayed(this, 100)
+        }
+    }
+
+    private fun sendEvent(eventName: String, params: Any?) {
+        try {
+            reactContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit(eventName, params)
+        } catch (_: Exception) {}
+    }
 
     @ReactMethod
     fun startPinning(promise: Promise) {
@@ -78,32 +123,41 @@ class AppPinningModule(private val reactContext: ReactApplicationContext) : Reac
     @ReactMethod
     fun hasOverlay(promise: Promise) {
         try {
-            // Auto-check: PiP, multi-window, or draw-over-other-apps
+            // Auto-check: PiP, multi-window, draw-over-other-apps, touch-obscured, or loss of window focus
             val activity = reactContext.currentActivity
+            if (activity == null) {
+                promise.resolve(true)
+                return
+            }
             var floating = false
             var reason = ""
-            if (activity != null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    if (activity.isInPictureInPictureMode) { floating = true; reason = "pip" }
-                    if (!floating && activity.isInMultiWindowMode) { floating = true; reason = "multi-window" }
-                }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                if (activity.isInPictureInPictureMode) { floating = true; reason = "pip" }
+                if (!floating && activity.isInMultiWindowMode) { floating = true; reason = "multi-window" }
             }
-            if (!floating && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                try {
-                    if (Settings.canDrawOverlays(reactContext)) {
-                        // canDrawOverlays true means this app has overlay permission,
-                        // but we also want to detect if ANY overlay is currently drawn.
-                        // We treat true as potential floating if activity is not focused
-                        // and is not in lock task. For auto-check we conservatively
-                        // consider PiP/multi-window already, overlay presence is best
-                        // detected via FLAG_SECURE + focus loss already handled by pin.
-                        // So we keep floating false here unless PiP/multi-window.
-                    }
-                } catch (_: Exception) {}
+            if (!floating && !activity.hasWindowFocus()) {
+                floating = true
+                reason = "window-focus-lost"
             }
-            // Additional: check if there is an overlay window currently visible
-            // is best handled by JS AppState + isInPipMode, so we return floating state
+            if (!floating && isObscuredByTouch) {
+                floating = true
+                reason = "touch-obscured"
+            }
             promise.resolve(floating)
+        } catch (e: Exception) {
+            promise.resolve(true)
+        }
+    }
+
+    @ReactMethod
+    fun hasWindowFocus(promise: Promise) {
+        try {
+            val activity = reactContext.currentActivity
+            if (activity != null) {
+                promise.resolve(activity.hasWindowFocus())
+            } else {
+                promise.resolve(false)
+            }
         } catch (e: Exception) {
             promise.resolve(false)
         }
@@ -130,10 +184,50 @@ class AppPinningModule(private val reactContext: ReactApplicationContext) : Reac
                 val activity = reactContext.currentActivity
                 if (activity != null) {
                     val window = activity.window
+                    isSecureEnabled = enable
                     if (enable) {
                         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+                        try {
+                            try {
+                                val m = window.decorView.javaClass.getMethod("setFilterTouchesWhenObfuscated", Boolean::class.javaPrimitiveType ?: java.lang.Boolean.TYPE)
+                                m.invoke(window.decorView, true)
+                            } catch (_: Exception) {}
+                            window.decorView.setOnTouchListener { _, event ->
+                                val flags = event.flags
+                                val isObscured = (flags and MotionEvent.FLAG_WINDOW_IS_OBSCURED) != 0 ||
+                                        (flags and MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED) != 0
+                                if (isObscured) {
+                                    isObscuredByTouch = true
+                                    sendEvent("onOverlayDetected", "touch-obscured")
+                                }
+                                false
+                            }
+                            if (focusChangeListener == null) {
+                                focusChangeListener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+                                    if (!hasFocus && isSecureEnabled) {
+                                        sendEvent("onOverlayDetected", "window-focus-lost")
+                                    }
+                                }
+                                window.decorView.viewTreeObserver.addOnWindowFocusChangeListener(focusChangeListener)
+                            }
+                        } catch (_: Exception) {}
+                        mainHandler.removeCallbacks(checkRunnable)
+                        mainHandler.post(checkRunnable)
                     } else {
                         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        try {
+                            try {
+                                val m = window.decorView.javaClass.getMethod("setFilterTouchesWhenObfuscated", Boolean::class.javaPrimitiveType ?: java.lang.Boolean.TYPE)
+                                m.invoke(window.decorView, false)
+                            } catch (_: Exception) {}
+                            window.decorView.setOnTouchListener(null)
+                            if (focusChangeListener != null) {
+                                window.decorView.viewTreeObserver.removeOnWindowFocusChangeListener(focusChangeListener)
+                                focusChangeListener = null
+                            }
+                        } catch (_: Exception) {}
+                        isObscuredByTouch = false
+                        mainHandler.removeCallbacks(checkRunnable)
                     }
                 }
                 promise.resolve(true)
@@ -142,4 +236,12 @@ class AppPinningModule(private val reactContext: ReactApplicationContext) : Reac
             }
         }
     }
+
+    @ReactMethod
+    fun addListener(eventName: String) {}
+
+    @ReactMethod
+    fun removeListeners(count: Int) {}
 }
+
+
