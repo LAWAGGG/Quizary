@@ -348,26 +348,7 @@ export default function QuizScreen() {
 
     setCheatReason(reason);
 
-    // Immediate lock for any floating overlay / focus loss / touch obscured / PiP / multi-window violations
-    if (
-      reason === 'floating-overlay' ||
-      reason === 'touch-obscured' ||
-      reason === 'window-focus-lost' ||
-      reason === 'window-blur' ||
-      reason === 'pip' ||
-      reason === 'multi-window'
-    ) {
-      if (warningTimerRef.current) clearInterval(warningTimerRef.current);
-      warningTimerRef.current = null;
-      setWarningVisible(false);
-      warningVisibleRef.current = false;
-      playCheat().catch(() => {});
-      setLockedAt(serverNowMs());
-      setLockedVisible(true);
-      lockedVisibleRef.current = true;
-      lockSubmission(sid, reason).catch(() => {});
-      return;
-    }
+
 
     warningStartRef.current = serverNowMs();
     countdownRef.current = 5;
