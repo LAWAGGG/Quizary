@@ -1854,7 +1854,7 @@ export default function AnswerQuiz() {
         {bannerPath && (
           <img loading="lazy" decoding="async" src={resolveMediaUrl(bannerPath)} alt="" className="w-full h-40 object-cover rounded-3xl mb-6 shadow-card" />
         )}
-        <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="flex flex-col gap-2 mb-6 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <h1 className="font-display text-xl font-bold text-ink dark:text-gray-100"><RichText html={resolveRichHtml(effectiveTitle)} className="rich-text" /></h1>
           <div className="flex items-center gap-2 shrink-0">
             {timeLeft !== null && (
