@@ -51,7 +51,7 @@ import { useAppPinning } from '../hooks/useAppPinning';
 import { useCheatSound } from '../hooks/useCheatSound';
 import { useLockedVolume } from '../hooks/useLockedVolume';
 import { useFloatingBlock } from '../hooks/useFloatingBlock';
-import { stripHtmlTags } from '../components/RichTextRenderer';
+import { stripHtmlTags, RichTextRenderer, hasMathFormulas, wrapBareMathForRender } from '../components/RichTextRenderer';
 import { isSubmissionExpired } from '../utils/api';
 import { serverNowMs, parseServerTime, monoNow, lastSyncMonoMs, wallClockJumpMs } from '../utils/serverClock';
 
@@ -1481,21 +1481,40 @@ export default function QuizScreen() {
               ) : <View style={{ width: 34 }} />}
 
               <View style={{ flex: 1, paddingHorizontal: 8, justifyContent: 'center', alignItems: 'center' }}>
-                <Text
-                  style={[
-                    styles.formHeaderTitle,
-                    {
-                      color: colors.text,
-                      textAlign: (formattedTimer || publicForm?.is_restricted) ? 'left' : 'center',
-                      marginHorizontal: 0,
-                      fontSize: 13,
-                      lineHeight: 18,
-                    },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {publicForm.title?.replace(/<[^>]*>/g, '') || 'Form'}
-                </Text>
+                {(() => {
+                  const rawHeaderTitle = publicForm?.title || '';
+                  if (hasMathFormulas(rawHeaderTitle)) {
+                    return (
+                      <RichTextRenderer
+                        html={wrapBareMathForRender(rawHeaderTitle)}
+                        style={{
+                          color: colors.text,
+                          fontWeight: '700',
+                          textAlign: (formattedTimer || publicForm?.is_restricted) ? 'left' : 'center',
+                          fontSize: 13,
+                          lineHeight: 18,
+                        }}
+                      />
+                    );
+                  }
+                  return (
+                    <Text
+                      style={[
+                        styles.formHeaderTitle,
+                        {
+                          color: colors.text,
+                          textAlign: (formattedTimer || publicForm?.is_restricted) ? 'left' : 'center',
+                          marginHorizontal: 0,
+                          fontSize: 13,
+                          lineHeight: 18,
+                        },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {stripHtmlTags(rawHeaderTitle) || 'Form'}
+                    </Text>
+                  );
+                })()}
               </View>
 
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 34, justifyContent: 'flex-end' }}>

@@ -334,6 +334,29 @@ export function hasMathFormulas(html?: string | null): boolean {
   );
 }
 
+/**
+ * Wraps bare LaTeX (no math delimiters) in \(...\) so KaTeX in the WebView
+ * can render it — needed for titles that arrive HTML-stripped (e.g. form_title
+ * from GET /me/submissions) but still contain raw TeX commands.
+ */
+export function wrapBareMathForRender(html?: string | null): string {
+  if (!html || typeof html !== 'string') return '';
+  if (!hasMathFormulas(html)) return html;
+  if (
+    html.includes('$$') ||
+    html.includes('\\[') ||
+    html.includes('\\(') ||
+    html.includes('ql-formula') ||
+    html.includes('data-value') ||
+    /\$[^\$\n]*\$/.test(html)
+  ) {
+    return html;
+  }
+  const trimmed = html.trim();
+  if (!trimmed) return html;
+  return `\\(${trimmed}\\)`;
+}
+
 interface RichTextRendererProps {
   html?: string | null;
   style?: StyleProp<TextStyle>;

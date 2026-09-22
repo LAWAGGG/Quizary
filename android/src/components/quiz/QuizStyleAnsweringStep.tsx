@@ -21,7 +21,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
 import { useAppAlert } from '../../context/AlertContext';
-import { RichTextRenderer, stripHtmlTags } from '../RichTextRenderer';
+import { RichTextRenderer, stripHtmlTags, hasMathFormulas, wrapBareMathForRender } from '../RichTextRenderer';
 import { extractImgUrl } from './QuizQuestionCard';
 import { AudioPlayer } from '../AudioPlayer';
 import { isAudioUrl, getQuestionImageUrl, getQuestionAudioUrl } from '../../utils/media';
@@ -448,20 +448,39 @@ export function QuizStyleAnsweringStep({
           </TouchableOpacity>
 
           <View style={{ flex: 1, paddingHorizontal: 8, justifyContent: 'center', alignItems: 'center' }}>
-            <Text
-              style={[
-                styles.headerQuizTitle,
-                {
-                  fontSize: 13 * fontSizeScale,
-                  textAlign: (formattedTimerStr || publicForm?.is_restricted) ? 'left' : 'center',
-                  marginHorizontal: 0,
-                  lineHeight: 18,
-                },
-              ]}
-              numberOfLines={2}
-            >
-              {stripHtmlTags(publicForm?.title) || 'Kuis'}
-            </Text>
+            {(() => {
+              const rawHeaderTitle = publicForm?.title || '';
+              if (hasMathFormulas(rawHeaderTitle)) {
+                return (
+                  <RichTextRenderer
+                    html={wrapBareMathForRender(rawHeaderTitle)}
+                    style={{
+                      color: '#FFFFFF',
+                      fontSize: 13 * fontSizeScale,
+                      fontWeight: '800',
+                      textAlign: (formattedTimerStr || publicForm?.is_restricted) ? 'left' : 'center',
+                      lineHeight: 18,
+                    }}
+                  />
+                );
+              }
+              return (
+                <Text
+                  style={[
+                    styles.headerQuizTitle,
+                    {
+                      fontSize: 13 * fontSizeScale,
+                      textAlign: (formattedTimerStr || publicForm?.is_restricted) ? 'left' : 'center',
+                      marginHorizontal: 0,
+                      lineHeight: 18,
+                    },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {stripHtmlTags(rawHeaderTitle) || 'Kuis'}
+                </Text>
+              );
+            })()}
           </View>
 
           <View style={styles.headerRightGroup}>
@@ -1207,9 +1226,30 @@ export function QuizStyleAnsweringStep({
             </View>
 
             <ScrollView style={styles.infoModalScroll} showsVerticalScrollIndicator={false}>
-              <Text style={[styles.infoModalTitle, { color: colors.text }]}>
-                {stripHtmlTags(publicForm?.title) || 'Quizary'}
-              </Text>
+              {(() => {
+                const rawTitle = publicForm?.title || '';
+                if (hasMathFormulas(rawTitle)) {
+                  return (
+                    <View style={{ marginBottom: 8, alignItems: 'center' }}>
+                      <RichTextRenderer
+                        html={wrapBareMathForRender(rawTitle)}
+                        style={{
+                          color: colors.text,
+                          fontSize: 20,
+                          fontWeight: 'bold',
+                          textAlign: 'center',
+                          lineHeight: 26,
+                        }}
+                      />
+                    </View>
+                  );
+                }
+                return (
+                  <Text style={[styles.infoModalTitle, { color: colors.text }]}>
+                    {stripHtmlTags(rawTitle) || 'Quizary'}
+                  </Text>
+                );
+              })()}
               {publicForm?.description ? (
                 <Text style={[styles.infoModalDesc, { color: colors.textSub }]}>
                   {stripHtmlTags(publicForm.description)}

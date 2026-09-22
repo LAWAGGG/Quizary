@@ -4,6 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
 import { isSubmissionExpired } from '../utils/api';
 import { parseServerTime } from '../utils/serverClock';
+import { RichTextRenderer, wrapBareMathForRender } from './RichTextRenderer';
+import { useRichFormTitle } from '../hooks/useRichFormTitle';
 
 interface SubmissionHistoryCardProps {
   item: any;
@@ -36,6 +38,32 @@ function getTimerExpiredAt(sub: any) {
 
 export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardProps) {
   const { colors, isDark, language, fontSizeScale } = useAppTheme();
+
+  // Bulletproof sanitization for formTitle (before hooks so item can be guarded below)
+  let formTitle = language === 'ID' ? 'Form Tanpa Judul' : 'Untitled Form';
+  if (item && typeof item === 'object') {
+    if (typeof item.form_title === 'string' && item.form_title.trim()) {
+      formTitle = item.form_title;
+    } else if (typeof item.title === 'string' && item.title.trim()) {
+      formTitle = item.title;
+    } else if (item.form && typeof item.form === 'object' && typeof item.form.title === 'string' && item.form.title.trim()) {
+      formTitle = item.form.title;
+    }
+  }
+
+  // Backend `/me/submissions` strips all HTML tags from form_title, so formula
+  // markup is destroyed. Fetch the rich title from /q/{shortCode} (cached) and
+  // render it the same way the answering screen does.
+  const bareWrapped = wrapBareMathForRender(formTitle);
+  const richTitle = useRichFormTitle(item?.short_code || null);
+  const finalTitle = richTitle ? wrapBareMathForRender(richTitle) : bareWrapped;
+
+  try {
+    if ((globalThis as any).__DEV__) {
+      console.log('[HistoryCard]', `code=${item?.short_code}`, 'stripped=', String(formTitle).slice(0, 80), 'rich=', richTitle ? String(richTitle).slice(0, 80) : richTitle, 'final=', String(finalTitle).slice(0, 80));
+    }
+  } catch {}
+
   if (!item || typeof item !== 'object') return null;
 
   const isExpired = isSubmissionExpired(item);
@@ -85,16 +113,6 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
 
   const isInProgress = item.status === 'in_progress' && !isExpired;
 
-  // Bulletproof sanitization for formTitle, dateStr, and scoreVal
-  let formTitle = language === 'ID' ? 'Form Tanpa Judul' : 'Untitled Form';
-  if (typeof item.form_title === 'string' && item.form_title.trim()) {
-    formTitle = item.form_title;
-  } else if (typeof item.title === 'string' && item.title.trim()) {
-    formTitle = item.title;
-  } else if (item.form && typeof item.form === 'object' && typeof item.form.title === 'string' && item.form.title.trim()) {
-    formTitle = item.form.title;
-  }
-
   let dateStr = '';
   const rawDate = isInProgress
     ? (item.started_at || item.created_at || item.updated_at)
@@ -135,12 +153,18 @@ export function SubmissionHistoryCard({ item, onPress }: SubmissionHistoryCardPr
       <View style={[styles.accentBar, { backgroundColor: accent }]} />
       <View style={styles.topRow}>
         <View style={styles.titleContainer}>
-          <Text
-            style={[styles.title, { color: colors.text, fontSize: 14.5 * fontSizeScale }]}
-            numberOfLines={1}
-          >
-            {formTitle}
-          </Text>
+          <View style={{ flex: 1 }}>
+            <RichTextRenderer
+              html={finalTitle}
+              numberOfLines={1}
+              style={{
+                color: colors.text,
+                fontSize: 14.5 * fontSizeScale,
+                fontWeight: '700',
+                lineHeight: Math.max(20, Math.round(14.5 * fontSizeScale * 1.4)),
+              }}
+            />
+          </View>
           <Ionicons name="open-outline" size={12 * fontSizeScale} color={colors.textMuted} style={styles.linkIcon} />
         </View>
 
