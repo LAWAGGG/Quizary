@@ -11,22 +11,22 @@ export function ScoringSettings({ mode = 'auto', onModeChange, questions = [], m
   const autoPoints = Math.round((100 / count) * 10) / 10
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex w-full min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:flex-wrap">
       <Select
         value={mode}
         onChange={(e) => onModeChange?.(e.target.value)}
-        className="w-full sm:w-[140px]"
+        className="w-full min-w-0 shrink-0 sm:w-[180px]"
       >
         <option value="auto">Auto grade</option>
         <option value="manual">Manual</option>
       </Select>
 
       {mode === 'auto' ? (
-        <span className="text-xs text-gray-500 dark:text-gray-400">
+        <span className="min-w-0 break-words text-xs text-gray-500 dark:text-gray-400">
           100 ÷ {count} = {autoPoints} pts each
         </span>
       ) : (
-        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <span className="text-xs text-gray-500 dark:text-gray-400">Weight:</span>
           <input
             type="number"
