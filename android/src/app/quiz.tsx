@@ -586,21 +586,10 @@ export default function QuizScreen() {
     return () => clearInterval(id);
   }, [submission?.expired_at]);
 
-  // Floating overlay auto-check (all floating: PiP, multi-window, overlay, focus loss)
+  // Floating overlay auto-check disabled to prevent false positive locks on modals/refresh/sections
   useEffect(() => {
-    if (!submission) return;
-    if (!isRestrictedRef.current) return;
-    const id = setInterval(async () => {
-      if (!answeringRef.current || lockedVisibleRef.current || pinInProgressRef.current) return;
-      try {
-        const floating = await hasFloating();
-        if (floating) {
-          triggerWarningFlow('floating-overlay');
-        }
-      } catch {}
-    }, 250);
-    return () => clearInterval(id);
-  }, [submission, hasFloating, triggerWarningFlow]);
+    return;
+  }, []);
 
   // AppState restricted handler -> 5 sec warning
   useEffect(() => {

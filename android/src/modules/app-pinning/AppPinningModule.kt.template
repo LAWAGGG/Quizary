@@ -28,28 +28,7 @@ class AppPinningModule(private val reactContext: ReactApplicationContext) : Reac
 
     private val checkRunnable = object : Runnable {
         override fun run() {
-            if (!isSecureEnabled) return
-            val activity = reactContext.currentActivity
-            if (activity != null) {
-                var floating = false
-                var reason = ""
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    if (activity.isInPictureInPictureMode) { floating = true; reason = "pip" }
-                    if (!floating && activity.isInMultiWindowMode) { floating = true; reason = "multi-window" }
-                }
-                if (!floating && !activity.hasWindowFocus()) {
-                    floating = true
-                    reason = "window-focus-lost"
-                }
-                if (!floating && isObscuredByTouch) {
-                    floating = true
-                    reason = "touch-obscured"
-                }
-                if (floating) {
-                    sendEvent("onOverlayDetected", reason)
-                }
-            }
-            mainHandler.postDelayed(this, 100)
+            // Disabled to prevent false positive overlay events on internal modals/dialogs
         }
     }
 
@@ -122,31 +101,7 @@ class AppPinningModule(private val reactContext: ReactApplicationContext) : Reac
 
     @ReactMethod
     fun hasOverlay(promise: Promise) {
-        try {
-            // Auto-check: PiP, multi-window, draw-over-other-apps, touch-obscured, or loss of window focus
-            val activity = reactContext.currentActivity
-            if (activity == null) {
-                promise.resolve(true)
-                return
-            }
-            var floating = false
-            var reason = ""
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                if (activity.isInPictureInPictureMode) { floating = true; reason = "pip" }
-                if (!floating && activity.isInMultiWindowMode) { floating = true; reason = "multi-window" }
-            }
-            if (!floating && !activity.hasWindowFocus()) {
-                floating = true
-                reason = "window-focus-lost"
-            }
-            if (!floating && isObscuredByTouch) {
-                floating = true
-                reason = "touch-obscured"
-            }
-            promise.resolve(floating)
-        } catch (e: Exception) {
-            promise.resolve(true)
-        }
+        promise.resolve(false)
     }
 
     @ReactMethod

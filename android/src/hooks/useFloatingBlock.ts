@@ -15,39 +15,14 @@ function getNative(): AppPinningNative | null {
 }
 
 export function useFloatingBlock(onOverlayDetected?: (reason: string) => void) {
+  // Disabled 3rd party floating overlay detector listener to prevent false positive locks
+  // when opening modals, zoom, refresh, date pickers, or changing sections.
   useEffect(() => {
-    if (Platform.OS !== 'android' || !onOverlayDetected) return;
-    const native = (NativeModules as any).AppPinning;
-    if (!native) return;
-    try {
-      const emitter = new NativeEventEmitter(native);
-      const sub = emitter.addListener('onOverlayDetected', (reason: string) => {
-        onOverlayDetected(reason || 'floating-overlay');
-      });
-      return () => sub.remove();
-    } catch {
-      return;
-    }
+    return;
   }, [onOverlayDetected]);
 
   const hasFloating = useCallback(async (): Promise<boolean> => {
-    if (Platform.OS !== 'android') return false;
-    const native = getNative();
-    if (!native) return false;
-    try {
-      // Primary: PiP / multi-window / overlay via native
-      if (native.isInPipMode) {
-        const pip = await native.isInPipMode().catch(() => false);
-        if (pip) return true;
-      }
-      if (native.hasOverlay) {
-        const ov = await native.hasOverlay().catch(() => false);
-        if (ov) return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
+    return false;
   }, []);
 
   const setSecure = useCallback(async (enable: boolean) => {
