@@ -127,6 +127,7 @@ export default function QuizScreen() {
   const lockedVisibleRef = useRef(false);
   const pinInProgressRef = useRef(false);
   const warningStartRef = useRef(0);
+  const unlockCooldownRef = useRef(0);
   const { pin, unpin, canPin, isExpoGo, nativeMissing } = useAppPinning();
   const { play: playCheat, stop: stopCheat } = useCheatSound();
   const { lock: lockVolume, unlock: unlockVolume } = useLockedVolume();
@@ -309,15 +310,40 @@ export default function QuizScreen() {
   }, [shortCode]);
 
   // Poll submission if locked (check if creator unlocked)
-  // Cleanup timer and unpin + unlock volume + stop sound + secure off on unmount (secure disabled for debugging)
   useEffect(() => {
-    return () => {
-      if (warningTimerRef.current) clearInterval(warningTimerRef.current);
-      unpin().catch(() => {});
-      unlockVolume().catch(() => {});
-      stopCheat().catch(() => {});
-    };
-  }, [unpin, unlockVolume, stopCheat]);
+    if (!lockedVisible) return;
+    const sid = submissionIdRef.current;
+    if (!sid) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const detail: any = await getSubmissionDetail(sid);
+        if (detail.status === 'in_progress') {
+          unlockCooldownRef.current = Date.now() + 5000;
+          setLockedVisible(false);
+          lockedVisibleRef.current = false;
+          setWarningVisible(false);
+          warningVisibleRef.current = false;
+          setCheatReason('window-blur');
+          setLockedAt(null);
+          setSubmission((prev: any) => ({ ...prev, status: 'in_progress' }));
+          stopCheat().catch(() => {});
+          if (isRestrictedRef.current && canPin) {
+            pin().catch(() => {});
+          }
+        } else if (detail.status === 'cheating' || detail.status === 'submitted' || detail.status === 'auto_submitted') {
+          await unpin().catch(() => {});
+          await unlockVolume().catch(() => {});
+          await stopCheat().catch(() => {});
+          setLockedVisible(false);
+          setWarningVisible(false);
+          router.replace({ pathname: '/(tabs)/home' } as any);
+        }
+      } catch {}
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [lockedVisible, unpin, unlockVolume, stopCheat, pin, canPin]);
 
   // Block hardware back when pinned (restricted quiz in progress)
   useEffect(() => {
@@ -343,6 +369,7 @@ export default function QuizScreen() {
 
   const triggerWarningFlow = useCallback((reason: string) => {
     if (lockedVisibleRef.current || pinInProgressRef.current) return;
+    if (unlockCooldownRef.current && Date.now() < unlockCooldownRef.current) return;
     const sid = submissionIdRef.current;
     if (!sid) return;
 
@@ -366,6 +393,7 @@ export default function QuizScreen() {
       const detail = await getSubmissionDetail(sid);
       const status = detail.status;
       if (status === 'in_progress') {
+        unlockCooldownRef.current = Date.now() + 5000;
         setLockedVisible(false);
         lockedVisibleRef.current = false;
         setWarningVisible(false);
@@ -374,6 +402,9 @@ export default function QuizScreen() {
         setLockedAt(null);
         setSubmission((prev: any) => ({ ...prev, status: 'in_progress' }));
         stopCheat().catch(() => {});
+        if (isRestrictedRef.current && canPin) {
+          pin().catch(() => {});
+        }
         // keep secure flag on when unlocked (still restricted) - disabled for debugging
         // setSecure(true).catch(() => {});
         showAlert({ type: 'success', title: language === 'ID' ? 'Dibuka Kembali' : 'Unlocked', message: language === 'ID' ? 'Pengawas telah membuka kembali ujian. Silakan lanjutkan.' : 'Proctor has unlocked the exam. Please continue.' });
@@ -397,7 +428,7 @@ export default function QuizScreen() {
     } finally {
       setRefreshingLock(false);
     }
-  }, [language, unpin]);
+  }, [language, unpin, stopCheat, pin, canPin]);
 
   // Sinkron ulang jam ke server bila terdeteksi lompatan jam HP (>4 dtk —
   // user yang memundurkan jam beberapa detik harus terkoreksi dalam hitungan
@@ -581,7 +612,8 @@ export default function QuizScreen() {
       if (lockedVisibleRef.current) return;
       if (pinInProgressRef.current) return;
 
-      if (next === 'background' || next === 'inactive') {
+      if (next === 'background') {
+        if (unlockCooldownRef.current && Date.now() < unlockCooldownRef.current) return;
         triggerWarningFlow('window-blur');
       } else if (next === 'active') {
         // Pulang dari background: sinkron ulang jam server
