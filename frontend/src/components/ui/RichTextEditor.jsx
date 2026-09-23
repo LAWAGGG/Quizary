@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Quill from 'quill'
 import Syntax from 'quill/modules/syntax'
 import hljs from 'highlight.js/lib/common'
@@ -190,6 +191,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
   // Dialog formula: { tex, index, length } — index/length = rentang
   // teks editor yang diganti saat disisipkan (edit rumus existing).
   const [formula, setFormula] = useState(null)
+  const formulaDialogRef = useRef(null)
   onChangeRef.current = onChange
 
   useEffect(() => {
@@ -396,7 +398,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
   useEffect(() => {
     if (!symbolsOpen && !formula) return
     const onDocClick = (e) => {
-      if (!wrapperRef.current?.contains(e.target)) {
+      if (!wrapperRef.current?.contains(e.target) && !formulaDialogRef.current?.contains(e.target)) {
         setSymbolsOpen(false)
         setFormula(null)
       }
@@ -549,12 +551,12 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
           ))}
         </div>
       )}
-      {formula && (
-        <>
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:contents" role="presentation">
-          <div className="fixed inset-0 bg-ink/30 backdrop-blur-sm sm:hidden" onClick={() => setFormula(null)} aria-hidden="true" />
+      {formula && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="presentation">
+          <div className="fixed inset-0 bg-ink/30 backdrop-blur-sm" onClick={() => setFormula(null)} aria-hidden="true" />
           <div
-            className={`relative z-10 bg-white dark:bg-ink-800 border border-gray-200 dark:border-ink-700 rounded-2xl sm:rounded-xl shadow-xl p-3 w-[calc(100vw-2rem)] max-w-[360px] max-h-[80dvh] overflow-y-auto sm:w-[360px] sm:max-w-[calc(100vw-2rem)] sm:max-h-none sm:overflow-visible sm:absolute ${compact ? 'sm:top-[38px]' : 'sm:top-[52px]'} sm:left-2`}
+            ref={formulaDialogRef}
+            className="relative z-10 bg-white dark:bg-ink-800 border border-gray-200 dark:border-ink-700 rounded-2xl shadow-xl p-3 w-[calc(100vw-2rem)] max-w-[360px] max-h-[80dvh] overflow-y-auto"
             role="dialog"
             aria-label="Insert LaTeX formula"
           >
@@ -645,8 +647,8 @@ export function RichTextEditor({ value = '', onChange, placeholder = '', compact
             </div>
           </div>
           </div>
-        </div>
-        </>
+        </div>,
+        document.body,
       )}
     </div>
     {hasMath && (
