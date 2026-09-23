@@ -1090,7 +1090,7 @@ export default function AIGenerate() {
                               <div className="pt-1">
                                 <AnswerKeyEditor
                                   value={q.answer_key || ''}
-                                  onChange={(value) => patchQuestion(si, qi, { answer_key: value })}
+                                   onChange={(value) => patchQuestion(si, qi, { answer_key: value, ...(value.trim() ? { is_scored: true } : {}) })}
                                 />
                               </div>
                             )}

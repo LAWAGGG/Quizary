@@ -397,7 +397,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
       {showKeywordScoring && (
         <AnswerKeyEditor
           value={form.answer_key || ''}
-          onChange={(v) => setForm((p) => ({ ...p, answer_key: v }))}
+          onChange={(v) => setForm((p) => ({ ...p, answer_key: v, ...(v.trim() ? { is_scored: true } : {}) }))}
           required={form.is_scored}
           error={ferr('answer_key')}
           inputRef={answerKeyInputRef}
@@ -520,7 +520,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
                 checked={!!form.is_scored}
                 onChange={(v) => {
                   if (showKeywordScoring) {
-                    setForm((p) => (v ? { ...p, is_scored: true } : { ...p, is_scored: false, answer_key: '', points: 0 }))
+                    setForm((p) => (v ? { ...p, is_scored: true } : { ...p, is_scored: false, points: 0 }))
                   } else {
                     setForm((p) => ({ ...p, is_scored: v, points: v ? p.points : 0 }))
                   }
