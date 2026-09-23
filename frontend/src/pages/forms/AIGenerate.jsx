@@ -7,9 +7,30 @@ import api from '../../api/client'
 import { useTheme } from '../../hooks/useTheme'
 import { useToast } from '../../hooks/useToast'
 import { stripTags } from '../../lib/sanitize'
-import { Card, RichTextEditor, RichText, Badge, Toggle, Select, Input, AnswerKeyEditor } from '../../components/ui'
+import { Card, RichTextEditor, RichText, Badge, Toggle, Input, AnswerKeyEditor } from '../../components/ui'
 
 const humanizeType = (t) => (t || '').replace(/_/g, ' ')
+
+const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+
+// Tipe yang tak ikut pool nilai (tiruan distribute_quiz_points backend).
+const NO_GRADE_TYPES = ['date', 'time', 'datetime', 'file_upload', 'dropdown']
+
+// Proyeksi pool-100 backend untuk badge poin kartu draft:
+// soal scored dibagi rata 100, sisa ke urutan awal. Essay tanpa kunci
+// dikecualikan (tak bisa dinilai otomatis).
+function projectAutoPoints(sections) {
+  const all = (sections || []).flatMap((s) => s.questions || [])
+  const scored = all.filter((q) => {
+    if (NO_GRADE_TYPES.includes(q.type)) return false
+    if ((q.type === 'essay' || q.type === 'short_answer') && !(q.answer_key || '').trim()) return false
+    return true
+  })
+  const base = scored.length ? Math.floor(100 / scored.length) : 0
+  const rem = scored.length ? 100 % scored.length : 0
+  const map = new Map(scored.map((q, i) => [q, base + (i < rem ? 1 : 0)]))
+  return (q) => map.get(q) ?? 0
+}
 
 const ACCEPT_EXT = '.docx,.pdf,.ppt,.pptx'
 const MAX_FILES = 5
@@ -120,7 +141,7 @@ function SettingChips({ settings }) {
   if (settings.is_restricted) chips.push({ icon: <Lock className="w-3.5 h-3.5" />, label: t('aiGenerate.restricted') })
   if (!settings.reveal_score) chips.push({ icon: <EyeOff className="w-3.5 h-3.5" />, label: t('aiGenerate.revealScore') })
   if (!settings.reveal_answers) chips.push({ icon: <EyeOff className="w-3.5 h-3.5" />, label: t('aiGenerate.revealAnswers') })
-  if (settings.scoring_mode === 'manual') chips.push({ icon: <ListChecks className="w-3.5 h-3.5" />, label: t('aiGenerate.scoringManual') })
+
   if (settings.starts_at || settings.ends_at) chips.push({ icon: <CalendarDays className="w-3.5 h-3.5" />, label: [settings.starts_at?.slice(0, 10), settings.ends_at?.slice(0, 10)].filter(Boolean).join(' → ') })
 
   return (
@@ -300,6 +321,24 @@ export default function AIGenerate() {
     }
   })
 
+  // Hapus 1 soal dari draf lokal (tanpa kuota AI). Section yang kehabisan
+  // soal ikut terhapus. Draft tak boleh kosong total (backend /ai/edit
+  // wajibkan sections non-empty) — hapus soal terakhir diblokir + toast.
+  const removeQuestion = (si, qi) => {
+    const total = (draft?.sections || []).reduce((n, s) => n + (s.questions?.length || 0), 0)
+    if (total <= 1) {
+      toast.error(t('aiGenerate.deleteLastQuestionBlocked'))
+      return
+    }
+    setDraft((d) => {
+      if (!d) return d
+      const sections = d.sections
+        .map((s, i) => (i !== si ? s : { ...s, questions: s.questions.filter((_, j) => j !== qi) }))
+        .filter((s) => (s.questions?.length || 0) > 0)
+      return { ...d, sections }
+    })
+  }
+
   // Mirror rantai backend: restricted ⇒ once ⇒ require_login.
   const toggleDraft = (key, value) => {
     if (key === 'is_restricted' && value) {
@@ -397,6 +436,8 @@ export default function AIGenerate() {
 
   const applyDone = (data, usedPrompt) => {
     const d = data.draft || {}
+    // Scoring selalu auto dari AI page — paksa di sini agar draft lama/AI bandel tetap auto.
+    if (d.settings) d.settings.scoring_mode = 'auto'
     setDraft(d)
     if (typeof d.title === 'string' && d.title) setTitle(d.title)
     if (typeof d.description === 'string') setDescription(d.description)
@@ -603,13 +644,25 @@ export default function AIGenerate() {
     try {
       const s = draft.settings
       const acceptType = formType === 'quiz' ? 'quiz' : 'form'
+      // Defensif pasca hapus manual: buang section kosong, tolak bila 0 soal.
+      const cleanSections = (draft.sections || [])
+        .map((sec) => ({ ...sec, questions: (sec.questions || []).filter(Boolean) }))
+        .filter((sec) => (sec.questions?.length || 0) > 0)
+      const totalQ = cleanSections.reduce((n, sec) => n + (sec.questions?.length || 0), 0)
+      if (!totalQ) {
+        const msg = t('aiGenerate.deleteLastQuestionBlocked')
+        setError(msg)
+        toast.error(msg)
+        setAccepting(false)
+        return
+      }
       const res = await api.post('/ai/accept', {
         title,
         description: description || null,
         type: acceptType,
-        settings: { ...s },
+        settings: { ...s, scoring_mode: 'auto' },
         // Kunci kosong (cuma spasi) dinull-kan agar lolos min_length backend.
-        sections: draft.sections.map((sec) => ({
+        sections: cleanSections.map((sec) => ({
           ...sec,
           questions: sec.questions.map((q) => ({
             ...q,
@@ -960,10 +1013,6 @@ export default function AIGenerate() {
                         <SettingRow title={t('aiGenerate.leaderboard')} control={<Toggle label={t('aiGenerate.leaderboard')} checked={!!draft.settings.show_leaderboard} onChange={(v) => toggleDraft('show_leaderboard', v)} />} />
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3">
                           <Input label={t('aiGenerate.timerLabel')} type="number" min="1" max="1440" value={draft.settings.timer_minutes || ''} onChange={(e) => toggleDraft('timer_minutes', e.target.value ? Number(e.target.value) : null)} />
-                          <Select label={t('aiGenerate.scoringMode')} value={draft.settings.scoring_mode || 'auto'} onChange={(e) => toggleDraft('scoring_mode', e.target.value)}>
-                            <option value="auto">{t('aiGenerate.scoringAuto')}</option>
-                            <option value="manual">{t('aiGenerate.scoringManual')}</option>
-                          </Select>
                         </div>
                       </>
                     )}
@@ -982,7 +1031,9 @@ export default function AIGenerate() {
                   </Card>
 
                   <div className={editing ? 'opacity-60 pointer-events-none select-none' : ''} aria-busy={editing}>
-                    {draft.sections.map((sec, si) => (
+                    {(() => {
+                      const autoPoints = projectAutoPoints(draft.sections)
+                      return draft.sections.map((sec, si) => (
                       <Card key={si} className="space-y-3">
                         <h3 className="font-display font-semibold text-ink dark:text-gray-100">{si + 1}. {sec.title}</h3>
                         {sec.questions.map((q, qi) => (
@@ -990,14 +1041,33 @@ export default function AIGenerate() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <Badge scheme="blue">{humanizeType(q.type)}</Badge>
                               {q.is_required && <span className="text-incorrect font-bold">*</span>}
-                              {q.points > 0 && <span className="text-xs text-gray-400">{t('aiGenerate.points', { points: q.points })}</span>}
+                              {formType === 'quiz' && <span className="text-xs text-gray-400">{t('aiGenerate.points', { points: autoPoints(q) })}</span>}
+                              <button
+                                type="button"
+                                onClick={() => removeQuestion(si, qi)}
+                                aria-label={t('aiGenerate.deleteQuestion')}
+                                title={t('aiGenerate.deleteQuestion')}
+                                className="ml-auto w-7 h-7 rounded-lg text-gray-400 dark:text-gray-500 hover:text-incorrect hover:bg-incorrect-soft transition-colors flex items-center justify-center shrink-0"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
                             </div>
                             <div className="text-sm text-ink dark:text-gray-100"><RichText html={q.question_text} className="rich-text block" /></div>
                             {q.options?.length > 0 && (
                               <ul className="space-y-1">
                                 {q.options.map((o, oi) => (
                                   <li key={oi} className={`flex items-start gap-2 text-sm px-2.5 py-1.5 rounded-lg ${o.is_correct ? 'bg-correct-soft text-correct font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
-                                    {o.is_correct ? <Check className="w-4 h-4 shrink-0 mt-0.5" /> : <span className="w-4 h-4 shrink-0 mt-0.5 text-center leading-4 text-gray-300">·</span>}
+                                    {q.type === 'dropdown' ? (
+                                      <span className="w-6 h-6 rounded-md bg-gray-100 dark:bg-ink-800 text-gray-500 dark:text-gray-400 flex items-center justify-center text-[10px] font-bold shrink-0">{oi + 1}</span>
+                                    ) : q.type === 'checkbox' ? (
+                                      <span className={`flex items-center justify-center w-6 h-6 rounded-md border-2 shrink-0 ${o.is_correct ? 'border-correct bg-correct text-white' : 'border-gray-300 text-transparent dark:border-gray-600'}`}>
+                                        {o.is_correct && <Check className="w-3.5 h-3.5" strokeWidth={3.5} />}
+                                      </span>
+                                    ) : (
+                                      <span className={`bubble w-6 h-6 text-xs ${o.is_correct ? 'bubble-correct' : 'bubble-empty'}`}>
+                                        {o.is_correct ? <Check className="w-3.5 h-3.5" /> : LETTERS[oi % LETTERS.length]}
+                                      </span>
+                                    )}
                                     <span className="flex-1 min-w-0 [&>p]:mb-0"><RichText html={o.option_text} className="rich-text" /></span>
                                   </li>
                                 ))}
@@ -1027,7 +1097,8 @@ export default function AIGenerate() {
                           </div>
                         ))}
                       </Card>
-                    ))}
+                      ))
+                    })()}
                   </div>
 
                   {error && <p className="field-error">{error}</p>}

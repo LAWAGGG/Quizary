@@ -302,6 +302,8 @@
     "accepting": "Membuat form...",
     "accepted": "Form dari AI berhasil dibuat",
     "acceptFailed": "Gagal membuat form dari draf",
+    "deleteQuestion": "Hapus soal",
+    "deleteLastQuestionBlocked": "Minimal satu soal harus tersisa di draf",
     "regenerate": "Regenerate",
     "regenerateHint": "Regenerate kembali ke isi prompt dan memakai 1 jatah generate.",
     "settingsTitle": "Pengaturan",

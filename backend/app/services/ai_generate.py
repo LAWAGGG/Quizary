@@ -1339,8 +1339,9 @@ def sanitize_draft(raw: dict, form_type: str = "auto", prompt_text: str = "") ->
         except Exception:
             return None
 
-    scoring = settings.get("scoring_mode")
-    scoring = scoring if scoring in ("auto", "manual") else "auto"
+    # Scoring selalu auto dari AI page (pilihan dihapus di frontend) —
+    # paksa di sini agar draft lama/AI bandel tetap auto.
+    scoring = "auto"
     starts = _dt(settings.get("starts_at"))
     ends = _dt(settings.get("ends_at"))
     if starts and ends:

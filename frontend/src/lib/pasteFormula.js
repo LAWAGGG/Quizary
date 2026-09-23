@@ -23,10 +23,6 @@ function mathmlToLatex(mathNode) {
   }
 }
 
-// MathML mentah sebagai TEKS (copy source dari AI/code): "<math ...>...</math>"
-// atau escaped "&lt;math ...&gt;...". Tanpa delimiter/backslash sehingga lolos
-// deteksi → Quill paste sebagai HTML hidup → browser render native MathML =
-// "preview dalam editor". Decode + convert ke $...$ di sini.
 function decodeMatchEntities(s) {
   let out = String(s || '')
   for (let i = 0; i < 2; i++) {

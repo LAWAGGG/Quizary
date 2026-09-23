@@ -302,6 +302,8 @@
     "accepting": "Creating form...",
     "accepted": "AI form created successfully",
     "acceptFailed": "Failed to create form from draft",
+    "deleteQuestion": "Delete question",
+    "deleteLastQuestionBlocked": "At least one question must remain in the draft",
     "regenerate": "Regenerate",
     "regenerateHint": "Regenerate goes back to the prompt and uses 1 generation credit.",
     "settingsTitle": "Settings",
