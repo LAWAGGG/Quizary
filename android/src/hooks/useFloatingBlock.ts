@@ -35,7 +35,7 @@ export function useFloatingBlock(onOverlayDetected?: (reason: string) => void) {
     const native = getNative();
     if (!native) return false;
     try {
-      // Primary: PiP / multi-window / overlay / window focus loss / touch obscured via native
+      // Primary: PiP / multi-window / overlay via native
       if (native.isInPipMode) {
         const pip = await native.isInPipMode().catch(() => false);
         if (pip) return true;
@@ -43,10 +43,6 @@ export function useFloatingBlock(onOverlayDetected?: (reason: string) => void) {
       if (native.hasOverlay) {
         const ov = await native.hasOverlay().catch(() => false);
         if (ov) return true;
-      }
-      if (native.hasWindowFocus) {
-        const focus = await native.hasWindowFocus().catch(() => false);
-        if (!focus) return true;
       }
       return false;
     } catch {

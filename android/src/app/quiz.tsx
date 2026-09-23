@@ -612,7 +612,8 @@ export default function QuizScreen() {
       if (lockedVisibleRef.current) return;
       if (pinInProgressRef.current) return;
 
-      if (next === 'background' || next === 'inactive') {
+      if (next === 'background') {
+        if (unlockCooldownRef.current && Date.now() < unlockCooldownRef.current) return;
         triggerWarningFlow('window-blur');
       } else if (next === 'active') {
         // Pulang dari background: sinkron ulang jam server
