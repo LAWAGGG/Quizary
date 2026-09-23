@@ -328,6 +328,9 @@ export default function QuizScreen() {
           setLockedAt(null);
           setSubmission((prev: any) => ({ ...prev, status: 'in_progress' }));
           stopCheat().catch(() => {});
+          if (isRestrictedRef.current && canPin) {
+            pin().catch(() => {});
+          }
         } else if (detail.status === 'cheating' || detail.status === 'submitted' || detail.status === 'auto_submitted') {
           await unpin().catch(() => {});
           await unlockVolume().catch(() => {});
@@ -340,7 +343,7 @@ export default function QuizScreen() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [lockedVisible, unpin, unlockVolume, stopCheat]);
+  }, [lockedVisible, unpin, unlockVolume, stopCheat, pin, canPin]);
 
   // Block hardware back when pinned (restricted quiz in progress)
   useEffect(() => {
@@ -399,6 +402,9 @@ export default function QuizScreen() {
         setLockedAt(null);
         setSubmission((prev: any) => ({ ...prev, status: 'in_progress' }));
         stopCheat().catch(() => {});
+        if (isRestrictedRef.current && canPin) {
+          pin().catch(() => {});
+        }
         // keep secure flag on when unlocked (still restricted) - disabled for debugging
         // setSecure(true).catch(() => {});
         showAlert({ type: 'success', title: language === 'ID' ? 'Dibuka Kembali' : 'Unlocked', message: language === 'ID' ? 'Pengawas telah membuka kembali ujian. Silakan lanjutkan.' : 'Proctor has unlocked the exam. Please continue.' });
@@ -422,7 +428,7 @@ export default function QuizScreen() {
     } finally {
       setRefreshingLock(false);
     }
-  }, [language, unpin, stopCheat]);
+  }, [language, unpin, stopCheat, pin, canPin]);
 
   // Sinkron ulang jam ke server bila terdeteksi lompatan jam HP (>4 dtk —
   // user yang memundurkan jam beberapa detik harus terkoreksi dalam hitungan
