@@ -953,6 +953,7 @@
     "tooLong": "Each key max {{max}} characters",
     "max": "Max {{max}} answer keys",
     "duplicate": "This key already exists",
+    "shortWarn": "Short keys ({{key}}) can match many sentences — use a longer key if possible",
     "hintChip": "Add one by one, press Enter to add. Max {{max}} keys."
   }
 }

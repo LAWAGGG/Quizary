@@ -948,6 +948,7 @@
     "tooLong": "Tiap kunci maksimal {{max}} karakter",
     "max": "Maksimal {{max}} kunci jawaban",
     "duplicate": "Kunci ini sudah ada",
+    "shortWarn": "Kunci pendek ({{key}}) bisa cocok di banyak kalimat — pakai kunci lebih panjang bila bisa",
     "hintChip": "Tambah satu per satu, tekan Enter untuk tambah. Maksimal {{max}} kunci."
   }
 }

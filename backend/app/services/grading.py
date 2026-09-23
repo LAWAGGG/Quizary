@@ -15,7 +15,7 @@ from app.models.answer import Answer
 from app.models.form import Form
 from app.models.question import Question, QuestionType
 from app.models.submission import Submission
-from app.schemas.question import normalize_answer_text, parse_answer_key
+from app.schemas.question import answer_tokens, key_matches, normalize_answer_text, parse_answer_key
 
 
 GRADABLE_TYPES = (
@@ -58,19 +58,28 @@ def grade_answer(answer: Answer, question: Question):
       - non-gradable / unscored types -> (None, 0)
       - multiple_choice / checkbox    -> +points when selected == correct set
       - password                     -> exact keyword match
-      - essay / short_answer berkunci -> +points bila salah satu kunci
-        terkandung dalam jawaban (case-insensitive); tanpa kunci -> (None, 0)
+      - short_answer berkunci        -> +points bila jawaban == salah satu kunci
+      - essay berkunci               -> +points bila salah satu kunci muncul
+        sebagai kata utuh (word-boundary); tanpa kunci -> (None, 0)
     """
-    # Essay/short_answer dengan answer_key: cocok-salah-satu (contains,
-    # abaikan kapital). Tanpa kunci: perilaku lama (None, 0).
+    # Essay/short_answer dengan answer_key — tanpa kunci: (None, 0).
+    # short_answer: exact match seluruh jawaban (`2` vs `jawabannya 2` → salah).
+    # essay: kunci wajib muncul sebagai kata utuh (`2` benar di `hasilnya 2`,
+    # salah di `22`; `2.5` satu token sehingga tak lolos kunci `2`).
     if question.type in KEYWORD_TYPES:
         if not question.is_scored or not has_answer_key(question):
             return None, Decimal("0")
         text = normalize_answer_text(answer.answer_text)
         if not text:
             return False, Decimal("0")
-        for key in parse_answer_key(question.answer_key):
-            if key in text:
+        keys = parse_answer_key(question.answer_key)
+        if question.type == QuestionType.short_answer:
+            if text in keys:
+                return True, Decimal(str(question.points or 0))
+            return False, Decimal("0")
+        tokens = answer_tokens(text)
+        for key in keys:
+            if key_matches(key, tokens):
                 return True, Decimal(str(question.points or 0))
         return False, Decimal("0")
 

@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -26,8 +27,11 @@ _WS_RE = re.compile(r"\s+")
 
 
 def normalize_answer_text(v: str | None) -> str:
-    """Normalisasi untuk pencocokan kunci: trim, lowercase, rapatkan spasi."""
-    return _WS_RE.sub(" ", (v or "").strip().lower())
+    """Normalisasi untuk pencocokan kunci: NFKC, trim, lowercase, rapatkan spasi.
+
+    NFKC menyamakan varian karakter (full-width `２`/superscript `²` → `2`)
+    agar jawaban dengan karakter aneh tetap dinilai adil."""
+    return _WS_RE.sub(" ", unicodedata.normalize("NFKC", v or "").strip().lower())
 
 
 def parse_answer_key(raw: str | None) -> list[str]:
@@ -36,6 +40,34 @@ def parse_answer_key(raw: str | None) -> list[str]:
     if not raw:
         return []
     return [k for k in (normalize_answer_text(p) for p in re.split(r"[;\n]+", raw)) if k]
+
+
+# Token angka desimal (`2.5`/`2,5` satu token) ATAU run alfanumerik.
+# Urutan alternatif penting: desimal dulu agar `2.5` tak pecah jadi `2` + `5`.
+_TOKEN_RE = re.compile(r"\d+[.,]\d+|[a-z0-9]+")
+
+
+def answer_tokens(text: str | None) -> list[str]:
+    """Pecah teks ternormalisasi jadi token kata utuh untuk pencocokan kunci.
+
+    - Angka desimal (`2,5`/`2.5`) = satu token (tak pecah jadi `2` + `5`).
+    - Batas digit-huruf dipisah (`5cm` → `5`, `cm`; `a1b` → `a`, `1`, `b`).
+    - Tanda baca/spasi murni pemisah (`2.`/`(2)` → `2`)."""
+    norm = normalize_answer_text(text)
+    norm = re.sub(r"(?<=\d)(?=[a-z])|(?<=[a-z])(?=\d)", " ", norm)
+    return _TOKEN_RE.findall(norm)
+
+
+def key_matches(key: str, tokens: list[str]) -> bool:
+    """True bila kunci muncul sebagai kata utuh berurutan dalam token jawaban.
+
+    Kunci frasa (`dki jakarta`) wajib berurutan penuh; kunci `2` cocok di
+    `hasilnya adalah 2` tapi tidak di `22` (tokennya `22`, bukan `2`)."""
+    key_toks = answer_tokens(key)
+    if not key_toks or not tokens:
+        return False
+    n = len(key_toks)
+    return any(tokens[i:i + n] == key_toks for i in range(len(tokens) - n + 1))
 
 
 def check_answer_key(answer_key: str | None, q_type: str | None) -> None:

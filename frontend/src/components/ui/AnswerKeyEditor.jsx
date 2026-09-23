@@ -77,8 +77,10 @@ export function AnswerKeyEditor({ value, onChange, required, error, inputRef }) 
             <li
               key={`${k}-${i}`}
               className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-primary-50 dark:bg-primary-900/30 border border-primary/20 pl-3 pr-1.5 py-1 text-sm text-primary-700 dark:text-primary-300"
+              title={k.trim().length <= 2 ? t('answerKey.shortWarn', { key: k }) : undefined}
             >
               <KeyContent k={k} />
+              {k.trim().length <= 2 && <span className="text-warn text-xs font-bold shrink-0" aria-hidden="true">!</span>}
               <button
                 type="button"
                 onClick={() => removeKey(i)}
