@@ -19,7 +19,10 @@
     "settings": "Pengaturan",
     "questions": "Soal",
     "results": "Hasil",
-    "analytics": "Analitik"
+    "analytics": "Analitik",
+    "unsavedTitle": "Perubahan belum disimpan",
+    "unsavedChanges": "Perubahan belum disimpan. Tinggalkan halaman tanpa menyimpan?",
+    "leaveWithoutSaving": "Tinggalkan tanpa menyimpan"
   },
   "auth": {
     "logout": "Keluar",

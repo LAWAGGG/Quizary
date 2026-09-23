@@ -19,7 +19,10 @@
     "settings": "Settings",
     "questions": "Questions",
     "results": "Results",
-    "analytics": "Analytics"
+    "analytics": "Analytics",
+    "unsavedTitle": "Unsaved changes",
+    "unsavedChanges": "You have unsaved changes. Leave without saving?",
+    "leaveWithoutSaving": "Leave without saving"
   },
   "auth": {
     "logout": "Logout",

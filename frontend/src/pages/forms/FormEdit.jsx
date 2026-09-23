@@ -524,7 +524,7 @@ export default function FormEdit() {
         }
       />
 
-      <FormSubNav formId={id} className="mt-5" />
+      <FormSubNav formId={id} className="mt-5" hasUnsavedChanges={dirty} />
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         <div className="space-y-6 order-2 lg:order-1">
