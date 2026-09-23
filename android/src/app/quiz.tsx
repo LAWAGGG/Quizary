@@ -342,40 +342,21 @@ export default function QuizScreen() {
   }, [canPin, language]);
 
   const triggerWarningFlow = useCallback((reason: string) => {
-    if (lockedVisibleRef.current || warningVisibleRef.current || pinInProgressRef.current) return;
+    if (lockedVisibleRef.current || pinInProgressRef.current) return;
     const sid = submissionIdRef.current;
     if (!sid) return;
 
     setCheatReason(reason);
-
-
-
-    warningStartRef.current = serverNowMs();
-    countdownRef.current = 5;
-    setWarningCountdown(5);
-    setWarningVisible(true);
-    warningVisibleRef.current = true;
-    playCheat().catch(() => {});
-
     if (warningTimerRef.current) clearInterval(warningTimerRef.current);
-    warningTimerRef.current = setInterval(() => {
-      const elapsed = Math.floor((serverNowMs() - warningStartRef.current) / 1000);
-      const remain = Math.max(0, 5 - elapsed);
-      countdownRef.current = remain;
-      setWarningCountdown(remain);
-      if (remain <= 0) {
-        if (warningTimerRef.current) clearInterval(warningTimerRef.current);
-        warningTimerRef.current = null;
-        setWarningVisible(false);
-        warningVisibleRef.current = false;
-        stopCheat().catch(() => {});
-        setLockedAt(serverNowMs());
-        setLockedVisible(true);
-        lockedVisibleRef.current = true;
-        lockSubmission(sid, reason).catch(() => {});
-      }
-    }, 250);
-  }, [playCheat, stopCheat]);
+    warningTimerRef.current = null;
+    setWarningVisible(false);
+    warningVisibleRef.current = false;
+    playCheat().catch(() => {});
+    setLockedAt(serverNowMs());
+    setLockedVisible(true);
+    lockedVisibleRef.current = true;
+    lockSubmission(sid, reason).catch(() => {});
+  }, [playCheat]);
 
   const handleCheckLockedStatus = useCallback(async () => {
     const sid = submissionIdRef.current;
