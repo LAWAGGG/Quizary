@@ -342,6 +342,105 @@ export async function resendOtpApi(body: { email: string }) {
   }
 }
 
+// FUNGSI LUPA PASSWORD
+export async function apiForgotPassword(body: { email: string }) {
+  try {
+    const res = await fetch(`${BASE_URL}/password/forgot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (res.status === 404) {
+        throw new Error('Email tidak terdaftar.');
+      }
+      if (res.status === 403) {
+        throw new Error('Email belum diverifikasi. Silakan verifikasi akun Anda terlebih dahulu.');
+      }
+      if (res.status === 429) {
+        throw new Error('Terlalu banyak permintaan. Harap tunggu sebentar sebelum meminta kode baru.');
+      }
+      if (res.status >= 500) {
+        throw new Error(`Terjadi kendala pada server (${res.status}).`);
+      }
+      throw new Error(extractErrorMessage(err, 'Gagal mengirim kode reset password.'));
+    }
+    return await res.json();
+  } catch (err: any) {
+    if (
+      err.message === 'Network request failed' ||
+      err.name === 'TypeError' ||
+      String(err).includes('Network')
+    )
+      throw new Error('Gagal terhubung ke server.');
+    throw err;
+  }
+}
+
+export async function apiVerifyResetCode(body: { email: string; code: string }) {
+  try {
+    const res = await fetch(`${BASE_URL}/password/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (res.status === 410) {
+        throw new Error('Kode reset sudah kadaluarsa atau tidak ditemukan. Silakan minta kode baru.');
+      }
+      if (res.status >= 500) {
+        throw new Error(`Terjadi kendala pada server (${res.status}).`);
+      }
+      throw new Error(extractErrorMessage(err, 'Kode reset salah atau tidak valid.'));
+    }
+    return await res.json();
+  } catch (err: any) {
+    if (
+      err.message === 'Network request failed' ||
+      err.name === 'TypeError' ||
+      String(err).includes('Network')
+    )
+      throw new Error('Gagal terhubung ke server.');
+    throw err;
+  }
+}
+
+export async function apiResetPassword(body: {
+  email: string;
+  code: string;
+  password: string;
+  password_confirmation: string;
+}) {
+  try {
+    const res = await fetch(`${BASE_URL}/password/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      if (res.status === 410) {
+        throw new Error('Kode reset sudah kadaluarsa. Silakan minta kode baru.');
+      }
+      if (res.status >= 500) {
+        throw new Error(`Terjadi kendala pada server (${res.status}).`);
+      }
+      throw new Error(extractErrorMessage(err, 'Gagal mereset password. Pastikan password minimal 8 karakter.'));
+    }
+    return await res.json();
+  } catch (err: any) {
+    if (
+      err.message === 'Network request failed' ||
+      err.name === 'TypeError' ||
+      String(err).includes('Network')
+    )
+      throw new Error('Gagal terhubung ke server.');
+    throw err;
+  }
+}
+
 export async function apiLogout() {
   try { await fetchWithAuth('/logout', { method: 'POST' }); } catch {}
   await removeToken();

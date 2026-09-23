@@ -15,7 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../context/ThemeContext';
-import { stripHtmlTags, RichTextRenderer } from '../RichTextRenderer';
+import { stripHtmlTags, RichTextRenderer, wrapBareMathForRender } from '../RichTextRenderer';
 import { getSubmissionDetail, getLeaderboard } from '../../services/api_service';
 import { isAudioUrl, extractMediaUrl } from '../../utils/media';
 import { AudioPlayer } from '../AudioPlayer';
@@ -127,7 +127,7 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
   const percentage = maxScore > 0 && finalScore != null ? Math.min(100, Math.max(0, Math.round((finalScore / maxScore) * 100))) : 0;
   const ringColor = percentage >= 70 ? '#10B981' : percentage >= 40 ? '#F59E0B' : '#EF4444';
 
-  const formTitle = publicForm?.title || resultData?.form_title || '';
+  const formTitle = publicForm?.title || resultData?.form_title || resultData?.title || subDetail?.form_title || subDetail?.title || subDetail?.form?.title || '';
   const cleanTitle = stripHtmlTags(formTitle);
   const isCheating = subDetail?.status === 'cheating' || resultData?.status === 'cheating';
   const isAutoSubmitted = subDetail?.status === 'auto_submitted' || resultData?.status === 'auto_submitted';
@@ -182,8 +182,15 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
               {hasThanks ? (
                 <View style={{ width: '100%', marginVertical: 10 }}>
                   <RichTextRenderer
-                    html={rawThanks}
+                    html={wrapBareMathForRender(rawThanks)}
                     style={{ textAlign: 'center', color: colors.text, fontSize: 16 }}
+                  />
+                </View>
+              ) : formTitle ? (
+                <View style={{ width: '100%', marginVertical: 10 }}>
+                  <RichTextRenderer
+                    html={wrapBareMathForRender(formTitle)}
+                    style={{ textAlign: 'center', color: colors.text, fontSize: 18, fontWeight: 'bold' }}
                   />
                 </View>
               ) : (
@@ -287,11 +294,17 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
           {/* Header Container */}
           <View style={styles.headerContainer}>
             {/* Eyebrow Form Title */}
-            {cleanTitle ? (
-              <View style={styles.eyebrowRow}>
-                <Text style={[styles.eyebrowText, { color: themeColor }]} numberOfLines={1}>
-                  {cleanTitle.toUpperCase()}
-                </Text>
+            {formTitle ? (
+              <View style={{ width: '100%', marginBottom: 8, alignItems: 'center' }}>
+                <RichTextRenderer
+                  html={wrapBareMathForRender(formTitle)}
+                  style={{
+                    color: themeColor,
+                    fontSize: 15,
+                    fontWeight: '700',
+                    textAlign: 'center',
+                  }}
+                />
               </View>
             ) : null}
 
@@ -299,7 +312,7 @@ export function QuizSubmittedStep({ resultData, submissionId, publicForm, onFill
             {hasThanks ? (
               <View style={{ width: '100%', marginVertical: 10 }}>
                 <RichTextRenderer
-                  html={rawThanks}
+                  html={wrapBareMathForRender(rawThanks)}
                   style={{ textAlign: 'center', color: colors.text, fontSize: 18, fontWeight: 'bold' }}
                 />
               </View>
