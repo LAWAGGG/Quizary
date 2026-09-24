@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, memo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, GripVertical, Upload, Check, HelpCircle, Trash2, Image as ImageIcon, X, Layers, Download, TextQuote, Unlink, ChevronDown, ChevronUp, Pencil, Copy } from 'lucide-react'
@@ -48,7 +48,7 @@ const TYPE_HINTS = {
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
 
-function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, questionId, sections, sectionsAllowed, scoringMode, poolCount = 0 }) {
+function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, questionId, sections, sectionsAllowed, scoringMode, poolCount = 0, onDirtyChange }) {
   const toast = useToast()
   const { t } = useTranslation()
   const typeLabels = {
@@ -94,6 +94,43 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
   })
   const isEditing = !!initial
   const ferr = (name) => errors?.[name]
+  // Bandingkan state form vs snapshot awal: true = ada perubahan belum disimpan.
+  const snapshot = useCallback((f) => JSON.stringify({
+    question_text: f?.question_text || '',
+    type: f?.type,
+    points: f?.points,
+    is_scored: f?.is_scored,
+    is_required: f?.is_required,
+    section_id: f?.section_id || null,
+    password_keyword: f?.password_keyword || '',
+    answer_key: (f?.answer_key || '').trim(),
+    allow_other: !!f?.allow_other,
+    options: (f?.options || []).map((o) => ({ id: o.id || null, option_text: o.option_text || '', is_correct: !!o.is_correct, image: o.image?.path || null, pending: !!(o._pendingFile || o._pendingImage || o._pendingAudio) })),
+    image: f?.image?.path || null,
+    audio: f?.audio?.path || null,
+    pendingMedia: !!(f?._pendingFile || f?._pendingImage || f?._pendingAudio),
+  }), [])
+  const initialSnapshotRef = useRef(null)
+  if (initialSnapshotRef.current === null) {
+    initialSnapshotRef.current = snapshot({
+      question_text: '',
+      type: 'essay',
+      points: 0,
+      is_scored: defaultIsScored,
+      is_required: true,
+      options: [],
+      password_keyword: '',
+      answer_key: '',
+      allow_other: false,
+      ...(initial || {}),
+      is_scored: initial ? (initial.is_scored ?? true) : defaultIsScored,
+      points: initial ? (initial.points ?? 0) : 0,
+      section_id: initial?.section_id || singleSectionId,
+    })
+  }
+  useEffect(() => {
+    onDirtyChange?.(snapshot(form) !== initialSnapshotRef.current)
+  }, [form, snapshot, onDirtyChange])
   const optionsErr = Object.keys(errors || {}).some((k) => k.startsWith('options'))
   const optionsMsg = Object.values(errors || {}).find((v, i) => Object.keys(errors)[i]?.startsWith('options'))
   const answerKeyInputRef = useRef(null)
@@ -965,7 +1002,7 @@ function GroupInnerRow({ q, globalIndex, isQuiz, selected, onToggleSelect, onEdi
   )
 }
 
-const SortableGroupCard = memo(function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, onToggle, isQuiz, selectedIds, onToggleSelect, onToggleGroupSelect, onEdit, onDelete, onDuplicate, duplicating, onUngroup, onMove, isFirst, isLast, selectCount, idToIndex, editing, showForm, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, scoringMode, allQuestions, onAddToGroup }) {
+const SortableGroupCard = memo(function SortableGroupCard({ groupId, questions: members, groupIndex, expanded, onToggle, isQuiz, selectedIds, onToggleSelect, onToggleGroupSelect, onEdit, onDelete, onDuplicate, duplicating, onUngroup, onMove, isFirst, isLast, selectCount, idToIndex, editing, showForm, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, scoringMode, allQuestions, onAddToGroup, onDirtyChange }) {
   const { t } = useTranslation()
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
     id: `g-${groupId}`,
@@ -1053,7 +1090,7 @@ const SortableGroupCard = memo(function SortableGroupCard({ groupId, questions: 
                               <span className="font-display font-semibold text-ink dark:text-gray-100 text-sm">Edit Soal {gIdx + 1}</span>
                               <button onClick={onCancel} className="p-1.5 rounded-lg text-gray-400 hover:text-ink hover:bg-gray-100 dark:hover:bg-ink-800"><X className="w-4 h-4" /></button>
                             </div>
-                            <QuestionForm initial={{ question_text: q.question_text, type: q.type, points: q.points, is_scored: q.is_scored !== false, is_required: q.is_required, section_id: q.section_id || null, password_keyword: q.password_keyword || '', answer_key: q.answer_key || '', allow_other: !!q.allow_other, image: q.image, audio: q.audio, options: q.options?.length ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct, image: o.image })) : [{ option_text: '', is_correct: false }] }} onSave={onSave} onCancel={onCancel} loading={saveLoading} isQuiz={isQuiz} errors={errors} questionId={q.id} sections={sections} sectionsAllowed={sectionsAllowed} scoringMode={scoringMode} />
+                            <QuestionForm initial={{ question_text: q.question_text, type: q.type, points: q.points, is_scored: q.is_scored !== false, is_required: q.is_required, section_id: q.section_id || null, password_keyword: q.password_keyword || '', answer_key: q.answer_key || '', allow_other: !!q.allow_other, image: q.image, audio: q.audio, options: q.options?.length ? q.options.map((o) => ({ id: o.id, option_text: o.option_text, is_correct: o.is_correct, image: o.image })) : [{ option_text: '', is_correct: false }] }} onSave={onSave} onCancel={onCancel} loading={saveLoading} isQuiz={isQuiz} errors={errors} questionId={q.id} sections={sections} sectionsAllowed={sectionsAllowed} scoringMode={scoringMode} onDirtyChange={onDirtyChange} />
                           </Card>
                         </motion.div>
                       )
@@ -1111,7 +1148,7 @@ const SortableGroupCard = memo(function SortableGroupCard({ groupId, questions: 
   )
 })
 
-function QuestionItem({ q, index, onEdit, onDelete, onDuplicate, duplicating, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupIndex, groupSize, onMove, totalCount, selectCount, scoringMode }) {
+function QuestionItem({ q, index, onEdit, onDelete, onDuplicate, duplicating, isQuiz, selected, onToggleSelect, editOpen, onSave, onCancel, saveLoading, errors, sections, sectionsAllowed, groupId, groupIndex, groupSize, onMove, totalCount, selectCount, scoringMode, onDirtyChange }) {
   const { t } = useTranslation()
   if (editOpen) {
     return (
@@ -1158,6 +1195,7 @@ function QuestionItem({ q, index, onEdit, onDelete, onDuplicate, duplicating, is
             sections={sections}
             sectionsAllowed={sectionsAllowed}
             scoringMode={scoringMode}
+            onDirtyChange={onDirtyChange}
           />
         </Card>
       </motion.div>
@@ -1292,6 +1330,19 @@ export default function QuestionBuilder() {
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(null)
   const [showForm, setShowForm] = useState(false)
+  // Guard pindah kartu saat edit kotor: QuestionForm lapor via onDirtyChange.
+  const formDirtyRef = useRef(false)
+  const [pendingEdit, setPendingEdit] = useState(null)
+  const [pendingNew, setPendingNew] = useState(false)
+  const showUnsavedModal = showForm && (pendingEdit !== null || pendingNew)
+  const handleFormDirty = useCallback((dirty) => { formDirtyRef.current = dirty }, [])
+  const closeForm = useCallback(() => {
+    formDirtyRef.current = false
+    setPendingEdit(null)
+    setPendingNew(false)
+    setShowForm(false)
+    setEditing(null)
+  }, [])
   const [reorderSaving, setReorderSaving] = useState(false)
   const [saveLoading, setSaveLoading] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -1492,8 +1543,7 @@ export default function QuestionBuilder() {
         toast.success(t('questionBuilder.added'))
       }
       load()
-      setShowForm(false)
-      setEditing(null)
+      closeForm()
     } catch (err) {
       const data = err.response?.data
       if (data?.errors) {
@@ -1929,9 +1979,58 @@ export default function QuestionBuilder() {
   }
 
   const editQuestion = (q) => {
+    // Klik kartu yang sama = no-op. Klik kartu lain saat form kotor =
+    // tahan dulu, tampilkan modal warning (pola FormSubNav).
+    if (showForm && editing?.id === q?.id) return
+    if (showForm && formDirtyRef.current) {
+      setPendingEdit(q)
+      setPendingNew(false)
+      return
+    }
+    formDirtyRef.current = false
+    setPendingEdit(null)
+    setPendingNew(false)
     setEditing(q)
     setShowForm(true)
     setFieldErrors({})
+  }
+
+  const openNewQuestion = () => {
+    // Sama seperti pindah kartu: form tambah baru hanya bila tak ada edit kotor.
+    if (showForm && !editing && !formDirtyRef.current) return
+    if (showForm && formDirtyRef.current) {
+      setPendingEdit(null)
+      setPendingNew(true)
+      return
+    }
+    formDirtyRef.current = false
+    setPendingEdit(null)
+    setPendingNew(false)
+    setEditing(null)
+    setShowForm(true)
+    setFieldErrors({})
+  }
+
+  const confirmPendingEdit = () => {
+    const target = pendingEdit
+    const isNew = pendingNew
+    formDirtyRef.current = false
+    setPendingEdit(null)
+    setPendingNew(false)
+    if (isNew || !target) {
+      setEditing(null)
+      setShowForm(true)
+      setFieldErrors({})
+    } else {
+      setEditing(target)
+      setShowForm(true)
+      setFieldErrors({})
+    }
+  }
+
+  const cancelPendingEdit = () => {
+    setPendingEdit(null)
+    setPendingNew(false)
   }
 
   const createSection = async () => {
@@ -2008,7 +2107,7 @@ export default function QuestionBuilder() {
               </Button>
             )}
             <div className="relative flex items-center shrink-0 self-start sm:self-auto" ref={actionsRef}>
-              <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />} className="rounded-r-none">
+              <Button onClick={openNewQuestion} icon={<Plus className="w-4 h-4" />} className="rounded-r-none">
                 <span className="hidden sm:inline">{t('questionBuilder.addQuestion')}</span>
               </Button>
               <Button
@@ -2103,7 +2202,7 @@ export default function QuestionBuilder() {
               </div>
               <QuestionForm
                 onSave={(data) => handleSaveQuestion(data)}
-                onCancel={() => { setShowForm(false); setEditing(null) }}
+                onCancel={closeForm}
                 loading={saveLoading}
                 isQuiz={form.type === 'quiz'}
                 errors={fieldErrors}
@@ -2112,6 +2211,7 @@ export default function QuestionBuilder() {
                 sectionsAllowed={sectionsAllowed}
                 scoringMode={scoringMode}
                 poolCount={poolCount}
+                onDirtyChange={handleFormDirty}
               />
             </Card>
           </motion.div>
@@ -2127,7 +2227,7 @@ export default function QuestionBuilder() {
             title={t('questionBuilder.emptyTitle')}
             description={t('questionBuilder.emptyDesc')}
             action={
-              <Button onClick={() => { setEditing(null); setShowForm(true); setFieldErrors({}) }} icon={<Plus className="w-4 h-4" />}>
+              <Button onClick={openNewQuestion} icon={<Plus className="w-4 h-4" />}>
                 {t('questionBuilder.addQuestion')}
               </Button>
             }
@@ -2271,7 +2371,7 @@ export default function QuestionBuilder() {
                                       editing={editing}
                                       showForm={showForm}
                                       onSave={(data) => handleSaveQuestion(data)}
-                                      onCancel={() => { setShowForm(false); setEditing(null) }}
+                                      onCancel={closeForm}
                                       saveLoading={saveLoading}
                                       errors={fieldErrors}
                                       sections={sections}
@@ -2279,6 +2379,7 @@ export default function QuestionBuilder() {
                                       scoringMode={scoringMode}
                                       allQuestions={questions}
                                       onAddToGroup={handleAddToGroup}
+                                      onDirtyChange={handleFormDirty}
                                     />
                                   )
                                 }
@@ -2297,7 +2398,7 @@ export default function QuestionBuilder() {
                                     onToggleSelect={toggleSelect}
                                     editOpen={showForm && editing?.id === q.id}
                                     onSave={(data) => handleSaveQuestion(data)}
-                                    onCancel={() => { setShowForm(false); setEditing(null) }}
+                                    onCancel={closeForm}
                                     saveLoading={saveLoading}
                                     errors={fieldErrors}
                                     sections={sections}
@@ -2308,6 +2409,7 @@ export default function QuestionBuilder() {
                                     totalCount={questions.length}
                                     selectCount={selectedIds.length}
                                     scoringMode={scoringMode}
+                                    onDirtyChange={handleFormDirty}
                                   />
                                 )
                               })}
@@ -2353,7 +2455,7 @@ export default function QuestionBuilder() {
                             editing={editing}
                             showForm={showForm}
                             onSave={(data) => handleSaveQuestion(data)}
-                            onCancel={() => { setShowForm(false); setEditing(null) }}
+                            onCancel={closeForm}
                             saveLoading={saveLoading}
                             errors={fieldErrors}
                             sections={sections}
@@ -2361,6 +2463,7 @@ export default function QuestionBuilder() {
                             scoringMode={scoringMode}
                             allQuestions={questions}
                             onAddToGroup={handleAddToGroup}
+                            onDirtyChange={handleFormDirty}
                           />
                         )
                       }
@@ -2379,7 +2482,7 @@ export default function QuestionBuilder() {
                           onToggleSelect={toggleSelect}
                           editOpen={showForm && editing?.id === q.id}
                           onSave={(data) => handleSaveQuestion(data)}
-                          onCancel={() => { setShowForm(false); setEditing(null) }}
+                          onCancel={closeForm}
                           saveLoading={saveLoading}
                           errors={fieldErrors}
                           sections={sections}
@@ -2391,6 +2494,7 @@ export default function QuestionBuilder() {
                           totalCount={questions.length}
                           selectCount={selectedIds.length}
                           scoringMode={scoringMode}
+                          onDirtyChange={handleFormDirty}
                         />
                       )
                     })}
@@ -2513,6 +2617,16 @@ export default function QuestionBuilder() {
         loading={confirmLoading}
         confirmText="Delete"
         variant="danger"
+      />
+
+      <ConfirmModal
+        show={showUnsavedModal}
+        title={t('formTabs.unsavedTitle')}
+        message={t('formTabs.unsavedChanges')}
+        confirmText={t('formTabs.leaveWithoutSaving')}
+        variant="primary"
+        onCancel={cancelPendingEdit}
+        onConfirm={confirmPendingEdit}
       />
 
       <ConfirmModal
