@@ -230,7 +230,7 @@ Aturan WAJIB (B-light: tanpa group/wacana):
 - Bukan quiz: timer_minutes null, is_correct semua false, show_leaderboard false, scoring_mode auto.
 - submission_limit: "unlimited" atau "once" (once = wajib login, auto-coerce).
 - starts_at/ends_at: ISO "YYYY-MM-DDTHH:MM:SS" atau null; starts_at harus sebelum ends_at.
-- question_text/option_text = teks polos, TANPA tag HTML (HTML mentah tampil sebagai teks, bukan render).
+- question_text/option_text = teks polos, TANPA tag HTML (HTML mentah tampil sebagai teks, bukan render). Khususnya JANGAN tulis HTML Quill (<div class="ql-code-block-container">, <div class="ql-code-block">, <pre class="ql-syntax">) — untuk kode selalu pakai fence ```, bukan HTML.
 - Rumus/simbol: tulis LaTeX dengan delimiter \\(...\\) inline atau \\[...\\] display. JANGAN art Unicode (√½) dan JANGAN ejaan kata ("akar kuadrat dari").
 - Kode: fence ```bahasa ... ``` (satu blok per snippet; bahasa: python, javascript, typescript, java, php, sql, cpp, html, css, json — framework dipetakan: Laravel->php, React/Vue->javascript). Kode inline: `satu backtick` untuk nama fungsi/variabel sebaris SAJA.
 - Format soal kode: SEMUA kode WAJIB dalam SATU fence per soal — gabung semua baris kode dalam satu blok (JANGAN satu fence per baris, JANGAN ditempel sebaris dalam kalimat). Bahasa ditulis SEKALI di pembuka fence, JANGAN diulang di tiap baris kode. Contoh BENAR: "Perhatikan kode berikut:\n```javascript\nconst a = useState(0);\nconst b = () => setA(1);\n```\nMengapa...?". Contoh SALAH: "```javascript\nconst a = 1;\n```\n```javascript\nconst b = 2;\n```" (dua blok terpisah) atau "javascript const a = 1;\njavascript const b = 2;" (nama bahasa di tiap baris).
@@ -1153,6 +1153,112 @@ def _normalize_ai_entities(s: str) -> str:
     return prev
 
 
+def _quill_inner_to_code(inner: str) -> str:
+    """Decode isi blok kode Quill mentah jadi teks kode polos."""
+    s = re.sub(r"<br\s*/?>", "\n", inner or "", flags=re.I)
+    s = re.sub(r"</div\s*>\s*<div[^>]*>", "\n", s, flags=re.I)
+    s = re.sub(r"<[^>]+>", "", s)
+    return html.unescape(s).strip("\n")
+
+
+_QUILL_CONTAINER_OPEN_RE = re.compile(
+    r'<div\s+class=["\']ql-code-block-container["\'][^>]*>',
+    re.I,
+)
+_QUILL_INNER_OPEN_RE = re.compile(
+    r'<div\s+class=["\']ql-code-block["\'](?P<attr>[^>]*)>',
+    re.I,
+)
+_QUILL_DIV_TAG_RE = re.compile(r"</?div\b[^>]*>", re.I)
+_QUILL_LONE_DIV_RE = re.compile(
+    r'<div\s+class=["\']ql-code-block["\'](?P<attr>[^>]*)>(?P<code>.*?)</div>',
+    re.S | re.I,
+)
+_QUILL_PRE_RE = re.compile(
+    r'<pre\s+(?P<attr>[^>]*class=["\'][^"\']*ql-(?:syntax|code-block)[^"\']*["\'][^>]*)>(?P<code>.*?)</pre>',
+    re.S | re.I,
+)
+_QUILL_LANG_RE = re.compile(r'data-language=["\']([\w+#-]+)["\']', re.I)
+
+
+def _quill_html_to_fence(text: str) -> str:
+    """Ubah HTML code-block Quill mentah dari AI jadi fence ```.
+
+    AI kadang meniru contoh HTML (`<div class="ql-code-block-container">...`)
+    padahal instruksi minta fence. Tanpa ini HTML tersebut di-escape lalu
+    terbungkus jadi code-block sehingga guru melihat teks `<div...>` mentah
+    (leak). Dengan ini output AI ternormalisasi jadi satu fence valid.
+    """
+    t = text or ""
+    if "ql-code-block" not in t and "ql-syntax" not in t:
+        return t
+    out: list[str] = []
+    pos = 0
+    for m in _QUILL_CONTAINER_OPEN_RE.finditer(t):
+        if m.start() < pos:
+            continue
+        # Pasangan container+inner (<div container><div inner>...) atau
+        # container polos tanpa inner (AI tulis versi pendek / hasil decode
+        # entitas &lt;div...&gt;).
+        im = re.match(
+            r"\s*<div\s+class=[\"']ql-code-block[\"'](?P<attr>[^>]*)>",
+            t[m.end():],
+            re.I,
+        )
+        if im:
+            attr = im.group("attr") or ""
+            code_start = m.end() + im.end()
+            depth = 2
+        else:
+            attr = m.group(0)
+            code_start = m.end()
+            depth = 1
+        end = None
+        inner_end = None
+        for dm in _QUILL_DIV_TAG_RE.finditer(t, code_start):
+            if dm.group(0).startswith("</"):
+                depth -= 1
+            else:
+                depth += 1
+            if depth == 1 and im:
+                inner_end = dm.start()
+            if depth == 0 or (not im and depth == 0):
+                end = dm.end()
+                if im:
+                    c = re.match(r"\s*</div>", t[end:], re.I)
+                    if c:
+                        end += c.end()
+                else:
+                    inner_end = dm.start()
+                break
+            if depth == 1 and not im:
+                continue
+        if end is None:
+            continue
+        if m.start() > pos:
+            out.append(t[pos:m.start()])
+        lm = _QUILL_LANG_RE.search(attr)
+        lang = lm.group(1) if lm else ""
+        code = _quill_inner_to_code(t[code_start:inner_end])
+        if code.strip():
+            out.append(f"```{lang}\n{code}\n```" if lang else f"```\n{code}\n```")
+        pos = end
+    out.append(t[pos:])
+    t = "".join(out)
+
+    def _lone_sub(m: re.Match) -> str:
+        lm = _QUILL_LANG_RE.search(m.group("attr") or "")
+        lang = lm.group(1) if lm else ""
+        code = _quill_inner_to_code(m.group("code") or "")
+        if not code.strip():
+            return ""
+        return f"```{lang}\n{code}\n```" if lang else f"```\n{code}\n```"
+
+    t = _QUILL_LONE_DIV_RE.sub(_lone_sub, t)
+    t = _QUILL_PRE_RE.sub(lambda m: _lone_sub(m), t)
+    return t
+
+
 def _rich_lite_to_html(text: str, code_lang: str = "plain", strict_code: bool = False) -> str:
     """Ubah konvensi rich-lite AI -> HTML allowlist frontend.
 
@@ -1163,8 +1269,9 @@ def _rich_lite_to_html(text: str, code_lang: str = "plain", strict_code: bool = 
     dikecualikan render via ignoredTags).
     Baris kode sebaris (AI lupa fence) otomatis dibungkus fence; strict_code
     (soal coding) pakai ambang rendah agar kode 1-baris ikut tertangkap.
+    HTML code-block Quill mentah dari AI dinormalisasi dulu jadi fence.
     """
-    text = _normalize_ai_entities(text)
+    text = _quill_html_to_fence(_normalize_ai_entities(text))
     text = _wrap_unfenced_code_lines(text, code_lang, strict_code)
     # AI bandel: banyak fence 1-baris berurutan -> gabung jadi satu blok agar
     # tidak tumpang-tindih. Hanya teks polos di antaranya yang digabung juga;
