@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Check, X, Minus, Eye, EyeOff, ArrowRight, ClipboardList, Trophy, AlertTriangle } from 'lucide-react'
+import { Check, X, Minus, Eye, EyeOff, ArrowLeft, ArrowRight, ClipboardList, Trophy, AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button, Card, Badge, FallbackPage, DotCorner, AuroraBg, RichText } from '../../components/ui'
 import { stripTags, resolveRichHtml } from '../../lib/sanitize'
@@ -30,6 +30,7 @@ export default function QuizResult() {
   const displayStyle = searchParams.get('style') || 'card'
   const formTitle = searchParams.get('title') || ''
   const formCode = searchParams.get('code') || ''
+  const fromHistory = searchParams.get('from') === 'history'
 
   const [data, setData] = useState(null)
   const [publicForm, setPublicForm] = useState(null)
@@ -38,16 +39,35 @@ export default function QuizResult() {
   const [countedScore, setCountedScore] = useState(0)
   const [showReview, setShowReview] = useState(false)
   const [leaderboard, setLeaderboard] = useState(null)
+  const activeFormCode = data?.short_code || formCode
+  const effectiveType = publicForm?.type ?? formType
+  const [formSettingsState, setFormSettingsState] = useState(formCode ? 'loading' : 'idle')
+  const formSettingsPending = Boolean(activeFormCode) && formSettingsState !== 'ready'
 
   useEffect(() => {
-    const sub = api.get(`/submissions/${submissionId}`, { headers: sessionTokenHeaders(submissionId) })
-      .then((res) => setData(res.data))
-      .catch((err) => setError(err.response?.data?.message || t('quizResult.loadFailed')))
-    const pub = formCode
-      ? api.get(`/q/${formCode}`).then((res) => setPublicForm(res.data)).catch(() => setPublicForm(null))
-      : Promise.resolve()
-    Promise.all([sub, pub]).finally(() => setLoading(false))
-  }, [submissionId, formCode, t])
+    let active = true
+    setPublicForm(null)
+    setFormSettingsState('idle')
+    api.get(`/submissions/${submissionId}`, { headers: sessionTokenHeaders(submissionId) })
+      .then((res) => { if (active) setData(res.data) })
+      .catch((err) => { if (active) setError(err.response?.data?.message || t('quizResult.loadFailed')) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [submissionId, t])
+
+  useEffect(() => {
+    if (!activeFormCode) {
+      setFormSettingsState('idle')
+      return
+    }
+    let active = true
+    setFormSettingsState('loading')
+    api.get(`/q/${activeFormCode}`)
+      .then((res) => { if (active) setPublicForm(res.data) })
+      .catch(() => { if (active) setPublicForm(null) })
+      .finally(() => { if (active) setFormSettingsState('ready') })
+    return () => { active = false }
+  }, [activeFormCode])
 
   useEffect(() => {
     if (!data || data.score == null) return
@@ -68,11 +88,14 @@ export default function QuizResult() {
 
   // Read-only leaderboard (FR-38) — shown post-submit when the creator enabled it.
   useEffect(() => {
-    if (formType !== 'quiz' || !formCode || !publicForm?.show_leaderboard) return
-    api.get(`/q/${formCode}/leaderboard`, { params: { limit: 10, submission_id: submissionId }, headers: sessionTokenHeaders(submissionId) })
+    if (effectiveType !== 'quiz' || !activeFormCode || !publicForm?.show_leaderboard) {
+      setLeaderboard(null)
+      return
+    }
+    api.get(`/q/${activeFormCode}/leaderboard`, { params: { limit: 10, submission_id: submissionId }, headers: sessionTokenHeaders(submissionId) })
       .then((res) => setLeaderboard(res.data))
       .catch(() => setLeaderboard(null))
-  }, [formType, formCode, publicForm?.show_leaderboard, submissionId])
+  }, [effectiveType, activeFormCode, publicForm?.show_leaderboard, submissionId])
 
   // Review ikut urutan soal yang dilihat responden (hormati shuffle).
   // Backend sudah sort, ini pengaman untuk data lama / payload lain.
@@ -83,7 +106,7 @@ export default function QuizResult() {
     [data?.answers],
   )
 
-  if (loading) {
+  if (loading || formSettingsPending) {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-paper dark:bg-ink-950">
         <motion.div
@@ -107,14 +130,14 @@ export default function QuizResult() {
 
   if (!data) return null
 
-  const isQuiz = formType === 'quiz'
-  const canRefill = publicForm?.submission_limit === 'unlimited' && formCode
+  const isQuiz = effectiveType === 'quiz'
+  const canRefill = publicForm?.submission_limit === 'unlimited' && activeFormCode
   const palette = themePalette(publicForm?.theme_color, theme === 'dark')
   const totalQ = data.answers?.length || 0
   // Creator mengatur apa yang boleh dilihat responden setelah selesai (hanya quiz).
   // reveal_score → angka nilai final; reveal_answers → ulasan benar/salah per soal.
-  const revealScore = formType !== 'quiz' || (publicForm?.reveal_score !== false)
-  const revealAnswers = formType !== 'quiz' || (publicForm?.reveal_answers !== false)
+  const revealScore = effectiveType !== 'quiz' || publicForm?.reveal_score === true
+  const revealAnswers = effectiveType !== 'quiz' || publicForm?.reveal_answers === true
 
   // Pesan terima kasih (atau fallback nama form) — dipakai untuk form & quiz.
   const rawThanks = publicForm?.thank_you_message || ''
@@ -149,6 +172,17 @@ export default function QuizResult() {
           className="relative w-full max-w-md"
         >
           <Card className="p-7 md:p-9 overflow-hidden" style={{ borderColor: palette.border }}>
+            {fromHistory && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/my-submissions')}
+                className="mb-4 -ml-2"
+                icon={<ArrowLeft className="w-4 h-4" />}
+              >
+                {t('quizResult.backToHistory')}
+              </Button>
+            )}
             <div className="relative w-fit mx-auto mb-7">
               <motion.span
                 className="absolute inset-0 rounded-full"
@@ -189,7 +223,7 @@ export default function QuizResult() {
             <div className="border-t border-gray-100 dark:border-gray-800 mt-7 pt-6">
               {canRefill ? (
                 <Button
-                  onClick={() => navigate(`/q/${formCode}`)}
+                  onClick={() => navigate(`/q/${activeFormCode}`)}
                   size="lg"
                   className="w-full"
                   style={{ background: palette.cta, color: palette.onBase }}
@@ -247,7 +281,18 @@ export default function QuizResult() {
       <DotCorner position="top-left" color={palette.base} />
       <DotCorner position="bottom-right" color={palette.base} />
 
-      <div className="relative max-w-lg mx-auto p-6 pb-12">
+        <div className="relative max-w-lg mx-auto p-6 pb-12">
+          {fromHistory && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/my-submissions')}
+              className="mb-4 -ml-2"
+              icon={<ArrowLeft className="w-4 h-4" />}
+            >
+              {t('quizResult.backToHistory')}
+            </Button>
+          )}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -466,7 +511,7 @@ export default function QuizResult() {
             className="mt-3"
           >
             <Button
-              onClick={() => navigate(`/q/${formCode}`)}
+              onClick={() => navigate(`/q/${activeFormCode}`)}
               size="lg"
               className="w-full"
               style={{ background: palette.cta, color: palette.onBase }}

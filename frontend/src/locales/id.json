@@ -22,7 +22,10 @@
     "analytics": "Analitik",
     "unsavedTitle": "Perubahan belum disimpan",
     "unsavedChanges": "Perubahan belum disimpan. Tinggalkan halaman tanpa menyimpan?",
-    "leaveWithoutSaving": "Tinggalkan tanpa menyimpan"
+    "unsavedQuestionChanges": "Perubahan pada soal belum disimpan. Simpan sebelum berpindah?",
+    "leaveWithoutSaving": "Tinggalkan tanpa menyimpan",
+    "saveAndContinue": "Simpan lalu pindah",
+    "cancel": "Batal"
   },
   "auth": {
     "logout": "Keluar",
@@ -366,6 +369,7 @@
     "invalidFields": "Ada kolom tidak valid",
     "titleRequired": "Judul wajib diisi",
     "timerRequired": "Quiz harus memiliki waktu pengerjaan (menit)",
+    "publishNeedsQuestion": "Form harus memiliki minimal 1 soal sebelum bisa dipublikasikan. Tambahkan soal di tab Soal, lalu coba lagi.",
     "scheduleInvalid": "Waktu dibuka harus sebelum waktu ditutup",
     "schedulePast": "Waktu tutup sudah lewat — perbarui jadwal dulu",
     "scheduleInvalidFormat": "Format tanggal tidak valid, gunakan pemilih tanggal",
@@ -843,7 +847,8 @@
     "badgeCorrect": "Benar",
     "badgeIncorrect": "Salah",
     "badgeNotGraded": "Tidak dinilai",
-    "viewAnswerFile": "Lihat berkas jawaban"
+    "viewAnswerFile": "Lihat berkas jawaban",
+    "backToHistory": "Kembali ke riwayat"
   },
   "analytics": {
     "loadFailed": "Gagal memuat data",

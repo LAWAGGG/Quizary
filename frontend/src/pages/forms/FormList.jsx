@@ -477,13 +477,13 @@ export default function FormList() {
               <button
                 key={cat.id}
                 onClick={() => { setActiveCategory(cat.id); setMeta((m) => ({ ...m, page: 1 })) }}
-                className={`group inline-flex items-center gap-2 pl-3 pr-3.5 h-9 rounded-full text-sm font-medium border transition-all duration-200 ${activeCategory === cat.id ? 'text-white border-transparent shadow-md scale-[1.02]' : 'bg-white dark:bg-ink-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:shadow-sm hover:-translate-y-0.5 hover:border-primary-200'}`}
+                className={`group inline-flex w-fit min-w-0 max-w-full items-center gap-2 pl-3 pr-3.5 rounded-full text-sm font-medium border transition-all duration-200 ${activeCategory === cat.id ? 'min-h-9 py-1.5 text-white border-transparent shadow-md scale-[1.02]' : 'h-9 bg-white dark:bg-ink-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:shadow-sm hover:-translate-y-0.5 hover:border-primary-200'}`}
                 style={activeCategory === cat.id ? { backgroundColor: cat.color || '#8B7CF6' } : {}}
               >
                 <span className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 -ml-1" style={{ backgroundColor: activeCategory===cat.id ? 'rgba(255,255,255,0.22)' : `${cat.color || '#8B7CF6'}14`, color: activeCategory===cat.id ? 'white' : cat.color || '#8B7CF6' }}>
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: activeCategory===cat.id ? 'white' : cat.color || '#8B7CF6' }} />
                 </span>
-                <span className="truncate max-w-[120px]">{cat.name}</span>
+                <span className={activeCategory === cat.id ? 'min-w-0 whitespace-normal break-words text-left' : 'truncate max-w-[120px]'}>{cat.name}</span>
                 <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-xs font-bold ${activeCategory===cat.id ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-ink-700 text-gray-500 group-hover:bg-primary-50 dark:group-hover:bg-primary-900/20'}`}>{cat.form_count}</span>
               </button>
             ))}

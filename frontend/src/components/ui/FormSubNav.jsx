@@ -12,7 +12,7 @@ const items = [
   { to: (id) => `/forms/${id}/analytics`, key: 'analytics', icon: BarChart3, end: false },
 ]
 
-export function FormSubNav({ formId, className = '', hasUnsavedChanges = false }) {
+export function FormSubNav({ formId, className = '', hasUnsavedChanges = false, onSave, saving = false }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [total, setTotal] = useState(null)
@@ -60,12 +60,15 @@ export function FormSubNav({ formId, className = '', hasUnsavedChanges = false }
       <ConfirmModal
         show={!!pendingPath}
         title={t('formTabs.unsavedTitle')}
-        message={t('formTabs.unsavedChanges')}
-        confirmText={t('formTabs.leaveWithoutSaving')}
+        message={onSave ? t('formTabs.unsavedQuestionChanges') : t('formTabs.unsavedChanges')}
+        confirmText={onSave ? t('formTabs.saveAndContinue') : t('formTabs.leaveWithoutSaving')}
+        cancelText={t('formTabs.cancel')}
+        loading={saving}
         variant="primary"
         onCancel={() => setPendingPath(null)}
-        onConfirm={() => {
+        onConfirm={async () => {
           const path = pendingPath
+          if (onSave && !(await onSave())) return
           setPendingPath(null)
           navigate(path)
         }}

@@ -108,7 +108,7 @@ export default function MySubmissions() {
             >
               <Card
                 className="cursor-pointer hover:border-primary/40 hover:shadow-lift transition-all"
-                onClick={() => navigate(`/s/${sub.id}?type=${sub.type || 'form'}`)}
+                onClick={() => navigate(`/s/${sub.id}/result?type=${encodeURIComponent(sub.type || 'form')}&code=${encodeURIComponent(sub.short_code || '')}&from=history`)}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">

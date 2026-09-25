@@ -129,7 +129,7 @@ function QuestionForm({ initial, onSave, onCancel, loading, isQuiz, errors, ques
     })
   }
   useEffect(() => {
-    onDirtyChange?.(snapshot(form) !== initialSnapshotRef.current)
+    onDirtyChange?.(snapshot(form) !== initialSnapshotRef.current, form)
   }, [form, snapshot, onDirtyChange])
   const optionsErr = Object.keys(errors || {}).some((k) => k.startsWith('options'))
   const optionsMsg = Object.values(errors || {}).find((v, i) => Object.keys(errors)[i]?.startsWith('options'))
@@ -1332,12 +1332,20 @@ export default function QuestionBuilder() {
   const [showForm, setShowForm] = useState(false)
   // Guard pindah kartu saat edit kotor: QuestionForm lapor via onDirtyChange.
   const formDirtyRef = useRef(false)
+  const formDataRef = useRef(null)
+  const [formDirty, setFormDirty] = useState(false)
   const [pendingEdit, setPendingEdit] = useState(null)
   const [pendingNew, setPendingNew] = useState(false)
   const showUnsavedModal = showForm && (pendingEdit !== null || pendingNew)
-  const handleFormDirty = useCallback((dirty) => { formDirtyRef.current = dirty }, [])
+  const handleFormDirty = useCallback((dirty, data) => {
+    formDirtyRef.current = dirty
+    formDataRef.current = data
+    setFormDirty(dirty)
+  }, [])
   const closeForm = useCallback(() => {
     formDirtyRef.current = false
+    formDataRef.current = null
+    setFormDirty(false)
     setPendingEdit(null)
     setPendingNew(false)
     setShowForm(false)
@@ -1459,6 +1467,7 @@ export default function QuestionBuilder() {
   }, [formId])
 
   const handleSaveQuestion = async (data) => {
+    if (!data) return false
     setSaveLoading(true)
     setFieldErrors({})
     // Keep the client-side option list alongside the payload. New options can
@@ -1544,6 +1553,7 @@ export default function QuestionBuilder() {
       }
       load()
       closeForm()
+      return true
     } catch (err) {
       const data = err.response?.data
       if (data?.errors) {
@@ -1557,6 +1567,7 @@ export default function QuestionBuilder() {
       } else {
         toast.error(data?.message || data?.detail || 'Failed to save question')
       }
+      return false
     } finally {
       setSaveLoading(false)
     }
@@ -2152,7 +2163,13 @@ export default function QuestionBuilder() {
         }
       />
 
-      <FormSubNav formId={formId} className="mt-5" />
+      <FormSubNav
+        formId={formId}
+        className="mt-5"
+        hasUnsavedChanges={formDirty}
+        onSave={() => handleSaveQuestion(formDataRef.current)}
+        saving={saveLoading}
+      />
 
       <SectionManager
         formId={formId}

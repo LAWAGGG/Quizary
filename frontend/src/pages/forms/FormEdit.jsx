@@ -91,6 +91,7 @@ export default function FormEdit() {
   const scheduleRef = useRef(null)
   const accessRef = useRef(null)
   const behaviorRef = useRef(null)
+  const statusRef = useRef(null)
 
   // Scroll ke input yang error supaya user langsung lihat apa yang kurang.
   const revealError = (ref) => {
@@ -276,6 +277,12 @@ export default function FormEdit() {
 
   const applyFieldErrors = (err) => {
     const data = err.response?.data
+    const message = data?.message || data?.detail || ''
+    if (form.status === 'published' && /at least 1 question|minimal 1 soal|question before publishing/i.test(message)) {
+      setErrors({ status: t('formEdit.publishNeedsQuestion') })
+      revealError(statusRef)
+      return
+    }
     if (data?.errors) {
       const mapped = {}
       data.errors.forEach((entry) => {
@@ -553,7 +560,7 @@ export default function FormEdit() {
               </div>
 
               <div>
-                <label className="field-label !mb-1.5">{t('formEdit.publicStatus')}</label>
+                <label ref={statusRef} className="field-label !mb-1.5">{t('formEdit.publicStatus')}</label>
                 <div className={`flex h-11 rounded-xl border overflow-hidden ${errors.status ? 'border-incorrect' : 'border-gray-200 dark:border-gray-700'}`}>
                   <button
                     type="button"

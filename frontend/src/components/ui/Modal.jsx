@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 
-export function ConfirmModal({ show, title, message, onConfirm, onCancel, loading, confirmText = 'Delete', variant = 'danger' }) {
+export function ConfirmModal({ show, title, message, onConfirm, onCancel, loading, confirmText = 'Delete', cancelText = 'Cancel', variant = 'danger' }) {
   return (
     <AnimatePresence>
       {show && (
@@ -26,7 +26,7 @@ export function ConfirmModal({ show, title, message, onConfirm, onCancel, loadin
                 disabled={loading}
                 className="h-10 px-4 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-ink-800 transition-colors disabled:opacity-50"
               >
-                Cancel
+                {cancelText}
               </button>
               <button
                 onClick={onConfirm}

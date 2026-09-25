@@ -22,7 +22,10 @@
     "analytics": "Analytics",
     "unsavedTitle": "Unsaved changes",
     "unsavedChanges": "You have unsaved changes. Leave without saving?",
-    "leaveWithoutSaving": "Leave without saving"
+    "unsavedQuestionChanges": "This question has unsaved changes. Save before continuing?",
+    "leaveWithoutSaving": "Leave without saving",
+    "saveAndContinue": "Save and continue",
+    "cancel": "Cancel"
   },
   "auth": {
     "logout": "Logout",
@@ -366,6 +369,7 @@
     "invalidFields": "Invalid fields",
     "titleRequired": "Title is required",
     "timerRequired": "Quiz harus memiliki waktu pengerjaan (menit)",
+    "publishNeedsQuestion": "Add at least 1 question before publishing this form. Add it in the Questions tab, then try again.",
     "scheduleInvalid": "Opens time must be before closes time",
     "schedulePast": "Closing time has passed — update the schedule first",
     "scheduleInvalidFormat": "Invalid date format, use the date picker",
@@ -848,7 +852,8 @@
     "badgeCorrect": "Correct",
     "badgeIncorrect": "Incorrect",
     "badgeNotGraded": "Not graded",
-    "viewAnswerFile": "View answer file"
+    "viewAnswerFile": "View answer file",
+    "backToHistory": "Back to history"
   },
   "analytics": {
     "loadFailed": "Failed to load data",

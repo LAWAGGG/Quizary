@@ -661,6 +661,19 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   opacity: 0.95;
 }
 
+.dark .rich-editor .ql-editor .ql-code-block-container .ql-ui,
+.dark .rich-editor .ql-editor pre.ql-code-block .ql-ui,
+.dark .rich-editor .ql-editor pre.ql-syntax .ql-ui {
+  @apply bg-ink-800 text-gray-100 border-gray-600;
+  color-scheme: dark;
+}
+
+.dark .rich-editor .ql-editor .ql-code-block-container .ql-ui option,
+.dark .rich-editor .ql-editor pre.ql-code-block .ql-ui option,
+.dark .rich-editor .ql-editor pre.ql-syntax .ql-ui option {
+  @apply bg-ink-800 text-gray-100;
+}
+
 .rich-text ul,
 .rich-text ol {
   margin: 0.5em 0;

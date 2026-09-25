@@ -513,11 +513,33 @@ def _safe_cell(value):
     return value
 
 
+def _quiz_counts(questions: list[Question], answers: list[Answer]):
+    scored = [
+        q for q in questions
+        if q.is_scored and (q.type in GRADABLE_TYPES or has_answer_key(q))
+    ]
+    answers_by_question = {answer.question_id: answer for answer in answers}
+    correct = wrong = 0
+    for question in scored:
+        answer = answers_by_question.get(question.id)
+        if answer is None:
+            wrong += 1
+            continue
+        verdict, _ = grade_answer(answer, question)
+        if verdict is True:
+            correct += 1
+        elif verdict is False:
+            wrong += 1
+    return correct, wrong
+
+
 def _export_columns(form: Form, subs: list[Submission], db: Session, base_url: str | None = None):
     """Build export: Timestamp, Status, Nama, Nilai + one column per question."""
-    questions = db.query(Question).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).order_by(Question.order_index).all()
+    questions = db.query(Question).options(selectinload(Question.options)).filter(Question.form_id == form.id, Question.is_deleted.is_(False)).order_by(Question.order_index).all()
     q_ids = [q.id for q in questions]
-    headers = ["Timestamp", "Status", "Nama", "Nilai"] + [_safe_cell(_strip_html(q.question_text) or f"Soal {i+1}") for i, q in enumerate(questions)]
+    is_quiz = form.type.value == "quiz"
+    summary_headers = ["Total Benar", "Total Salah"] if is_quiz else []
+    headers = ["Timestamp", "Status", "Nama", "Nilai"] + summary_headers + [_safe_cell(_strip_html(q.question_text) or f"Soal {i+1}") for i, q in enumerate(questions)]
 
     if not questions:
         rows = [
@@ -526,6 +548,7 @@ def _export_columns(form: Form, subs: list[Submission], db: Session, base_url: s
                 s.status.value,
                 _safe_cell(s.respondent_name) or "-",
                 float(s.score) if s.score is not None else "-",
+                *([0, 0] if is_quiz else []),
             ]
             for s in subs
         ]
@@ -555,6 +578,9 @@ def _export_columns(form: Form, subs: list[Submission], db: Session, base_url: s
         return path
 
     q_by_id = {q.id: q for q in questions}
+    answers_by_submission: dict[int, list[Answer]] = {}
+    for answer in answers:
+        answers_by_submission.setdefault(answer.submission_id, []).append(answer)
     answer_map: dict[tuple[int, int], str] = {}
     for a in answers:
         q = q_by_id.get(a.question_id)
@@ -569,12 +595,15 @@ def _export_columns(form: Form, subs: list[Submission], db: Session, base_url: s
 
     rows = []
     for s in subs:
+        correct, wrong = _quiz_counts(questions, answers_by_submission.get(s.id, [])) if is_quiz else (None, None)
         row = [
             fmt_dt(to_naive_utc(s.submitted_at)) or "-",
             s.status.value,
             _safe_cell(s.respondent_name) or "-",
             float(s.score) if s.score is not None else "-",
         ]
+        if is_quiz:
+            row.extend([correct, wrong])
         row.extend(_safe_cell(answer_map.get((s.id, q.id), "") or "-") for q in questions)
         rows.append(row)
     return questions, headers, rows
@@ -638,7 +667,8 @@ def export_excel(
 
     # Soal file_upload → hyperlink klikable (display = nama file, target = URL
     # penuh). Excel render biru-underline; user klik langsung buka file.
-    file_col_idx = {i + 4 for i, qq in enumerate(questions) if qq.type == QuestionType.file_upload}
+    question_col_start = len(headers) - len(questions)
+    file_col_idx = {question_col_start + i for i, qq in enumerate(questions) if qq.type == QuestionType.file_upload}
     link_font = Font(color="0563C1", underline="single")
     for row in ws.iter_rows(min_row=2, max_row=1 + len(rows)):
         for i in file_col_idx:
