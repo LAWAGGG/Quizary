@@ -63,7 +63,7 @@ const OptionTile = memo(function OptionTile({ letter, color, selected, checkbox,
       whileTap={{ scale: 0.96 }}
       onClick={onClick}
       disabled={disabled}
-      className={`relative py-4 px-4 rounded-2xl font-medium text-white text-center min-h-[88px] flex flex-col items-center gap-3 transition-all ${
+      className={`py-4 px-4 rounded-2xl font-medium text-white text-center min-h-[88px] flex flex-col items-center gap-3 transition-all ${
         selected ? 'ring-2 ring-white ring-offset-2 shadow-lift scale-[1.02]' : 'shadow hover:brightness-110 active:brightness-95'
       }`}
       style={{ backgroundColor: color }}
@@ -76,12 +76,15 @@ const OptionTile = memo(function OptionTile({ letter, color, selected, checkbox,
             {selected && <Check className="w-4 h-4 text-[var(--t,#6C5CE7)]" strokeWidth={3.5} />}
           </span>
         ) : (
-          <span className="flex items-center justify-center w-9 h-9 rounded-full bg-white/25 font-mono font-bold text-sm shrink-0">
-            {letter}
+          <span
+            className={`flex items-center justify-center w-9 h-9 rounded-full font-mono font-bold text-sm shrink-0 transition-colors ${selected ? 'bg-white' : 'bg-white/25'}`}
+            style={selected ? { color } : undefined}
+          >
+            {selected ? <Check className="w-5 h-5" strokeWidth={3.5} /> : letter}
           </span>
         )}
         {children ? (
-          <span className="flex-1 leading-snug text-left">{children}</span>
+          <span className={`flex-1 leading-snug text-left ${selected ? 'font-bold' : ''}`}>{children}</span>
         ) : (
           <span className="flex-1" />
         )}
@@ -93,12 +96,6 @@ const OptionTile = memo(function OptionTile({ letter, color, selected, checkbox,
         ) : (
           <img loading="lazy" decoding="async" src={resolveMediaUrl(image.path)} alt="" className="max-h-24 w-auto rounded-lg object-contain" />
         )
-      )}
-
-      {selected && !checkbox && (
-        <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-white/25 flex items-center justify-center">
-          <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
-        </span>
       )}
     </motion.button>
   )
@@ -143,7 +140,7 @@ const OtherTile = memo(function OtherTile({ variant = 'quiz', color, checkbox, s
   return (
     <motion.div
       onClick={onToggle}
-      className={`relative py-4 px-4 rounded-2xl font-medium text-white min-h-[88px] flex flex-col gap-3 transition-all cursor-pointer ${
+      className={`py-4 px-4 rounded-2xl font-medium text-white min-h-[88px] flex flex-col gap-3 transition-all cursor-pointer ${
         selected ? 'ring-2 ring-white ring-offset-2 shadow-lift scale-[1.02]' : 'shadow hover:brightness-110 active:brightness-95'
       } ${error && !text.trim() ? '!ring-2 !ring-incorrect ring-offset-2' : ''}`}
       style={{ backgroundColor: color }}
@@ -154,16 +151,14 @@ const OtherTile = memo(function OtherTile({ variant = 'quiz', color, checkbox, s
             {selected && <Check className="w-4 h-4 text-[var(--t,#6C5CE7)]" strokeWidth={3.5} />}
           </span>
         ) : (
-          <span className="flex items-center justify-center w-9 h-9 rounded-full bg-white/25 shrink-0">
-            <PenLine className="w-4 h-4" />
+          <span
+            className={`flex items-center justify-center w-9 h-9 rounded-full shrink-0 transition-colors ${selected ? 'bg-white' : 'bg-white/25'}`}
+            style={selected ? { color } : undefined}
+          >
+            {selected ? <Check className="w-5 h-5" strokeWidth={3.5} /> : <PenLine className="w-4 h-4" />}
           </span>
         )}
-        <span className="flex-1 leading-snug text-left">{label}</span>
-        {selected && !checkbox && (
-          <span className="w-5 h-5 rounded-full bg-white/25 flex items-center justify-center shrink-0">
-            <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
-          </span>
-        )}
+        <span className={`flex-1 leading-snug text-left ${selected ? 'font-bold' : ''}`}>{label}</span>
       </div>
       <input
         id={inputId}
