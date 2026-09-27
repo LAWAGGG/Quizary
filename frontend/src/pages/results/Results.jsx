@@ -651,7 +651,6 @@ export default function Results() {
                       {detail.status === 'cheating'
                         ? t('results.cheatingDetected')
                         : t('results.violationRecorded')}
-                      {' '}{detail.tab_exit_count || 0}x
                     </p>
                     {detail.cheat_reason && (
                       <p className={`text-[11px] mt-1 ${detail.status === 'cheating' ? 'text-incorrect/80' : 'text-warn/80'}`}>

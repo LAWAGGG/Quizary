@@ -725,17 +725,11 @@ export default function AnswerQuiz() {
         clearInterval(graceIntervalRef.current)
         graceIntervalRef.current = null
         graceTimerRef.current = null
-        const stillOutside = !document.fullscreenElement && !document.webkitFullscreenElement
-        const stillHidden = document.visibilityState === 'hidden'
-        const stillBlurred = !document.hasFocus()
-        const stillSplit = (document.fullscreenElement || document.webkitFullscreenElement) && (window.screen.height - window.innerHeight > 120)
-        if (stillOutside || stillHidden || stillBlurred || stillSplit) {
-          setGraceCountdown(null)
-          graceEndAtRef.current = 0
-          reportTabExit(graceReasonRef.current)
-        } else {
-          clearGrace()
-        }
+        // ponytail: timer hanya jalan bila user belum kembali (kembali
+        // membatalkan via clearGrace) — habis = langsung lapor lock.
+        setGraceCountdown(null)
+        graceEndAtRef.current = 0
+        reportTabExit(graceReasonRef.current)
       }, GRACE_MS)
     }
 
@@ -747,6 +741,8 @@ export default function AnswerQuiz() {
 
     const onFsChange = () => {
       if (!fsAvailable) return
+      // ponytail: balik fullscreen + visible = kembali — batalkan grace,
+      // user lanjut bersih tanpa chip/pill.
       if (inFullscreen() && document.visibilityState === 'visible') clearGrace()
       else report('left-fullscreen')
     }
@@ -757,7 +753,8 @@ export default function AnswerQuiz() {
     }
     const onBlur = () => { if (!fsAvailable) return; if (!kbInsetRef.current) report('window-blur') }
     const onFocus = () => {
-      // ponytail: Windows-key blur tidak keluar fullscreen — fokus kembali dalam grace harus clear tanpa lock
+      // ponytail: Windows-key blur tidak keluar fullscreen — fokus kembali
+      // dalam grace membatalkan tanpa lock.
       if ((document.fullscreenElement || document.webkitFullscreenElement) && document.visibilityState === 'visible' && document.hasFocus()) {
         if (window.screen.height - window.innerHeight <= 120) clearGrace()
       }
@@ -1366,23 +1363,21 @@ export default function AnswerQuiz() {
     const cur = document.fullscreenElement || document.webkitFullscreenElement
     if (req && !cur) {
       Promise.resolve(req.call(el)).catch(() => { })
-    } else if (cur) {
-      // ponytail: already fullscreen but overlay stuck (Windows-key blur) — force clear grace + kiosk
-      if (graceTimerRef.current || graceCountdown !== null) {
-        if (graceTimerRef.current) clearTimeout(graceTimerRef.current)
-        if (graceIntervalRef.current) clearInterval(graceIntervalRef.current)
-        graceTimerRef.current = null
-        graceIntervalRef.current = null
-        graceEndAtRef.current = 0
-        graceReasonRef.current = ''
-        setGraceCountdown(null)
-        const a = alertAudioRef.current
-        if (a) { a.pause(); a.currentTime = 0 }
-      }
-      if (kioskTimer.current) clearTimeout(kioskTimer.current)
-      if (kioskLocked) setKioskLocked(false)
-      if (!document.hasFocus()) window.focus()
     }
+    // ponytail: tap tombol = user kembali — buka kiosk + batalkan grace
+    // sekaligus (request fullscreen boleh gagal di mobile, tetap bisa kembali).
+    if (graceTimerRef.current) clearTimeout(graceTimerRef.current)
+    if (graceIntervalRef.current) clearInterval(graceIntervalRef.current)
+    graceTimerRef.current = null
+    graceIntervalRef.current = null
+    graceEndAtRef.current = 0
+    graceReasonRef.current = ''
+    setGraceCountdown(null)
+    const _aa = alertAudioRef.current
+    if (_aa) { _aa.pause(); _aa.currentTime = 0 }
+    if (kioskTimer.current) clearTimeout(kioskTimer.current)
+    setKioskLocked(false)
+    if (!document.hasFocus()) window.focus()
   }
 
   // formPages sudah di-memo sebelum early return (anti hitung ulang tiap ketik)
@@ -2418,6 +2413,8 @@ function CheatLockOverlay({ info, serverNowMs, onRefresh, refreshing }) {
 
 function KioskLockOverlay({ locked, palette, onResume, countdown }) {
   const { t } = useTranslation()
+  // ponytail: overlay menutup penuh selama grace/lock — kembali (tap tombol
+  // / fullscreen pulih) menutupnya sekaligus membatalkan countdown.
   const visible = locked || (countdown !== null && countdown !== undefined)
   useEffect(() => {
     if (!visible) return
