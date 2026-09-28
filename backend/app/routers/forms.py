@@ -1,8 +1,12 @@
+import os
+import re
 import secrets
+import shutil
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user, verify_form_owner
@@ -15,7 +19,7 @@ from app.models.submission import Submission, SubmissionStatus
 from app.models.answer import Answer
 from app.models.user import User
 from app.services.points import distribute_quiz_points
-from app.utils import file_url, fmt_dt, now_wib, _delete_file
+from app.utils import UPLOAD_DIR, file_url, fmt_dt, now_wib, _delete_file
 from app.schemas.form import (
     BatchPointsUpdate,
     FormBulkCategoryRequest,
@@ -483,6 +487,156 @@ def publish_form(
         message="Form published" if form.status == FormStatus.published else "Form moved to draft",
         short_code=form.short_code,
     )
+
+
+def _copy_title(title: str | None) -> str:
+    """Judul salinan + " (Copy)" tepat di kanan teks — disisip SEBELUM tag
+    penutup terakhir (judul rich-text `<p>Judul</p>` → `<p>Judul (Copy)</p>`).
+    Tempel di luar tag bikin "(Copy)" jatuh ke baris/blok baru."""
+    suffix = " (Copy)"
+    base = title or ""
+    m = re.search(r"(</[a-zA-Z][^>]*>)\s*$", base)
+    new = base[:m.start(1)] + suffix + base[m.start(1):] if m else base + suffix
+    if len(new) > 1000:
+        cut = 1000 - len(suffix)
+        m2 = re.search(r"(</[a-zA-Z][^>]*>)\s*$", base[:cut])
+        new = base[:m2.start(1)] + suffix + base[m2.start(1):cut] if m2 else base[:cut] + suffix
+    return new
+
+
+def _copy_stored_file(rel: str | None) -> str | None:
+    """Salin file upload ke nama baru (uuid), kembalikan relative path baru.
+    Bukan shared path — hapus salah satu tidak merenggut yang lain.
+    File yatim / hilang dilewati (None) agar duplikasi tetap jalan."""
+    if not rel:
+        return None
+    full = os.path.join(UPLOAD_DIR, rel.lstrip("/"))
+    if not os.path.isfile(full):
+        return None
+    ext = os.path.splitext(rel)[1].lower()
+    subdir = os.path.dirname(rel) or "question-images"
+    new_rel = f"{subdir}/{uuid.uuid4().hex}{ext}"
+    os.makedirs(os.path.join(UPLOAD_DIR, subdir), exist_ok=True)
+    shutil.copy2(full, os.path.join(UPLOAD_DIR, new_rel.lstrip("/")))
+    return new_rel
+
+
+# ── POST /forms/{form_id}/duplicate ──────────────────────────────────────────
+
+@router.post("/forms/{form_id}/duplicate", status_code=201)
+def duplicate_form(
+    request: Request,
+    form: Form = Depends(verify_form_owner),
+    db: Session = Depends(get_db),
+):
+    """Duplikat penuh 1 form: semua setting, sections, soal, opsi, dan media
+    (banner + gambar soal/opsi disalin di disk). Submissions/jawaban TIDAK
+    ikut. Judul + " (Copy)", status ikut form asli (fallback draft bila
+    salinan tak layak publish, mis. jadwal sudah lewat)."""
+    now = now_wib()
+    new_title = _copy_title(form.title)
+
+    copy = Form(
+        user_id=form.user_id,
+        title=new_title,
+        description=form.description,
+        type=form.type,
+        display_style=form.display_style,
+        status=form.status,
+        require_login=form.require_login,
+        theme_color=form.theme_color,
+        banner_path=_copy_stored_file(form.banner_path),
+        thank_you_message=form.thank_you_message,
+        timer_seconds=form.timer_seconds,
+        starts_at=form.starts_at,
+        ends_at=form.ends_at,
+        shuffle_questions=form.shuffle_questions,
+        shuffle_options=form.shuffle_options,
+        submission_limit=form.submission_limit,
+        show_leaderboard=form.show_leaderboard,
+        is_restricted=form.is_restricted,
+        show_in_history=form.show_in_history,
+        reveal_score=form.reveal_score,
+        reveal_answers=form.reveal_answers,
+        scoring_mode=form.scoring_mode,
+        category_id=form.category_id,
+        short_code=_generate_short_code(db),
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(copy)
+    db.flush()
+
+    # Sections — petakan id lama → baru agar soal menempel ke section salinan.
+    section_map: dict[int, int] = {}
+    for s in (
+        db.query(Section).filter(Section.form_id == form.id).order_by(Section.order_index).all()
+    ):
+        ns = Section(form_id=copy.id, title=s.title, order_index=s.order_index, created_at=now)
+        db.add(ns)
+        db.flush()
+        section_map[s.id] = ns.id
+
+    # group_id wacana di-remap agar grup salinan terisolasi dari aslinya.
+    group_map: dict[str, str] = {}
+
+    questions = (
+        db.query(Question)
+        .options(selectinload(Question.options).selectinload(QuestionOption.images), selectinload(Question.images))
+        .filter(Question.form_id == form.id, Question.is_deleted.is_(False))
+        .order_by(Question.order_index)
+        .all()
+    )
+    for q in questions:
+        gid = q.group_id
+        if gid:
+            gid = group_map.setdefault(gid, str(uuid.uuid4()))
+        nq = Question(
+            form_id=copy.id,
+            section_id=section_map.get(q.section_id),
+            type=q.type,
+            question_text=q.question_text,
+            points=q.points,
+            is_scored=q.is_scored,
+            is_required=q.is_required,
+            group_id=gid,
+            password_keyword=q.password_keyword,
+            allow_other=q.allow_other,
+            answer_key=q.answer_key,
+            order_index=q.order_index,
+            created_at=now,
+        )
+        db.add(nq)
+        db.flush()
+        opt_map: dict[int, QuestionOption] = {}
+        for opt in sorted(q.options, key=lambda o: o.order_index or 0):
+            nopt = QuestionOption(
+                question_id=nq.id,
+                option_text=opt.option_text,
+                is_correct=opt.is_correct,
+                order_index=opt.order_index,
+            )
+            db.add(nopt)
+            db.flush()
+            opt_map[opt.id] = nopt
+        for img in sorted(q.images, key=lambda i: i.order_index or 0):
+            p = _copy_stored_file(img.path)
+            if p:
+                db.add(Image(question_id=nq.id, path=p, order_index=img.order_index, created_at=now))
+        for opt in sorted(q.options, key=lambda o: o.order_index or 0):
+            for img in sorted(opt.images, key=lambda i: i.order_index or 0):
+                p = _copy_stored_file(img.path)
+                if p:
+                    db.add(Image(option_id=opt_map[opt.id].id, path=p, order_index=img.order_index, created_at=now))
+
+    if copy.status == FormStatus.published:
+        try:
+            _ensure_publishable(copy, db)
+        except HTTPException:
+            copy.status = FormStatus.draft
+    db.commit()
+    db.refresh(copy)
+    return _form_dict(copy, request, db)
 
 
 # ── PATCH /forms/{form_id}/questions/points ─────────────────────────────────

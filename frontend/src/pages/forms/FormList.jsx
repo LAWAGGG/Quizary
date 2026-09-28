@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, ClipboardList, Search, Trophy, HelpCircle, FolderOpen, Settings2, MoreVertical, FolderInput, Trash2, CheckSquare, Check, X, Users, Share2 } from 'lucide-react'
+import { Plus, ClipboardList, Search, Trophy, HelpCircle, FolderOpen, Settings2, MoreVertical, FolderInput, Trash2, CheckSquare, Check, X, Users, Share2, Copy } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
@@ -114,7 +114,7 @@ function FormVisual({ form, onMenu, menuOpen, selectionMode, badgeOffset }) {
 // Kartu form yang bisa diseleksi — satu komponen per kartu agar hook
 // hold-select aman Rules of Hooks. Hold (mobile) masuk mode seleksi + haptic;
 // saat mode aktif tap = toggle, saat nonaktif tap = buka detail.
-function FormCardItem({ form, index, selected, selectedCount, selectionMode, onToggle, onOpen, menuOpen, onMenu, onShare, onMove, onDelete }) {
+function FormCardItem({ form, index, selected, selectedCount, selectionMode, onToggle, onOpen, menuOpen, onMenu, onShare, onMove, onDuplicate, onDelete }) {
   const { t } = useTranslation()
   const holdProps = useHoldSelect({ selectedCount, onToggle: () => onToggle(form.id), onTap: () => onOpen(form) })
   return (
@@ -172,7 +172,9 @@ function FormCardItem({ form, index, selected, selectedCount, selectionMode, onT
                     <button onClick={(e)=>{ e.stopPropagation(); onMenu(); onMove(form)}} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-ink dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-ink-700 transition-colors">
                       <FolderInput className="w-4 h-4 text-primary" /> {t('forms.menuMoveCategory')}
                     </button>
-                    <div className="my-1 h-px bg-gray-100 dark:bg-gray-700" />
+                    <button onClick={(e)=>{ e.stopPropagation(); onMenu(); onDuplicate(form)}} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-ink dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-ink-700 transition-colors">
+                      <Copy className="w-4 h-4 text-gray-400" /> {t('forms.menuDuplicate')}
+                    </button>
                     <button onClick={(e)=>{ e.stopPropagation(); onMenu(); onDelete(form)}} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium text-incorrect hover:bg-incorrect-soft transition-colors">
                       <Trash2 className="w-4 h-4" /> {t('forms.menuDelete')}
                     </button>
@@ -182,7 +184,7 @@ function FormCardItem({ form, index, selected, selectedCount, selectionMode, onT
             )}
           </AnimatePresence>
 
-          <h3 className="relative text-[17px] font-display font-semibold text-ink dark:text-gray-100 leading-tight line-clamp-2"><RichText html={form.title} className="rich-text" /></h3>
+          <h3 className="relative text-[17px] font-display font-semibold text-ink dark:text-gray-100 leading-tight card-title-clamp"><RichText html={form.title} className="rich-text" /></h3>
           <div className="relative h-7 mt-3" />
           <FormTypeCluster form={form} />
         </Card>
@@ -300,6 +302,7 @@ export default function FormList() {
   const [moveTarget, setMoveTarget] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const duplicatingRef = useRef(false)
   // Bulk select — scope halaman ini saja (direset tiap filter berubah)
   const [selected, setSelected] = useState(() => new Set())
   const [showBulkDelete, setShowBulkDelete] = useState(false)
@@ -364,6 +367,21 @@ export default function FormList() {
   const handleMoved = () => {
     fetchForms()
     fetchCategories()
+  }
+
+  const handleDuplicate = async (form) => {
+    if (duplicatingRef.current) return // klik ganda = 1 salinan saja
+    duplicatingRef.current = true
+    try {
+      const res = await api.post(`/forms/${form.id}/duplicate`)
+      toast.success(t('forms.duplicated', { title: stripTags(res.data.title || form.title) }))
+      fetchForms()
+      fetchCategories()
+    } catch (err) {
+      toast.error(err.response?.data?.message || t('forms.duplicateFailed'))
+    } finally {
+      duplicatingRef.current = false
+    }
   }
 
   const filtered = useMemo(() => {
@@ -635,6 +653,7 @@ export default function FormList() {
                 onMenu={() => setMenuOpen(menuOpen===form.id ? null : form.id)}
                 onShare={handleShare}
                 onMove={(f) => setMoveTarget(f)}
+                onDuplicate={handleDuplicate}
                 onDelete={(f) => setDeleteTarget(f)}
               />
             ))}
