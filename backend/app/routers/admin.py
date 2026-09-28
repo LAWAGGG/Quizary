@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.auth import hash_password
 from app.database import get_db
 from app.dependencies import get_current_admin
 from app.models.ai_generation import AiGeneration
@@ -14,6 +16,10 @@ from app.models.user import User, UserRole
 from app.schemas.admin import (
     AdminBulkDeleteRequest,
     AdminBulkStatusRequest,
+    AdminRole,
+    AdminUserCreate,
+    AdminUserDetailResponse,
+    AdminUserUpdate,
     AdminUserListResponse,
     AdminUserResponse,
     AdminPermanentDeleteRequest,
@@ -104,6 +110,7 @@ def _delete_user_files(db: Session, user: User) -> None:
 @router.get("/users", response_model=AdminUserListResponse)
 def list_users(
     search: str | None = Query(default=None, min_length=1, max_length=150),
+    role: AdminRole | None = Query(default=None),
     page: int = Query(default=1, ge=1, le=100000),
     limit: int = Query(default=20, ge=1, le=100),
     include_deleted: bool = False,
@@ -116,6 +123,8 @@ def list_users(
     if search:
         pattern = f"%{search.strip()}%"
         query = query.filter((User.name.ilike(pattern)) | (User.email.ilike(pattern)))
+    if role:
+        query = query.filter(User.role == UserRole(role.value))
     total = query.count()
     users = query.order_by(User.created_at.desc(), User.id.desc()).offset((page - 1) * limit).limit(limit).all()
     return AdminUserListResponse(
@@ -127,6 +136,63 @@ def list_users(
     )
 
 
+def _user_detail(user: User, db: Session) -> AdminUserDetailResponse:
+    base = _user_response(user)
+    return AdminUserDetailResponse(
+        **base.model_dump(),
+        total_forms=db.query(Form).filter(Form.user_id == user.id).count(),
+        total_submissions=db.query(Submission).filter(Submission.user_id == user.id).count(),
+    )
+
+
+@router.post("/users", response_model=AdminUserResponse, status_code=201)
+def create_user(body: AdminUserCreate, admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    if db.query(User).filter(User.email == body.email).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+    now = now_wib()
+    user = User(
+        name=body.name,
+        email=body.email,
+        password=hash_password(body.password),
+        role=UserRole(body.role.value),
+        is_active=True,
+        email_verified_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError:
+        # Race: dua create email sama bersamaan.
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+    db.refresh(user)
+    return _user_response(user)
+
+
+@router.get("/users/{user_id}", response_model=AdminUserDetailResponse)
+def get_user_detail(user_id: int, admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    return _user_detail(_get_user_or_404(db, user_id), db)
+
+
+@router.patch("/users/{user_id}", response_model=AdminUserDetailResponse)
+def update_user(user_id: int, body: AdminUserUpdate, admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    _protect_self(user_id, admin)
+    user = _get_user_or_404(db, user_id)
+    if user.deleted_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User yang dihapus tidak dapat diubah")
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Tidak ada perubahan")
+    if data.get("name") is not None:
+        user.name = data["name"]
+    if data.get("password") is not None:
+        user.password = hash_password(data["password"])
+    user.updated_at = now_wib()
+    db.commit()
+    db.refresh(user)
+    return _user_detail(user, db)
 @router.patch("/users/{user_id}/role", response_model=AdminUserResponse)
 def update_user_role(user_id: int, body: AdminUserRoleUpdate, admin: User = Depends(get_current_admin), db: Session = Depends(get_db)):
     _protect_self(user_id, admin)

@@ -1,10 +1,27 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, MoreVertical, Search, Trash2, UserCheck, UserX, Users } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, Info, MoreVertical, Search, Trash2, UserCheck, UserPlus, UserX, Users, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { Button, Card, ConfirmModal, EmptyState, Input, PageHeader } from '../../components/ui'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
+
+// Module scope: definisi di dalam Admin bikin identitas komponen baru tiap
+// render → React remount seluruh modal tiap ketikan → input kehilangan fokus.
+function ModalShell({ title, onClose, children }) {
+  const { t } = useTranslation()
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border bg-white p-6 shadow-lift dark:border-ink-800 dark:bg-ink-900" onClick={(event) => event.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-display text-lg font-bold text-ink dark:text-gray-100">{title}</h3>
+          <button type="button" onClick={onClose} aria-label={t('common.close')} className="grid h-9 w-9 place-items-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-ink-800"><X className="h-4 w-4" /></button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
 
 function errorMessage(error) {
   return error.response?.data?.message || error.response?.data?.detail || 'Terjadi kesalahan'
@@ -16,7 +33,9 @@ export default function Admin() {
   const toast = useToast()
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
   const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
   const [data, setData] = useState({ items: [], page: 1, limit: 20, total: 0, pages: 0 })
   const [selected, setSelected] = useState([])
   const [openMenu, setOpenMenu] = useState(null)
@@ -26,12 +45,43 @@ export default function Admin() {
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [error, setError] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createForm, setCreateForm] = useState({ name: '', email: '', password: '', role: 'user' })
+  const [createErrors, setCreateErrors] = useState({})
+  const [infoUser, setInfoUser] = useState(null)
+  const [infoLoading, setInfoLoading] = useState(false)
+  const [infoForm, setInfoForm] = useState({ password: '' })
+  const [infoErrors, setInfoErrors] = useState({})
+
+  // 422 backend: { message, errors: [{field: msg}, ...] } → {field: msg}
+  const parseFieldErrors = (error) => {
+    const list = error.response?.data?.errors
+    if (!Array.isArray(list)) return null
+    const mapped = {}
+    for (const item of list) {
+      if (item && typeof item === 'object') Object.assign(mapped, item)
+    }
+    return Object.keys(mapped).length ? mapped : null
+  }
+
+  const applyServerError = (error, setErrors) => {
+    const fields = parseFieldErrors(error)
+    if (fields) setErrors(fields)
+    else toast.error(errorMessage(error))
+  }
+
+  const clearFieldError = (setErrors, field) => setErrors((prev) => {
+    if (!prev?.[field]) return prev
+    const next = { ...prev }
+    delete next[field]
+    return next
+  })
 
   const load = useCallback(async (signal) => {
     setLoading(true)
     setError('')
     try {
-      const users = await api.get('/admin/users', { params: { search: query || undefined, page, limit: 20 }, signal })
+      const users = await api.get('/admin/users', { params: { search: query || undefined, role: roleFilter || undefined, page, limit }, signal })
       setData(users.data)
       setSelected([])
     } catch (err) {
@@ -39,7 +89,7 @@ export default function Admin() {
     } finally {
       setLoading(false)
     }
-  }, [page, query])
+  }, [page, query, roleFilter, limit])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -92,15 +142,80 @@ export default function Admin() {
     mutate(() => api.delete('/admin/bulk/users', { data: { user_ids: selected, permanent: true } }), 'User berhasil dihapus')
   }
 
+  const openInfo = async (user) => {
+    setOpenMenu(null)
+    setInfoLoading(true)
+    setInfoUser(null)
+    try {
+      const res = await api.get(`/admin/users/${user.id}`)
+      setInfoUser(res.data)
+      setInfoForm({ password: '' })
+      setInfoErrors({})
+    } catch (err) {
+      toast.error(errorMessage(err))
+    } finally {
+      setInfoLoading(false)
+    }
+  }
+
+  const saveInfo = async () => {
+    if (!infoUser) return
+    if (!infoForm.password) {
+      toast.error(t('admin.noChanges'))
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await api.patch(`/admin/users/${infoUser.id}`, { password: infoForm.password })
+      setInfoUser(res.data)
+      setInfoForm({ password: '' })
+      setInfoErrors({})
+      toast.success(t('admin.userUpdated'))
+      await load()
+    } catch (err) {
+      applyServerError(err, setInfoErrors)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const submitCreate = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      await api.post('/admin/users', { ...createForm, name: createForm.name.trim(), email: createForm.email.trim() })
+      toast.success(t('admin.userCreated'))
+      setCreateOpen(false)
+      setCreateForm({ name: '', email: '', password: '', role: 'user' })
+      setCreateErrors({})
+      await load()
+    } catch (err) {
+      applyServerError(err, setCreateErrors)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const toggleSelected = (id) => {
     setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
   }
 
-  const allVisibleSelected = data.items.length > 0 && data.items.every((user) => selected.includes(user.id))
+  // Admin tidak bisa diselect untuk delete — proteksi di level UI.
+  const selectableUsers = data.items.filter((user) => user.role !== 'admin')
+  const allVisibleSelected = selectableUsers.length > 0 && selectableUsers.every((user) => selected.includes(user.id))
+  const toggleSelectVisible = () => setSelected(allVisibleSelected
+    ? selected.filter((id) => !selectableUsers.some((user) => user.id === id))
+    : [...new Set([...selected, ...selectableUsers.map((user) => user.id)])])
   const submitSearch = (event) => {
     event.preventDefault()
     setPage(1)
     setQuery(search.trim())
+  }
+
+  const closeInfo = () => {
+    setInfoUser(null)
+    setInfoForm({ password: '' })
+    setInfoErrors({})
   }
 
   return (
@@ -109,7 +224,7 @@ export default function Admin() {
         eyebrow={t('admin.eyebrow')}
         title={t('admin.navUsers')}
         description={t('admin.usersDescription')}
-        actions={<Button variant="secondary" size="sm" onClick={() => load()} loading={loading}>{t('admin.refresh')}</Button>}
+        actions={<div className="flex gap-2"><Button size="sm" onClick={() => setCreateOpen(true)} icon={<UserPlus className="h-4 w-4" />}>{t('admin.addUser')}</Button><Button variant="secondary" size="sm" onClick={() => load()} loading={loading}>{t('admin.refresh')}</Button></div>}
       />
 
       <Card padding={false} className="overflow-hidden">
@@ -121,6 +236,13 @@ export default function Admin() {
             </div>
             <Button type="submit" variant="secondary">{t('admin.search')}</Button>
           </form>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={roleFilter} onChange={(event) => { setPage(1); setRoleFilter(event.target.value) }} aria-label={t('admin.filterRole')} className="rounded-lg border-gray-200 bg-white px-2.5 py-2 text-sm dark:border-gray-700 dark:bg-ink-800">
+              <option value="">{t('admin.allRoles')}</option>
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             {selected.length > 0 && <Button variant="danger" size="sm" onClick={bulkDelete} loading={saving} icon={<Trash2 className="h-4 w-4" />}>{t('admin.deleteSelected', { count: selected.length })}</Button>}
           </div>
@@ -137,28 +259,28 @@ export default function Admin() {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-gray-200 dark:border-gray-700 text-xs uppercase tracking-wider text-gray-400">
                   <tr>
-                    <th className="w-12 px-5 py-3"><input type="checkbox" checked={allVisibleSelected} onChange={() => setSelected(allVisibleSelected ? selected.filter((id) => !data.items.some((user) => user.id === id)) : [...new Set([...selected, ...data.items.map((user) => user.id)])])} aria-label={t('admin.selectAll')} className="rounded border-gray-300 text-primary focus:ring-primary" /></th>
+                    <th className="w-12 px-5 py-3"><input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectVisible} aria-label={t('admin.selectAll')} className="rounded border-gray-300 text-primary focus:ring-primary" /></th>
                     <th className="px-3 py-3">{t('admin.user')}</th><th className="px-3 py-3">{t('admin.role')}</th><th className="px-3 py-3">{t('admin.status')}</th><th className="px-3 py-3">{t('admin.created')}</th><th className="px-5 py-3 text-right">{t('admin.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {data.items.map((user) => (
                     <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-ink-800/50">
-                      <td className="px-5 py-4"><input type="checkbox" checked={selected.includes(user.id)} onChange={() => toggleSelected(user.id)} aria-label={`${t('admin.select')} ${user.email}`} className="rounded border-gray-300 text-primary focus:ring-primary" /></td>
+                      <td className="px-5 py-4"><input type="checkbox" checked={selected.includes(user.id)} onChange={() => toggleSelected(user.id)} disabled={user.role === 'admin'} aria-label={`${t('admin.select')} ${user.email}`} className="rounded border-gray-300 text-primary focus:ring-primary" /></td>
                       <td className="px-3 py-4"><p className="font-medium text-ink dark:text-gray-100">{user.name}</p><p className="text-xs text-gray-400">{user.email}</p></td>
                       <td className="px-3 py-4"><select value={user.role} onChange={(event) => updateRole(user, event.target.value)} disabled={saving || user.id === currentUser?.id} className="rounded-lg border-gray-200 bg-white px-2.5 py-2 text-sm dark:border-gray-700 dark:bg-ink-800"><option value="user">User</option><option value="admin">Admin</option></select></td>
                       <td className="px-3 py-4"><span className={`inline-flex items-center gap-1.5 text-xs font-medium ${user.is_active ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`}><span className="h-1.5 w-1.5 rounded-full bg-current" />{user.is_active ? t('admin.active') : t('admin.inactive')}</span></td>
                       <td className="px-3 py-4 text-xs text-gray-500 dark:text-gray-400">{user.created_at ? new Date(user.created_at).toLocaleDateString() : '-'}</td>
-                      <td className="px-5 py-4"><div className="flex items-center justify-end gap-1"><Button variant="ghost" size="sm" onClick={() => updateStatus(user)} disabled={saving || user.id === currentUser?.id} icon={user.is_active ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}>{user.is_active ? t('admin.disable') : t('admin.enable')}</Button><div className="relative"><button type="button" onClick={() => setOpenMenu(openMenu === user.id ? null : user.id)} disabled={saving || user.id === currentUser?.id} className="grid h-9 w-9 place-items-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-50 dark:hover:bg-ink-800 dark:hover:text-gray-100" aria-label={t('admin.moreActions')} aria-expanded={openMenu === user.id}><MoreVertical className="h-4 w-4" /></button>{openMenu === user.id && <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-gray-200 bg-white p-1.5 shadow-lift dark:border-gray-700 dark:bg-ink-900"><button type="button" onClick={() => permanentDelete(user)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-incorrect transition-colors hover:bg-incorrect-soft"><Trash2 className="h-4 w-4" />{t('admin.delete')}</button></div>}</div></div></td>
+                      <td className="px-5 py-4"><div className="flex items-center justify-end gap-1"><Button variant="ghost" size="sm" onClick={() => updateStatus(user)} disabled={saving || user.id === currentUser?.id} icon={user.is_active ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}>{user.is_active ? t('admin.disable') : t('admin.enable')}</Button><div className="relative"><button type="button" onClick={() => setOpenMenu(openMenu === user.id ? null : user.id)} disabled={saving || user.id === currentUser?.id} className="grid h-9 w-9 place-items-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-50 dark:hover:bg-ink-800 dark:hover:text-gray-100" aria-label={t('admin.moreActions')} aria-expanded={openMenu === user.id}><MoreVertical className="h-4 w-4" /></button>{openMenu === user.id && <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-gray-200 bg-white p-1.5 shadow-lift dark:border-gray-700 dark:bg-ink-900"><button type="button" onClick={() => openInfo(user)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-ink-800"><Info className="h-4 w-4" />{t('admin.userInfo')}</button><button type="button" onClick={() => permanentDelete(user)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-incorrect transition-colors hover:bg-incorrect-soft"><Trash2 className="h-4 w-4" />{t('admin.delete')}</button></div>}</div></div></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <div className="divide-y divide-gray-100 dark:divide-gray-800 md:hidden">
-              {data.items.map((user) => <div key={user.id} className="space-y-3 p-4"><div className="flex items-start gap-3"><input type="checkbox" checked={selected.includes(user.id)} onChange={() => toggleSelected(user.id)} aria-label={`${t('admin.select')} ${user.email}`} className="mt-1 rounded border-gray-300 text-primary focus:ring-primary" /><div className="min-w-0 flex-1"><p className="truncate font-medium text-ink dark:text-gray-100">{user.name}</p><p className="truncate text-xs text-gray-400">{user.email}</p></div><span className={`text-xs font-medium ${user.is_active ? 'text-green-600' : 'text-gray-400'}`}>{user.is_active ? t('admin.active') : t('admin.inactive')}</span></div><div className="flex flex-wrap items-center gap-2 pl-6"><select value={user.role} onChange={(event) => updateRole(user, event.target.value)} disabled={saving || user.id === currentUser?.id} className="rounded-lg border-gray-200 bg-white px-2 py-1.5 text-xs dark:border-gray-700 dark:bg-ink-800"><option value="user">User</option><option value="admin">Admin</option></select><Button variant="secondary" size="sm" onClick={() => updateStatus(user)} disabled={saving || user.id === currentUser?.id}>{user.is_active ? t('admin.disable') : t('admin.enable')}</Button><div className="relative ml-auto"><button type="button" onClick={() => setOpenMenu(openMenu === user.id ? null : user.id)} disabled={saving || user.id === currentUser?.id} className="grid h-9 w-9 place-items-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-50 dark:hover:bg-ink-800 dark:hover:text-gray-100" aria-label={t('admin.moreActions')} aria-expanded={openMenu === user.id}><MoreVertical className="h-4 w-4" /></button>{openMenu === user.id && <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-gray-200 bg-white p-1.5 shadow-lift dark:border-gray-700 dark:bg-ink-900"><button type="button" onClick={() => permanentDelete(user)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-incorrect transition-colors hover:bg-incorrect-soft"><Trash2 className="h-4 w-4" />{t('admin.delete')}</button></div>}</div></div></div>)}
+              {data.items.map((user) => <div key={user.id} className="space-y-3 p-4"><div className="flex items-start gap-3"><input type="checkbox" checked={selected.includes(user.id)} onChange={() => toggleSelected(user.id)} disabled={user.role === 'admin'} aria-label={`${t('admin.select')} ${user.email}`} className="mt-1 rounded border-gray-300 text-primary focus:ring-primary" /><div className="min-w-0 flex-1"><p className="truncate font-medium text-ink dark:text-gray-100">{user.name}</p><p className="truncate text-xs text-gray-400">{user.email}</p></div><span className={`text-xs font-medium ${user.is_active ? 'text-green-600' : 'text-gray-400'}`}>{user.is_active ? t('admin.active') : t('admin.inactive')}</span></div><div className="flex flex-wrap items-center gap-2 pl-6"><select value={user.role} onChange={(event) => updateRole(user, event.target.value)} disabled={saving || user.id === currentUser?.id} className="rounded-lg border-gray-200 bg-white px-2 py-1.5 text-xs dark:border-gray-700 dark:bg-ink-800"><option value="user">User</option><option value="admin">Admin</option></select><Button variant="secondary" size="sm" onClick={() => updateStatus(user)} disabled={saving || user.id === currentUser?.id}>{user.is_active ? t('admin.disable') : t('admin.enable')}</Button><div className="relative ml-auto"><button type="button" onClick={() => setOpenMenu(openMenu === user.id ? null : user.id)} disabled={saving || user.id === currentUser?.id} className="grid h-9 w-9 place-items-center rounded-xl text-gray-400 transition-colors hover:bg-gray-100 hover:text-ink disabled:opacity-50 dark:hover:bg-ink-800 dark:hover:text-gray-100" aria-label={t('admin.moreActions')} aria-expanded={openMenu === user.id}><MoreVertical className="h-4 w-4" /></button>{openMenu === user.id && <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-gray-200 bg-white p-1.5 shadow-lift dark:border-gray-700 dark:bg-ink-900"><button type="button" onClick={() => openInfo(user)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-ink-800"><Info className="h-4 w-4" />{t('admin.userInfo')}</button><button type="button" onClick={() => permanentDelete(user)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-incorrect transition-colors hover:bg-incorrect-soft"><Trash2 className="h-4 w-4" />{t('admin.delete')}</button></div>}</div></div></div>)}
             </div>
-            <div className="flex items-center justify-between border-t border-gray-200 px-5 py-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400"><span>{t('admin.showing', { from: data.total ? (data.page - 1) * data.limit + 1 : 0, to: Math.min(data.page * data.limit, data.total), total: data.total })}</span><div className="flex gap-1"><Button variant="ghost" size="sm" disabled={page <= 1 || saving} onClick={() => setPage((value) => value - 1)} icon={<ChevronLeft className="h-4 w-4" />}>{t('admin.previous')}</Button><Button variant="ghost" size="sm" disabled={page >= data.pages || saving} onClick={() => setPage((value) => value + 1)} icon={<ChevronRight className="h-4 w-4" />}>{t('admin.next')}</Button></div></div>
+            <div className="flex items-center justify-between border-t border-gray-200 px-5 py-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400"><span className="flex items-center gap-2"><select value={limit} onChange={(event) => { setPage(1); setLimit(Number(event.target.value)) }} aria-label={t('admin.perPage')} className="rounded-lg border-gray-200 bg-white px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-ink-800">{[10, 20, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}</select><span>{t('admin.showing', { from: data.total ? (data.page - 1) * data.limit + 1 : 0, to: Math.min(data.page * data.limit, data.total), total: data.total })}</span></span><div className="flex gap-1"><Button variant="ghost" size="sm" disabled={page <= 1 || saving} onClick={() => setPage((value) => value - 1)} icon={<ChevronLeft className="h-4 w-4" />}>{t('admin.previous')}</Button><Button variant="ghost" size="sm" disabled={page >= data.pages || saving} onClick={() => setPage((value) => value + 1)} icon={<ChevronRight className="h-4 w-4" />}>{t('admin.next')}</Button></div></div>
           </>
         )}
       </Card>
@@ -187,6 +309,53 @@ export default function Admin() {
         loading={saving}
         confirmText={t('admin.deleteSelected', { count: selected.length })}
       />
+
+      {createOpen && (
+        <ModalShell title={t('admin.createUser')} onClose={() => setCreateOpen(false)}>
+          <form onSubmit={submitCreate} className="space-y-4">
+            <Input label={t('admin.fullName')} value={createForm.name} onChange={(event) => { setCreateForm((form) => ({ ...form, name: event.target.value })); clearFieldError(setCreateErrors, 'name') }} error={createErrors.name} required minLength={1} maxLength={100} />
+            <Input label={t('admin.email')} type="email" value={createForm.email} onChange={(event) => { setCreateForm((form) => ({ ...form, email: event.target.value })); clearFieldError(setCreateErrors, 'email') }} error={createErrors.email} required minLength={5} maxLength={150} />
+            <Input label={t('admin.password')} type="password" value={createForm.password} onChange={(event) => { setCreateForm((form) => ({ ...form, password: event.target.value })); clearFieldError(setCreateErrors, 'password') }} error={createErrors.password} required minLength={8} maxLength={72} helper={t('admin.passwordHint')} />
+            <div>
+              <label className="field-label">{t('admin.role')}</label>
+              <select value={createForm.role} onChange={(event) => setCreateForm((form) => ({ ...form, role: event.target.value }))} className="rounded-lg border-gray-200 bg-white px-2.5 py-2 text-sm dark:border-gray-700 dark:bg-ink-800"><option value="user">User</option><option value="admin">Admin</option></select>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="secondary" onClick={() => setCreateOpen(false)}>{t('common.cancel')}</Button>
+              <Button type="submit" loading={saving}>{t('common.create')}</Button>
+            </div>
+          </form>
+        </ModalShell>
+      )}
+
+      {(infoUser || infoLoading) && (
+        <ModalShell title={t('admin.userInfo')} onClose={closeInfo}>
+          {infoLoading || !infoUser ? (
+            <div className="space-y-3">{[1, 2, 3].map((item) => <div key={item} className="h-12 animate-pulse rounded-xl bg-gray-100 dark:bg-ink-800" />)}</div>
+          ) : (
+            <>
+              <div className="mb-4 grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-gray-50 p-3 dark:bg-ink-800"><p className="text-xs text-gray-400">{t('admin.totalForms')}</p><p className="text-lg font-bold text-ink dark:text-gray-100">{infoUser.total_forms}</p></div>
+                <div className="rounded-xl bg-gray-50 p-3 dark:bg-ink-800"><p className="text-xs text-gray-400">{t('admin.totalSubmissions')}</p><p className="text-lg font-bold text-ink dark:text-gray-100">{infoUser.total_submissions}</p></div>
+              </div>
+              <dl className="space-y-2 text-sm">
+                <div className="flex justify-between gap-4"><dt className="text-gray-400">{t('admin.fullName')}</dt><dd className="truncate font-medium text-ink dark:text-gray-100">{infoUser.name}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-gray-400">{t('admin.email')}</dt><dd className="truncate font-medium text-ink dark:text-gray-100">{infoUser.email}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-gray-400">{t('admin.role')}</dt><dd className="font-medium capitalize text-ink dark:text-gray-100">{infoUser.role}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-gray-400">{t('admin.status')}</dt><dd className="font-medium text-ink dark:text-gray-100">{infoUser.is_active ? t('admin.active') : t('admin.inactive')}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-gray-400">{t('admin.created')}</dt><dd className="font-medium text-ink dark:text-gray-100">{infoUser.created_at ? new Date(infoUser.created_at).toLocaleDateString() : '-'}</dd></div>
+              </dl>
+              <div className="mt-4 space-y-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <Input label={t('admin.newPassword')} type="password" value={infoForm.password} onChange={(event) => { setInfoForm((form) => ({ ...form, password: event.target.value })); clearFieldError(setInfoErrors, 'password') }} error={infoErrors.password} minLength={8} maxLength={72} helper={t('admin.passwordHint')} />
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <Button type="button" variant="secondary" onClick={closeInfo}>{t('common.cancel')}</Button>
+                <Button onClick={saveInfo} loading={saving}>{t('common.save')}</Button>
+              </div>
+            </>
+          )}
+        </ModalShell>
+      )}
     </div>
   )
 }

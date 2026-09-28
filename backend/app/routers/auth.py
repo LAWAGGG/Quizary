@@ -86,6 +86,9 @@ def register(request: Request, body: RegisterRequest, db: Session = Depends(get_
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
     user = User(name=body.name, email=body.email, password=hash_password(body.password))
+    now = _now_naive()
+    user.created_at = now
+    user.updated_at = now
     db.add(user)
     try:
         db.commit()
