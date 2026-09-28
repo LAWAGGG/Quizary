@@ -570,7 +570,7 @@ export default function FormEdit() {
       <FormSubNav formId={id} className="mt-5" hasUnsavedChanges={dirty} />
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-        <div className="space-y-6 order-2 lg:order-1">
+        <div className="space-y-6 order-2 lg:order-1 min-w-0">
            <SectionCard data-tour="form-edit-basics" title={t('formEdit.basicInfo')} icon={<Info className="w-4 h-4" />}>
 
             <div className="space-y-5">
@@ -891,7 +891,7 @@ export default function FormEdit() {
           </SectionCard>
         </div>
 
-        <div className="space-y-6 lg:sticky lg:top-6 self-start order-1 lg:order-2">
+        <div className="space-y-6 lg:sticky lg:top-6 self-start order-1 lg:order-2 min-w-0">
            <SectionCard data-tour="form-edit-share" title={t('formEdit.share')} icon={<Link2 className="w-4 h-4" />}>
 
             <ShareLink value={`${window.location.origin}/q/${form.short_code}`} />
