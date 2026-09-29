@@ -760,7 +760,7 @@
     "previewMode": "Mode pratinjau — belum dipublikasikan"
   },
   "answerQuiz": {
-    "cheatWarningTitle": "Aktivitas mencurigakan terdeteksi ({{reason}}).",
+    "cheatWarningTitle": "Aktivitas mencurigakan terdeteksi.",
     "cheatWarningDesc": "Peringatan {{current}}/2",
     "pickOne": "Pilih satu jawaban",
     "other": "Lainnya",
@@ -907,6 +907,10 @@
     "sortHighest": "Skor tertinggi",
     "sortLowest": "Skor terendah",
     "exportHintActive": "Ekspor Excel akan mengikuti filter & urutan yang aktif.",
+    "searchPlaceholder": "Cari nama / email...",
+    "clearSearch": "Hapus pencarian",
+    "emptySearchTitle": "Tidak ada hasil cocok",
+    "emptySearchDesc": "Coba kata kunci lain atau hapus pencarian.",
     "selectedCount": "{{count}} hasil dipilih",
     "cancelSelection": "Batal",
     "changeStatus": "Ubah status",

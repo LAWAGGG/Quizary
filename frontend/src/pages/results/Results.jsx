@@ -1,15 +1,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Download, ClipboardList, X, Check, AlertTriangle, Trash2 } from 'lucide-react'
+import { Download, ClipboardList, X, Check, Trash2, Search } from 'lucide-react'
 import api from '../../api/client'
 import { useToast } from '../../hooks/useToast'
 import { useHoldSelect } from '../../hooks/useHoldSelect'
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll'
 import { stripTags, resolveRichHtml } from '../../lib/sanitize'
-import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, FormBackButton, EmptyState, CardSkeleton, RichText, ConfirmModal } from '../../components/ui'
+import { Card, Button, StatusBadge, Select, PageHeader, FormSubNav, FormBackButton, EmptyState, CardSkeleton, RichText, ConfirmModal, Input } from '../../components/ui'
 import { resolveMediaUrl, questionImageUrl, questionAudioUrl } from '../../lib/media'
-import { formatCheatReason } from '../../lib/cheatReason'
 import { useTranslation } from 'react-i18next'
 import { usePageTour } from '../../features/tour/TourContext'
 
@@ -53,8 +52,13 @@ export default function Results() {
   const [meta, setMeta] = useState({ total: 0, page: 1, per_page: 20 })
   const [formTitle, setFormTitle] = useState('')
   const [isQuiz, setIsQuiz] = useState(true)
+  const [isRestricted, setIsRestricted] = useState(false)
   const [status, setStatus] = useState('')
   const [sort, setSort] = useState('')
+  const [search, setSearch] = useState('')
+  // ponytail: debounce 400ms biar tidak request tiap ketik
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => { const id = setTimeout(() => setDebouncedSearch(search.trim()), 400); return () => clearTimeout(id) }, [search])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const pageRef = useRef(1)
@@ -77,6 +81,8 @@ export default function Results() {
     ? [
         { value: 'in_progress', label: t('results.statusInProgress') },
         { value: 'submitted', label: t('results.statusSubmitted') },
+        // Kunci manual hanya untuk quiz restricted — guru bisa lock sesi curang langsung
+        ...(isRestricted ? [{ value: 'locked', label: t('results.statusLocked') }] : []),
         { value: 'cheating', label: t('results.statusCheating') },
       ]
     : [
@@ -208,6 +214,7 @@ export default function Results() {
       const params = { page: pageNum, per_page: 20 }
       if (status) params.status = status
       if (sort) params.sort = sort
+      if (debouncedSearch) params.search = debouncedSearch
       const res = await api.get(`/forms/${formId}/results`, { params })
       const rows = res.data.data || []
       const m = res.data.meta || {}
@@ -232,7 +239,7 @@ export default function Results() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [formId, status, sort])
+  }, [formId, status, sort, debouncedSearch])
 
   const dataRef = useRef([])
   dataRef.current = data
@@ -250,6 +257,7 @@ export default function Results() {
     api.get(`/forms/${formId}`).then((res) => {
       setFormTitle(res.data.title)
       setIsQuiz(res.data.type === 'quiz')
+      setIsRestricted(!!res.data.is_restricted)
     }).catch(() => {})
   }, [formId])
 
@@ -269,6 +277,7 @@ export default function Results() {
         const params = { page: 1, per_page: 20 }
         if (status) params.status = status
         if (sort) params.sort = sort
+        if (debouncedSearch) params.search = debouncedSearch
         const res = await api.get(`/forms/${formId}/results`, { params })
         const rows = res.data.data || []
         const m = res.data.meta || {}
@@ -298,13 +307,14 @@ export default function Results() {
       } catch {}
     }, 4000)
     return () => clearInterval(id)
-  }, [formId, status, sort])
+  }, [formId, status, sort, debouncedSearch])
 
   const handleExport = async () => {
     try {
       const params = {}
       if (status) params.status = status
       if (sort) params.sort = sort
+      if (debouncedSearch) params.search = debouncedSearch
       const res = await api.get(`/forms/${formId}/export/excel`, { responseType: 'blob', params })
       const disposition = res.headers['content-disposition']
       let filename = ''
@@ -403,6 +413,25 @@ export default function Results() {
       </div>
 
       <div data-tour="results-filters" className="flex flex-wrap gap-3 mt-6 mb-6">
+        <div className="relative w-full sm:w-64">
+          <Input
+            placeholder={t('results.searchPlaceholder')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+            aria-label="Search results"
+          />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-gray-400 dark:text-gray-500" />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-ink dark:hover:text-gray-100"
+              aria-label={t('results.clearSearch')}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
         <div className="w-full sm:w-48">
           <Select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status">
             {statusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -416,7 +445,7 @@ export default function Results() {
           </div>
         )}
       </div>
-      {(status || sort) && (
+      {(status || sort || debouncedSearch) && (
         <p className="text-xs text-gray-400 dark:text-gray-500 mb-4 -mt-2">
           {t('results.exportHintActive')}
         </p>
@@ -456,9 +485,14 @@ export default function Results() {
            <EmptyState
 
             icon={<ClipboardList className="w-6 h-6" />}
-            title={t('results.emptyTitle')}
-            description={t('results.emptyDesc')}
+            title={debouncedSearch ? t('results.emptySearchTitle') : t('results.emptyTitle')}
+            description={debouncedSearch ? t('results.emptySearchDesc') : t('results.emptyDesc')}
           />
+          {debouncedSearch && (
+            <div className="flex justify-center pb-6">
+              <Button variant="secondary" size="sm" onClick={() => setSearch('')}>{t('results.clearSearch')}</Button>
+            </div>
+          )}
         </Card>
        ) : (
          <div data-tour="results-list">
@@ -484,7 +518,7 @@ export default function Results() {
                       key={row.submission_id}
                       variants={itemVariants}
                       className={`border-b border-gray-50 last:border-0 transition-colors cursor-pointer ${
-                        row.status === 'cheating' ? 'bg-incorrect-soft hover:bg-incorrect-soft' : 'hover:bg-gray-50/70 dark:hover:bg-ink-800/50'
+                        row.status === 'cheating' ? 'bg-incorrect-soft hover:bg-incorrect-soft' : row.status === 'locked' ? 'bg-warn-soft hover:bg-warn-soft' : 'hover:bg-gray-50/70 dark:hover:bg-ink-800/50'
                       }`}
                       onClick={() => openDetail(row.submission_id)}
                     >
@@ -492,7 +526,10 @@ export default function Results() {
                         <input type="checkbox" checked={selected.has(row.submission_id)} onChange={() => toggleSelect(row.submission_id)} aria-label={`Select #${row.submission_id}`} className="accent-primary w-4 h-4 cursor-pointer" />
                       </td>
                       {isQuiz && <td className="px-5 py-3.5 text-sm font-semibold tabular-nums text-gray-500 dark:text-gray-400">{row.rank ?? '-'}</td>}
-                      <td className="px-5 py-3.5 text-sm font-medium text-ink dark:text-gray-100">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">{t('results.youSuffix')}</span>}</td>
+                      <td className="px-5 py-3.5 text-sm font-medium text-ink dark:text-gray-100">
+                        <span className="block truncate max-w-[200px]">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">{t('results.youSuffix')}</span>}</span>
+                        {row.respondent_email && <span className="block text-xs font-normal text-gray-400 dark:text-gray-500 truncate max-w-[200px]">{row.respondent_email}</span>}
+                      </td>
                       <td className="px-5 py-3.5 text-sm tabular-nums">
                         {isQuiz ? (
                           <span className="inline-flex items-center gap-1.5">
@@ -511,9 +548,7 @@ export default function Results() {
                           <span className="text-gray-600 dark:text-gray-400 block max-w-[320px] truncate">{row.answer_summary || '-'}</span>
                         )}
                       </td>
-                      <td className="px-5 py-3.5"><StatusSelect row={row} />{row.cheat_reason && (
-                        <p className="text-[11px] text-incorrect/80 mt-1 max-w-[180px] truncate" title={row.cheat_reason}>{formatCheatReason(row.cheat_reason, t)}</p>
-                      )}</td>
+                      <td className="px-5 py-3.5"><StatusSelect row={row} /></td>
                       <td className="px-5 py-3.5 text-sm text-gray-500 dark:text-gray-400">{row.submitted_at || '-'}</td>
                     </motion.tr>
                   ))}
@@ -530,20 +565,18 @@ export default function Results() {
                   selected={selected.has(row.submission_id)}
                   onToggle={() => toggleSelect(row.submission_id)}
                   onTap={() => openDetail(row.submission_id)}
-                  className={row.status === 'cheating' ? 'bg-incorrect-soft' : ''}
+                  className={row.status === 'cheating' ? 'bg-incorrect-soft' : row.status === 'locked' ? 'bg-warn-soft' : ''}
                 >
                   <div className="flex items-start gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start mb-3 gap-2">
                         <div className="min-w-0">
                           <span className="font-medium text-sm text-ink dark:text-gray-100 truncate block">{row.respondent_name || 'Anonymous'}{row.is_creator && <span className="text-primary text-xs font-semibold ml-1.5">{t('results.youSuffix')}</span>}</span>
+                          {row.respondent_email && <span className="block text-xs text-gray-400 dark:text-gray-500 truncate">{row.respondent_email}</span>}
                           <p className="text-xs text-gray-400 dark:text-gray-500 font-mono mt-0.5">#{row.submission_id}{isQuiz && row.rank != null ? ` · #${row.rank}` : ''}</p>
                         </div>
                         <StatusBadge status={row.status} />
                       </div>
-                      {row.cheat_reason && (
-                        <p className="text-[11px] text-incorrect/80 mb-2 truncate" title={row.cheat_reason}>{formatCheatReason(row.cheat_reason, t)}</p>
-                      )}
                       <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400">
                     {isQuiz ? (
                       <span className="inline-flex items-center gap-1.5">
@@ -641,24 +674,6 @@ export default function Results() {
                     <span className="font-medium text-ink dark:text-gray-100">{detail.submitted_at || '-'}</span>
                   </span>
                 </div>
-
-                {/* Catatan pelanggaran tetap tampil walau status kini bukan cheating —
-                    riwayat contek penting untuk konteks nilai yang ada. */}
-                {(detail.cheat_reason || detail.tab_exit_count > 0) && (
-                  <div className={`mt-3 rounded-xl border px-4 py-3 ${detail.status === 'cheating' ? 'bg-incorrect-soft border-incorrect/30' : 'bg-warn-soft border-warn/30'}`}>
-                    <p className={`text-xs font-semibold flex items-center gap-1.5 ${detail.status === 'cheating' ? 'text-incorrect' : 'text-warn'}`}>
-                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      {detail.status === 'cheating'
-                        ? t('results.cheatingDetected')
-                        : t('results.violationRecorded')}
-                    </p>
-                    {detail.cheat_reason && (
-                      <p className={`text-[11px] mt-1 ${detail.status === 'cheating' ? 'text-incorrect/80' : 'text-warn/80'}`}>
-                        {t('results.lastRecorded', { reason: formatCheatReason(detail.cheat_reason, t) })}
-                      </p>
-                    )}
-                  </div>
-                )}
               </div>
 
               <div className="flex-1 overflow-y-auto px-6 py-5">

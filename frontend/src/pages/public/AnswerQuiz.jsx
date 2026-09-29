@@ -12,7 +12,6 @@ import { stripTags, resolveRichHtml } from '../../lib/sanitize'
 import { useTranslation } from 'react-i18next'
 import api from '../../api/client'
 import { sessionTokenHeaders } from '../../lib/sessionToken'
-import { formatCheatReason } from '../../lib/cheatReason'
 
 const OPT_COLORS = ['#3B82F6', '#EF4444', '#F59E0B', '#10B981']
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
@@ -419,6 +418,8 @@ export default function AnswerQuiz() {
             goToResult()
             return
           }
+          // Guru mengunci manual saat murid di halaman — langsung tampil lock page
+          setLockedInfo((previous) => lockedInfoFromSubmission(d, previous))
           syncFromPayload(d)
         })
         .catch(() => {})
@@ -1434,7 +1435,7 @@ export default function AnswerQuiz() {
             <div className="flex items-start gap-3 bg-incorrect text-white px-4 py-3.5 rounded-2xl shadow-lift">
               <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
               <div className="text-sm">
-                <p className="font-semibold">{t('answerQuiz.cheatWarningTitle', { reason: formatCheatReason(cheatWarn.reason, t) })}</p>
+                <p className="font-semibold">{t('answerQuiz.cheatWarningTitle')}</p>
                 <p className="text-white/85 mt-0.5">
                   {t('answerQuiz.cheatWarningDesc', { current: 3 - cheatWarn.left })}
                 </p>
@@ -1841,7 +1842,7 @@ export default function AnswerQuiz() {
           <div className="flex items-start gap-3 bg-incorrect text-white px-4 py-3.5 rounded-2xl shadow-lift">
             <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
             <div className="text-sm">
-              <p className="font-semibold">{t('answerQuiz.cheatWarningTitle', { reason: formatCheatReason(cheatWarn.reason, t) })}</p>
+              <p className="font-semibold">{t('answerQuiz.cheatWarningTitle')}</p>
               <p className="text-white/85 mt-0.5">
                 {t('answerQuiz.cheatWarningDesc', { current: 3 - cheatWarn.left })}
               </p>
@@ -2374,9 +2375,6 @@ function CheatLockOverlay({ info, serverNowMs, onRefresh, refreshing }) {
               <AlertTriangle className="w-8 h-8 text-incorrect" />
             </span>
             <p className="font-display text-2xl font-bold">{t('answerQuiz.violatingRules')}</p>
-            {info.reason && (
-              <p className="text-sm text-white/70 mt-2">{t('answerQuiz.lastViolation', { reason: formatCheatReason(info.reason, t) })}</p>
-            )}
             <p className="text-sm text-white/70 mt-4 leading-relaxed">
               {t('answerQuiz.temporarilyLocked')}
             </p>

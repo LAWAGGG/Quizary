@@ -765,7 +765,7 @@
     "previewMode": "Preview"
   },
   "answerQuiz": {
-    "cheatWarningTitle": "Suspicious activity detected ({{reason}}).",
+    "cheatWarningTitle": "Suspicious activity detected.",
     "cheatWarningDesc": "Warning {{current}}/2",
     "pickOne": "Pick one answer",
     "other": "Other",
@@ -912,6 +912,10 @@
     "sortHighest": "Highest score",
     "sortLowest": "Lowest score",
     "exportHintActive": "Export Excel will follow active filter & sort.",
+    "searchPlaceholder": "Search name / email...",
+    "clearSearch": "Clear search",
+    "emptySearchTitle": "No matching results",
+    "emptySearchDesc": "Try another keyword or clear the search.",
     "selectedCount": "{{count}} result(s) selected",
     "cancelSelection": "Cancel",
     "changeStatus": "Change status",
