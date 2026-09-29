@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 class ResultItem(BaseModel):
     submission_id: int
     respondent_name: Optional[str] = None
+    respondent_email: Optional[str] = None
     is_creator: bool = False          # True kalau respondent = pemilik form (creator preview)
     score: Optional[float] = None
     max_score: Optional[float] = None
@@ -27,13 +28,14 @@ class ResultDeleteRequest(BaseModel):
 
 class ResultStatusRequest(BaseModel):
     # Creator mengatur ulang status hasil secara universal: buka kembali
-    # (in_progress), sahkan (submitted), atau vonis curang (cheating, nilai 0).
-    status: str = Field(pattern="^(in_progress|submitted|cheating)$")
+    # (in_progress), sahkan (submitted), vonis curang (cheating, nilai 0),
+    # atau kunci manual (locked, menunggu keputusan — hanya quiz restricted).
+    status: str = Field(pattern="^(in_progress|submitted|cheating|locked)$")
 
 
 class ResultBulkStatusRequest(BaseModel):
     submission_ids: list[int] = Field(min_length=1, max_length=1000)
-    status: str = Field(pattern="^(in_progress|submitted|cheating)$")
+    status: str = Field(pattern="^(in_progress|submitted|cheating|locked)$")
 
 
 class PerQuestionStat(BaseModel):

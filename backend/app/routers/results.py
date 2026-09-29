@@ -4,6 +4,7 @@ from datetime import datetime
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -57,6 +58,7 @@ def list_results(
     form: Form = Depends(verify_form_owner),
     status_filter: str | None = Query(None, alias="status"),
     sort: str | None = Query(None, alias="sort"),
+    search: str | None = Query(None, min_length=1, max_length=100),
     page: int = Query(1, ge=1),
     per_page: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -69,6 +71,9 @@ def list_results(
         if status_filter not in SubmissionStatus.__members__:
             raise HTTPException(status_code=422, detail="status must be in_progress, submitted, auto_submitted, or cheating")
         q = q.filter(Submission.status == SubmissionStatus[status_filter])
+    if search and search.strip():
+        like = f"%{search.strip()}%"
+        q = q.filter(or_(Submission.respondent_name.ilike(like), Submission.respondent_email.ilike(like)))
 
     if sort == "score_desc":
         q = q.order_by(Submission.score.desc(), Submission.submitted_at.asc(), Submission.id.asc())
@@ -128,6 +133,7 @@ def list_results(
         data=[ResultItem(
             submission_id=s.id,
             respondent_name=s.respondent_name,
+            respondent_email=s.respondent_email,
             is_creator=s.user_id == form.user_id,
             score=float(s.score) if s.score is not None else None,
             max_score=float(s.max_score) if s.max_score is not None else None,
@@ -189,6 +195,10 @@ def set_result_status(
     # ISOLASI form: form (survey) tidak punya sistem poin, cheating hanya untuk quiz
     if body.status == "cheating" and form.type.value != "quiz":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Status cheating hanya tersedia untuk tipe quiz")
+    # Kunci manual hanya untuk quiz restricted — di luar itu lock tak ada artinya
+    # (tanpa fullscreen anti-cheat, tak ada yang menunggu keputusan).
+    if body.status == "locked" and (form.type.value != "quiz" or not form.is_restricted):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Status locked hanya tersedia untuk quiz dengan mode restricted")
 
     now = now_wib()
     if body.status == "in_progress":
@@ -211,6 +221,14 @@ def set_result_status(
         sub.submitted_at = sub.submitted_at or now
         grade_submission(db, sub, form)
         message = "Submission disahkan"
+    elif body.status == "locked":
+        # Kunci manual oleh guru — bekukan sesi, responden refresh langsung
+        # masuk lock page (locked_at = updated_at). Skor/jawaban dibiarkan apa
+        # adanya; tak diputuskan 5 menit → sweep otomatis jadi cheating.
+        sub.status = SubmissionStatus.locked
+        if not sub.cheat_reason:
+            sub.cheat_reason = "Dikunci manual oleh pengawas"
+        message = "Submission dikunci — menunggu keputusan pengawas"
     else:  # cheating
         sub.status = SubmissionStatus.cheating
         sub.submitted_at = sub.submitted_at or now
@@ -251,6 +269,8 @@ def set_bulk_result_status(
     # ISOLASI form: cheating hanya untuk quiz
     if body.status == "cheating" and form.type.value != "quiz":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Status cheating hanya tersedia untuk tipe quiz")
+    if body.status == "locked" and (form.type.value != "quiz" or not form.is_restricted):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Status locked hanya tersedia untuk quiz dengan mode restricted")
 
     now = now_wib()
     for sub in subs:
@@ -267,6 +287,10 @@ def set_bulk_result_status(
             sub.status = SubmissionStatus.submitted
             sub.submitted_at = sub.submitted_at or now
             grade_submission(db, sub, form)
+        elif body.status == "locked":
+            sub.status = SubmissionStatus.locked
+            if not sub.cheat_reason:
+                sub.cheat_reason = "Dikunci manual oleh pengawas"
         else:  # cheating
             sub.status = SubmissionStatus.cheating
             sub.submitted_at = sub.submitted_at or now
@@ -616,6 +640,7 @@ def export_excel(
     db: Session = Depends(get_db),
     status: str | None = Query(None, alias="status"),
     sort: str | None = Query(None, alias="sort"),
+    search: str | None = Query(None, min_length=1, max_length=100),
 ):
     # Sesi kedaluwarsa dikonversi dulu jadi auto_submitted supaya datanya ikut
     # terekspor. Submission in_progress yang masih aktif tetap turut diekspor
@@ -636,6 +661,9 @@ def export_excel(
             SubmissionStatus.cheating,
             SubmissionStatus.locked,
         ]))
+    if search and search.strip():
+        like = f"%{search.strip()}%"
+        q = q.filter(or_(Submission.respondent_name.ilike(like), Submission.respondent_email.ilike(like)))
 
     # Sort — mirror list_results so export matches what user sees
     if sort == "score_desc":
