@@ -982,6 +982,8 @@
     "registrationToggle": "Aktifkan pendaftaran",
     "open": "Terbuka",
     "closed": "Ditutup",
+    "securityTitle": "Keamanan akun",
+    "securityDescription": "Ubah kata sandi akun admin Anda untuk menjaga akses tetap aman.",
     "searchPlaceholder": "Cari nama atau email",
     "search": "Cari",
     "filterRole": "Filter role",

@@ -986,6 +986,8 @@
     "registrationToggle": "Toggle registration",
     "open": "Open",
     "closed": "Closed",
+    "securityTitle": "Account security",
+    "securityDescription": "Change your admin account password to keep access secure.",
     "searchPlaceholder": "Search name or email",
     "search": "Search",
     "filterRole": "Filter role",
