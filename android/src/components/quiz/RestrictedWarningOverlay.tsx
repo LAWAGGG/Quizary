@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { DeviceInfoBar } from './DeviceInfoBar';
 
 interface Props {
   visible: boolean;
@@ -17,6 +18,18 @@ export function RestrictedWarningOverlay({ visible, countdown, themeColor, onRee
 
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: '#0F172A', zIndex: 99999 }]} pointerEvents="auto">
+      {/* Device Info Bar in Warning Overlay */}
+      <View style={styles.deviceInfoContainer}>
+        <DeviceInfoBar
+          themeColor={activeColor}
+          darkBackground={true}
+          containerStyle={{
+            backgroundColor: 'rgba(30, 41, 59, 0.85)',
+            borderColor: 'rgba(255, 255, 255, 0.15)',
+          }}
+        />
+      </View>
+      
       <View style={styles.center}>
         {/* Warning Icon Badge with Theme Tint */}
         <View style={[styles.iconCircle, { backgroundColor: `${activeColor}20`, borderColor: `${activeColor}50` }]}>
@@ -58,6 +71,12 @@ export function RestrictedWarningOverlay({ visible, countdown, themeColor, onRee
 }
 
 const styles = StyleSheet.create({
+  deviceInfoContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 48,
+    paddingBottom: 8,
+    width: '100%',
+  },
   center: {
     flex: 1,
     alignItems: 'center',

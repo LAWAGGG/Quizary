@@ -1,8 +1,19 @@
 import { serverNowMs } from "./serverClock";
 
 export const getBaseUrl = () => {
-  const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL || "";
-  return envUrl.replace(/\/+$/, "");
+  const envUrl = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_API_URL || "";
+  let url = envUrl.trim();
+  if (!url) return "";
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = `https://${url}`;
+  }
+  const protocolMatch = url.match(/^(https?:\/\/)(.*)$/i);
+  if (protocolMatch) {
+    const protocol = protocolMatch[1];
+    let path = protocolMatch[2].replace(/\/+/g, "/").replace(/\/+$/, "");
+    return `${protocol}${path}`;
+  }
+  return url.replace(/\/+$/, "");
 };
 
 export function getApiUrl(path) {

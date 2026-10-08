@@ -198,5 +198,3 @@ class AppPinningModule(private val reactContext: ReactApplicationContext) : Reac
     @ReactMethod
     fun removeListeners(count: Int) {}
 }
-
-

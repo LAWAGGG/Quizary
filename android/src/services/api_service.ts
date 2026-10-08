@@ -12,17 +12,25 @@ function syncClockFromPayload(data: any) {
 }
 
 const getHost = () => {
-  let envUrl = process.env.EXPO_PUBLIC_API_URL?.trim() || process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+  const rawEnv = process.env.EXPO_PUBLIC_API_URL?.trim() || process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
 
-  if (envUrl) {
-    if (!envUrl.startsWith('http://') && !envUrl.startsWith('https://')) {
-      envUrl = `https://${envUrl}`;
+  if (rawEnv) {
+    let url = rawEnv;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = `https://${url}`;
     }
-    envUrl = envUrl.replace(/\/+$/, '');
-    if (!envUrl.endsWith('/api')) {
-      envUrl += '/api';
+    const match = url.match(/^(https?:\/\/)(.*)$/i);
+    if (match) {
+      const protocol = match[1];
+      let path = match[2].replace(/\/+/g, '/').replace(/\/+$/, '');
+      if (!path.endsWith('/api')) {
+        path = `${path}/api`;
+      }
+      return `${protocol}${path}`;
     }
-    return envUrl;
+    url = url.replace(/\/+$/, '');
+    if (!url.endsWith('/api')) url += '/api';
+    return url;
   }
 
   const hostUri =

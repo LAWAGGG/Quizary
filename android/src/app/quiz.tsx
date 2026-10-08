@@ -47,6 +47,7 @@ import { QuestionZoomModal } from '../components/quiz/QuestionZoomModal';
 import { QuizSubmittedStep } from '../components/quiz/QuizSubmittedStep';
 import { RestrictedWarningOverlay } from '../components/quiz/RestrictedWarningOverlay';
 import { ViolatingLockOverlay } from '../components/quiz/ViolatingLockOverlay';
+import { DeviceInfoBar } from '../components/quiz/DeviceInfoBar';
 import { useAppPinning } from '../hooks/useAppPinning';
 import { useCheatSound } from '../hooks/useCheatSound';
 import { useLockedVolume } from '../hooks/useLockedVolume';
@@ -1524,6 +1525,19 @@ export default function QuizScreen() {
                   </TouchableOpacity>
                 )}
               </View>
+            </View>
+
+            {/* Device Info Bar in Form Mode */}
+            <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 2 }}>
+              <DeviceInfoBar
+                themeColor={themeColor}
+                darkBackground={false}
+                compact={true}
+                containerStyle={{
+                  backgroundColor: colors.cardBg,
+                  borderColor: colors.cardBorder,
+                }}
+              />
             </View>
 
           <ScrollView

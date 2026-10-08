@@ -28,11 +28,12 @@ import { isAudioUrl, getQuestionImageUrl, getQuestionAudioUrl } from '../../util
 import { CustomDateTimePickerModal } from './CustomDateTimePickerModal';
 import { checkPassword } from '../../services/api_service';
 import { useKeyboardHeight } from '../../hooks/useKeyboardHeight';
+import { DeviceInfoBar } from './DeviceInfoBar';
 
 interface QuizStyleAnsweringStepProps {
   publicForm: any;
-  questions: any[];
-  answers: Record<number, any>;
+  questions?: any[];
+  answers?: Record<number, any>;
   onSelectOption: (questionId: number, optionId: number, isCheckbox: boolean) => void;
   onTextChange: (questionId: number, text: string) => void;
   onPickFile: (questionId: number) => void;
@@ -54,12 +55,12 @@ const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
 export function QuizStyleAnsweringStep({
   publicForm,
-  questions,
-  answers,
+  questions = [],
+  answers = {},
   onSelectOption,
   onTextChange,
   onPickFile,
-  fileUploading,
+  fileUploading = {},
   formattedTimerStr,
   submitting,
   onSubmit,
@@ -82,6 +83,12 @@ export function QuizStyleAnsweringStep({
   const mainScrollRef = useRef<ScrollView>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
   const { keyboardHeight, isVisible: isKeyboardOpen } = useKeyboardHeight();
+
+  // Guard safe questions & answers array
+  const safeQuestions = Array.isArray(questions) ? questions : [];
+  const safeAnswers = answers || {};
+  const totalQ = safeQuestions.length;
+  const currentQ = safeQuestions[currentIdx] || safeQuestions[0] || null;
 
   // Reset scroll to top on question change
   useEffect(() => {
@@ -112,8 +119,9 @@ export function QuizStyleAnsweringStep({
   const isTransitioningRef = useRef(false);
   const pendingDirRef = useRef<number>(1);
 
-  const totalQ = questions.length;
-  const currentQ = questions[currentIdx] || questions[0];
+  const answeredCount = safeQuestions.filter((q) => q && isAnswered(q, safeAnswers[q.id])).length;
+  const markedCount = safeQuestions.filter((q) => q && reviewed[q.id]).length;
+  const unansweredCount = Math.max(0, totalQ - answeredCount);
 
   // Exam info modal — paritas web ExamInfoDrawer (AnswerQuiz.jsx):
   // waktu dari timer_seconds (fallback time_limit), submission once/unlimited.
@@ -138,7 +146,7 @@ export function QuizStyleAnsweringStep({
 
   const animateToQuestion = (newIdx: number, dir: number) => {
     if (isTransitioningRef.current || newIdx === currentIdx) return;
-    if (newIdx < 0 || newIdx >= questions.length) return;
+    if (newIdx < 0 || newIdx >= safeQuestions.length) return;
 
     isTransitioningRef.current = true;
     pendingDirRef.current = dir;
@@ -298,10 +306,10 @@ export function QuizStyleAnsweringStep({
   };
 
   const checkRequiredAndSubmit = async () => {
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
+    for (let i = 0; i < safeQuestions.length; i++) {
+      const q = safeQuestions[i];
       const isRequired = q.is_required !== false;
-      const val = answers[q.id];
+      const val = safeAnswers[q.id];
       if (isRequired && !isAnswered(q, val)) {
         showAlert({
           type: 'warning',
@@ -319,13 +327,13 @@ export function QuizStyleAnsweringStep({
     }
     // password gate on submit: semua password required harus valid
     setPwChecking(true);
-    const wrongIds = await checkPasswordForQuestions(questions);
+    const wrongIds = await checkPasswordForQuestions(safeQuestions);
     setPwChecking(false);
     if (wrongIds.length) {
       const errs: Record<number, boolean> = {};
       wrongIds.forEach((id) => (errs[id] = true));
       setPwWrong((p) => ({ ...p, ...errs }));
-      const firstIdx = questions.findIndex((q) => wrongIds.includes(q.id));
+      const firstIdx = safeQuestions.findIndex((q) => wrongIds.includes(q.id));
       showAlert({
         type: 'warning',
         title: language === 'ID' ? 'Password salah' : 'Wrong password',
@@ -343,7 +351,7 @@ export function QuizStyleAnsweringStep({
     // Gate password: semua password (termasuk OPTIONAL seperti token hahay) wajib benar untuk Next
     const t = String(currentQ.type || currentQ.question_type || '').toLowerCase();
     if (t === 'password') {
-      const ans = String(answers[currentQ.id] ?? '');
+      const ans = String(safeAnswers[currentQ.id] ?? '');
       if (!ans.trim()) {
         showAlert({
           type: 'warning',
@@ -434,8 +442,21 @@ export function QuizStyleAnsweringStep({
     <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#0B0F19' : colors.bg }]} edges={['top']}>
       <StatusBar style={isDark ? "light" : "dark"} />
 
-      {/* TOP HEADER BAR — editorial solid, bukan gradient mengkilap AI */}
+      {/* TOP HEADER BAR */}
       <View style={[styles.headerBar, { backgroundColor: themeColor, borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.14)' }]}>
+      <View style={{ marginTop: 10 }}>
+          <DeviceInfoBar
+            themeColor="#FFF"
+            darkBackground={true}
+            compact={true}
+            containerStyle={{
+              backgroundColor: 'rgba(0, 0, 0, 0.2)',
+              borderColor: 'rgba(255, 255, 255, 0.18)',
+              width: '100%',
+            }}
+          />
+        </View>
+      </View>
         {/* Row 1: Info (i), Quiz Title, and Timer Pill */}
         <View style={[styles.headerRowTop, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 32 }]}>
           <TouchableOpacity
@@ -515,24 +536,33 @@ export function QuizStyleAnsweringStep({
           </View>
         </View>
 
-        {/* Row 2: Progress Slider Bar & Question Map Selector Pill */}
+        {/* Row 2: Progress Slider Bar & Question Map Selector Pill (Jump to Question) */}
         <View style={styles.headerRowBottom}>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
           </View>
 
           <TouchableOpacity
-            style={[styles.mapSelectorBtn, { backgroundColor: 'rgba(0,0,0,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' }]}
+            style={[
+              styles.mapSelectorBtn,
+              {
+                backgroundColor: 'rgba(255, 255, 255, 0.22)',
+                borderWidth: 1.5,
+                borderColor: 'rgba(255, 255, 255, 0.4)',
+              },
+            ]}
             onPress={() => setShowMapModal(true)}
-            activeOpacity={0.8}
+            activeOpacity={0.75}
+            accessibilityLabel="Buka Navigasi Soal"
           >
-            <Ionicons name="grid-outline" size={13} color="#FFF" />
+            <Ionicons name="grid" size={13} color="#FFF" />
             <Text style={styles.mapSelectorText}>
-              {currentIdx + 1}/{totalQ}
+              {language === 'ID' ? `Soal ${currentIdx + 1}/${totalQ}` : `Q ${currentIdx + 1}/${totalQ}`}
             </Text>
+            <Ionicons name="chevron-down" size={12} color="#FFF" style={{ opacity: 0.9 }} />
           </TouchableOpacity>
         </View>
-      </View>
+
 
       {/* MAIN QUESTION CONTAINER — keyboard aware: behavior height on Android + dynamic padding */}
       <KeyboardAvoidingView
@@ -1086,7 +1116,7 @@ export function QuizStyleAnsweringStep({
         />
       )}
 
-      {/* BOTTOM ACTION BAR (Matching Web Screenshot 1 with Previous Text & Bright Green Next Button) */}
+      {/* BOTTOM ACTION BAR */}
       <View style={[styles.bottomActionBar, { backgroundColor: isDark ? '#0F172A' : colors.cardBg, borderTopColor: colors.cardBorder, paddingBottom: insets.bottom > 0 ? insets.bottom + 14 : 14 }]}>
         <View style={styles.bottomButtonsRow}>
           {currentIdx > 0 && (
@@ -1096,11 +1126,30 @@ export function QuizStyleAnsweringStep({
               activeOpacity={0.8}
             >
               <Ionicons name="chevron-back" size={18} color={colors.textSub} />
-              <Text style={[styles.prevBtnText, { color: colors.textSub, fontSize: 15 * fontSizeScale }]}>
+              <Text style={[styles.prevBtnText, { color: colors.textSub, fontSize: 14 * fontSizeScale }]}>
                 {language === 'ID' ? 'Sebelumnya' : 'Previous'}
               </Text>
             </TouchableOpacity>
           )}
+
+          {/* Quick Jump to Question Button */}
+          <TouchableOpacity
+            style={[
+              styles.jumpGridBtn,
+              {
+                backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
+                borderColor: isDark ? '#334155' : '#CBD5E1',
+              },
+            ]}
+            onPress={() => setShowMapModal(true)}
+            activeOpacity={0.8}
+            accessibilityLabel="Peta Soal"
+          >
+            <Ionicons name="grid" size={16} color={themeColor} />
+            <Text style={[styles.jumpGridBtnText, { color: colors.text, fontSize: 13 * fontSizeScale }]}>
+              {language === 'ID' ? 'Peta Soal' : 'Questions'}
+            </Text>
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.nextBtn, { backgroundColor: themeColor }]}
@@ -1108,7 +1157,7 @@ export function QuizStyleAnsweringStep({
             disabled={submitting}
             activeOpacity={0.85}
           >
-            <Text style={[styles.nextBtnText, { fontSize: 16 * fontSizeScale }]}>
+            <Text style={[styles.nextBtnText, { fontSize: 15 * fontSizeScale }]}>
               {currentIdx === totalQ - 1
                 ? (language === 'ID' ? 'Kirim Jawaban' : 'Submit')
                 : (language === 'ID' ? 'Selanjutnya >' : 'Next >')}
@@ -1117,48 +1166,125 @@ export function QuizStyleAnsweringStep({
         </View>
       </View>
 
-      {/* QUESTION MAP MODAL */}
+      {/* QUESTION MAP MODAL (JUMP TO QUESTION) */}
       <Modal visible={showMapModal} transparent animationType="fade" onRequestClose={() => setShowMapModal(false)}>
         <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setShowMapModal(false)}>
-          <View style={[styles.mapModalBox, { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' }]}>
+          <View
+            style={[
+              styles.mapModalBox,
+              {
+                backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+                borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                borderWidth: 1,
+              },
+            ]}
+            onStartShouldSetResponder={() => true}
+          >
+            {/* Header */}
             <View style={styles.mapModalHeader}>
-              <Text style={[styles.mapModalTitle, { color: colors.text }]}>
-                {language === 'ID' ? 'Peta Soal' : 'Question Map'}
-              </Text>
-              <TouchableOpacity onPress={() => setShowMapModal(false)}>
-                <Ionicons name="close" size={22} color={colors.text} />
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={[styles.mapModalIconBadge, { backgroundColor: `${themeColor}22` }]}>
+                    <Ionicons name="grid" size={18} color={themeColor} />
+                  </View>
+                  <Text style={[styles.mapModalTitle, { color: colors.text }]}>
+                    {language === 'ID' ? 'Navigasi Soal' : 'Question Map'}
+                  </Text>
+                </View>
+                <Text style={[styles.mapModalSubtitle, { color: colors.textSub }]}>
+                  {language === 'ID'
+                    ? 'Ketuk nomor untuk langsung lompat ke soal'
+                    : 'Tap a number to jump directly'}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => setShowMapModal(false)}
+                style={[styles.mapModalCloseBtn, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close" size={20} color={colors.text} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.mapGridContainer}>
-              {questions.map((q, idx) => {
-                const answered = isAnswered(q, answers[q.id]);
+            {/* Status Counters */}
+            <View style={[styles.mapStatsRow, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC' }]}>
+              <View style={styles.mapStatChip}>
+                <View style={[styles.mapStatDot, { backgroundColor: '#10B981' }]} />
+                <Text style={[styles.mapStatLabel, { color: colors.textSub }]}>
+                  {language === 'ID' ? 'Dijawab' : 'Answered'}
+                </Text>
+                <Text style={[styles.mapStatValue, { color: '#10B981' }]}>{answeredCount}</Text>
+              </View>
+
+              <View style={styles.mapStatDivider} />
+
+              <View style={styles.mapStatChip}>
+                <View style={[styles.mapStatDot, { backgroundColor: '#F59E0B' }]} />
+                <Text style={[styles.mapStatLabel, { color: colors.textSub }]}>
+                  {language === 'ID' ? 'Ditandai' : 'Marked'}
+                </Text>
+                <Text style={[styles.mapStatValue, { color: '#F59E0B' }]}>{markedCount}</Text>
+              </View>
+
+              <View style={styles.mapStatDivider} />
+
+              <View style={styles.mapStatChip}>
+                <View style={[styles.mapStatDot, { backgroundColor: isDark ? '#64748B' : '#94A3B8' }]} />
+                <Text style={[styles.mapStatLabel, { color: colors.textSub }]}>
+                  {language === 'ID' ? 'Belum' : 'Empty'}
+                </Text>
+                <Text style={[styles.mapStatValue, { color: isDark ? '#94A3B8' : '#64748B' }]}>{unansweredCount}</Text>
+              </View>
+            </View>
+
+            {/* Grid Soal */}
+            <ScrollView
+              contentContainerStyle={styles.mapGridContainer}
+              showsVerticalScrollIndicator={true}
+              style={{ maxHeight: 330 }}
+            >
+              {safeQuestions.map((q, idx) => {
+                const answered = isAnswered(q, safeAnswers[q.id]);
                 const isCurrent = idx === currentIdx;
                 const isMarked = reviewed[q.id];
                 const letters = answered ? answerLetters(q) : null;
 
-                let bg = isDark ? '#334155' : '#F1F5F9';
-                let textCol = colors.text;
+                let bg = isDark ? '#1E293B' : '#F8FAFC';
+                let borderCol = isDark ? '#334155' : '#CBD5E1';
+                let textCol = isDark ? '#E2E8F0' : '#1E293B';
 
-                if (isMarked) {
-                  bg = '#F59E0B';
-                  textCol = '#FFFFFF';
+                if (isCurrent) {
+                  bg = isDark ? '#1E3A8A' : '#EFF6FF';
+                  borderCol = themeColor;
+                  textCol = isDark ? '#93C5FD' : themeColor;
+                } else if (isMarked) {
+                  bg = '#FEF3C7';
+                  borderCol = '#F59E0B';
+                  textCol = '#92400E';
                 } else if (answered) {
-                  bg = '#22C55E';
-                  textCol = '#FFFFFF';
-                } else if (isCurrent) {
-                  bg = themeColor;
-                  textCol = '#FFFFFF';
+                  bg = '#DCFCE7';
+                  borderCol = '#10B981';
+                  textCol = '#166534';
                 }
 
                 return (
                   <TouchableOpacity
                     key={q.id || idx}
-                    style={[styles.mapGridItem, { backgroundColor: bg }, isCurrent && { borderWidth: 2.5, borderColor: '#FFFFFF' }]}
+                    style={[
+                      styles.mapGridItem,
+                      {
+                        backgroundColor: bg,
+                        borderColor: borderCol,
+                        borderWidth: isCurrent ? 2.5 : 1.5,
+                      },
+                      isCurrent && styles.mapGridItemCurrentShadow,
+                    ]}
+                    activeOpacity={0.7}
                     onPress={async () => {
                       if (idx > currentIdx) {
                         // cegah skip password: validasi semua password dari current sampai idx-1
-                        const range = questions.slice(currentIdx, idx);
+                        const range = safeQuestions.slice(currentIdx, idx);
                         const hasBlockingPw = range.some((qq: any) => String(qq.type || qq.question_type || '').toLowerCase() === 'password' && qq.is_required !== false);
                         if (hasBlockingPw) {
                           const wrong = await checkPasswordForQuestions(range);
@@ -1181,33 +1307,73 @@ export function QuizStyleAnsweringStep({
                       }, 60);
                     }}
                   >
-                    <Text
-                      style={[styles.mapGridText, { color: textCol }, letters && { fontSize: 11, maxWidth: 40 }]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.6}
-                    >
-                      {letters ? `${idx + 1}.${letters}` : idx + 1}
+                    {/* Badge status sudut */}
+                    {isCurrent && (
+                      <View style={[styles.activePillIndicator, { backgroundColor: themeColor }]}>
+                        <Text style={styles.activePillText}>AKTIF</Text>
+                      </View>
+                    )}
+                    {!isCurrent && isMarked && (
+                      <View style={styles.statusBadgeCorner}>
+                        <Ionicons name="flag" size={10} color="#F59E0B" />
+                      </View>
+                    )}
+                    {!isCurrent && !isMarked && answered && (
+                      <View style={styles.statusBadgeCorner}>
+                        <Ionicons name="checkmark-circle" size={12} color="#10B981" />
+                      </View>
+                    )}
+
+                    <Text style={[styles.mapGridText, { color: textCol, fontWeight: '800' }]}>
+                      {idx + 1}
                     </Text>
+
+                    {letters ? (
+                      <View style={[styles.letterPillBadge, { backgroundColor: isDark ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.08)' }]}>
+                        <Text style={[styles.letterPillText, { color: textCol }]} numberOfLines={1}>
+                          {letters}
+                        </Text>
+                      </View>
+                    ) : null}
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
 
-            <View style={styles.mapLegendRow}>
+            {/* Legend Row */}
+            <View style={[styles.mapLegendRow, { borderTopColor: isDark ? '#1E293B' : '#E2E8F0' }]}>
               <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#22C55E' }]} />
+                <View style={[styles.legendBox, { backgroundColor: '#DCFCE7', borderColor: '#10B981' }]}>
+                  <Ionicons name="checkmark" size={10} color="#166534" />
+                </View>
                 <Text style={[styles.legendText, { color: colors.textSub }]}>{language === 'ID' ? 'Sudah Diisi' : 'Answered'}</Text>
               </View>
               <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#F59E0B' }]} />
+                <View style={[styles.legendBox, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
+                  <Ionicons name="flag" size={9} color="#92400E" />
+                </View>
                 <Text style={[styles.legendText, { color: colors.textSub }]}>{language === 'ID' ? 'Ditandai' : 'Marked'}</Text>
               </View>
               <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: isDark ? '#334155' : '#E2E8F0' }]} />
-                <Text style={[styles.legendText, { color: colors.textSub }]}>{language === 'ID' ? 'Belum Diisi' : 'Unanswered'}</Text>
+                <View style={[styles.legendBox, { backgroundColor: isDark ? '#1E3A8A' : '#EFF6FF', borderColor: themeColor }]} />
+                <Text style={[styles.legendText, { color: colors.textSub }]}>{language === 'ID' ? 'Aktif' : 'Current'}</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendBox, { backgroundColor: isDark ? '#1E293B' : '#F8FAFC', borderColor: isDark ? '#334155' : '#CBD5E1' }]} />
+                <Text style={[styles.legendText, { color: colors.textSub }]}>{language === 'ID' ? 'Belum' : 'Empty'}</Text>
               </View>
             </View>
+
+            {/* Back to Question CTA button */}
+            <TouchableOpacity
+              style={[styles.mapModalActionBtn, { backgroundColor: themeColor }]}
+              onPress={() => setShowMapModal(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.mapModalActionBtnText}>
+                {language === 'ID' ? 'Lanjut Mengerjakan' : 'Continue Quiz'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -1546,25 +1712,52 @@ const styles = StyleSheet.create({
   dropdownOptionText: { fontWeight: '600', flex: 1, paddingRight: 10 },
 
   /* BOTTOM ACTION BAR */
-  bottomActionBar: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 14, backgroundColor: '#0F172A', borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)' },
-  bottomButtonsRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  prevBtnWithText: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 16, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', backgroundColor: 'rgba(30, 41, 59, 0.6)' },
+  bottomActionBar: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14, backgroundColor: '#0F172A', borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)' },
+  bottomButtonsRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  prevBtnWithText: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 14, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.15)', backgroundColor: 'rgba(30, 41, 59, 0.6)' },
   prevBtnText: { color: '#94A3B8', fontWeight: '700' },
-  nextBtn: { flex: 1, paddingVertical: 16, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
+  jumpGridBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 14, borderRadius: 16, borderWidth: 1.5 },
+  jumpGridBtnText: { fontWeight: '700' },
+  nextBtn: { flex: 1, paddingVertical: 14, borderRadius: 16, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
   nextBtnText: { color: '#FFFFFF', fontWeight: 'bold' },
 
   /* MODALS */
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  mapModalBox: { width: '100%', maxWidth: 400, borderRadius: 24, padding: 20, maxHeight: '80%' },
-  mapModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  mapModalTitle: { fontSize: 18, fontWeight: 'bold' },
-  mapGridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', paddingVertical: 10 },
-  mapGridItem: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  mapGridText: { fontSize: 14, fontWeight: 'bold' },
-  mapLegendRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(148, 163, 184, 0.2)' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.7)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+  mapModalBox: { width: '100%', maxWidth: 440, borderRadius: 24, padding: 20, maxHeight: '88%', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 20, elevation: 12 },
+  mapModalHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 },
+  mapModalIconBadge: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  mapModalTitle: { fontSize: 18, fontWeight: '800' },
+  mapModalSubtitle: { fontSize: 12, marginTop: 2 },
+  mapModalCloseBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  
+  /* Status Chips Summary */
+  mapStatsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 14, marginBottom: 14 },
+  mapStatChip: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  mapStatDot: { width: 8, height: 8, borderRadius: 4 },
+  mapStatLabel: { fontSize: 12, fontWeight: '600' },
+  mapStatValue: { fontSize: 13, fontWeight: '800' },
+  mapStatDivider: { width: 1, height: 16, backgroundColor: 'rgba(148, 163, 184, 0.25)' },
+
+  /* Grid Items */
+  mapGridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-start', paddingVertical: 6 },
+  mapGridItem: { width: 50, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  mapGridItemCurrentShadow: { shadowColor: '#3B82F6', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
+  mapGridText: { fontSize: 15 },
+  activePillIndicator: { position: 'absolute', top: -7, alignSelf: 'center', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6 },
+  activePillText: { color: '#FFF', fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
+  statusBadgeCorner: { position: 'absolute', top: 2, right: 2 },
+  letterPillBadge: { position: 'absolute', bottom: 2, paddingHorizontal: 4, paddingVertical: 0.5, borderRadius: 4, maxWidth: 42 },
+  letterPillText: { fontSize: 9, fontWeight: '800' },
+
+  /* Legend */
+  mapLegendRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 14, paddingTop: 12, borderTopWidth: 1, gap: 8 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendText: { fontSize: 12, fontWeight: '600' },
+  legendBox: { width: 16, height: 16, borderRadius: 5, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  legendText: { fontSize: 11, fontWeight: '600' },
+
+  /* CTA Modal Action */
+  mapModalActionBtn: { width: '100%', paddingVertical: 13, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
+  mapModalActionBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
 
   infoModalBox: { width: '100%', maxWidth: 360, maxHeight: '85%', borderRadius: 24, padding: 24, alignItems: 'center' },
   infoModalHeaderRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },

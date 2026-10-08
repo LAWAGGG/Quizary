@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { serverNowMs } from '../../utils/serverClock';
+import { DeviceInfoBar } from './DeviceInfoBar';
 
 interface Props {
   visible: boolean;
@@ -39,6 +40,18 @@ export function ViolatingLockOverlay({ visible, cheatReason, lockedAt, onRefresh
 
   return (
     <View style={styles.overlay}>
+      {/* Device Info Bar in Lock Screen */}
+      <View style={styles.topInfoBar}>
+        <DeviceInfoBar
+          themeColor="#EF4444"
+          darkBackground={true}
+          containerStyle={{
+            backgroundColor: 'rgba(30, 41, 59, 0.85)',
+            borderColor: 'rgba(255, 255, 255, 0.15)',
+          }}
+        />
+      </View>
+
       <View style={styles.iconBox}>
         <Ionicons name="warning-outline" size={32} color="#EF4444" />
       </View>
@@ -77,6 +90,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+  },
+  topInfoBar: {
+    position: 'absolute',
+    top: 48,
+    left: 16,
+    right: 16,
+    zIndex: 10,
   },
   iconBox: {
     width: 72,
